@@ -5,12 +5,12 @@ import { SignOutButton } from "./_components/sign-out";
 type NavItem = { href: string; label: string };
 
 const navByIndustry: Record<string, NavItem[]> = {
-  transportation: [
+ transportation: [
     { href: "/app", label: "Dashboard" },
     { href: "/app/trips", label: "Trips" },
     { href: "/app/customers", label: "Customers" },
-    { href: "/app/catalog", label: "Pricing" },
-    { href: "/app/staff", label: "Staff" },
+    { href: "/app/partners", label: "Partners" },
+    { href: "/app/vehicles", label: "Vehicles" },
     { href: "/app/settings", label: "Settings" },
   ],
   restaurant: [

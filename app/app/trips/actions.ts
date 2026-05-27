@@ -1,0 +1,152 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import { requireBusiness } from "@/lib/services/tenancy";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+
+const tripSchema = z
+  .object({
+    customer_id: z.string().uuid().optional().nullable(),
+    vehicle_id: z.string().uuid().optional().nullable(),
+    pickup_address: z.string().min(1, "Pickup address is required").max(500),
+    dropoff_address: z.string().min(1, "Dropoff address is required").max(500),
+    scheduled_at: z.string().min(1, "Pickup time required"),
+    pricing_type: z.enum(["flat", "hourly"]),
+    price_total: z.coerce.number().min(0).max(1000000),
+    hours: z.coerce.number().min(0).max(100).optional().nullable(),
+    passenger_count: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(100)
+      .optional()
+      .nullable(),
+    luggage_count: z.coerce.number().int().min(0).max(50).optional().nullable(),
+    flight_number: z.string().max(50).optional().or(z.literal("")),
+    terminal: z.string().max(50).optional().or(z.literal("")),
+    handled_by: z.enum(["self", "partner"]),
+    partner_id: z.string().uuid().optional().nullable(),
+    cookie_amount: z.coerce.number().min(0).optional().nullable(),
+    notes: z.string().max(2000).optional().or(z.literal("")),
+  })
+  .refine(
+    (data) =>
+      (data.handled_by === "self" && !data.partner_id) ||
+      (data.handled_by === "partner" && !!data.partner_id),
+    { message: "If farmed out, you must select a partner." }
+  );
+
+type TripInput = {
+  customer_id?: string | null;
+  vehicle_id?: string | null;
+  pickup_address: string;
+  dropoff_address: string;
+  scheduled_at: string;
+  pricing_type: "flat" | "hourly";
+  price_total: number;
+  hours?: number | null;
+  passenger_count?: number | null;
+  luggage_count?: number | null;
+  flight_number?: string;
+  terminal?: string;
+  handled_by: "self" | "partner";
+  partner_id?: string | null;
+  cookie_amount?: number | null;
+  notes?: string;
+};
+
+export async function createTrip(
+  input: TripInput
+): Promise<{ ok: true; id: string } | { error: string }> {
+  const parsed = tripSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const isPartner = parsed.data.handled_by === "partner";
+
+  const { data, error } = await supabase
+    .from("trips")
+    .insert({
+      business_id: business.id,
+      customer_id: parsed.data.customer_id || null,
+      vehicle_id: isPartner ? null : parsed.data.vehicle_id || null,
+      pickup_address: parsed.data.pickup_address,
+      dropoff_address: parsed.data.dropoff_address,
+      scheduled_at: parsed.data.scheduled_at,
+      pricing_type: parsed.data.pricing_type,
+      price_total: parsed.data.price_total,
+      hours:
+        parsed.data.pricing_type === "hourly" ? parsed.data.hours ?? null : null,
+      passenger_count: parsed.data.passenger_count ?? null,
+      luggage_count: parsed.data.luggage_count ?? null,
+      flight_number: parsed.data.flight_number || null,
+      terminal: parsed.data.terminal || null,
+      handled_by: parsed.data.handled_by,
+      partner_id: isPartner ? parsed.data.partner_id : null,
+      cookie_amount: isPartner ? parsed.data.cookie_amount ?? null : null,
+      notes: parsed.data.notes || null,
+    })
+    .select()
+    .single();
+
+  if (error || !data) {
+    console.error("createTrip:", error);
+    return { error: "Could not create trip. Please try again." };
+  }
+
+  revalidatePath("/app/trips");
+  revalidatePath("/app");
+  return { ok: true, id: data.id };
+}
+
+export async function updateTrip(
+  id: string,
+  input: TripInput
+): Promise<{ ok: true } | { error: string }> {
+  const parsed = tripSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  await requireBusiness();
+  const supabase = await createClient();
+  const isPartner = parsed.data.handled_by === "partner";
+
+  const { error } = await supabase
+    .from("trips")
+    .update({
+      customer_id: parsed.data.customer_id || null,
+      vehicle_id: isPartner ? null : parsed.data.vehicle_id || null,
+      pickup_address: parsed.data.pickup_address,
+      dropoff_address: parsed.data.dropoff_address,
+      scheduled_at: parsed.data.scheduled_at,
+      pricing_type: parsed.data.pricing_type,
+      price_total: parsed.data.price_total,
+      hours:
+        parsed.data.pricing_type === "hourly" ? parsed.data.hours ?? null : null,
+      passenger_count: parsed.data.passenger_count ?? null,
+      luggage_count: parsed.data.luggage_count ?? null,
+      flight_number: parsed.data.flight_number || null,
+      terminal: parsed.data.terminal || null,
+      handled_by: parsed.data.handled_by,
+      partner_id: isPartner ? parsed.data.partner_id : null,
+      cookie_amount: isPartner ? parsed.data.cookie_amount ?? null : null,
+      notes: parsed.data.notes || null,
+    })
+    .eq("id", id);
+
+  if (error) {
+    console.error("updateTrip:", error);
+    return { error: "Could not update trip. Please try again." };
+  }
+
+  revalidatePath("/app/trips");
+  revalidatePath(`/app/trips/${id}`);
+  revalidatePath("/app");
+  return { ok: true };
+}

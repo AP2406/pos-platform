@@ -39,3 +39,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+API-key-for-Auto-capture-leads.txt
+   *.key.txt
