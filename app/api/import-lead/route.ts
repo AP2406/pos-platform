@@ -76,9 +76,10 @@ export async function POST(req: NextRequest) {
   let parsed: ParsedLead;
   try {
     parsed = await parseEmailWithGemini(emailText);
-  } catch (err) {
+ } catch (err) {
     console.error("import-lead parse error:", err);
-    return NextResponse.json({ ok: true, status: "parse_failed" });
+    const detail = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ ok: true, status: "parse_failed", detail });
   }
 
   const detected = parsed.trip_status; // booked | confirmed | completed | null
