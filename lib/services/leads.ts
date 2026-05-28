@@ -13,6 +13,8 @@ export type ParsedLead = {
   flight_number: string | null;
   terminal: string | null;
   notes: string | null;
+  trip_status: "booked" | "confirmed" | "completed" | null;
+  booking_reference: string | null;
 };
 
 const PARSE_PROMPT = `You extract structured data from limo/transportation booking emails.
@@ -37,7 +39,9 @@ Return ONLY a JSON object with these fields (use null for missing/unclear data):
   "luggage_count": integer or null,
   "flight_number": string or null,
   "terminal": string or null,
-  "notes": string or null
+  "notes": string or null,
+  "trip_status": "booked" | "confirmed" | "completed" | null,
+  "booking_reference": string or null
 }
 
 Rules:
@@ -47,6 +51,14 @@ Rules:
 - Convert relative dates like "tomorrow" or "next Friday" using the current date
 - For prices, extract the dollar value only (e.g., $85.50 becomes 85.50)
 - For notes, capture special instructions, payment terms, customer preferences, broker reference numbers, etc.
+
+- trip_status: classify what this email represents:
+  - "booked" = a new reservation/booking request just placed, not yet confirmed
+  - "confirmed" = the booking is confirmed or locked in (e.g. "your ride is confirmed", a driver/car was assigned, a confirmation number was issued)
+  - "completed" = the trip already happened (e.g. a receipt, trip summary, drop-off notice, or "thank you for riding")
+  - null only if you genuinely cannot tell
+- booking_reference: any broker/booking/confirmation/reservation reference or ID in the email (e.g. "Booking #GL-48213", "Confirmation: ABC123", "Ref: 99281"). Extract just the identifier. null if none.
+
 - Return ONLY the JSON object, no markdown formatting, no commentary
 
 Email to parse:

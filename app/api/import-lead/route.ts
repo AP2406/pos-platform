@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { parseEmailWithGemini, type ParsedLead } from "@/lib/services/leads";
 
+const STATUS_RANK: Record<string, number> = {
+  booked: 0,
+  confirmed: 1,
+  completed: 2,
+};
+
 function serviceClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,7 +17,6 @@ function serviceClient() {
 }
 
 export async function POST(req: NextRequest) {
-  // 1. Authenticate via import token
   const token = req.headers.get("x-import-token");
   if (!token) {
     return NextResponse.json({ error: "Missing token" }, { status: 401 });
@@ -30,13 +35,11 @@ export async function POST(req: NextRequest) {
     .select("business_id")
     .eq("token", token)
     .maybeSingle();
-
   if (!tokenRow) {
     return NextResponse.json({ error: "Invalid token" }, { status: 401 });
   }
   const businessId = tokenRow.business_id as string;
 
-  // 2. Read the email payload
   let payload: {
     messageId?: string;
     from?: string;
@@ -54,7 +57,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing email body" }, { status: 400 });
   }
 
-  // 3. Skip if we already imported this exact email
+  // Skip if we already processed this exact email
   if (messageId) {
     const { data: dupe } = await supabase
       .from("trips")
@@ -68,7 +71,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 4. Parse with Gemini (same logic as the manual "Lead from email")
+  // Parse with Gemini
   const emailText = `From: ${from ?? ""}\nSubject: ${subject ?? ""}\n\n${body}`;
   let parsed: ParsedLead;
   try {
@@ -78,7 +81,44 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, status: "parse_failed" });
   }
 
-  // 5. Need the essentials to make a real trip
+  const detected = parsed.trip_status; // booked | confirmed | completed | null
+
+  // FOLLOW-UP PATH: same reference as an existing trip → update status, don't duplicate
+  if (parsed.booking_reference) {
+    const { data: existingTrip } = await supabase
+      .from("trips")
+      .select("id, trip_status")
+      .eq("business_id", businessId)
+      .eq("booking_reference", parsed.booking_reference)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingTrip) {
+      if (detected) {
+        const cur = STATUS_RANK[existingTrip.trip_status] ?? 0;
+        const next = STATUS_RANK[detected] ?? 0;
+        if (next > cur) {
+          await supabase
+            .from("trips")
+            .update({ trip_status: detected })
+            .eq("id", existingTrip.id);
+          return NextResponse.json({
+            ok: true,
+            status: "updated",
+            tripId: existingTrip.id,
+            to: detected,
+          });
+        }
+      }
+      return NextResponse.json({
+        ok: true,
+        status: "no_change",
+        tripId: existingTrip.id,
+      });
+    }
+  }
+
+  // NEW TRIP PATH: needs the essentials
   if (
     !parsed.pickup_address ||
     !parsed.dropoff_address ||
@@ -88,7 +128,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, status: "incomplete" });
   }
 
-  // 6. Match an existing customer (this business only) or create one
   let customerId: string | null = null;
   if (parsed.customer_phone || parsed.customer_email) {
     const filters: string[] = [];
@@ -117,11 +156,10 @@ export async function POST(req: NextRequest) {
     if (newCustomer) customerId = newCustomer.id;
   }
 
-  // 7. Past trips → completed, upcoming → booked
   const tripStatus =
-    new Date(parsed.scheduled_at) < new Date() ? "completed" : "booked";
+    detected ??
+    (new Date(parsed.scheduled_at) < new Date() ? "completed" : "booked");
 
-  // 8. Create the trip
   const { data: trip, error: tripError } = await supabase
     .from("trips")
     .insert({
@@ -140,6 +178,7 @@ export async function POST(req: NextRequest) {
       trip_status: tripStatus,
       notes: parsed.notes,
       source_message_id: messageId ?? null,
+      booking_reference: parsed.booking_reference ?? null,
     })
     .select("id")
     .single();
@@ -149,5 +188,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Insert failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, status: "imported", tripId: trip.id });
+  return NextResponse.json({
+    ok: true,
+    status: "imported",
+    tripId: trip.id,
+    detected: tripStatus,
+  });
 }
