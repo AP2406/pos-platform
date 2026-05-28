@@ -2,7 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
 import { PartnerControls } from "./partner-controls";
+import { StatusBadge, SectionHeader } from "../../_components/ui";
 
 function formatCurrency(amount: number | string | null | undefined): string {
   const num = typeof amount === "number" ? amount : parseFloat(amount ?? "0");
@@ -16,18 +18,6 @@ function formatDate(iso: string) {
     day: "numeric",
     year: "numeric",
   }).format(new Date(iso));
-}
-
-function statusColor(status: string) {
-  const map: Record<string, string> = {
-    booked: "bg-slate-100 text-slate-700",
-    confirmed: "bg-blue-50 text-blue-700",
-    in_progress: "bg-amber-50 text-amber-700",
-    completed: "bg-green-50 text-green-700",
-    cancelled: "bg-red-50 text-red-700",
-    no_show: "bg-red-50 text-red-700",
-  };
-  return map[status] ?? "bg-slate-100 text-slate-700";
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,26 +80,29 @@ export default async function PartnerDetailPage({
       <div className="flex items-center justify-between mb-4">
         <Link
           href="/app/partners"
-          className="text-sm text-slate-500 hover:text-slate-900"
+          className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 transition-colors"
         >
-          ← All partners
+          <ChevronLeft className="w-4 h-4" />
+          All partners
         </Link>
         <PartnerControls partner={partner} />
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-lg p-6 mb-4">
-        <h1 className="text-2xl font-semibold">{partner.name}</h1>
+      <div className="bg-card border border-border rounded-lg p-6 mb-4">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {partner.name}
+        </h1>
         {partner.contact_name && (
-          <div className="text-sm text-slate-700 mt-1">
+          <div className="text-sm text-foreground mt-1">
             Contact: {partner.contact_name}
           </div>
         )}
-        <div className="text-sm text-slate-600 mt-2 space-y-1">
+        <div className="text-sm text-muted-foreground mt-2 space-y-1">
           {partner.phone && <div>{partner.phone}</div>}
           {partner.email && <div>{partner.email}</div>}
         </div>
         {firstTrip && (
-          <div className="text-xs text-slate-500 mt-3">
+          <div className="text-xs text-muted-foreground mt-3">
             Partner since {formatDate(firstTrip.scheduled_at)}
           </div>
         )}
@@ -144,28 +137,24 @@ export default async function PartnerDetailPage({
       </div>
 
       {partner.notes && (
-        <div className="bg-white border border-slate-200 rounded-lg p-6 mb-4">
-          <h2 className="text-xs uppercase tracking-wider text-slate-500 mb-2">
-            Notes
-          </h2>
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Notes</SectionHeader>
           <p className="text-sm whitespace-pre-wrap">{partner.notes}</p>
         </div>
       )}
 
-      <h2 className="text-xs uppercase tracking-wider text-slate-500 mt-6 mb-3">
-        Trip history
-      </h2>
+      <SectionHeader className="mt-6">Trip history</SectionHeader>
       {trips.length === 0 ? (
-        <div className="bg-white border border-dashed border-slate-300 rounded-lg p-8 text-center text-sm text-slate-500">
+        <div className="bg-card border border-dashed border-border rounded-lg p-8 text-center text-sm text-muted-foreground">
           No trips farmed out to this partner yet.
         </div>
       ) : (
-        <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-200">
+        <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
           {trips.map((t) => (
             <Link
               key={t.id}
               href={`/app/trips/${t.id}`}
-              className="block p-4 hover:bg-slate-50 transition"
+              className="block p-4 hover:bg-accent transition-colors"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
@@ -173,31 +162,25 @@ export default async function PartnerDetailPage({
                     <span className="font-medium">
                       {t.customer?.name ?? "One-off"}
                     </span>
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded capitalize ${statusColor(
-                        t.trip_status
-                      )}`}
-                    >
-                      {t.trip_status.replace("_", " ")}
-                    </span>
+                    <StatusBadge status={t.trip_status} />
                     {t.cookie_collected && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-green-50 text-green-700">
+                      <span className="text-xs px-2 py-0.5 rounded-md bg-green-50 text-green-700 font-medium">
                         ✓ Cookie collected
                       </span>
                     )}
                   </div>
-                  <div className="text-sm text-slate-700 mt-1 truncate">
+                  <div className="text-sm text-foreground mt-1 truncate">
                     {t.pickup_address} → {t.dropoff_address}
                   </div>
-                  <div className="text-xs text-slate-500 mt-1">
+                  <div className="text-xs text-muted-foreground mt-1">
                     {formatDate(t.scheduled_at)}
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="font-semibold text-purple-700">
+                  <div className="font-semibold text-purple-700 tabular-nums">
                     🍪 {formatCurrency(t.cookie_amount)}
                   </div>
-                  <div className="text-xs text-slate-400">
+                  <div className="text-xs text-muted-foreground/60 tabular-nums">
                     of {formatCurrency(t.price_total)}
                   </div>
                 </div>
@@ -222,18 +205,18 @@ function StatCard({
   tone?: "warning" | "neutral";
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-5">
-      <div className="text-xs uppercase tracking-wider text-slate-500">
+    <div className="bg-card border border-border rounded-lg p-5 transition-all duration-200 hover:border-foreground/15 hover:shadow-[0_2px_8px_rgb(0_0_0_/_0.04)]">
+      <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold">
         {label}
       </div>
       <div
-        className={`text-2xl font-semibold mt-2 ${
+        className={`text-2xl font-semibold mt-2 tabular-nums ${
           tone === "warning" ? "text-amber-700" : ""
         }`}
       >
         {value}
       </div>
-      {hint && <div className="text-xs text-slate-500 mt-1">{hint}</div>}
+      {hint && <div className="text-xs text-muted-foreground mt-1">{hint}</div>}
     </div>
   );
 }

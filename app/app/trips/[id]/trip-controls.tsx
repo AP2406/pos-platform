@@ -72,7 +72,7 @@ export function TripControls({
     <div className="space-y-4">
       {/* Status switcher */}
       <div className="space-y-2">
-        <div className="text-xs uppercase tracking-wider text-slate-500">
+        <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold">
           Status
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -82,10 +82,10 @@ export function TripControls({
               type="button"
               disabled={isPending}
               onClick={() => run(() => updateTripStatus(tripId, s.value))}
-              className={`px-3 py-2 text-xs rounded-md border transition ${
+              className={`px-3 py-2 text-xs rounded-md border transition-colors disabled:opacity-50 ${
                 tripStatus === s.value
-                  ? "border-slate-900 bg-slate-50 font-medium"
-                  : "border-slate-200 hover:border-slate-400"
+                  ? "border-foreground bg-accent font-medium"
+                  : "border-border hover:border-foreground/40 hover:bg-accent/50"
               }`}
             >
               {s.label}
@@ -95,8 +95,8 @@ export function TripControls({
       </div>
 
       {/* Money tracking */}
-      <div className="space-y-2 pt-4 border-t border-slate-100">
-        <div className="text-xs uppercase tracking-wider text-slate-500 mb-2">
+      <div className="space-y-2 pt-4 border-t border-border">
+        <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2">
           Money
         </div>
 
@@ -105,7 +105,7 @@ export function TripControls({
             <div className="text-sm font-medium">
               {paymentCollected ? "✓ Customer paid" : "Customer payment"}
             </div>
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-muted-foreground">
               {paymentCollected ? "Marked as collected" : "Not collected yet"}
             </div>
           </div>
@@ -122,12 +122,12 @@ export function TripControls({
         </div>
 
         {handledBy === "partner" && cookieAmount != null && (
-          <div className="flex items-center justify-between py-2 border-t border-slate-100">
+          <div className="flex items-center justify-between py-2 border-t border-border">
             <div>
-              <div className="text-sm font-medium">
+              <div className="text-sm font-medium tabular-nums">
                 {cookieCollected ? "✓ " : ""}🍪 Cookie ${cookieAmount.toFixed(2)}
               </div>
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-muted-foreground">
                 {cookieCollected
                   ? "Partner paid you"
                   : "Partner still owes you this"}
@@ -149,12 +149,12 @@ export function TripControls({
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <div className="pt-4 border-t border-slate-100">
+      <div className="pt-4 border-t border-border">
         <button
           type="button"
           onClick={handleDelete}
           disabled={isPending}
-          className="text-xs text-red-600 hover:text-red-800 underline"
+          className="text-xs text-red-600 hover:text-red-700 underline disabled:opacity-50"
         >
           Delete trip
         </button>
