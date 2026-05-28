@@ -36,7 +36,7 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
 
   return (
     <nav className="flex-1 p-2 space-y-0.5">
-      {items.map((item) => {
+      {items.map((item, index) => {
         const Icon = iconMap[item.href] ?? LayoutDashboard;
         const isActive =
           item.href === "/app"
@@ -44,33 +44,51 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
             : pathname === item.href || pathname.startsWith(item.href + "/");
 
         return (
-          <Link
+          <motion.div
             key={item.href}
-            href={item.href}
-            className="relative flex items-center gap-3 px-3 py-2 text-sm rounded-md group"
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{
+              delay: index * 0.04,
+              duration: 0.28,
+              ease: [0.22, 1, 0.36, 1],
+            }}
           >
-            {isActive && (
-              <motion.div
-                layoutId="sidebar-active-pill"
-                className="absolute inset-0 bg-sidebar-accent rounded-md"
-                transition={{
-                  type: "spring",
-                  stiffness: 380,
-                  damping: 30,
-                }}
-              />
-            )}
-            <span
-              className={`relative flex items-center gap-3 z-10 transition-colors ${
-                isActive
-                  ? "text-foreground font-medium"
-                  : "text-muted-foreground group-hover:text-foreground"
-              }`}
+            <Link
+              href={item.href}
+              className="relative flex items-center gap-3 px-3 py-2 text-sm rounded-md group"
             >
-              <Icon className="w-4 h-4 shrink-0" strokeWidth={2} />
-              <span>{item.label}</span>
-            </span>
-          </Link>
+              {isActive && (
+                <>
+                  <motion.div
+                    layoutId="sidebar-active-bar"
+                    className="absolute -left-2 top-1.5 bottom-1.5 w-[3px] bg-sidebar-primary"
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                  />
+                  <motion.div
+                    layoutId="sidebar-active-pill"
+                    className="absolute inset-0 bg-sidebar-accent rounded-md"
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                  />
+                </>
+              )}
+              <span
+                className={`relative flex items-center gap-3 z-10 transition-colors ${
+                  isActive
+                    ? "text-sidebar-foreground font-medium"
+                    : "text-sidebar-muted group-hover:text-sidebar-foreground"
+                }`}
+              >
+                <Icon
+                  className={`w-4 h-4 shrink-0 transition-colors ${
+                    isActive ? "text-sidebar-primary" : ""
+                  }`}
+                  strokeWidth={2}
+                />
+                <span>{item.label}</span>
+              </span>
+            </Link>
+          </motion.div>
         );
       })}
     </nav>

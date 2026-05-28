@@ -1,6 +1,7 @@
 import { requireBusiness } from "@/lib/services/tenancy";
 import { SignOutButton } from "./_components/sign-out";
 import { SidebarNav } from "./_components/sidebar-nav";
+import { PageTransition } from "./_components/page-transition";
 
 type NavItem = { href: string; label: string };
 
@@ -59,12 +60,13 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-screen flex bg-background">
-      <aside className="w-60 bg-sidebar border-r border-sidebar-border flex flex-col shrink-0">
+      <aside className="w-60 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col shrink-0">
         {/* Logo + brand */}
         <div className="px-4 pt-5 pb-4 border-b border-sidebar-border">
           <div className="flex items-center gap-2 mb-5">
-          <div className="w-7 h-7 rounded-md bg-[oklch(0.62_0.215_254)] text-white flex items-center justify-center shrink-0 shadow-sm">
-                <svg viewBox="0 0 24 24"
+            <div className="w-7 h-7 rounded-md bg-sidebar-primary text-white flex items-center justify-center shrink-0 shadow-sm">
+              <svg
+                viewBox="0 0 24 24"
                 fill="currentColor"
                 className="w-4 h-4"
                 aria-hidden="true"
@@ -77,13 +79,13 @@ export default async function AppLayout({
 
           {/* Business workspace context */}
           <div>
-            <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-medium">
+            <div className="text-[10px] uppercase tracking-[0.08em] text-sidebar-muted font-medium">
               Workspace
             </div>
             <div className="font-medium text-sm mt-1 truncate">
               {business.name}
             </div>
-            <div className="text-xs text-muted-foreground capitalize mt-0.5">
+            <div className="text-xs text-sidebar-muted capitalize mt-0.5">
               {business.industry.replace("_", " ")} · {role}
             </div>
           </div>
@@ -99,7 +101,9 @@ export default async function AppLayout({
       </aside>
 
       <main className="flex-1 overflow-auto">
-        <div className="p-8 max-w-7xl mx-auto">{children}</div>
+        <div className="p-8 max-w-7xl mx-auto">
+          <PageTransition>{children}</PageTransition>
+        </div>
       </main>
     </div>
   );
