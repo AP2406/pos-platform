@@ -4,6 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import {
+  createDraftSquareInvoice,
+  isSquareConfigured,
+} from "@/lib/services/square";
 
 const tripSchema = z
   .object({
@@ -99,8 +103,60 @@ export async function createTrip(
     return { error: "Could not create trip. Please try again." };
   }
 
+  // Auto-create a Square draft invoice for self-driven trips that have a customer
+  if (!isPartner && parsed.data.customer_id && isSquareConfigured()) {
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("id, name, email, phone, square_customer_id")
+      .eq("id", parsed.data.customer_id)
+      .maybeSingle();
+
+    if (customer) {
+      const result = await createDraftSquareInvoice({
+        customer: {
+          square_customer_id: customer.square_customer_id,
+          name: customer.name,
+          email: customer.email,
+          phone: customer.phone,
+        },
+        trip: {
+          pickup_address: parsed.data.pickup_address,
+          dropoff_address: parsed.data.dropoff_address,
+          scheduled_at: parsed.data.scheduled_at,
+          price_total: parsed.data.price_total,
+        },
+        currency: business.currency ?? "CAD",
+      });
+
+      if ("ok" in result) {
+        if (!customer.square_customer_id) {
+          await supabase
+            .from("customers")
+            .update({ square_customer_id: result.data.squareCustomerId })
+            .eq("id", customer.id);
+        }
+        await supabase
+          .from("trips")
+          .update({
+            square_invoice_id: result.data.invoiceId,
+            square_invoice_status: result.data.invoiceStatus,
+            square_invoice_url: result.data.invoiceUrl,
+            square_order_id: result.data.orderId,
+            square_error: null,
+          })
+          .eq("id", data.id);
+      } else {
+        await supabase
+          .from("trips")
+          .update({ square_error: result.error })
+          .eq("id", data.id);
+      }
+    }
+  }
+
   revalidatePath("/app/trips");
   revalidatePath("/app");
+  revalidatePath(`/app/trips/${data.id}`);
   return { ok: true, id: data.id };
 }
 
