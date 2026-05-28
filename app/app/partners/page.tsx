@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { AddPartnerSheet } from "./add-partner-sheet";
+import { PageHeader, EmptyState } from "../_components/ui";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PartnerRow = any;
@@ -17,26 +18,19 @@ export default async function PartnersPage() {
 
   return (
     <div className="max-w-6xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold">Partners</h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Drivers and services you farm trips out to.
-          </p>
-        </div>
-        <AddPartnerSheet />
-      </div>
+      <PageHeader
+        title="Partners"
+        subtitle="Drivers and services you farm trips out to."
+        action={<AddPartnerSheet />}
+      />
 
       {!partners || partners.length === 0 ? (
-        <div className="bg-white border border-dashed border-slate-300 rounded-lg p-12 text-center">
-          <h2 className="font-medium text-slate-900">No partners yet</h2>
-          <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
-            Add a partner you farm trips out to. You&apos;ll set a default
-            cookie they pay you.
-          </p>
-        </div>
+        <EmptyState
+          title="No partners yet"
+          message="Add a partner you farm trips out to. You'll set a default cookie they pay you."
+        />
       ) : (
-        <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-200">
+        <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
           {partners.map((p: PartnerRow) => {
             let defaultRate = "—";
             if (p.default_cookie_percent != null) {
@@ -48,18 +42,22 @@ export default async function PartnersPage() {
               <Link
                 key={p.id}
                 href={`/app/partners/${p.id}`}
-                className="flex items-center justify-between p-4 hover:bg-slate-50 transition"
+                className="flex items-center justify-between p-4 hover:bg-accent transition-colors"
               >
                 <div className="flex-1 min-w-0">
                   <div className="font-medium">{p.name}</div>
-                  <div className="text-xs text-slate-500 mt-1 space-x-3">
+                  <div className="text-xs text-muted-foreground mt-1 space-x-3">
                     {p.contact_name && <span>{p.contact_name}</span>}
                     {p.phone && <span>{p.phone}</span>}
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-xs text-slate-500">Default cookie</div>
-                  <div className="font-medium text-sm">{defaultRate}</div>
+                <div className="text-right shrink-0">
+                  <div className="text-xs text-muted-foreground">
+                    Default cookie
+                  </div>
+                  <div className="font-medium text-sm tabular-nums">
+                    {defaultRate}
+                  </div>
                 </div>
               </Link>
             );
