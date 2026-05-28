@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { parseEmailWithGemini, type ParsedLead } from "@/lib/services/leads";
+import {
+  createDraftSquareInvoice,
+  isSquareConfigured,
+} from "@/lib/services/square";
 
 const STATUS_RANK: Record<string, number> = {
   booked: 0,
@@ -129,21 +133,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, status: "incomplete" });
   }
 
-  let customerId: string | null = null;
+let customerRecord: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    square_customer_id: string | null;
+  } | null = null;
+
   if (parsed.customer_phone || parsed.customer_email) {
     const filters: string[] = [];
     if (parsed.customer_phone) filters.push(`phone.eq.${parsed.customer_phone}`);
     if (parsed.customer_email) filters.push(`email.eq.${parsed.customer_email}`);
     const { data: existing } = await supabase
       .from("customers")
-      .select("id")
+      .select("id, name, email, phone, square_customer_id")
       .eq("business_id", businessId)
       .or(filters.join(","))
       .limit(1)
       .maybeSingle();
-    if (existing) customerId = existing.id;
+    if (existing) customerRecord = existing;
   }
-  if (!customerId && parsed.customer_name) {
+  if (!customerRecord && parsed.customer_name) {
     const { data: newCustomer } = await supabase
       .from("customers")
       .insert({
@@ -152,10 +163,12 @@ export async function POST(req: NextRequest) {
         email: parsed.customer_email,
         phone: parsed.customer_phone,
       })
-      .select("id")
+      .select("id, name, email, phone, square_customer_id")
       .single();
-    if (newCustomer) customerId = newCustomer.id;
+    if (newCustomer) customerRecord = newCustomer;
   }
+
+  const customerId = customerRecord?.id ?? null;
 
   const tripStatus =
     detected ??
@@ -184,9 +197,59 @@ export async function POST(req: NextRequest) {
     .select("id")
     .single();
 
-  if (tripError || !trip) {
+if (tripError || !trip) {
     console.error("import-lead insert error:", tripError);
     return NextResponse.json({ error: "Insert failed" }, { status: 500 });
+  }
+
+  // Auto-create a Square draft invoice for upcoming bookings
+  // (skipped for completed/past trips from a backlog import)
+  if (isSquareConfigured() && customerRecord && tripStatus !== "completed") {
+    const { data: biz } = await supabase
+      .from("businesses")
+      .select("currency")
+      .eq("id", businessId)
+      .maybeSingle();
+
+    const result = await createDraftSquareInvoice({
+      customer: {
+        square_customer_id: customerRecord.square_customer_id,
+        name: customerRecord.name,
+        email: customerRecord.email,
+        phone: customerRecord.phone,
+      },
+      trip: {
+        pickup_address: parsed.pickup_address,
+        dropoff_address: parsed.dropoff_address,
+        scheduled_at: parsed.scheduled_at,
+        price_total: parsed.price_total,
+      },
+      currency: biz?.currency ?? "CAD",
+    });
+
+    if ("ok" in result) {
+      if (!customerRecord.square_customer_id) {
+        await supabase
+          .from("customers")
+          .update({ square_customer_id: result.data.squareCustomerId })
+          .eq("id", customerRecord.id);
+      }
+      await supabase
+        .from("trips")
+        .update({
+          square_invoice_id: result.data.invoiceId,
+          square_invoice_status: result.data.invoiceStatus,
+          square_invoice_url: result.data.invoiceUrl,
+          square_order_id: result.data.orderId,
+          square_error: null,
+        })
+        .eq("id", trip.id);
+    } else {
+      await supabase
+        .from("trips")
+        .update({ square_error: result.error })
+        .eq("id", trip.id);
+    }
   }
 
   return NextResponse.json({
