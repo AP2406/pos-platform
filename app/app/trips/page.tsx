@@ -4,6 +4,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { BookTripSheet } from "./book-trip-sheet";
 import { TripRowActions } from "./trip-row-actions";
 import { LeadFromEmailSheet } from "./lead-from-email-sheet";
+import { TripsFilter } from "./trips-filter";
 import { PageHeader, EmptyState, StatusBadge } from "../_components/ui";
 
 function formatDateTime(iso: string) {
@@ -19,8 +20,13 @@ function formatDateTime(iso: string) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TripRow = any;
 
-export default async function TripsPage() {
+export default async function TripsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ handled?: string }>;
+}) {
   await requireBusiness();
+  const { handled } = await searchParams;
   const supabase = await createClient();
 
   const { data: trips } = await supabase
@@ -47,6 +53,12 @@ export default async function TripsPage() {
     .eq("is_active", true)
     .order("name");
 
+  const allTrips: TripRow[] = trips ?? [];
+  const filteredTrips =
+    handled === "self" || handled === "partner"
+      ? allTrips.filter((t: TripRow) => t.handled_by === handled)
+      : allTrips;
+
   return (
     <div className="max-w-6xl">
       <PageHeader
@@ -64,14 +76,21 @@ export default async function TripsPage() {
         }
       />
 
-      {!trips || trips.length === 0 ? (
+      {allTrips.length > 0 && <TripsFilter />}
+
+      {allTrips.length === 0 ? (
         <EmptyState
           title="No trips yet"
           message="Book your first trip to start tracking the work."
         />
+      ) : filteredTrips.length === 0 ? (
+        <EmptyState
+          title="No trips match this filter"
+          message="Try selecting a different filter above."
+        />
       ) : (
         <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
-          {trips.map((t: TripRow) => (
+          {filteredTrips.map((t: TripRow) => (
             <div
               key={t.id}
               className="flex items-stretch hover:bg-accent transition-colors"

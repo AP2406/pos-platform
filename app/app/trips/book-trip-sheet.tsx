@@ -38,6 +38,16 @@ function isoToLocalDateTime(iso: string): string {
   )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function toggleBtn(active: boolean, size: "sm" | "xs" = "sm") {
+  return `px-3 py-2 ${
+    size === "xs" ? "text-xs" : "text-sm"
+  } rounded-md border transition-colors ${
+    active
+      ? "border-foreground bg-accent font-medium"
+      : "border-border hover:border-foreground/40 hover:bg-accent/50"
+  }`;
+}
+
 export function BookTripSheet({
   customers: initialCustomers,
   vehicles,
@@ -273,7 +283,7 @@ export function BookTripSheet({
   }
 
   const selectClass =
-    "w-full h-10 px-3 rounded-md border border-slate-200 bg-white text-sm";
+    "w-full h-10 px-3 rounded-md border border-input bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-ring";
 
   return (
     <Sheet
@@ -306,7 +316,7 @@ export function BookTripSheet({
                   <button
                     type="button"
                     onClick={() => setShowAddCustomer(true)}
-                    className="text-xs text-slate-600 underline hover:text-slate-900"
+                    className="text-xs text-muted-foreground underline hover:text-foreground transition-colors"
                   >
                     + New customer
                   </button>
@@ -328,7 +338,7 @@ export function BookTripSheet({
                   ))}
                 </select>
               ) : (
-                <div className="border border-slate-200 rounded-lg p-3 space-y-3 bg-slate-50">
+                <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/50">
                   <div className="space-y-1">
                     <Label htmlFor="new-name" className="text-xs">
                       Name <span className="text-red-500">*</span>
@@ -433,16 +443,12 @@ export function BookTripSheet({
             </div>
 
             {/* HANDLER */}
-            <div className="space-y-2 pt-3 border-t border-slate-100">
+            <div className="space-y-2 pt-3 border-t border-border">
               <Label>Who&apos;s handling this trip?</Label>
               <div className="grid grid-cols-2 gap-2 mt-2">
                 <button
                   type="button"
-                  className={`px-3 py-2 text-sm rounded-md border transition ${
-                    handledBy === "self"
-                      ? "border-slate-900 bg-slate-50 font-medium"
-                      : "border-slate-200 hover:border-slate-400"
-                  }`}
+                  className={toggleBtn(handledBy === "self")}
                   onClick={() => {
                     setHandledBy("self");
                     setPartnerId("");
@@ -456,11 +462,7 @@ export function BookTripSheet({
                 </button>
                 <button
                   type="button"
-                  className={`px-3 py-2 text-sm rounded-md border transition ${
-                    handledBy === "partner"
-                      ? "border-slate-900 bg-slate-50 font-medium"
-                      : "border-slate-200 hover:border-slate-400"
-                  }`}
+                  className={toggleBtn(handledBy === "partner")}
                   onClick={() => {
                     setHandledBy("partner");
                     setVehicleId("");
@@ -513,7 +515,7 @@ export function BookTripSheet({
                       ))}
                     </select>
                     {partners.length === 0 && (
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-muted-foreground">
                         No partners yet. Add one in Partners first.
                       </p>
                     )}
@@ -524,7 +526,7 @@ export function BookTripSheet({
                     <div className="flex items-center justify-between">
                       <Label>Cookie owed to me</Label>
                       {cookieHint && (
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs text-muted-foreground">
                           {cookieHint}
                         </span>
                       )}
@@ -538,11 +540,7 @@ export function BookTripSheet({
                           setCookieMode("percent");
                           setCookieManuallySet(true);
                         }}
-                        className={`px-3 py-2 text-xs rounded-md border transition ${
-                          cookieMode === "percent"
-                            ? "border-slate-900 bg-slate-50 font-medium"
-                            : "border-slate-200 hover:border-slate-400"
-                        }`}
+                        className={toggleBtn(cookieMode === "percent", "xs")}
                       >
                         Percentage
                       </button>
@@ -552,11 +550,7 @@ export function BookTripSheet({
                           setCookieMode("dollar");
                           setCookieManuallySet(true);
                         }}
-                        className={`px-3 py-2 text-xs rounded-md border transition ${
-                          cookieMode === "dollar"
-                            ? "border-slate-900 bg-slate-50 font-medium"
-                            : "border-slate-200 hover:border-slate-400"
-                        }`}
+                        className={toggleBtn(cookieMode === "dollar", "xs")}
                       >
                         Dollar amount
                       </button>
@@ -579,20 +573,22 @@ export function BookTripSheet({
                             }}
                             placeholder="15"
                           />
-                          <span className="text-slate-500 text-sm">%</span>
+                          <span className="text-muted-foreground text-sm">
+                            %
+                          </span>
                         </div>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-muted-foreground">
                           Cookie: ${computedCookieDollars.toFixed(2)}
                           {priceTotal &&
-                            ` of $${parseFloat(priceTotal).toFixed(
-                              2
-                            )} trip`}
+                            ` of $${parseFloat(priceTotal).toFixed(2)} trip`}
                         </p>
                       </div>
                     ) : (
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-slate-500 text-sm">$</span>
+                          <span className="text-muted-foreground text-sm">
+                            $
+                          </span>
                           <Input
                             id="cookie-amount"
                             type="number"
@@ -606,7 +602,7 @@ export function BookTripSheet({
                             placeholder="0.00"
                           />
                         </div>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-muted-foreground">
                           What the partner pays you for sending them this trip.
                         </p>
                       </div>
@@ -617,13 +613,13 @@ export function BookTripSheet({
             </div>
 
             {/* TRIP DETAILS */}
-            <div className="space-y-3 pt-3 border-t border-slate-100">
+            <div className="space-y-3 pt-3 border-t border-border">
               <Label>Trip details</Label>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label
                     htmlFor="passengers"
-                    className="text-xs text-slate-500"
+                    className="text-xs text-muted-foreground"
                   >
                     Passengers
                   </Label>
@@ -638,7 +634,10 @@ export function BookTripSheet({
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="luggage" className="text-xs text-slate-500">
+                  <Label
+                    htmlFor="luggage"
+                    className="text-xs text-muted-foreground"
+                  >
                     Luggage
                   </Label>
                   <Input
@@ -652,7 +651,10 @@ export function BookTripSheet({
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="flight" className="text-xs text-slate-500">
+                  <Label
+                    htmlFor="flight"
+                    className="text-xs text-muted-foreground"
+                  >
                     Flight number
                   </Label>
                   <Input
@@ -663,7 +665,10 @@ export function BookTripSheet({
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="terminal" className="text-xs text-slate-500">
+                  <Label
+                    htmlFor="terminal"
+                    className="text-xs text-muted-foreground"
+                  >
                     Terminal
                   </Label>
                   <Input
@@ -677,27 +682,19 @@ export function BookTripSheet({
             </div>
 
             {/* PRICING */}
-            <div className="space-y-2 pt-3 border-t border-slate-100">
+            <div className="space-y-2 pt-3 border-t border-border">
               <Label>Pricing</Label>
               <div className="grid grid-cols-2 gap-2 mt-2">
                 <button
                   type="button"
-                  className={`px-3 py-2 text-sm rounded-md border transition ${
-                    pricingType === "flat"
-                      ? "border-slate-900 bg-slate-50 font-medium"
-                      : "border-slate-200 hover:border-slate-400"
-                  }`}
+                  className={toggleBtn(pricingType === "flat")}
                   onClick={() => setPricingType("flat")}
                 >
                   Flat rate
                 </button>
                 <button
                   type="button"
-                  className={`px-3 py-2 text-sm rounded-md border transition ${
-                    pricingType === "hourly"
-                      ? "border-slate-900 bg-slate-50 font-medium"
-                      : "border-slate-200 hover:border-slate-400"
-                  }`}
+                  className={toggleBtn(pricingType === "hourly")}
                   onClick={() => setPricingType("hourly")}
                 >
                   Hourly
@@ -706,11 +703,14 @@ export function BookTripSheet({
 
               <div className="flex gap-2 mt-2">
                 <div className="flex-1 space-y-2">
-                  <Label htmlFor="price" className="text-xs text-slate-500">
+                  <Label
+                    htmlFor="price"
+                    className="text-xs text-muted-foreground"
+                  >
                     Total price
                   </Label>
                   <div className="flex items-center gap-2">
-                    <span className="text-slate-500 text-sm">$</span>
+                    <span className="text-muted-foreground text-sm">$</span>
                     <Input
                       id="price"
                       type="number"
@@ -725,7 +725,10 @@ export function BookTripSheet({
                 </div>
                 {pricingType === "hourly" && (
                   <div className="flex-1 space-y-2">
-                    <Label htmlFor="hours" className="text-xs text-slate-500">
+                    <Label
+                      htmlFor="hours"
+                      className="text-xs text-muted-foreground"
+                    >
                       Hours
                     </Label>
                     <Input
@@ -743,7 +746,7 @@ export function BookTripSheet({
             </div>
 
             {/* NOTES */}
-            <div className="space-y-2 pt-3 border-t border-slate-100">
+            <div className="space-y-2 pt-3 border-t border-border">
               <Label htmlFor="notes">Notes</Label>
               <Textarea
                 id="notes"
