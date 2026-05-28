@@ -4,6 +4,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { BookTripSheet } from "./book-trip-sheet";
 import { TripRowActions } from "./trip-row-actions";
 import { LeadFromEmailSheet } from "./lead-from-email-sheet";
+import { PageHeader, EmptyState, StatusBadge } from "../_components/ui";
 
 function formatDateTime(iso: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -13,18 +14,6 @@ function formatDateTime(iso: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(iso));
-}
-
-function statusColor(status: string) {
-  const map: Record<string, string> = {
-    booked: "bg-slate-100 text-slate-700",
-    confirmed: "bg-blue-50 text-blue-700",
-    in_progress: "bg-amber-50 text-amber-700",
-    completed: "bg-green-50 text-green-700",
-    cancelled: "bg-red-50 text-red-700",
-    no_show: "bg-red-50 text-red-700",
-  };
-  return map[status] ?? "bg-slate-100 text-slate-700";
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -60,62 +49,49 @@ export default async function TripsPage() {
 
   return (
     <div className="max-w-6xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold">Trips</h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Every trip you&apos;ve booked.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <LeadFromEmailSheet />
-          <BookTripSheet
-            customers={customers ?? []}
-            vehicles={vehicles ?? []}
-            partners={partners ?? []}
-          />
-        </div>
-      </div>
+      <PageHeader
+        title="Trips"
+        subtitle="Every trip you've booked."
+        action={
+          <>
+            <LeadFromEmailSheet />
+            <BookTripSheet
+              customers={customers ?? []}
+              vehicles={vehicles ?? []}
+              partners={partners ?? []}
+            />
+          </>
+        }
+      />
 
       {!trips || trips.length === 0 ? (
-        <div className="bg-white border border-dashed border-slate-300 rounded-lg p-12 text-center">
-          <h2 className="font-medium text-slate-900">No trips yet</h2>
-          <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
-            Book your first trip to start tracking the work.
-          </p>
-        </div>
+        <EmptyState
+          title="No trips yet"
+          message="Book your first trip to start tracking the work."
+        />
       ) : (
-        <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-200">
+        <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
           {trips.map((t: TripRow) => (
             <div
               key={t.id}
-              className="flex items-stretch hover:bg-slate-50 transition"
+              className="flex items-stretch hover:bg-accent transition-colors"
             >
-              <Link
-                href={`/app/trips/${t.id}`}
-                className="flex-1 p-4 min-w-0"
-              >
+              <Link href={`/app/trips/${t.id}`} className="flex-1 p-4 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium">
                     {t.customer?.name ?? "One-off"}
                   </span>
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded ${statusColor(
-                      t.trip_status
-                    )}`}
-                  >
-                    {t.trip_status.replace("_", " ")}
-                  </span>
+                  <StatusBadge status={t.trip_status} />
                   {t.handled_by === "partner" && (
-                    <span className="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-700">
+                    <span className="text-xs px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 font-medium">
                       → {t.partner?.name ?? "Partner"}
                     </span>
                   )}
                 </div>
-                <div className="text-sm text-slate-700 mt-1 truncate">
+                <div className="text-sm text-foreground mt-1 truncate">
                   {t.pickup_address} → {t.dropoff_address}
                 </div>
-                <div className="text-xs text-slate-500 mt-1">
+                <div className="text-xs text-muted-foreground mt-1">
                   {formatDateTime(t.scheduled_at)}
                   {t.vehicle?.name && ` · ${t.vehicle.name}`}
                 </div>
