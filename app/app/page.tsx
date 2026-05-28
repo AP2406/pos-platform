@@ -32,14 +32,14 @@ function formatDate(iso: string, timezone: string): string {
 
 function statusColor(status: string): string {
   const map: Record<string, string> = {
-    booked: "bg-slate-100 text-slate-700",
+    booked: "bg-secondary text-secondary-foreground",
     confirmed: "bg-blue-50 text-blue-700",
     in_progress: "bg-amber-50 text-amber-700",
     completed: "bg-green-50 text-green-700",
     cancelled: "bg-red-50 text-red-700",
     no_show: "bg-red-50 text-red-700",
   };
-  return map[status] ?? "bg-slate-100 text-slate-700";
+  return map[status] ?? "bg-secondary text-secondary-foreground";
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -124,7 +124,6 @@ export default async function DashboardPage() {
       .limit(50),
   ]);
 
-  // TODAY
   const todayTrips: TripData[] = todayTripsResult.data ?? [];
   const todayCompleted = todayTrips.filter(
     (t) => t.trip_status === "completed"
@@ -146,17 +145,14 @@ export default async function DashboardPage() {
 
   const upcomingTrips: TripData[] = upcomingTripsResult.data ?? [];
 
-  // WEEK
   const weekTrips: TripData[] = weekTripsResult.data ?? [];
   const weekGross = weekTrips.reduce((sum, t) => sum + businessRevenue(t), 0);
 
-  // MONTH
   const monthTrips: TripData[] = monthTripsResult.data ?? [];
   const monthGross = monthTrips.reduce((sum, t) => sum + businessRevenue(t), 0);
   const monthTripCount = monthTrips.length;
   const avgPerTrip = monthTripCount > 0 ? monthGross / monthTripCount : 0;
 
-  // SELF vs PARTNER
   const monthSelfRevenue = monthTrips
     .filter((t) => t.handled_by === "self")
     .reduce((sum, t) => sum + parseFloat(t.price_total ?? "0"), 0);
@@ -169,7 +165,6 @@ export default async function DashboardPage() {
       ? Math.round((monthSelfRevenue / totalRevenue) * 100)
       : 0;
 
-  // TOP CUSTOMERS (by business revenue this month)
   const customerMap = new Map<
     string,
     { id: string; name: string; revenue: number; tripCount: number }
@@ -193,7 +188,6 @@ export default async function DashboardPage() {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 5);
 
-  // TOP PARTNERS (by cookies earned this month)
   const partnerMap = new Map<
     string,
     { id: string; name: string; cookies: number; tripCount: number }
@@ -217,7 +211,6 @@ export default async function DashboardPage() {
     .sort((a, b) => b.cookies - a.cookies)
     .slice(0, 5);
 
-  // NEEDS ATTENTION
   const needsAttention = (needsAttentionResult.data ?? [])
     .filter((t: TripData) => {
       if (t.handled_by === "self" && !t.payment_collected) return true;
@@ -226,7 +219,6 @@ export default async function DashboardPage() {
     })
     .slice(0, 5);
 
-  // CHART (this week by day)
   const weekDays: { label: string; revenue: number }[] = [];
   for (let i = 0; i < 7; i++) {
     const dayStartMs = weekStart.getTime() + i * 24 * 60 * 60 * 1000;
@@ -246,22 +238,21 @@ export default async function DashboardPage() {
 
   return (
     <div className="max-w-6xl">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
-      <p className="text-slate-500 mt-1">
-        {new Intl.DateTimeFormat("en-US", {
-          timeZone: tz,
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        }).format(new Date())}
-      </p>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          {new Intl.DateTimeFormat("en-US", {
+            timeZone: tz,
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+          }).format(new Date())}
+        </p>
+      </div>
 
-      {/* Today metrics */}
-      <h2 className="text-xs uppercase tracking-wider text-slate-500 mt-6 mb-3">
-        Today
-      </h2>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <SectionHeader>Today</SectionHeader>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard
           label="Today's gross"
           value={formatCurrency(todayGross)}
@@ -286,11 +277,8 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {/* Period metrics */}
-      <h2 className="text-xs uppercase tracking-wider text-slate-500 mt-6 mb-3">
-        Period
-      </h2>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <SectionHeader>Period</SectionHeader>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard
           label="This week"
           value={formatCurrency(weekGross)}
@@ -319,11 +307,8 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {/* Revenue chart */}
-      <h2 className="text-xs uppercase tracking-wider text-slate-500 mt-8 mb-3">
-        Revenue this week
-      </h2>
-      <div className="bg-white border border-slate-200 rounded-lg p-5">
+      <SectionHeader>Revenue this week</SectionHeader>
+      <div className="bg-card border border-border rounded-lg p-5 transition-shadow hover:shadow-sm">
         <svg
           viewBox="0 0 700 200"
           className="w-full"
@@ -341,7 +326,9 @@ export default async function DashboardPage() {
                   width="80"
                   height={barHeight}
                   className={
-                    day.revenue > 0 ? "fill-slate-800" : "fill-slate-200"
+                    day.revenue > 0
+                      ? "fill-[oklch(0.62_0.215_254)]"
+                      : "fill-muted"
                   }
                   rx="4"
                 />
@@ -350,7 +337,7 @@ export default async function DashboardPage() {
                     x={x + 40}
                     y={barY - 6}
                     textAnchor="middle"
-                    className="fill-slate-700 text-xs font-medium"
+                    className="fill-foreground text-xs font-medium tabular-nums"
                   >
                     ${day.revenue.toFixed(0)}
                   </text>
@@ -359,7 +346,7 @@ export default async function DashboardPage() {
                   x={x + 40}
                   y="185"
                   textAnchor="middle"
-                  className="fill-slate-500 text-xs"
+                  className="fill-muted-foreground text-xs"
                 >
                   {day.label}
                 </text>
@@ -369,13 +356,10 @@ export default async function DashboardPage() {
         </svg>
       </div>
 
-      {/* Needs attention */}
       {needsAttention.length > 0 && (
         <>
-          <h2 className="text-xs uppercase tracking-wider text-slate-500 mt-8 mb-3">
-            Needs attention
-          </h2>
-          <div className="bg-amber-50/30 border border-amber-200 rounded-lg divide-y divide-amber-100">
+          <SectionHeader>Needs attention</SectionHeader>
+          <div className="bg-amber-50/30 border border-amber-200 rounded-lg divide-y divide-amber-100 overflow-hidden">
             {needsAttention.map((t: TripData) => {
               const isPaymentPending =
                 t.handled_by === "self" && !t.payment_collected;
@@ -385,25 +369,25 @@ export default async function DashboardPage() {
                 <Link
                   key={t.id}
                   href={`/app/trips/${t.id}`}
-                  className="block p-4 hover:bg-white/60 transition"
+                  className="block p-4 hover:bg-white/60 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="font-medium">
                         {t.customer?.name ?? "One-off"}
                       </div>
-                      <div className="text-xs text-slate-500 mt-0.5">
+                      <div className="text-xs text-muted-foreground mt-0.5">
                         Completed · {formatDate(t.scheduled_at, tz)}
                       </div>
                     </div>
                     <div className="text-right text-sm">
                       {isPaymentPending && (
-                        <div className="text-amber-700 font-medium">
+                        <div className="text-amber-700 font-medium tabular-nums">
                           {formatCurrency(t.price_total)} unpaid
                         </div>
                       )}
                       {isCookiePending && (
-                        <div className="text-purple-700 font-medium">
+                        <div className="text-purple-700 font-medium tabular-nums">
                           🍪 {formatCurrency(t.cookie_amount)} pending
                         </div>
                       )}
@@ -416,18 +400,13 @@ export default async function DashboardPage() {
         </>
       )}
 
-      {/* Top customers + partners */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-6">
         <div>
-          <h2 className="text-xs uppercase tracking-wider text-slate-500 mb-3">
-            Top customers this month
-          </h2>
+          <SectionHeader noMargin>Top customers this month</SectionHeader>
           {topCustomers.length === 0 ? (
-            <div className="bg-white border border-dashed border-slate-300 rounded-lg p-6 text-center text-sm text-slate-500">
-              No completed trips this month yet.
-            </div>
+            <EmptyState message="No completed trips this month yet." />
           ) : (
-            <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-200">
+            <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
               {topCustomers.map((c) => (
                 <div
                   key={c.id}
@@ -435,11 +414,11 @@ export default async function DashboardPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">{c.name}</div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-muted-foreground">
                       {c.tripCount} trip{c.tripCount === 1 ? "" : "s"}
                     </div>
                   </div>
-                  <div className="font-semibold">
+                  <div className="font-semibold tabular-nums">
                     {formatCurrency(c.revenue)}
                   </div>
                 </div>
@@ -449,15 +428,11 @@ export default async function DashboardPage() {
         </div>
 
         <div>
-          <h2 className="text-xs uppercase tracking-wider text-slate-500 mb-3">
-            Top partners this month
-          </h2>
+          <SectionHeader noMargin>Top partners this month</SectionHeader>
           {topPartners.length === 0 ? (
-            <div className="bg-white border border-dashed border-slate-300 rounded-lg p-6 text-center text-sm text-slate-500">
-              No farmed-out trips this month yet.
-            </div>
+            <EmptyState message="No farmed-out trips this month yet." />
           ) : (
-            <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-200">
+            <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
               {topPartners.map((p) => (
                 <div
                   key={p.id}
@@ -465,11 +440,11 @@ export default async function DashboardPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">{p.name}</div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-muted-foreground">
                       {p.tripCount} trip{p.tripCount === 1 ? "" : "s"}
                     </div>
                   </div>
-                  <div className="font-semibold text-purple-700">
+                  <div className="font-semibold text-purple-700 tabular-nums">
                     🍪 {formatCurrency(p.cookies)}
                   </div>
                 </div>
@@ -479,31 +454,26 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Today's schedule */}
-      <h2 className="text-xs uppercase tracking-wider text-slate-500 mt-8 mb-3">
-        Today&apos;s schedule
-      </h2>
+      <SectionHeader>Today&apos;s schedule</SectionHeader>
       {todayTrips.length === 0 ? (
-        <div className="bg-white border border-dashed border-slate-300 rounded-lg p-8 text-center">
-          <p className="text-slate-500 text-sm">No trips scheduled today.</p>
-        </div>
+        <EmptyState message="No trips scheduled today." />
       ) : (
-        <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-200">
+        <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
           {todayTrips.map((t) => (
             <Link
               key={t.id}
               href={`/app/trips/${t.id}`}
-              className="flex items-center justify-between gap-4 p-4 hover:bg-slate-50 transition"
+              className="flex items-center justify-between gap-4 p-4 hover:bg-accent transition-colors"
             >
               <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="text-sm font-medium text-slate-700 w-16 shrink-0">
+                <div className="text-sm font-medium text-foreground w-16 shrink-0 tabular-nums">
                   {formatTime(t.scheduled_at, tz)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium truncate">
                     {t.customer?.name ?? "One-off"}
                   </div>
-                  <div className="text-xs text-slate-500 truncate">
+                  <div className="text-xs text-muted-foreground truncate">
                     {t.pickup_address} → {t.dropoff_address}
                   </div>
                 </div>
@@ -517,11 +487,11 @@ export default async function DashboardPage() {
                   {t.trip_status.replace("_", " ")}
                 </span>
                 <div className="text-right w-24">
-                  <div className="font-medium">
+                  <div className="font-medium tabular-nums">
                     {formatCurrency(businessRevenue(t))}
                   </div>
                   {t.handled_by === "partner" && (
-                    <div className="text-xs text-slate-400">
+                    <div className="text-xs text-muted-foreground tabular-nums">
                       of {formatCurrency(t.price_total)}
                     </div>
                   )}
@@ -532,23 +502,16 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Coming up */}
-      <h2 className="text-xs uppercase tracking-wider text-slate-500 mt-8 mb-3">
-        Coming up
-      </h2>
+      <SectionHeader>Coming up</SectionHeader>
       {upcomingTrips.length === 0 ? (
-        <div className="bg-white border border-dashed border-slate-300 rounded-lg p-8 text-center">
-          <p className="text-slate-500 text-sm">
-            No upcoming trips after today.
-          </p>
-        </div>
+        <EmptyState message="No upcoming trips after today." />
       ) : (
-        <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-200">
+        <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
           {upcomingTrips.map((t) => (
             <Link
               key={t.id}
               href={`/app/trips/${t.id}`}
-              className="block p-4 hover:bg-slate-50 transition"
+              className="block p-4 hover:bg-accent transition-colors"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
@@ -569,20 +532,20 @@ export default async function DashboardPage() {
                       </span>
                     )}
                   </div>
-                  <div className="text-sm text-slate-700 mt-1 truncate">
+                  <div className="text-sm text-foreground mt-1 truncate">
                     {t.pickup_address} → {t.dropoff_address}
                   </div>
-                  <div className="text-xs text-slate-500 mt-1">
+                  <div className="text-xs text-muted-foreground mt-1">
                     {formatDate(t.scheduled_at, tz)} at{" "}
                     {formatTime(t.scheduled_at, tz)}
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="font-semibold">
+                  <div className="font-semibold tabular-nums">
                     {formatCurrency(businessRevenue(t))}
                   </div>
                   {t.handled_by === "partner" && (
-                    <div className="text-xs text-slate-400 mt-0.5">
+                    <div className="text-xs text-muted-foreground tabular-nums mt-0.5">
                       of {formatCurrency(t.price_total)}
                     </div>
                   )}
@@ -592,6 +555,32 @@ export default async function DashboardPage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function SectionHeader({
+  children,
+  noMargin,
+}: {
+  children: React.ReactNode;
+  noMargin?: boolean;
+}) {
+  return (
+    <h2
+      className={`text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-3 ${
+        noMargin ? "" : "mt-8"
+      }`}
+    >
+      {children}
+    </h2>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="bg-card border border-dashed border-border rounded-lg p-8 text-center">
+      <p className="text-muted-foreground text-sm">{message}</p>
     </div>
   );
 }
@@ -608,18 +597,20 @@ function StatCard({
   tone?: "warning" | "neutral";
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-5">
-      <div className="text-xs uppercase tracking-wider text-slate-500">
+    <div className="group bg-card border border-border rounded-lg p-5 transition-all duration-200 hover:border-foreground/15 hover:shadow-[0_2px_8px_rgb(0_0_0_/_0.04)]">
+      <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold">
         {label}
       </div>
       <div
-        className={`text-2xl font-semibold mt-2 ${
-          tone === "warning" ? "text-amber-700" : ""
+        className={`text-2xl font-semibold mt-2 tabular-nums tracking-tight ${
+          tone === "warning" ? "text-amber-600" : "text-foreground"
         }`}
       >
         {value}
       </div>
-      {hint && <div className="text-xs text-slate-500 mt-1">{hint}</div>}
+      {hint && (
+        <div className="text-xs text-muted-foreground mt-1">{hint}</div>
+      )}
     </div>
   );
 }
