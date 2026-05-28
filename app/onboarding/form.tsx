@@ -57,9 +57,8 @@ export function OnboardingForm() {
       const result = await createBusiness({ name, industry });
       if ("error" in result) {
         setError(result.error);
-      } else {
-        router.push("/app");
-        router.refresh();
+} else {
+        window.location.href = "/app";
       }
     });
   }
