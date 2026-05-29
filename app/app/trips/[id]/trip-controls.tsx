@@ -8,6 +8,7 @@ import {
   togglePaymentCollected,
   toggleCookieCollected,
   deleteTrip,
+  updateTripTip,
 } from "../actions";
 import { RefundDialog } from "./refund-dialog";
 
@@ -36,6 +37,7 @@ export function TripControls({
   paymentCollected,
   cookieCollected,
   cookieAmount,
+  tipAmount,
   refundStatus,
   refundAmount,
   refundReason,
@@ -48,6 +50,7 @@ export function TripControls({
   paymentCollected: boolean;
   cookieCollected: boolean;
   cookieAmount: number | null;
+  tipAmount: number;
   refundStatus: string | null;
   refundAmount: number | null;
   refundReason: string | null;
@@ -56,6 +59,8 @@ export function TripControls({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [editingTip, setEditingTip] = useState(false);
+  const [tipInput, setTipInput] = useState(tipAmount.toFixed(2));
 
   const isRefunded = refundStatus === "completed";
   const canRefund = paymentCollected && !isRefunded;
@@ -66,6 +71,20 @@ export function TripControls({
       const result = await action();
       if ("error" in result) setError(result.error);
       else router.refresh();
+    });
+  }
+
+  function handleTipSave() {
+    const amount = parseFloat(tipInput) || 0;
+    setError(null);
+    startTransition(async () => {
+      const result = await updateTripTip({ id: tripId, amount });
+      if ("error" in result) {
+        setError(result.error);
+      } else {
+        setEditingTip(false);
+        router.refresh();
+      }
     });
   }
 
@@ -114,6 +133,7 @@ export function TripControls({
           Money
         </div>
 
+        {/* Customer payment */}
         <div className="flex items-center justify-between py-2">
           <div>
             <div className="text-sm font-medium">
@@ -135,6 +155,96 @@ export function TripControls({
           </Button>
         </div>
 
+        {/* Tip */}
+        <div className="py-2 border-t border-border">
+          {!editingTip ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium tabular-nums">
+                  {tipAmount > 0 ? `Tip: $${tipAmount.toFixed(2)}` : "Tip"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {tipAmount > 0 && tripPrice > 0
+                    ? `${((tipAmount / tripPrice) * 100).toFixed(0)}% of trip total`
+                    : "Not recorded"}
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isPending}
+                onClick={() => {
+                  setTipInput(tipAmount.toFixed(2));
+                  setEditingTip(true);
+                }}
+              >
+                {tipAmount > 0 ? "Edit tip" : "Add tip"}
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mr-1">
+                  Quick:
+                </span>
+                {[15, 18, 20].map((pct) => (
+                  <button
+                    key={pct}
+                    type="button"
+                    onClick={() =>
+                      setTipInput(((tripPrice * pct) / 100).toFixed(2))
+                    }
+                    className="px-2 py-0.5 text-xs border border-border rounded hover:bg-accent transition-colors"
+                  >
+                    {pct}%
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setTipInput("0.00")}
+                  className="px-2 py-0.5 text-xs border border-border rounded hover:bg-accent transition-colors text-muted-foreground"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                    $
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={tipInput}
+                    onChange={(e) => setTipInput(e.target.value)}
+                    autoFocus
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent pl-7 pr-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring tabular-nums"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  type="button"
+                  disabled={isPending}
+                  onClick={handleTipSave}
+                >
+                  Save
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => setEditingTip(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Cookie (partner trips only) */}
         {handledBy === "partner" && cookieAmount != null && (
           <div className="flex items-center justify-between py-2 border-t border-border">
             <div>

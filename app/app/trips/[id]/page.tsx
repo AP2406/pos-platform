@@ -84,6 +84,7 @@ export default async function TripDetailPage({
     trip.vehicle?.name;
 
   const tripPrice = parseFloat(trip.price_total);
+  const tipAmount = trip.tip_amount ? parseFloat(trip.tip_amount) : 0;
   const refundAmount = trip.refund_amount ? parseFloat(trip.refund_amount) : null;
   const isRefunded = trip.refund_status === "completed";
 
@@ -198,7 +199,7 @@ export default async function TripDetailPage({
             : "Driving it myself"}
         </SectionHeader>
 
-        <div className="flex items-baseline gap-3 pb-4 border-b border-border">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pb-4 border-b border-border">
           <div className="text-3xl font-semibold tabular-nums">
             ${tripPrice.toFixed(2)}
           </div>
@@ -207,6 +208,11 @@ export default async function TripDetailPage({
               ? `${trip.hours}h hourly`
               : "flat rate"}
           </div>
+          {tipAmount > 0 && (
+            <div className="text-sm text-green-700 tabular-nums">
+              + ${tipAmount.toFixed(2)} tip
+            </div>
+          )}
           {isRefunded && refundAmount != null && (
             <div className="text-sm text-red-600 tabular-nums">
               − ${refundAmount.toFixed(2)} refunded
@@ -225,6 +231,7 @@ export default async function TripDetailPage({
             cookieAmount={
               trip.cookie_amount ? parseFloat(trip.cookie_amount) : null
             }
+            tipAmount={tipAmount}
             refundStatus={trip.refund_status ?? null}
             refundAmount={refundAmount}
             refundReason={trip.refund_reason ?? null}
