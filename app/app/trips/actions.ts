@@ -19,13 +19,7 @@ const tripSchema = z
     pricing_type: z.enum(["flat", "hourly"]),
     price_total: z.coerce.number().min(0).max(1000000),
     hours: z.coerce.number().min(0).max(100).optional().nullable(),
-    passenger_count: z.coerce
-      .number()
-      .int()
-      .min(0)
-      .max(100)
-      .optional()
-      .nullable(),
+    passenger_count: z.coerce.number().int().min(0).max(100).optional().nullable(),
     luggage_count: z.coerce.number().int().min(0).max(50).optional().nullable(),
     flight_number: z.string().max(50).optional().or(z.literal("")),
     terminal: z.string().max(50).optional().or(z.literal("")),
@@ -60,6 +54,14 @@ type TripInput = {
   notes?: string;
 };
 
+type TripStatus =
+  | "booked"
+  | "confirmed"
+  | "in_progress"
+  | "completed"
+  | "cancelled"
+  | "no_show";
+
 export async function createTrip(
   input: TripInput
 ): Promise<{ ok: true; id: string } | { error: string }> {
@@ -84,8 +86,7 @@ export async function createTrip(
       scheduled_at: parsed.data.scheduled_at,
       pricing_type: parsed.data.pricing_type,
       price_total: parsed.data.price_total,
-      hours:
-        parsed.data.pricing_type === "hourly" ? parsed.data.hours ?? null : null,
+      hours: parsed.data.pricing_type === "hourly" ? parsed.data.hours ?? null : null,
       passenger_count: parsed.data.passenger_count ?? null,
       luggage_count: parsed.data.luggage_count ?? null,
       flight_number: parsed.data.flight_number || null,
@@ -103,7 +104,6 @@ export async function createTrip(
     return { error: "Could not create trip. Please try again." };
   }
 
-  // Auto-create a Square draft invoice for self-driven trips that have a customer
   if (!isPartner && parsed.data.customer_id && isSquareConfigured()) {
     const { data: customer } = await supabase
       .from("customers")
@@ -183,8 +183,7 @@ export async function updateTrip(
       scheduled_at: parsed.data.scheduled_at,
       pricing_type: parsed.data.pricing_type,
       price_total: parsed.data.price_total,
-      hours:
-        parsed.data.pricing_type === "hourly" ? parsed.data.hours ?? null : null,
+      hours: parsed.data.pricing_type === "hourly" ? parsed.data.hours ?? null : null,
       passenger_count: parsed.data.passenger_count ?? null,
       luggage_count: parsed.data.luggage_count ?? null,
       flight_number: parsed.data.flight_number || null,
@@ -205,8 +204,84 @@ export async function updateTrip(
   revalidatePath(`/app/trips/${id}`);
   revalidatePath("/app");
   return { ok: true };
+}
 
-  export async function refundTrip(input: {
+export async function updateTripStatus(
+  id: string,
+  status: TripStatus
+): Promise<{ ok: true } | { error: string }> {
+  await requireBusiness();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("trips")
+    .update({ trip_status: status })
+    .eq("id", id);
+
+  if (error) {
+    console.error("updateTripStatus:", error);
+    return { error: "Could not update status." };
+  }
+  revalidatePath("/app/trips");
+  revalidatePath(`/app/trips/${id}`);
+  return { ok: true };
+}
+
+export async function togglePaymentCollected(
+  id: string,
+  collected: boolean
+): Promise<{ ok: true } | { error: string }> {
+  await requireBusiness();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("trips")
+    .update({ payment_collected: collected })
+    .eq("id", id);
+
+  if (error) {
+    console.error("togglePaymentCollected:", error);
+    return { error: "Could not update payment status." };
+  }
+  revalidatePath("/app/trips");
+  revalidatePath(`/app/trips/${id}`);
+  return { ok: true };
+}
+
+export async function toggleCookieCollected(
+  id: string,
+  collected: boolean
+): Promise<{ ok: true } | { error: string }> {
+  await requireBusiness();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("trips")
+    .update({ cookie_collected: collected })
+    .eq("id", id);
+
+  if (error) {
+    console.error("toggleCookieCollected:", error);
+    return { error: "Could not update cookie status." };
+  }
+  revalidatePath("/app/trips");
+  revalidatePath(`/app/trips/${id}`);
+  return { ok: true };
+}
+
+export async function deleteTrip(
+  id: string
+): Promise<{ ok: true } | { error: string }> {
+  await requireBusiness();
+  const supabase = await createClient();
+  const { error } = await supabase.from("trips").delete().eq("id", id);
+
+  if (error) {
+    console.error("deleteTrip:", error);
+    return { error: "Could not delete trip." };
+  }
+  revalidatePath("/app/trips");
+  return { ok: true };
+}
+
+export async function refundTrip(input: {
   id: string;
   amount: number;
   reason: string;
@@ -260,6 +335,4 @@ export async function updateTrip(
   revalidatePath("/app/trips");
   revalidatePath(`/app/trips/${input.id}`);
   return { ok: true };
-}
-
 }
