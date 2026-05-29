@@ -336,3 +336,32 @@ export async function refundTrip(input: {
   revalidatePath(`/app/trips/${input.id}`);
   return { ok: true };
 }
+
+export async function updateTripTip(input: {
+  id: string;
+  amount: number;
+}): Promise<{ ok: true } | { error: string }> {
+  await requireBusiness();
+
+  if (input.amount < 0) {
+    return { error: "Tip cannot be negative." };
+  }
+  if (input.amount > 100000) {
+    return { error: "Tip amount looks too large. Double-check the value." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("trips")
+    .update({ tip_amount: input.amount })
+    .eq("id", input.id);
+
+  if (error) {
+    console.error("updateTripTip:", error);
+    return { error: "Could not update tip." };
+  }
+
+  revalidatePath("/app/trips");
+  revalidatePath(`/app/trips/${input.id}`);
+  return { ok: true };
+}
