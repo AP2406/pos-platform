@@ -8,7 +8,8 @@ import {
   togglePaymentCollected,
   toggleCookieCollected,
   deleteTrip,
-} from "./actions";
+} from "../actions";
+import { RefundDialog } from "./refund-dialog";
 
 type TripStatus =
   | "booked"
@@ -29,22 +30,35 @@ const statusOptions: { value: TripStatus; label: string }[] = [
 
 export function TripControls({
   tripId,
+  tripPrice,
   tripStatus,
   handledBy,
   paymentCollected,
   cookieCollected,
   cookieAmount,
+  refundStatus,
+  refundAmount,
+  refundReason,
+  refundedAt,
 }: {
   tripId: string;
+  tripPrice: number;
   tripStatus: string;
   handledBy: "self" | "partner";
   paymentCollected: boolean;
   cookieCollected: boolean;
   cookieAmount: number | null;
+  refundStatus: string | null;
+  refundAmount: number | null;
+  refundReason: string | null;
+  refundedAt: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  const isRefunded = refundStatus === "completed";
+  const canRefund = paymentCollected && !isRefunded;
 
   function run(action: () => Promise<{ ok: true } | { error: string }>) {
     setError(null);
@@ -146,6 +160,56 @@ export function TripControls({
           </div>
         )}
       </div>
+
+      {/* Refund */}
+      {(canRefund || isRefunded) && (
+        <div className="space-y-2 pt-4 border-t border-border">
+          <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2">
+            Refund
+          </div>
+
+          {isRefunded ? (
+            <div className="py-2 space-y-1">
+              <div className="text-sm font-medium tabular-nums text-red-600">
+                − ${(refundAmount ?? 0).toFixed(2)} refunded
+              </div>
+              {refundReason && (
+                <div className="text-xs text-muted-foreground">
+                  Reason: {refundReason}
+                </div>
+              )}
+              {refundedAt && (
+                <div className="text-xs text-muted-foreground">
+                  {new Date(refundedAt).toLocaleDateString("en-CA", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                  {" · Remember to process the actual refund in your processor's dashboard."}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <div className="text-sm font-medium">Issue refund</div>
+                <div className="text-xs text-muted-foreground">
+                  Record a refund for this trip
+                </div>
+              </div>
+              <RefundDialog
+                tripId={tripId}
+                tripPrice={tripPrice}
+                trigger={
+                  <Button variant="outline" size="sm" disabled={isPending}>
+                    Refund…
+                  </Button>
+                }
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 

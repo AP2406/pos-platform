@@ -83,6 +83,10 @@ export default async function TripDetailPage({
     trip.terminal ||
     trip.vehicle?.name;
 
+  const tripPrice = parseFloat(trip.price_total);
+  const refundAmount = trip.refund_amount ? parseFloat(trip.refund_amount) : null;
+  const isRefunded = trip.refund_status === "completed";
+
   return (
     <div className="max-w-3xl">
       <div className="flex items-center justify-between mb-4">
@@ -196,18 +200,24 @@ export default async function TripDetailPage({
 
         <div className="flex items-baseline gap-3 pb-4 border-b border-border">
           <div className="text-3xl font-semibold tabular-nums">
-            ${parseFloat(trip.price_total).toFixed(2)}
+            ${tripPrice.toFixed(2)}
           </div>
           <div className="text-sm text-muted-foreground">
             {trip.pricing_type === "hourly" && trip.hours
               ? `${trip.hours}h hourly`
               : "flat rate"}
           </div>
+          {isRefunded && refundAmount != null && (
+            <div className="text-sm text-red-600 tabular-nums">
+              − ${refundAmount.toFixed(2)} refunded
+            </div>
+          )}
         </div>
 
         <div className="pt-4">
           <TripControls
             tripId={trip.id}
+            tripPrice={tripPrice}
             tripStatus={trip.trip_status}
             handledBy={trip.handled_by}
             paymentCollected={trip.payment_collected}
@@ -215,6 +225,10 @@ export default async function TripDetailPage({
             cookieAmount={
               trip.cookie_amount ? parseFloat(trip.cookie_amount) : null
             }
+            refundStatus={trip.refund_status ?? null}
+            refundAmount={refundAmount}
+            refundReason={trip.refund_reason ?? null}
+            refundedAt={trip.refunded_at ?? null}
           />
         </div>
       </div>
