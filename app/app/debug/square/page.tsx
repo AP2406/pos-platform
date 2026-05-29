@@ -1,5 +1,6 @@
 import { SquareClient, SquareEnvironment } from "square";
 
+
 async function getLocations() {
   const token = process.env.SQUARE_ACCESS_TOKEN;
   if (!token) {

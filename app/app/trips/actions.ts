@@ -8,6 +8,7 @@ import {
   createDraftSquareInvoice,
   isSquareConfigured,
 } from "@/lib/services/square";
+import { refundTransfer } from "@/lib/services/finix";
 
 const tripSchema = z
   .object({
@@ -302,7 +303,7 @@ export async function refundTrip(input: {
 
   const { data: trip, error: fetchError } = await supabase
     .from("trips")
-    .select("price_total, refund_status")
+    .select("price_total, refund_status, processor_payment_id")
     .eq("id", input.id)
     .maybeSingle();
 
@@ -316,6 +317,47 @@ export async function refundTrip(input: {
     return { error: "Refund amount cannot exceed the trip price." };
   }
 
+  // Default refund processor is manual (operator handles money movement outside Surge)
+  let refundProcessor: "manual" | "finix" = "manual";
+  let processorRef: string | null = null;
+
+  // If this trip was paid via Finix, call the Finix refund API
+  if (trip.processor_payment_id) {
+    const { data: finixPayment } = await supabase
+      .from("finix_payments")
+      .select("finix_transfer_id, status")
+      .eq("id", trip.processor_payment_id)
+      .maybeSingle();
+
+    if (
+      finixPayment?.finix_transfer_id &&
+      (finixPayment.status === "succeeded" || finixPayment.status === "pending")
+    ) {
+      const refundAmountCents = Math.round(input.amount * 100);
+      const idempotencyKey = `surge-refund-${input.id}-${Date.now()}`;
+
+      const refundResult = await refundTransfer(finixPayment.finix_transfer_id, {
+        refundAmount: refundAmountCents,
+        idempotency_id: idempotencyKey,
+        tags: {
+          source: "surge",
+          trip_id: input.id,
+          reason: input.reason.trim().slice(0, 100),
+        },
+      });
+
+      if ("error" in refundResult) {
+        console.error("Finix refund failed:", refundResult);
+        return {
+          error: `Finix refund failed: ${refundResult.error}. The trip refund was NOT recorded — please try again or refund manually in the Finix dashboard.`,
+        };
+      }
+
+      refundProcessor = "finix";
+      processorRef = refundResult.data.id;
+    }
+  }
+
   const { error } = await supabase
     .from("trips")
     .update({
@@ -323,7 +365,8 @@ export async function refundTrip(input: {
       refund_reason: input.reason.trim(),
       refund_status: "completed",
       refunded_at: new Date().toISOString(),
-      refund_processor: "manual",
+      refund_processor: refundProcessor,
+      refund_processor_ref: processorRef,
     })
     .eq("id", input.id);
 

@@ -1,4 +1,5 @@
 import { FinixPingButton } from "./finix-ping-button";
+import { FinixChargeForm } from "./finix-charge-form";
 
 export default function DebugPage() {
   return (
@@ -18,6 +19,17 @@ export default function DebugPage() {
           </p>
         </div>
         <FinixPingButton />
+      </div>
+
+      <div className="bg-card border border-border rounded-lg p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Finix test charge</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Charge a sandbox test card against the Surge Application Owner merchant.
+            Routes funds through Finix → records the transfer in the finix_payments table.
+          </p>
+        </div>
+        <FinixChargeForm />
       </div>
     </div>
   );

@@ -95,3 +95,162 @@ export const finix = {
     finixRequest<T>("PATCH", path, body),
   delete: <T>(path: string) => finixRequest<T>("DELETE", path),
 };
+// ---------- Payment Instrument types & helpers ----------
+
+export type CreatePaymentInstrumentInput = {
+  identity: string; // Finix Identity ID (buyer)
+  type: "PAYMENT_CARD";
+  name: string; // cardholder name
+  number: string;
+  expiration_month: number;
+  expiration_year: number;
+  security_code: string;
+};
+
+export type FinixPaymentInstrument = {
+  id: string;
+  fingerprint?: string;
+  card_brand?: string;
+  last_four?: string;
+  expiration_month?: number;
+  expiration_year?: number;
+  created_at: string;
+};
+
+export async function createPaymentInstrument(
+  input: CreatePaymentInstrumentInput
+) {
+  return finix.post<FinixPaymentInstrument>("/payment_instruments", input);
+}
+
+// ---------- Buyer Identity helpers ----------
+
+export type CreateBuyerIdentityInput = {
+  entity: {
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+    phone?: string;
+  };
+};
+
+export type FinixIdentityResponse = {
+  id: string;
+  entity: Record<string, unknown>;
+  created_at: string;
+};
+
+export async function createBuyerIdentity(input: CreateBuyerIdentityInput) {
+  return finix.post<FinixIdentityResponse>("/identities", input);
+}
+
+// ---------- Transfer (charge) types & helpers ----------
+
+export type CreateTransferInput = {
+  amount: number; // in cents
+  currency: string; // "USD" or "CAD"
+  source: string; // Payment Instrument ID
+  merchant_identity: string; // Merchant Identity ID that receives the funds
+  tags?: Record<string, string>;
+  idempotency_id?: string;
+};
+
+export type FinixTransfer = {
+  id: string;
+  amount: number;
+  currency: string;
+  state: "PENDING" | "SUCCEEDED" | "FAILED" | "CANCELED";
+  failure_code?: string;
+  failure_message?: string;
+  source: string;
+  merchant_identity: string;
+  created_at: string;
+};
+// ---------- Refund types & helpers ----------
+
+export type CreateRefundInput = {
+  refundAmount: number; // in cents
+  tags?: Record<string, string>;
+  idempotency_id?: string;
+};
+
+export type FinixRefund = {
+  id: string;
+  amount: number;
+  currency: string;
+  state: "PENDING" | "SUCCEEDED" | "FAILED" | "CANCELED";
+  parent_transfer: string;
+  failure_code?: string;
+  failure_message?: string;
+  created_at: string;
+};
+
+export async function refundTransfer(
+  transferId: string,
+  input: CreateRefundInput
+) {
+  return finix.post<FinixRefund>(`/transfers/${transferId}/reversals`, {
+    refund_amount: input.refundAmount,
+    tags: input.tags,
+    idempotency_id: input.idempotency_id,
+  });
+}
+
+// ---------- Webhook signature verification ----------
+
+import { createHmac, timingSafeEqual } from "crypto";
+
+export function verifyFinixWebhook(
+  payload: string,
+  signatureHeader: string | null,
+  secret: string
+): { valid: boolean; reason?: string } {
+  if (!signatureHeader) {
+    return { valid: false, reason: "Missing signature header" };
+  }
+
+  const parts = signatureHeader.split(",").reduce<Record<string, string>>(
+    (acc, part) => {
+      const [key, value] = part.split("=");
+      if (key && value) acc[key.trim()] = value.trim();
+      return acc;
+    },
+    {}
+  );
+
+  const timestamp = parts.t;
+  const signature = parts.v1;
+
+  if (!timestamp || !signature) {
+    return { valid: false, reason: "Malformed signature header" };
+  }
+
+  const eventTime = parseInt(timestamp, 10);
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (Math.abs(nowSec - eventTime) > 300) {
+    return { valid: false, reason: "Timestamp too old (replay protection)" };
+  }
+
+  const signedPayload = `${timestamp}.${payload}`;
+  const expected = createHmac("sha256", secret)
+    .update(signedPayload)
+    .digest("hex");
+
+  try {
+    const expectedBuf = Buffer.from(expected, "hex");
+    const sigBuf = Buffer.from(signature, "hex");
+    if (expectedBuf.length !== sigBuf.length) {
+      return { valid: false, reason: "Signature length mismatch" };
+    }
+    if (!timingSafeEqual(expectedBuf, sigBuf)) {
+      return { valid: false, reason: "Signature does not match" };
+    }
+  } catch {
+    return { valid: false, reason: "Signature parsing error" };
+  }
+
+  return { valid: true };
+}
+export async function createTransfer(input: CreateTransferInput) {
+  return finix.post<FinixTransfer>("/transfers", input);
+}
