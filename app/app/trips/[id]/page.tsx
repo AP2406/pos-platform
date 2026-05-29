@@ -8,6 +8,7 @@ import { BookTripSheet } from "../book-trip-sheet";
 import { Button } from "@/components/ui/button";
 import { getSquareDashboardUrl } from "@/lib/services/square";
 import { StatusBadge, SectionHeader } from "../../_components/ui";
+import { SendInvoiceButton } from "./send-invoice-button";
 
 function formatDateTime(iso: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -237,6 +238,21 @@ export default async function TripDetailPage({
             refundReason={trip.refund_reason ?? null}
             refundedAt={trip.refunded_at ?? null}
           />
+          <div className="bg-card border border-border rounded-lg p-6 mt-4">
+            <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-3">
+              Customer invoice
+            </div>
+            <SendInvoiceButton
+              tripId={trip.id}
+              customerEmail={
+                Array.isArray(trip.customer)
+                  ? trip.customer[0]?.email ?? null
+                  : (trip.customer as { email?: string } | null)?.email ?? null
+              }
+              squareInvoiceUrl={trip.square_invoice_url ?? null}
+              brandedInvoiceSentAt={trip.branded_invoice_sent_at ?? null}
+            />
+          </div>
         </div>
       </div>
 
