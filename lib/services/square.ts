@@ -1,3 +1,5 @@
+import { SquareClient, SquareEnvironment } from "square";
+import { randomUUID } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
 
@@ -120,6 +122,161 @@ export async function squareFetch(
 
   return fetch(SQUARE_BASE + path, { ...(init || {}), headers: headers });
 }
+
+async function getClientForBusiness(
+  businessId: string
+): Promise<{ client: SquareClient; locationId: string } | null> {
+  const access = await getSquareAccess(businessId);
+  if (!access || !access.accessToken || !access.locationId) {
+    return null;
+  }
+  const client = new SquareClient({
+    token: access.accessToken,
+    environment: SquareEnvironment.Production,
+  });
+  return { client: client, locationId: access.locationId };
+}
+
+export function isSquareConfigured(): boolean {
+  return !!(process.env.SQUARE_APP_ID && process.env.SQUARE_APP_SECRET);
+}
+
+export type SquareInvoiceResult = {
+  squareCustomerId: string;
+  orderId: string;
+  invoiceId: string;
+  invoiceStatus: string;
+  invoiceUrl: string | null;
+};
+
+export async function createDraftSquareInvoice(input: {
+  businessId?: string;
+  customer: {
+    square_customer_id: string | null;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  };
+  trip: {
+    pickup_address: string;
+    dropoff_address: string;
+    scheduled_at: string;
+    price_total: number;
+  };
+  currency: string;
+}): Promise<{ ok: true; data: SquareInvoiceResult } | { error: string }> {
+  if (!input.businessId) {
+    return { error: "No business specified for Square invoice." };
+  }
+
+  const ctx = await getClientForBusiness(input.businessId);
+  if (!ctx) {
+    return { error: "Square not connected for this business." };
+  }
+  const client = ctx.client;
+  const locationId = ctx.locationId;
+
+  try {
+    let squareCustomerId = input.customer.square_customer_id;
+
+    if (!squareCustomerId) {
+      const nameParts = (input.customer.name ?? "Customer").trim().split(/\s+/);
+      const givenName = nameParts[0] || "Customer";
+      const familyName = nameParts.slice(1).join(" ") || undefined;
+
+      const createCustResp = await client.customers.create({
+        idempotencyKey: randomUUID(),
+        givenName: givenName,
+        familyName: familyName,
+        emailAddress: input.customer.email ?? undefined,
+        phoneNumber: input.customer.phone ?? undefined,
+      });
+
+      squareCustomerId = createCustResp.customer?.id ?? null;
+      if (!squareCustomerId) {
+        return { error: "Failed to create Square customer." };
+      }
+    }
+
+    const cents = BigInt(Math.round(input.trip.price_total * 100));
+    const tripDate = new Date(input.trip.scheduled_at).toLocaleDateString(
+      "en-CA",
+      { year: "numeric", month: "short", day: "numeric" }
+    );
+
+    const createOrderResp = await client.orders.create({
+      idempotencyKey: randomUUID(),
+      order: {
+        locationId: locationId,
+        customerId: squareCustomerId,
+        lineItems: [
+          {
+            name: "Trip on " + tripDate,
+            note:
+              input.trip.pickup_address + " -> " + input.trip.dropoff_address,
+            quantity: "1",
+            basePriceMoney: {
+              amount: cents,
+              currency: input.currency as "CAD" | "USD",
+            },
+          },
+        ],
+      },
+    });
+
+    const orderId = createOrderResp.order?.id;
+    if (!orderId) return { error: "Failed to create Square order." };
+
+    const dueDate = new Date(input.trip.scheduled_at)
+      .toISOString()
+      .split("T")[0];
+
+    const createInvoiceResp = await client.invoices.create({
+      idempotencyKey: randomUUID(),
+      invoice: {
+        locationId: locationId,
+        orderId: orderId,
+        primaryRecipient: { customerId: squareCustomerId },
+        acceptedPaymentMethods: {
+          card: true,
+          squareGiftCard: false,
+          bankAccount: false,
+          buyNowPayLater: false,
+          cashAppPay: false,
+        },
+        paymentRequests: [
+          {
+            requestType: "BALANCE",
+            dueDate: dueDate,
+          },
+        ],
+        deliveryMethod: "EMAIL",
+        title: "Trip on " + tripDate,
+        description:
+          input.trip.pickup_address + " -> " + input.trip.dropoff_address,
+      },
+    });
+
+    const invoice = createInvoiceResp.invoice;
+    if (!invoice?.id) return { error: "Failed to create Square invoice." };
+
+    return {
+      ok: true,
+      data: {
+        squareCustomerId: squareCustomerId,
+        orderId: orderId,
+        invoiceId: invoice.id,
+        invoiceStatus: invoice.status ?? "DRAFT",
+        invoiceUrl: invoice.publicUrl ?? null,
+      },
+    };
+  } catch (error) {
+    console.error("createDraftSquareInvoice error:", error);
+    const msg = error instanceof Error ? error.message : "Square API error";
+    return { error: msg };
+  }
+}
+
 export function getSquareDashboardUrl(invoiceId: string): string {
   return "https://app.squareup.com/dashboard/invoices/" + invoiceId;
 }
