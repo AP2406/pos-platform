@@ -7,6 +7,12 @@ import { sendEmail, isEmailConfigured } from "@/lib/services/email";
 import { buildBrandedInvoiceEmail } from "@/lib/email-templates/branded-invoice-email";
 import { buildBrandedReceiptEmail } from "@/lib/email-templates/branded-receipt-email";
 
+type LineItemRow = {
+  name: string;
+  amount: string;
+  quantity: number;
+};
+
 export async function sendBrandedInvoice(
   tripId: string
 ): Promise<{ ok: true } | { error: string }> {
@@ -27,28 +33,37 @@ export async function sendBrandedInvoice(
   };
   const supabase = await createClient();
 
-  const { data: trip, error: tripError } = await supabase
-    .from("trips")
-    .select(`
-      id,
-      pickup_address,
-      dropoff_address,
-      scheduled_at,
-      price_total,
-      pricing_type,
-      hours,
-      passenger_count,
-      flight_number,
-      terminal,
-      square_invoice_url,
-      customer:customers ( name, email )
-    `)
-    .eq("id", tripId)
-    .maybeSingle();
+  // Fetch trip + line items in parallel
+  const [tripResult, lineItemsResult] = await Promise.all([
+    supabase
+      .from("trips")
+      .select(`
+        id,
+        pickup_address,
+        dropoff_address,
+        scheduled_at,
+        price_total,
+        pricing_type,
+        hours,
+        passenger_count,
+        flight_number,
+        terminal,
+        square_invoice_url,
+        customer:customers ( name, email )
+      `)
+      .eq("id", tripId)
+      .maybeSingle(),
+    supabase
+      .from("trip_line_items")
+      .select("name, amount, quantity")
+      .eq("trip_id", tripId)
+      .order("created_at"),
+  ]);
 
-  if (tripError || !trip) {
+  if (tripResult.error || !tripResult.data) {
     return { error: "Could not load trip." };
   }
+  const trip = tripResult.data;
 
   const customer = Array.isArray(trip.customer) ? trip.customer[0] : trip.customer;
   if (!customer || !customer.email) {
@@ -57,6 +72,14 @@ export async function sendBrandedInvoice(
   if (!trip.square_invoice_url) {
     return { error: "Square invoice has not been created yet for this trip." };
   }
+
+  const lineItems = ((lineItemsResult.data ?? []) as LineItemRow[]).map(
+    (item) => ({
+      name: item.name,
+      amount: parseFloat(item.amount),
+      quantity: item.quantity,
+    })
+  );
 
   const { subject, html } = buildBrandedInvoiceEmail(
     {
@@ -82,6 +105,7 @@ export async function sendBrandedInvoice(
       flight_number: trip.flight_number,
       terminal: trip.terminal,
       invoice_url: trip.square_invoice_url,
+      line_items: lineItems,
     }
   );
 
@@ -127,35 +151,62 @@ export async function sendBrandedReceipt(
   };
   const supabase = await createClient();
 
-  const { data: trip, error: tripError } = await supabase
-    .from("trips")
-    .select(`
-      id,
-      pickup_address,
-      dropoff_address,
-      scheduled_at,
-      price_total,
-      tip_amount,
-      pricing_type,
-      hours,
-      passenger_count,
-      customer:customers ( name, email )
-    `)
-    .eq("id", tripId)
-    .maybeSingle();
+  // Fetch trip + line items in parallel
+  const [tripResult, lineItemsResult] = await Promise.all([
+    supabase
+      .from("trips")
+      .select(`
+        id,
+        pickup_address,
+        dropoff_address,
+        scheduled_at,
+        price_total,
+        tip_amount,
+        refund_amount,
+        refund_status,
+        pricing_type,
+        hours,
+        passenger_count,
+        customer:customers ( name, email )
+      `)
+      .eq("id", tripId)
+      .maybeSingle(),
+    supabase
+      .from("trip_line_items")
+      .select("name, amount, quantity")
+      .eq("trip_id", tripId)
+      .order("created_at"),
+  ]);
 
-  if (tripError || !trip) {
+  if (tripResult.error || !tripResult.data) {
     return { error: "Could not load trip." };
   }
+  const trip = tripResult.data;
 
   const customer = Array.isArray(trip.customer) ? trip.customer[0] : trip.customer;
   if (!customer || !customer.email) {
     return { error: "This trip has no customer with an email address." };
   }
 
-  const price = parseFloat(trip.price_total);
+  const lineItems = ((lineItemsResult.data ?? []) as LineItemRow[]).map(
+    (item) => ({
+      name: item.name,
+      amount: parseFloat(item.amount),
+      quantity: item.quantity,
+    })
+  );
+
+  const basePrice = parseFloat(trip.price_total);
   const tip = trip.tip_amount ? parseFloat(trip.tip_amount) : 0;
-  const total = price + tip;
+  const refund =
+    trip.refund_status === "completed" && trip.refund_amount
+      ? parseFloat(trip.refund_amount)
+      : 0;
+  const addOnsSubtotal = lineItems.reduce(
+    (sum, item) => sum + item.amount * item.quantity,
+    0
+  );
+  const totalPaid = basePrice + addOnsSubtotal + tip - refund;
 
   const { subject, html } = buildBrandedReceiptEmail(
     {
@@ -174,12 +225,14 @@ export async function sendBrandedReceipt(
       pickup_address: trip.pickup_address,
       dropoff_address: trip.dropoff_address,
       scheduled_at: trip.scheduled_at,
-      price_total: price,
+      price_total: basePrice,
       tip_amount: tip,
-      total_paid: total,
+      refund_amount: refund,
+      total_paid: totalPaid,
       pricing_type: trip.pricing_type,
       hours: trip.hours ? parseFloat(trip.hours) : null,
       passenger_count: trip.passenger_count,
+      line_items: lineItems,
     }
   );
 

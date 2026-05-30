@@ -10,6 +10,12 @@ type Branding = {
   address_postal_code: string | null;
 };
 
+type LineItem = {
+  name: string;
+  amount: number;
+  quantity: number;
+};
+
 type ReceiptDetails = {
   customer_name: string;
   pickup_address: string;
@@ -17,10 +23,12 @@ type ReceiptDetails = {
   scheduled_at: string;
   price_total: number;
   tip_amount: number;
+  refund_amount: number;
   total_paid: number;
   pricing_type: "flat" | "hourly";
   hours: number | null;
   passenger_count: number | null;
+  line_items: LineItem[];
 };
 
 function formatScheduled(iso: string): string {
@@ -60,12 +68,61 @@ export function buildBrandedReceiptEmail(
     ? `<img src="${branding.logo_url}" alt="${branding.business_name}" height="48" style="display:block;margin:0 auto 12px auto;max-height:48px;" />`
     : "";
 
+  const pricingLabel =
+    receipt.pricing_type === "hourly" && receipt.hours
+      ? `Trip (${receipt.hours}h hourly)`
+      : "Trip (flat rate)";
+
+  // Compute subtotal (base + line items + tip)
+  const addOnsSubtotal = receipt.line_items.reduce(
+    (sum, item) => sum + item.amount * item.quantity,
+    0
+  );
+  const subtotal = receipt.price_total + addOnsSubtotal + receipt.tip_amount;
+
+  // Render line items
+  const lineItemRows = receipt.line_items
+    .map((item) => {
+      const qtyLabel =
+        item.quantity > 1
+          ? `<span style="color:#9ca3af;font-size:12px;margin-left:4px;">×${item.quantity}</span>`
+          : "";
+      const lineTotal = (item.amount * item.quantity).toFixed(2);
+      return `
+        <tr>
+          <td style="padding:6px 0;font-size:14px;color:#374151;">${item.name}${qtyLabel}</td>
+          <td style="padding:6px 0;font-size:14px;color:#111827;text-align:right;font-variant-numeric:tabular-nums;">$${lineTotal}</td>
+        </tr>`;
+    })
+    .join("");
+
   const tipLine =
     receipt.tip_amount > 0
       ? `
         <tr>
           <td style="padding:6px 0;font-size:14px;color:#374151;">Tip</td>
-          <td style="padding:6px 0;font-size:14px;color:#111827;text-align:right;font-variant-numeric:tabular-nums;">$${receipt.tip_amount.toFixed(2)}</td>
+          <td style="padding:6px 0;font-size:14px;color:#059669;text-align:right;font-variant-numeric:tabular-nums;">$${receipt.tip_amount.toFixed(2)}</td>
+        </tr>`
+      : "";
+
+  // Subtotal row only if there are line items or tip
+  const hasExtras =
+    receipt.line_items.length > 0 || receipt.tip_amount > 0;
+  const subtotalRow = hasExtras
+    ? `
+        <tr>
+          <td style="padding:10px 0 6px 0;border-top:1px solid #e5e7eb;font-size:14px;color:#6b7280;">Subtotal</td>
+          <td style="padding:10px 0 6px 0;border-top:1px solid #e5e7eb;font-size:14px;color:#111827;text-align:right;font-variant-numeric:tabular-nums;">$${subtotal.toFixed(2)}</td>
+        </tr>`
+    : "";
+
+  // Refund row
+  const refundRow =
+    receipt.refund_amount > 0
+      ? `
+        <tr>
+          <td style="padding:6px 0;font-size:14px;color:#dc2626;">Refund</td>
+          <td style="padding:6px 0;font-size:14px;color:#dc2626;text-align:right;font-variant-numeric:tabular-nums;">− $${receipt.refund_amount.toFixed(2)}</td>
         </tr>`
       : "";
 
@@ -116,15 +173,19 @@ export function buildBrandedReceiptEmail(
                 </tr>
               </table>
 
+              <!-- Itemized breakdown -->
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom:24px;">
                 <tr>
-                  <td style="padding:6px 0;font-size:14px;color:#374151;">Trip</td>
+                  <td style="padding:6px 0;font-size:14px;color:#374151;">${pricingLabel}</td>
                   <td style="padding:6px 0;font-size:14px;color:#111827;text-align:right;font-variant-numeric:tabular-nums;">$${receipt.price_total.toFixed(2)}</td>
                 </tr>
+                ${lineItemRows}
                 ${tipLine}
+                ${subtotalRow}
+                ${refundRow}
                 <tr>
-                  <td style="padding:12px 0 6px 0;border-top:1px solid #e5e7eb;font-size:15px;color:#111827;font-weight:600;">Total paid</td>
-                  <td style="padding:12px 0 6px 0;border-top:1px solid #e5e7eb;font-size:18px;color:${brand};font-weight:600;text-align:right;font-variant-numeric:tabular-nums;">$${receipt.total_paid.toFixed(2)}</td>
+                  <td style="padding:12px 0 6px 0;border-top:2px solid #111827;font-size:15px;color:#111827;font-weight:600;">Total paid</td>
+                  <td style="padding:12px 0 6px 0;border-top:2px solid #111827;font-size:20px;color:${brand};font-weight:600;text-align:right;font-variant-numeric:tabular-nums;">$${receipt.total_paid.toFixed(2)}</td>
                 </tr>
               </table>
 

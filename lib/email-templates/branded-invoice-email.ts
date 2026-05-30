@@ -10,6 +10,12 @@ type Branding = {
   address_postal_code: string | null;
 };
 
+type LineItem = {
+  name: string;
+  amount: number;
+  quantity: number;
+};
+
 type TripDetails = {
   customer_name: string;
   pickup_address: string;
@@ -22,6 +28,7 @@ type TripDetails = {
   flight_number: string | null;
   terminal: string | null;
   invoice_url: string;
+  line_items: LineItem[];
 };
 
 function formatScheduled(iso: string): string {
@@ -81,8 +88,41 @@ export function buildBrandedInvoiceEmail(
 
   const pricingLabel =
     trip.pricing_type === "hourly" && trip.hours
-      ? `${trip.hours} hours hourly rate`
-      : "Flat rate";
+      ? `Trip (${trip.hours}h hourly)`
+      : "Trip (flat rate)";
+
+  // Compute totals
+  const addOnsSubtotal = trip.line_items.reduce(
+    (sum, item) => sum + item.amount * item.quantity,
+    0
+  );
+  const total = trip.price_total + addOnsSubtotal;
+
+  // Render line items
+  const lineItemRows = trip.line_items
+    .map((item) => {
+      const qtyLabel =
+        item.quantity > 1
+          ? `<span style="color:#9ca3af;font-size:12px;margin-left:4px;">×${item.quantity}</span>`
+          : "";
+      const lineTotal = (item.amount * item.quantity).toFixed(2);
+      return `
+        <tr>
+          <td style="padding:6px 0;font-size:14px;color:#374151;">${item.name}${qtyLabel}</td>
+          <td style="padding:6px 0;font-size:14px;color:#111827;text-align:right;font-variant-numeric:tabular-nums;">$${lineTotal}</td>
+        </tr>`;
+    })
+    .join("");
+
+  // Subtotal row only if there are line items
+  const subtotalRow =
+    trip.line_items.length > 0
+      ? `
+        <tr>
+          <td style="padding:10px 0 6px 0;border-top:1px solid #e5e7eb;font-size:14px;color:#6b7280;">Subtotal</td>
+          <td style="padding:10px 0 6px 0;border-top:1px solid #e5e7eb;font-size:14px;color:#111827;text-align:right;font-variant-numeric:tabular-nums;">$${total.toFixed(2)}</td>
+        </tr>`
+      : "";
 
   const footerLines = [
     branding.business_name,
@@ -131,14 +171,21 @@ export function buildBrandedInvoiceEmail(
                 </tr>
                 ${flightLine}
                 ${passengerLine}
-                <tr>
-                  <td style="padding:6px 0;font-size:13px;color:#6b7280;">Rate</td>
-                  <td style="padding:6px 0;font-size:14px;color:#111827;">${pricingLabel}</td>
-                </tr>
               </table>
 
-              <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">Amount due</div>
-              <div style="font-size:32px;color:#111827;font-weight:600;margin-bottom:28px;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;">$${trip.price_total.toFixed(2)}</div>
+              <!-- Itemized breakdown -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom:24px;">
+                <tr>
+                  <td style="padding:6px 0;font-size:14px;color:#374151;">${pricingLabel}</td>
+                  <td style="padding:6px 0;font-size:14px;color:#111827;text-align:right;font-variant-numeric:tabular-nums;">$${trip.price_total.toFixed(2)}</td>
+                </tr>
+                ${lineItemRows}
+                ${subtotalRow}
+                <tr>
+                  <td style="padding:12px 0 6px 0;border-top:2px solid #111827;font-size:15px;color:#111827;font-weight:600;">Amount due</td>
+                  <td style="padding:12px 0 6px 0;border-top:2px solid #111827;font-size:20px;color:${brand};font-weight:600;text-align:right;font-variant-numeric:tabular-nums;">$${total.toFixed(2)}</td>
+                </tr>
+              </table>
 
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                 <tr>

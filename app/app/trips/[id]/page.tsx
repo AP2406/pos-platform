@@ -106,10 +106,10 @@ export default async function TripDetailPage({
 
   const tripPrice = parseFloat(trip.price_total);
   const tipAmount = trip.tip_amount ? parseFloat(trip.tip_amount) : 0;
-  const refundAmount = trip.refund_amount ? parseFloat(trip.refund_amount) : null;
+  const refundAmount = trip.refund_amount ? parseFloat(trip.refund_amount) : 0;
   const isRefunded = trip.refund_status === "completed";
 
-  // Line items: parse from DB and compute add-ons subtotal
+  // Line items
   const lineItems = ((lineItemsResult.data ?? []) as LineItemRow[]).map(
     (item) => ({
       id: item.id,
@@ -124,15 +124,18 @@ export default async function TripDetailPage({
     0
   );
 
-  // Effective trip total (base + add-ons)
-  const tripTotalWithAddOns = tripPrice + addOnsSubtotal;
+  // Invoice math
+  const subtotal = tripPrice + addOnsSubtotal + tipAmount;
+  const totalPaid = subtotal - refundAmount;
 
-  // Editable until refunded — drivers can add tolls/fees before, during, or after the trip
-  // (we only lock once a refund has happened)
   const canEditLineItems = !isRefunded;
+  const customerEmail = Array.isArray(trip.customer)
+    ? trip.customer[0]?.email ?? null
+    : (trip.customer as { email?: string } | null)?.email ?? null;
 
   return (
     <div className="max-w-3xl">
+      {/* Top bar */}
       <div className="flex items-center justify-between mb-4">
         <Link
           href="/app/trips"
@@ -154,6 +157,7 @@ export default async function TripDetailPage({
         />
       </div>
 
+      {/* Trip header */}
       <div className="bg-card border border-border rounded-lg p-6 mb-4">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
@@ -193,6 +197,7 @@ export default async function TripDetailPage({
         </div>
       </div>
 
+      {/* Trip details */}
       {hasDetails && (
         <div className="bg-card border border-border rounded-lg p-6 mb-4">
           <SectionHeader>Trip details</SectionHeader>
@@ -235,6 +240,100 @@ export default async function TripDetailPage({
         </div>
       )}
 
+      {/* Invoice preview — THE HERO CARD */}
+      <div className="bg-card border border-border rounded-lg p-6 mb-4">
+        <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2">
+          Invoice preview
+        </div>
+
+        <div className="flex items-baseline gap-3 mb-6">
+          <div className="text-5xl font-semibold tabular-nums tracking-tight">
+            ${totalPaid.toFixed(2)}
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {isRefunded ? "after refund" : trip.payment_collected ? "paid" : "due"}
+          </div>
+        </div>
+
+        <div className="space-y-2 text-sm">
+          {/* Base trip line */}
+          <div className="flex items-center justify-between py-1.5">
+            <div className="text-foreground">
+              {trip.pricing_type === "hourly" && trip.hours
+                ? `Trip (${trip.hours}h hourly)`
+                : "Trip (flat rate)"}
+            </div>
+            <div className="tabular-nums">${tripPrice.toFixed(2)}</div>
+          </div>
+
+          {/* Line items */}
+          {lineItems.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center justify-between py-1.5"
+            >
+              <div className="text-foreground">
+                {item.name}
+                {item.quantity > 1 && (
+                  <span className="text-xs text-muted-foreground ml-1">
+                    ×{item.quantity}
+                  </span>
+                )}
+              </div>
+              <div className="tabular-nums">
+                ${(item.amount * item.quantity).toFixed(2)}
+              </div>
+            </div>
+          ))}
+
+          {/* Tip */}
+          {tipAmount > 0 && (
+            <div className="flex items-center justify-between py-1.5">
+              <div className="text-foreground">Tip</div>
+              <div className="tabular-nums text-green-700">
+                ${tipAmount.toFixed(2)}
+              </div>
+            </div>
+          )}
+
+          {/* Subtotal */}
+          <div className="flex items-center justify-between py-2 border-t border-border">
+            <div className="text-muted-foreground">Subtotal</div>
+            <div className="tabular-nums font-medium">
+              ${subtotal.toFixed(2)}
+            </div>
+          </div>
+
+          {/* Refund */}
+          {isRefunded && refundAmount > 0 && (
+            <div className="flex items-center justify-between py-1.5">
+              <div className="text-red-600">Refund</div>
+              <div className="tabular-nums text-red-600">
+                − ${refundAmount.toFixed(2)}
+              </div>
+            </div>
+          )}
+
+          {/* Total */}
+          <div className="flex items-center justify-between pt-3 border-t-2 border-border">
+            <div className="text-foreground font-semibold">Total</div>
+            <div className="tabular-nums font-semibold text-lg">
+              ${totalPaid.toFixed(2)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Line items editor */}
+      <div className="bg-card border border-border rounded-lg p-6 mb-4">
+        <LineItemsSection
+          tripId={trip.id}
+          items={lineItems}
+          canEdit={canEditLineItems}
+        />
+      </div>
+
+      {/* Trip status & money */}
       <div className="bg-card border border-border rounded-lg p-6 mb-4">
         <SectionHeader>
           {trip.handled_by === "partner"
@@ -242,93 +341,48 @@ export default async function TripDetailPage({
             : "Driving it myself"}
         </SectionHeader>
 
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pb-4 border-b border-border">
-          <div className="text-3xl font-semibold tabular-nums">
-            ${tripPrice.toFixed(2)}
-          </div>
-          <div className="text-sm text-muted-foreground">
-            {trip.pricing_type === "hourly" && trip.hours
-              ? `${trip.hours}h hourly`
-              : "flat rate"}
-          </div>
-          {addOnsSubtotal > 0 && (
-            <div className="text-sm text-muted-foreground tabular-nums">
-              + ${addOnsSubtotal.toFixed(2)} add-ons
-            </div>
-          )}
-          {tipAmount > 0 && (
-            <div className="text-sm text-green-700 tabular-nums">
-              + ${tipAmount.toFixed(2)} tip
-            </div>
-          )}
-          {isRefunded && refundAmount != null && (
-            <div className="text-sm text-red-600 tabular-nums">
-              − ${refundAmount.toFixed(2)} refunded
-            </div>
-          )}
-          {addOnsSubtotal > 0 && (
-            <div className="text-sm text-muted-foreground tabular-nums w-full pt-1 border-t border-border mt-1">
-              Trip total:{" "}
-              <span className="font-medium text-foreground">
-                ${tripTotalWithAddOns.toFixed(2)}
-              </span>
-            </div>
-          )}
-        </div>
+        <TripControls
+          tripId={trip.id}
+          tripPrice={tripPrice}
+          tripStatus={trip.trip_status}
+          handledBy={trip.handled_by}
+          paymentCollected={trip.payment_collected}
+          cookieCollected={trip.cookie_collected}
+          cookieAmount={
+            trip.cookie_amount ? parseFloat(trip.cookie_amount) : null
+          }
+          tipAmount={tipAmount}
+          refundStatus={trip.refund_status ?? null}
+          refundAmount={refundAmount > 0 ? refundAmount : null}
+          refundReason={trip.refund_reason ?? null}
+          refundedAt={trip.refunded_at ?? null}
+        />
+      </div>
 
-        <div className="pt-4 border-b border-border pb-4">
-          <LineItemsSection
-            tripId={trip.id}
-            items={lineItems}
-            canEdit={canEditLineItems}
-          />
-        </div>
+      {/* Customer communication */}
+      <div className="bg-card border border-border rounded-lg p-6 mb-4">
+        <SectionHeader>Customer communication</SectionHeader>
 
-        <div className="pt-4">
-          <TripControls
-            tripId={trip.id}
-            tripPrice={tripPrice}
-            tripStatus={trip.trip_status}
-            handledBy={trip.handled_by}
-            paymentCollected={trip.payment_collected}
-            cookieCollected={trip.cookie_collected}
-            cookieAmount={
-              trip.cookie_amount ? parseFloat(trip.cookie_amount) : null
-            }
-            tipAmount={tipAmount}
-            refundStatus={trip.refund_status ?? null}
-            refundAmount={refundAmount}
-            refundReason={trip.refund_reason ?? null}
-            refundedAt={trip.refunded_at ?? null}
-          />
-
-          <div className="bg-card border border-border rounded-lg p-6 mt-4">
-            <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-3">
-              Customer invoice
+        <div className="space-y-5">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2">
+              Invoice
             </div>
             <SendInvoiceButton
               tripId={trip.id}
-              customerEmail={
-                Array.isArray(trip.customer)
-                  ? trip.customer[0]?.email ?? null
-                  : (trip.customer as { email?: string } | null)?.email ?? null
-              }
+              customerEmail={customerEmail}
               squareInvoiceUrl={trip.square_invoice_url ?? null}
               brandedInvoiceSentAt={trip.branded_invoice_sent_at ?? null}
             />
           </div>
 
-          <div className="bg-card border border-border rounded-lg p-6 mt-4">
-            <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-3">
-              Customer receipt
+          <div className="pt-5 border-t border-border">
+            <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2">
+              Receipt
             </div>
             <SendReceiptButton
               tripId={trip.id}
-              customerEmail={
-                Array.isArray(trip.customer)
-                  ? trip.customer[0]?.email ?? null
-                  : (trip.customer as { email?: string } | null)?.email ?? null
-              }
+              customerEmail={customerEmail}
               tripStatus={trip.trip_status}
               brandedReceiptSentAt={trip.branded_receipt_sent_at ?? null}
             />
@@ -336,6 +390,7 @@ export default async function TripDetailPage({
         </div>
       </div>
 
+      {/* Square invoice status */}
       {trip.square_invoice_id ? (
         <div className="bg-card border border-border rounded-lg p-6 mb-4">
           <div className="flex items-start justify-between gap-4">
@@ -357,7 +412,7 @@ export default async function TripDetailPage({
               </div>
               {trip.square_invoice_status === "DRAFT" && (
                 <p className="text-xs text-muted-foreground mt-2">
-                  Draft created — click below to review and send from Square.
+                  Draft created — review and send from Square.
                 </p>
               )}
             </div>
@@ -378,14 +433,14 @@ export default async function TripDetailPage({
           </div>
           <div className="text-sm text-red-700">{trip.square_error}</div>
           <div className="text-xs text-red-600 mt-2">
-            The trip is saved. You can create the invoice manually in Square for
-            now.
+            The trip is saved. You can create the invoice manually in Square for now.
           </div>
         </div>
       ) : null}
 
+      {/* Notes */}
       {trip.notes && (
-        <div className="bg-card border border-border rounded-lg p-6}">
+        <div className="bg-card border border-border rounded-lg p-6">
           <SectionHeader>Notes</SectionHeader>
           <p className="text-sm whitespace-pre-wrap">{trip.notes}</p>
         </div>
