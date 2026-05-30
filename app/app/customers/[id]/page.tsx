@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { CustomerControls } from "./customer-controls";
+import { CustomerNotes } from "./customer-notes";
+import { CustomerTags } from "./customer-tags";
 import { StatusBadge, SectionHeader } from "../../_components/ui";
 
 function formatCurrency(amount: number | string | null | undefined): string {
@@ -23,6 +25,12 @@ function formatDate(iso: string) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TripData = any;
 
+type TagRow = {
+  id: string;
+  name: string;
+  color: string;
+};
+
 function businessRevenue(trip: TripData): number {
   if (trip.handled_by === "partner") {
     return parseFloat(trip.cookie_amount ?? "0");
@@ -36,21 +44,42 @@ export default async function CustomerDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await requireBusiness();
+  const { business } = await requireBusiness();
   const supabase = await createClient();
 
-  const [customerResult, tripsResult] = await Promise.all([
-    supabase.from("customers").select("*").eq("id", id).maybeSingle(),
-    supabase
-      .from("trips")
-      .select("*")
-      .eq("customer_id", id)
-      .order("scheduled_at", { ascending: false }),
-  ]);
+  const [customerResult, tripsResult, attachedTagsResult, allTagsResult] =
+    await Promise.all([
+      supabase.from("customers").select("*").eq("id", id).maybeSingle(),
+      supabase
+        .from("trips")
+        .select("*")
+        .eq("customer_id", id)
+        .order("scheduled_at", { ascending: false }),
+      supabase
+        .from("customer_tags")
+        .select("tag:tags(id, name, color)")
+        .eq("customer_id", id),
+      supabase
+        .from("tags")
+        .select("id, name, color")
+        .eq("business_id", business.id)
+        .order("name"),
+    ]);
 
   if (!customerResult.data) notFound();
   const customer = customerResult.data;
   const trips: TripData[] = tripsResult.data ?? [];
+
+  // Flatten attached tags
+  const attachedTags: TagRow[] = (attachedTagsResult.data ?? [])
+    .map((row) => {
+      const t = row.tag as unknown as TagRow | TagRow[] | null;
+      if (!t) return null;
+      return Array.isArray(t) ? t[0] : t;
+    })
+    .filter((t): t is TagRow => t != null);
+
+  const allTags: TagRow[] = (allTagsResult.data ?? []) as TagRow[];
 
   const completedTrips = trips.filter((t) => t.trip_status === "completed");
   const lifetimeValue = completedTrips.reduce(
@@ -71,6 +100,7 @@ export default async function CustomerDetailPage({
     .reduce((sum, t) => sum + parseFloat(t.price_total), 0);
 
   const firstTrip = trips.length > 0 ? trips[trips.length - 1] : null;
+  const lastCompletedTrip = completedTrips[0] ?? null;
 
   return (
     <div className="max-w-4xl">
@@ -94,11 +124,27 @@ export default async function CustomerDetailPage({
           {customer.phone && <div>{customer.phone}</div>}
           {customer.email && <div>{customer.email}</div>}
         </div>
-        {firstTrip && (
-          <div className="text-xs text-muted-foreground mt-3">
-            Customer since {formatDate(firstTrip.scheduled_at)}
+
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground mt-3">
+          {firstTrip && (
+            <div>Customer since {formatDate(firstTrip.scheduled_at)}</div>
+          )}
+          {lastCompletedTrip && (
+            <div>Last seen {formatDate(lastCompletedTrip.scheduled_at)}</div>
+          )}
+        </div>
+
+        {/* Tags */}
+        <div className="mt-5 pt-5 border-t border-border">
+          <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2">
+            Tags
           </div>
-        )}
+          <CustomerTags
+            customerId={customer.id}
+            attachedTags={attachedTags}
+            allTags={allTags}
+          />
+        </div>
       </div>
 
       {/* Stats */}
@@ -126,13 +172,14 @@ export default async function CustomerDetailPage({
         />
       </div>
 
-      {/* Notes */}
-      {customer.notes && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Notes</SectionHeader>
-          <p className="text-sm whitespace-pre-wrap">{customer.notes}</p>
-        </div>
-      )}
+      {/* Notes (always editable) */}
+      <div className="bg-card border border-border rounded-lg p-6 mb-4">
+        <SectionHeader>Notes</SectionHeader>
+        <CustomerNotes
+          customerId={customer.id}
+          initialNotes={customer.notes ?? null}
+        />
+      </div>
 
       {/* Trip history */}
       <SectionHeader className="mt-6">Trip history</SectionHeader>
