@@ -188,6 +188,7 @@ export async function createTripFromLead(input: {
       terminal: input.terminal,
       handled_by: "self",
       notes: input.notes,
+      is_lead: true,
     })
     .select()
     .single();

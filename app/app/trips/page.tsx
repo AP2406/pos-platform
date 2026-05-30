@@ -6,6 +6,7 @@ import { TripRowActions } from "./trip-row-actions";
 import { LeadFromEmailSheet } from "./lead-from-email-sheet";
 import { TripsFilter } from "./trips-filter";
 import { PageHeader, EmptyState, StatusBadge } from "../_components/ui";
+import { TripsTabs } from "./trips-tabs";
 
 function formatDateTime(iso: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -23,10 +24,10 @@ type TripRow = any;
 export default async function TripsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ handled?: string }>;
+  searchParams: Promise<{ handled?: string; view?: string }>;
 }) {
   await requireBusiness();
-  const { handled } = await searchParams;
+  const { handled, view } = await searchParams;
   const supabase = await createClient();
 
   const { data: trips } = await supabase
@@ -54,10 +55,17 @@ export default async function TripsPage({
     .order("name");
 
   const allTrips: TripRow[] = trips ?? [];
+  const isLeadsView = view === "leads";
+  const leadCount = allTrips.filter((t: TripRow) => t.is_lead === true).length;
+  const tripCount = allTrips.length - leadCount;
+
+  const tabTrips = allTrips.filter((t: TripRow) =>
+    isLeadsView ? t.is_lead === true : t.is_lead !== true
+  );
   const filteredTrips =
     handled === "self" || handled === "partner"
-      ? allTrips.filter((t: TripRow) => t.handled_by === handled)
-      : allTrips;
+      ? tabTrips.filter((t: TripRow) => t.handled_by === handled)
+      : tabTrips;
 
   return (
     <div className="max-w-6xl">
@@ -76,6 +84,9 @@ export default async function TripsPage({
         }
       />
 
+      {allTrips.length > 0 && (
+        <TripsTabs tripCount={tripCount} leadCount={leadCount} />
+      )}
       {allTrips.length > 0 && <TripsFilter />}
 
       {allTrips.length === 0 ? (
