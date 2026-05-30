@@ -216,6 +216,7 @@ export async function createTripFromLead(input: {
   // Try to create a Square draft invoice (non-blocking)
   if (isSquareConfigured() && customerRecord) {
     const result = await createDraftSquareInvoice({
+       businessId: business.id,
       customer: {
         square_customer_id: customerRecord.square_customer_id,
         name: customerRecord.name,

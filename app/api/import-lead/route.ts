@@ -212,6 +212,7 @@ if (tripError || !trip) {
       .maybeSingle();
 
     const result = await createDraftSquareInvoice({
+      businessId: businessId,
       customer: {
         square_customer_id: customerRecord.square_customer_id,
         name: customerRecord.name,
