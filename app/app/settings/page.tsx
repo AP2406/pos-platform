@@ -10,6 +10,20 @@ export default async function SettingsPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  let squareIntegration = null;
+  if (role === "owner") {
+    const { data } = await supabase
+      .from("business_integrations")
+      .select("id, is_active, environment, connected_at")
+      .eq("business_id", business.id)
+      .eq("provider", "square")
+      .maybeSingle();
+    squareIntegration = data;
+  }
+
+  const squareConnected =
+    squareIntegration != null && squareIntegration.is_active;
+
   return (
     <div className="max-w-2xl">
       <PageHeader
@@ -40,6 +54,35 @@ export default async function SettingsPage() {
           </div>
         </dl>
       </div>
+
+      {role === "owner" ? (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Integrations</SectionHeader>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="font-medium text-sm">Square invoices</p>
+              <p className="text-muted-foreground text-sm">
+                Auto-create draft invoices in your Square account when a trip is
+                booked.
+              </p>
+            </div>
+            {squareConnected ? (
+              <span className="text-sm font-medium text-green-600">
+                Connected
+              </span>
+            ) : (
+              <form action="/api/integrations/square/connect" method="get">
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 whitespace-nowrap"
+                >
+                  Connect with Square
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       <div className="bg-card border border-border rounded-lg p-6">
         <SectionHeader>Account</SectionHeader>
