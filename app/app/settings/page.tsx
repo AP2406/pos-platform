@@ -65,6 +65,7 @@ export default async function SettingsPage() {
               <p className="text-muted-foreground text-sm">
                 Auto-create draft invoices in your Square account when a trip is
                 booked.
+                <LeadInboxCard />
               </p>
             </div>
             {squareConnected ? (
@@ -97,4 +98,3 @@ export default async function SettingsPage() {
     </div>
   );
 }
-<LeadInboxCard />
