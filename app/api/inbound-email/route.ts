@@ -195,10 +195,9 @@ export async function POST(req: NextRequest) {
   if (
     !parsed.pickup_address ||
     !parsed.dropoff_address ||
-    !parsed.scheduled_at ||
-    parsed.price_total == null
+    !parsed.scheduled_at
   ) {
-    console.log("inbound-email: INCOMPLETE — pickup=" + parsed.pickup_address + " dropoff=" + parsed.dropoff_address + " when=" + parsed.scheduled_at + " price=" + parsed.price_total);
+    console.log("inbound-email: INCOMPLETE — pickup=" + parsed.pickup_address + " dropoff=" + parsed.dropoff_address + " when=" + parsed.scheduled_at);
     return NextResponse.json({ ok: true, status: "incomplete" });
   }
 
@@ -244,7 +243,7 @@ export async function POST(req: NextRequest) {
       dropoff_address: parsed.dropoff_address,
       scheduled_at: parsed.scheduled_at,
       pricing_type: "flat",
-      price_total: parsed.price_total,
+      price_total: parsed.price_total ?? 0,
       passenger_count: parsed.passenger_count,
       luggage_count: parsed.luggage_count,
       flight_number: parsed.flight_number,
