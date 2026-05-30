@@ -12,6 +12,7 @@ import { SendInvoiceButton } from "./send-invoice-button";
 import { SendReceiptButton } from "./send-receipt-button";
 import { LineItemsSection } from "./line-items";
 import { CreateInvoiceButton } from "./create-invoice-button";
+import { UpdateFromConversation } from "./update-from-conversation";
 
 function formatDateTime(iso: string) {
   return new Intl.DateTimeFormat("en-US", {

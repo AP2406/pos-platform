@@ -203,3 +203,88 @@ export async function createTripFromLead(input: {
   revalidatePath("/app/trips/" + trip.id);
   return { ok: true, id: trip.id };
 }
+
+export async function updateTripFromConversation(
+  tripId: string,
+  conversation: string
+): Promise<{ ok: true; updated: string[] } | { error: string }> {
+  const { business } = await requireBusiness();
+
+  const parsedResult = await parseLeadEmail(conversation);
+  if (!("ok" in parsedResult)) {
+    return { error: parsedResult.error };
+  }
+  const parsed = parsedResult.data;
+
+  const supabase = await createClient();
+
+  const { data: trip } = await supabase
+    .from("trips")
+    .select("id, notes")
+    .eq("id", tripId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+
+  if (!trip) {
+    return { error: "Could not find that trip." };
+  }
+
+  const updates: Record<string, unknown> = {};
+  const updated: string[] = [];
+
+  if (parsed.pickup_address) {
+    updates.pickup_address = parsed.pickup_address;
+    updated.push("pickup address");
+  }
+  if (parsed.dropoff_address) {
+    updates.dropoff_address = parsed.dropoff_address;
+    updated.push("dropoff address");
+  }
+  if (parsed.scheduled_at) {
+    updates.scheduled_at = parsed.scheduled_at;
+    updated.push("pickup time");
+  }
+  if (parsed.price_total != null) {
+    updates.price_total = parsed.price_total;
+    updated.push("price");
+  }
+  if (parsed.passenger_count != null) {
+    updates.passenger_count = parsed.passenger_count;
+    updated.push("passengers");
+  }
+  if (parsed.luggage_count != null) {
+    updates.luggage_count = parsed.luggage_count;
+    updated.push("luggage");
+  }
+  if (parsed.flight_number) {
+    updates.flight_number = parsed.flight_number;
+    updated.push("flight number");
+  }
+  if (parsed.terminal) {
+    updates.terminal = parsed.terminal;
+    updated.push("terminal");
+  }
+  if (parsed.notes) {
+    const existing = trip.notes ? trip.notes + "\n\n" : "";
+    updates.notes = existing + parsed.notes;
+    updated.push("notes");
+  }
+
+  if (updated.length === 0) {
+    return { error: "Couldn't pull any new details from that conversation." };
+  }
+
+  const { error } = await supabase
+    .from("trips")
+    .update(updates)
+    .eq("id", tripId);
+
+  if (error) {
+    console.error("updateTripFromConversation:", error);
+    return { error: "Could not update the trip. Please try again." };
+  }
+
+  revalidatePath("/app/trips/" + tripId);
+  revalidatePath("/app/trips");
+  return { ok: true, updated: updated };
+}
