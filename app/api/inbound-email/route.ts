@@ -87,7 +87,8 @@ export async function POST(req: NextRequest) {
   const businessId = tokenRow.business_id as string;
 
   if (/forwarding-noreply@google\.com/i.test(from)) {
-    const body = text || html || "";
+    const body = (text || "") + "\n" + (html || "");
+    console.log("inbound-email verification body:", body.slice(0, 2000));
     const codeMatch = body.match(/\b(\d{9})\b/);
     const code = codeMatch ? codeMatch[1] : null;
 
