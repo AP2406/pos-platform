@@ -13,20 +13,18 @@ import {
 import { RefundDialog } from "./refund-dialog";
 
 type TripStatus =
-  | "booked"
+  | "new_lead"
   | "confirmed"
-  | "in_progress"
+  | "decision_making"
   | "completed"
-  | "cancelled"
-  | "no_show";
+  | "lost";
 
 const statusOptions: { value: TripStatus; label: string }[] = [
-  { value: "booked", label: "Booked" },
+  { value: "new_lead", label: "New Lead" },
   { value: "confirmed", label: "Confirmed" },
-  { value: "in_progress", label: "In progress" },
+  { value: "decision_making", label: "Decision Making" },
   { value: "completed", label: "Completed" },
-  { value: "cancelled", label: "Cancelled" },
-  { value: "no_show", label: "No show" },
+  { value: "lost", label: "Lost" },
 ];
 
 export function TripControls({

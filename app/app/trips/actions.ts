@@ -53,12 +53,11 @@ type TripInput = {
 };
 
 type TripStatus =
-  | "booked"
+  | "new_lead"
   | "confirmed"
-  | "in_progress"
+  | "decision_making"
   | "completed"
-  | "cancelled"
-  | "no_show";
+  | "lost";
 
 export async function createTrip(
   input: TripInput
@@ -162,8 +161,7 @@ export async function updateTripStatus(
   const supabase = await createClient();
   const { error } = await supabase
     .from("trips")
-    .update({ trip_status: status })
-    .eq("id", id);
+.update({ trip_status: status, is_lead: status === "new_lead" })    .eq("id", id);
 
   if (error) {
     console.error("updateTripStatus:", error);

@@ -231,9 +231,7 @@ export async function POST(req: NextRequest) {
     if (newCustomer) customerId = newCustomer.id;
   }
 
-  const tripStatus =
-    detected ??
-    (new Date(parsed.scheduled_at) < new Date() ? "completed" : "booked");
+  const tripStatus = "new_lead";
 
   const { data: trip, error: tripError } = await supabase
     .from("trips")

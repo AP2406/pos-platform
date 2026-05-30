@@ -43,10 +43,13 @@ export function EmptyState({
 }
 
 const statusStyles: Record<string, string> = {
-  booked: "bg-secondary text-secondary-foreground",
+  new_lead: "bg-purple-50 text-purple-700",
   confirmed: "bg-blue-50 text-blue-700",
-  in_progress: "bg-amber-50 text-amber-700",
+  decision_making: "bg-amber-50 text-amber-700",
   completed: "bg-green-50 text-green-700",
+  lost: "bg-red-50 text-red-700",
+  booked: "bg-secondary text-secondary-foreground",
+  in_progress: "bg-amber-50 text-amber-700",
   cancelled: "bg-red-50 text-red-700",
   no_show: "bg-red-50 text-red-700",
 };
