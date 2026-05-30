@@ -114,6 +114,7 @@ export async function createTrip(
 
     if (customer) {
       const result = await createDraftSquareInvoice({
+        businessId: business.id,
         customer: {
           square_customer_id: customer.square_customer_id,
           name: customer.name,
