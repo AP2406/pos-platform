@@ -43,23 +43,31 @@ export function EmptyState({
 }
 
 const statusStyles: Record<string, string> = {
-  new_lead: "bg-purple-50 text-purple-700",
-  confirmed: "bg-blue-50 text-blue-700",
-  decision_making: "bg-amber-50 text-amber-700",
-  completed: "bg-green-50 text-green-700",
-  lost: "bg-red-50 text-red-700",
-  booked: "bg-secondary text-secondary-foreground",
-  in_progress: "bg-amber-50 text-amber-700",
-  cancelled: "bg-red-50 text-red-700",
-  no_show: "bg-red-50 text-red-700",
+  new_lead:
+    "bg-violet-500/15 text-violet-300 ring-1 ring-inset ring-violet-500/30",
+  confirmed: "bg-sky-500/15 text-sky-300 ring-1 ring-inset ring-sky-500/30",
+  decision_making:
+    "bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/30",
+  completed:
+    "bg-emerald-500/15 text-emerald-300 ring-1 ring-inset ring-emerald-500/30",
+  lost: "bg-rose-500/15 text-rose-300 ring-1 ring-inset ring-rose-500/30",
+  booked: "bg-white/10 text-foreground/70 ring-1 ring-inset ring-white/15",
+  in_progress:
+    "bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/30",
+  cancelled: "bg-rose-500/15 text-rose-300 ring-1 ring-inset ring-rose-500/30",
+  no_show: "bg-rose-500/15 text-rose-300 ring-1 ring-inset ring-rose-500/30",
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  const style =
-    statusStyles[status] ?? "bg-secondary text-secondary-foreground";
+  const fallback =
+    "bg-white/10 text-foreground/70 ring-1 ring-inset ring-white/15";
+  const style = statusStyles[status] ?? fallback;
   return (
     <span
-      className={`text-xs px-2 py-0.5 rounded-md capitalize font-medium ${style}`}
+      className={
+        "inline-flex items-center text-[10px] uppercase tracking-[0.08em] px-2 py-0.5 rounded-md font-semibold " +
+        style
+      }
     >
       {status.replace("_", " ")}
     </span>
@@ -75,7 +83,10 @@ export function SectionHeader({
 }) {
   return (
     <h2
-      className={`text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-3 ${className}`}
+      className={
+        "text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-3 " +
+        className
+      }
     >
       {children}
     </h2>
