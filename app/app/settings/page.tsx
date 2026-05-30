@@ -2,6 +2,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, SectionHeader } from "../_components/ui";
 import { SettingsForm } from "./settings-form";
+import { LeadInboxCard } from "./lead-inbox-card";
 
 export default async function SettingsPage() {
   const { business, role } = await requireBusiness();
@@ -96,3 +97,4 @@ export default async function SettingsPage() {
     </div>
   );
 }
+<LeadInboxCard />
