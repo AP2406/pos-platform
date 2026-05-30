@@ -10,6 +10,7 @@ import { getSquareDashboardUrl } from "@/lib/services/square";
 import { StatusBadge, SectionHeader } from "../../_components/ui";
 import { SendInvoiceButton } from "./send-invoice-button";
 import { SendReceiptButton } from "./send-receipt-button";
+import { LineItemsSection } from "./line-items";
 
 function formatDateTime(iso: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -39,6 +40,14 @@ function invoiceStatusColor(status: string) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TripDetail = any;
 
+type LineItemRow = {
+  id: string;
+  name: string;
+  amount: string;
+  quantity: number;
+  category: string | null;
+};
+
 export default async function TripDetailPage({
   params,
 }: {
@@ -48,32 +57,42 @@ export default async function TripDetailPage({
   await requireBusiness();
   const supabase = await createClient();
 
-  const [tripResult, customersResult, vehiclesResult, partnersResult] =
-    await Promise.all([
-      supabase
-        .from("trips")
-        .select(
-          `
+  const [
+    tripResult,
+    customersResult,
+    vehiclesResult,
+    partnersResult,
+    lineItemsResult,
+  ] = await Promise.all([
+    supabase
+      .from("trips")
+      .select(
+        `
           *,
           customer:customers(id, name, email),
           vehicle:vehicles(id, name),
           partner:partners(id, name)
         `
-        )
-        .eq("id", id)
-        .maybeSingle(),
-      supabase.from("customers").select("id, name").order("name"),
-      supabase
-        .from("vehicles")
-        .select("id, name")
-        .eq("is_active", true)
-        .order("name"),
-      supabase
-        .from("partners")
-        .select("id, name, default_cookie_percent, default_cookie_flat")
-        .eq("is_active", true)
-        .order("name"),
-    ]);
+      )
+      .eq("id", id)
+      .maybeSingle(),
+    supabase.from("customers").select("id, name").order("name"),
+    supabase
+      .from("vehicles")
+      .select("id, name")
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("partners")
+      .select("id, name, default_cookie_percent, default_cookie_flat")
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("trip_line_items")
+      .select("id, name, amount, quantity, category")
+      .eq("trip_id", id)
+      .order("created_at"),
+  ]);
 
   if (!tripResult.data) notFound();
   const trip: TripDetail = tripResult.data;
@@ -89,6 +108,28 @@ export default async function TripDetailPage({
   const tipAmount = trip.tip_amount ? parseFloat(trip.tip_amount) : 0;
   const refundAmount = trip.refund_amount ? parseFloat(trip.refund_amount) : null;
   const isRefunded = trip.refund_status === "completed";
+
+  // Line items: parse from DB and compute add-ons subtotal
+  const lineItems = ((lineItemsResult.data ?? []) as LineItemRow[]).map(
+    (item) => ({
+      id: item.id,
+      name: item.name,
+      amount: parseFloat(item.amount),
+      quantity: item.quantity,
+      category: item.category,
+    })
+  );
+  const addOnsSubtotal = lineItems.reduce(
+    (sum, item) => sum + item.amount * item.quantity,
+    0
+  );
+
+  // Effective trip total (base + add-ons)
+  const tripTotalWithAddOns = tripPrice + addOnsSubtotal;
+
+  // Editable until refunded — drivers can add tolls/fees before, during, or after the trip
+  // (we only lock once a refund has happened)
+  const canEditLineItems = !isRefunded;
 
   return (
     <div className="max-w-3xl">
@@ -210,6 +251,11 @@ export default async function TripDetailPage({
               ? `${trip.hours}h hourly`
               : "flat rate"}
           </div>
+          {addOnsSubtotal > 0 && (
+            <div className="text-sm text-muted-foreground tabular-nums">
+              + ${addOnsSubtotal.toFixed(2)} add-ons
+            </div>
+          )}
           {tipAmount > 0 && (
             <div className="text-sm text-green-700 tabular-nums">
               + ${tipAmount.toFixed(2)} tip
@@ -220,6 +266,22 @@ export default async function TripDetailPage({
               − ${refundAmount.toFixed(2)} refunded
             </div>
           )}
+          {addOnsSubtotal > 0 && (
+            <div className="text-sm text-muted-foreground tabular-nums w-full pt-1 border-t border-border mt-1">
+              Trip total:{" "}
+              <span className="font-medium text-foreground">
+                ${tripTotalWithAddOns.toFixed(2)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="pt-4 border-b border-border pb-4">
+          <LineItemsSection
+            tripId={trip.id}
+            items={lineItems}
+            canEdit={canEditLineItems}
+          />
         </div>
 
         <div className="pt-4">
@@ -323,7 +385,7 @@ export default async function TripDetailPage({
       ) : null}
 
       {trip.notes && (
-        <div className="bg-card border border-border rounded-lg p-6">
+        <div className="bg-card border border-border rounded-lg p-6}">
           <SectionHeader>Notes</SectionHeader>
           <p className="text-sm whitespace-pre-wrap">{trip.notes}</p>
         </div>
