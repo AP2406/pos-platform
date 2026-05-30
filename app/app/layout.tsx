@@ -2,6 +2,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { SignOutButton } from "./_components/sign-out";
 import { SidebarNav } from "./_components/sidebar-nav";
 import { PageTransition } from "./_components/page-transition";
+import { ThemeToggle } from "./_components/theme-toggle";
 
 type NavItem = { href: string; label: string };
 
@@ -94,8 +95,9 @@ export default async function AppLayout({
         {/* Navigation (client component for active state) */}
         <SidebarNav items={nav} />
 
-        {/* Sign out */}
-        <div className="p-2 border-t border-sidebar-border">
+        {/* Theme + sign out */}
+        <div className="p-2 border-t border-sidebar-border space-y-1">
+          <ThemeToggle />
           <SignOutButton />
         </div>
       </aside>

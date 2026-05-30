@@ -44,23 +44,28 @@ export function EmptyState({
 
 const statusStyles: Record<string, string> = {
   new_lead:
-    "bg-violet-500/15 text-violet-300 ring-1 ring-inset ring-violet-500/30",
-  confirmed: "bg-sky-500/15 text-sky-300 ring-1 ring-inset ring-sky-500/30",
+    "bg-violet-100 text-violet-700 ring-1 ring-inset ring-violet-200 dark:bg-violet-500/15 dark:text-violet-300 dark:ring-violet-500/30",
+  confirmed:
+    "bg-sky-100 text-sky-700 ring-1 ring-inset ring-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-500/30",
   decision_making:
-    "bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/30",
+    "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30",
   completed:
-    "bg-emerald-500/15 text-emerald-300 ring-1 ring-inset ring-emerald-500/30",
-  lost: "bg-rose-500/15 text-rose-300 ring-1 ring-inset ring-rose-500/30",
-  booked: "bg-white/10 text-foreground/70 ring-1 ring-inset ring-white/15",
+    "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/30",
+  lost:
+    "bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-500/30",
+  booked:
+    "bg-secondary text-secondary-foreground ring-1 ring-inset ring-border",
   in_progress:
-    "bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/30",
-  cancelled: "bg-rose-500/15 text-rose-300 ring-1 ring-inset ring-rose-500/30",
-  no_show: "bg-rose-500/15 text-rose-300 ring-1 ring-inset ring-rose-500/30",
+    "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30",
+  cancelled:
+    "bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-500/30",
+  no_show:
+    "bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-500/30",
 };
 
 export function StatusBadge({ status }: { status: string }) {
   const fallback =
-    "bg-white/10 text-foreground/70 ring-1 ring-inset ring-white/15";
+    "bg-secondary text-secondary-foreground ring-1 ring-inset ring-border";
   const style = statusStyles[status] ?? fallback;
   return (
     <span
