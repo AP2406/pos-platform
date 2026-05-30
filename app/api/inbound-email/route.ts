@@ -29,7 +29,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Server not configured" }, { status: 500 });
   }
 
-  // Optional shared-secret check (only enforced if INBOUND_WEBHOOK_KEY is set)
   const expectedKey = process.env.INBOUND_WEBHOOK_KEY;
   if (expectedKey) {
     const k = req.nextUrl.searchParams.get("k");
@@ -53,7 +52,6 @@ export async function POST(req: NextRequest) {
   const envelope = (form.get("envelope") as string) || "";
   const headers = (form.get("headers") as string) || "";
 
-  // Find which inbound address this was sent to (envelope catches BCC too)
   let recipient = toField;
   try {
     if (envelope) {
@@ -70,6 +68,7 @@ export async function POST(req: NextRequest) {
   }
 
   const token = tokenFromAddress(recipient);
+  console.log("inbound-email: recipient=" + recipient + " token=" + token + " from=" + from);
   if (!token) {
     return NextResponse.json({ ok: true, status: "no_token" });
   }
@@ -82,11 +81,11 @@ export async function POST(req: NextRequest) {
     .eq("token", token)
     .maybeSingle();
   if (!tokenRow) {
+    console.log("inbound-email: UNKNOWN token " + token);
     return NextResponse.json({ ok: true, status: "unknown_token" });
   }
   const businessId = tokenRow.business_id as string;
 
-  // Gmail forwarding verification email — capture the code, try to auto-confirm
   if (/forwarding-noreply@google\.com/i.test(from)) {
     const body = text || html || "";
     const codeMatch = body.match(/\b(\d{9})\b/);
@@ -113,6 +112,7 @@ export async function POST(req: NextRequest) {
       })
       .eq("token", token);
 
+    console.log("inbound-email: Gmail verification, code=" + code + " confirmed=" + confirmed);
     return NextResponse.json({
       ok: true,
       status: "forwarding_verification",
@@ -123,10 +123,10 @@ export async function POST(req: NextRequest) {
 
   const body = text || html;
   if (!body || !body.trim()) {
+    console.log("inbound-email: empty body");
     return NextResponse.json({ ok: true, status: "empty" });
   }
 
-  // Dedupe by Message-ID pulled from the raw headers
   let messageId: string | null = null;
   const midMatch = headers.match(/^message-id:\s*(.+)$/im);
   if (midMatch) messageId = midMatch[1].trim();
@@ -140,6 +140,7 @@ export async function POST(req: NextRequest) {
       .limit(1)
       .maybeSingle();
     if (dupe) {
+      console.log("inbound-email: duplicate " + messageId);
       return NextResponse.json({ ok: true, status: "duplicate" });
     }
   }
@@ -154,9 +155,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, status: "parse_failed", detail });
   }
 
+  console.log("inbound-email parsed:", JSON.stringify(parsed));
   const detected = parsed.trip_status;
 
-  // Follow-up: same booking reference -> advance status, don't duplicate
   if (parsed.booking_reference) {
     const { data: existingTrip } = await supabase
       .from("trips")
@@ -191,13 +192,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // New trip needs the essentials
   if (
     !parsed.pickup_address ||
     !parsed.dropoff_address ||
     !parsed.scheduled_at ||
     parsed.price_total == null
   ) {
+    console.log("inbound-email: INCOMPLETE — pickup=" + parsed.pickup_address + " dropoff=" + parsed.dropoff_address + " when=" + parsed.scheduled_at + " price=" + parsed.price_total);
     return NextResponse.json({ ok: true, status: "incomplete" });
   }
 
@@ -263,6 +264,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, status: "insert_failed" });
   }
 
+  console.log("inbound-email: IMPORTED trip " + trip.id);
   return NextResponse.json({
     ok: true,
     status: "imported",
