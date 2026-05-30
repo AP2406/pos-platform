@@ -5,11 +5,97 @@ import { OnboardingForm } from "./form";
 export default async function OnboardingPage() {
   await requireUser();
   const ctx = await getCurrentBusiness();
-  if (ctx) redirect("/app"); // Already onboarded — skip to the app
+  if (ctx) redirect("/app");
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
-      <OnboardingForm />
+    <div className="min-h-screen flex bg-background">
+      <style
+        dangerouslySetInnerHTML={{
+          __html:
+            "@keyframes oaRise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}.oa-rise{animation:oaRise .7s cubic-bezier(0.16,1,0.3,1) both}@keyframes oaFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-28px)}}.oa-float{animation:oaFloat 9s ease-in-out infinite}",
+        }}
+      />
+
+      {/* Brand panel — desktop only */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.21 0.045 265), oklch(0.15 0.02 265))",
+          }}
+        />
+        <div
+          className="oa-float absolute -top-24 -left-12 w-80 h-80 rounded-full blur-3xl"
+          style={{ background: "oklch(0.66 0.19 250 / 0.35)" }}
+        />
+        <div
+          className="oa-float absolute -bottom-16 right-0 w-96 h-96 rounded-full blur-3xl"
+          style={{ background: "oklch(0.6 0.18 285 / 0.25)", animationDelay: "2.5s" }}
+        />
+        <div
+          className="absolute inset-0 opacity-[0.12]"
+          style={{
+            backgroundImage:
+              "radial-gradient(oklch(1 0 0 / 0.5) 1px, transparent 1px)",
+            backgroundSize: "28px 28px",
+          }}
+        />
+
+        <div className="relative z-10 flex flex-col justify-between p-12 text-white w-full">
+          <div className="flex items-center gap-2.5 oa-rise">
+            <span className="w-9 h-9 rounded-lg bg-white/10 ring-1 ring-white/20 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                <path d="M13 2L3 14h7v8l10-12h-7z" />
+              </svg>
+            </span>
+            <span className="font-semibold text-lg tracking-tight">Surge</span>
+          </div>
+
+          <div className="max-w-md">
+            <h2
+              className="oa-rise text-3xl font-semibold tracking-tight leading-tight"
+              style={{ animationDelay: "0.1s" }}
+            >
+              Run your whole operation from one place.
+            </h2>
+            <p
+              className="oa-rise text-white/60 mt-4 text-sm leading-relaxed"
+              style={{ animationDelay: "0.2s" }}
+            >
+              Trips, leads, customers, payments — Surge keeps the day-to-day
+              moving so you can focus on the work.
+            </p>
+            <div
+              className="oa-rise flex flex-wrap gap-2 mt-6"
+              style={{ animationDelay: "0.3s" }}
+            >
+              {["Trips & dispatch", "Leads from email", "Payments & invoicing"].map(
+                (f) => (
+                  <span
+                    key={f}
+                    className="text-xs px-3 py-1.5 rounded-full bg-white/10 ring-1 ring-white/20 text-white/80"
+                  >
+                    {f}
+                  </span>
+                )
+              )}
+            </div>
+          </div>
+
+          <div
+            className="oa-rise text-xs text-white/40"
+            style={{ animationDelay: "0.4s" }}
+          >
+            © Surge · surgetechpos.com
+          </div>
+        </div>
+      </div>
+
+      {/* Form panel */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
+        <OnboardingForm />
+      </div>
     </div>
   );
 }
