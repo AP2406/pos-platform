@@ -11,6 +11,7 @@ import { StatusBadge, SectionHeader } from "../../_components/ui";
 import { SendInvoiceButton } from "./send-invoice-button";
 import { SendReceiptButton } from "./send-receipt-button";
 import { LineItemsSection } from "./line-items";
+import { CreateInvoiceButton } from "./create-invoice-button";
 
 function formatDateTime(iso: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -426,17 +427,28 @@ export default async function TripDetailPage({
             </Link>
           </div>
         </div>
-      ) : trip.square_error ? (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-4">
-          <div className="text-xs uppercase tracking-wider text-red-700 mb-1">
-            Square invoice failed
-          </div>
-          <div className="text-sm text-red-700">{trip.square_error}</div>
-          <div className="text-xs text-red-600 mt-2">
-            The trip is saved. You can create the invoice manually in Square for now.
+      ) : (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2">
+                Square invoice
+              </h2>
+              {trip.square_error ? (
+                <p className="text-sm text-red-700">
+                  Last attempt failed: {trip.square_error}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No invoice yet. Once the trip details are final, create a
+                  draft in Square, then review and send it from there.
+                </p>
+              )}
+            </div>
+            <CreateInvoiceButton tripId={trip.id} />
           </div>
         </div>
-      ) : null}
+      )}
 
       {/* Notes */}
       {trip.notes && (

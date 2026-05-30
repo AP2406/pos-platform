@@ -4,10 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import {
-  createDraftSquareInvoice,
-  isSquareConfigured,
-} from "@/lib/services/square";
+import { createDraftSquareInvoice } from "@/lib/services/square";
 import { refundTransfer } from "@/lib/services/finix";
 
 const tripSchema = z
@@ -105,60 +102,9 @@ export async function createTrip(
     return { error: "Could not create trip. Please try again." };
   }
 
-  if (!isPartner && parsed.data.customer_id && isSquareConfigured()) {
-    const { data: customer } = await supabase
-      .from("customers")
-      .select("id, name, email, phone, square_customer_id")
-      .eq("id", parsed.data.customer_id)
-      .maybeSingle();
-
-    if (customer) {
-      const result = await createDraftSquareInvoice({
-        businessId: business.id,
-        customer: {
-          square_customer_id: customer.square_customer_id,
-          name: customer.name,
-          email: customer.email,
-          phone: customer.phone,
-        },
-        trip: {
-          pickup_address: parsed.data.pickup_address,
-          dropoff_address: parsed.data.dropoff_address,
-          scheduled_at: parsed.data.scheduled_at,
-          price_total: parsed.data.price_total,
-        },
-        currency: business.currency ?? "CAD",
-      });
-
-      if ("ok" in result) {
-        if (!customer.square_customer_id) {
-          await supabase
-            .from("customers")
-            .update({ square_customer_id: result.data.squareCustomerId })
-            .eq("id", customer.id);
-        }
-        await supabase
-          .from("trips")
-          .update({
-            square_invoice_id: result.data.invoiceId,
-            square_invoice_status: result.data.invoiceStatus,
-            square_invoice_url: result.data.invoiceUrl,
-            square_order_id: result.data.orderId,
-            square_error: null,
-          })
-          .eq("id", data.id);
-      } else {
-        await supabase
-          .from("trips")
-          .update({ square_error: result.error })
-          .eq("id", data.id);
-      }
-    }
-  }
-
   revalidatePath("/app/trips");
   revalidatePath("/app");
-  revalidatePath(`/app/trips/${data.id}`);
+  revalidatePath("/app/trips/" + data.id);
   return { ok: true, id: data.id };
 }
 
@@ -203,7 +149,7 @@ export async function updateTrip(
   }
 
   revalidatePath("/app/trips");
-  revalidatePath(`/app/trips/${id}`);
+  revalidatePath("/app/trips/" + id);
   revalidatePath("/app");
   return { ok: true };
 }
@@ -224,7 +170,7 @@ export async function updateTripStatus(
     return { error: "Could not update status." };
   }
   revalidatePath("/app/trips");
-  revalidatePath(`/app/trips/${id}`);
+  revalidatePath("/app/trips/" + id);
   return { ok: true };
 }
 
@@ -244,7 +190,7 @@ export async function togglePaymentCollected(
     return { error: "Could not update payment status." };
   }
   revalidatePath("/app/trips");
-  revalidatePath(`/app/trips/${id}`);
+  revalidatePath("/app/trips/" + id);
   return { ok: true };
 }
 
@@ -264,7 +210,7 @@ export async function toggleCookieCollected(
     return { error: "Could not update cookie status." };
   }
   revalidatePath("/app/trips");
-  revalidatePath(`/app/trips/${id}`);
+  revalidatePath("/app/trips/" + id);
   return { ok: true };
 }
 
@@ -318,11 +264,9 @@ export async function refundTrip(input: {
     return { error: "Refund amount cannot exceed the trip price." };
   }
 
-  // Default refund processor is manual (operator handles money movement outside Surge)
   let refundProcessor: "manual" | "finix" = "manual";
   let processorRef: string | null = null;
 
-  // If this trip was paid via Finix, call the Finix refund API
   if (trip.processor_payment_id) {
     const { data: finixPayment } = await supabase
       .from("finix_payments")
@@ -335,7 +279,7 @@ export async function refundTrip(input: {
       (finixPayment.status === "succeeded" || finixPayment.status === "pending")
     ) {
       const refundAmountCents = Math.round(input.amount * 100);
-      const idempotencyKey = `surge-refund-${input.id}-${Date.now()}`;
+      const idempotencyKey = "surge-refund-" + input.id + "-" + Date.now();
 
       const refundResult = await refundTransfer(finixPayment.finix_transfer_id, {
         refundAmount: refundAmountCents,
@@ -350,7 +294,10 @@ export async function refundTrip(input: {
       if ("error" in refundResult) {
         console.error("Finix refund failed:", refundResult);
         return {
-          error: `Finix refund failed: ${refundResult.error}. The trip refund was NOT recorded — please try again or refund manually in the Finix dashboard.`,
+          error:
+            "Finix refund failed: " +
+            refundResult.error +
+            ". The trip refund was NOT recorded — please try again or refund manually in the Finix dashboard.",
         };
       }
 
@@ -377,7 +324,7 @@ export async function refundTrip(input: {
   }
 
   revalidatePath("/app/trips");
-  revalidatePath(`/app/trips/${input.id}`);
+  revalidatePath("/app/trips/" + input.id);
   return { ok: true };
 }
 
@@ -406,6 +353,87 @@ export async function updateTripTip(input: {
   }
 
   revalidatePath("/app/trips");
-  revalidatePath(`/app/trips/${input.id}`);
+  revalidatePath("/app/trips/" + input.id);
+  return { ok: true };
+}
+
+export async function createSquareInvoiceForTrip(
+  tripId: string
+): Promise<{ ok: true } | { error: string }> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data: trip, error: tripError } = await supabase
+    .from("trips")
+    .select(
+      "id, customer_id, pickup_address, dropoff_address, scheduled_at, price_total, square_invoice_id"
+    )
+    .eq("id", tripId)
+    .maybeSingle();
+
+  if (tripError || !trip) {
+    return { error: "Could not find that trip." };
+  }
+  if (trip.square_invoice_id) {
+    return { error: "An invoice has already been created for this trip." };
+  }
+  if (!trip.customer_id) {
+    return { error: "Add a customer to this trip before creating an invoice." };
+  }
+
+  const { data: customer } = await supabase
+    .from("customers")
+    .select("id, name, email, phone, square_customer_id")
+    .eq("id", trip.customer_id)
+    .maybeSingle();
+
+  if (!customer) {
+    return { error: "Could not find the customer for this trip." };
+  }
+
+  const result = await createDraftSquareInvoice({
+    businessId: business.id,
+    customer: {
+      square_customer_id: customer.square_customer_id,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+    },
+    trip: {
+      pickup_address: trip.pickup_address,
+      dropoff_address: trip.dropoff_address,
+      scheduled_at: trip.scheduled_at,
+      price_total: Number(trip.price_total),
+    },
+    currency: business.currency ?? "CAD",
+  });
+
+  if (!("ok" in result)) {
+    await supabase
+      .from("trips")
+      .update({ square_error: result.error })
+      .eq("id", trip.id);
+    return { error: result.error };
+  }
+
+  if (!customer.square_customer_id) {
+    await supabase
+      .from("customers")
+      .update({ square_customer_id: result.data.squareCustomerId })
+      .eq("id", customer.id);
+  }
+  await supabase
+    .from("trips")
+    .update({
+      square_invoice_id: result.data.invoiceId,
+      square_invoice_status: result.data.invoiceStatus,
+      square_invoice_url: result.data.invoiceUrl,
+      square_order_id: result.data.orderId,
+      square_error: null,
+    })
+    .eq("id", trip.id);
+
+  revalidatePath("/app/trips/" + tripId);
+  revalidatePath("/app/trips");
   return { ok: true };
 }

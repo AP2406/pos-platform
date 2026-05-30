@@ -4,10 +4,6 @@ import { GoogleGenAI } from "@google/genai";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
-import {
-  createDraftSquareInvoice,
-  isSquareConfigured,
-} from "@/lib/services/square";
 
 const PARSE_PROMPT = `You extract structured data from limo/transportation booking emails.
 
@@ -139,32 +135,22 @@ export async function createTripFromLead(input: {
   const supabase = await createClient();
 
   let customerId: string | null = null;
-  let customerRecord: {
-    id: string;
-    name: string | null;
-    email: string | null;
-    phone: string | null;
-    square_customer_id: string | null;
-  } | null = null;
 
   // Try to match existing customer by phone or email
   if (input.customer_phone || input.customer_email) {
     const filters: string[] = [];
-    if (input.customer_phone)
-      filters.push(`phone.eq.${input.customer_phone}`);
-    if (input.customer_email)
-      filters.push(`email.eq.${input.customer_email}`);
+    if (input.customer_phone) filters.push("phone.eq." + input.customer_phone);
+    if (input.customer_email) filters.push("email.eq." + input.customer_email);
 
     const { data: existing } = await supabase
       .from("customers")
-      .select("id, name, email, phone, square_customer_id")
+      .select("id")
       .or(filters.join(","))
       .limit(1)
       .maybeSingle();
 
     if (existing) {
       customerId = existing.id;
-      customerRecord = existing;
     }
   }
 
@@ -178,16 +164,14 @@ export async function createTripFromLead(input: {
         email: input.customer_email,
         phone: input.customer_phone,
       })
-      .select("id, name, email, phone, square_customer_id")
+      .select("id")
       .single();
 
     if (newCustomer) {
       customerId = newCustomer.id;
-      customerRecord = newCustomer;
     }
   }
 
-  // Create the trip first (so we never lose a lead even if Square fails)
   const { data: trip, error: tripError } = await supabase
     .from("trips")
     .insert({
@@ -213,56 +197,8 @@ export async function createTripFromLead(input: {
     return { error: "Could not create trip from lead." };
   }
 
-  // Try to create a Square draft invoice (non-blocking)
-  if (isSquareConfigured() && customerRecord) {
-    const result = await createDraftSquareInvoice({
-       businessId: business.id,
-      customer: {
-        square_customer_id: customerRecord.square_customer_id,
-        name: customerRecord.name,
-        email: customerRecord.email,
-        phone: customerRecord.phone,
-      },
-      trip: {
-        pickup_address: input.pickup_address,
-        dropoff_address: input.dropoff_address,
-        scheduled_at: input.scheduled_at,
-        price_total: input.price_total,
-      },
-      currency: business.currency ?? "CAD",
-    });
-
-    if ("ok" in result) {
-      // Save Square customer ID on the customer (cache for future)
-      if (!customerRecord.square_customer_id) {
-        await supabase
-          .from("customers")
-          .update({ square_customer_id: result.data.squareCustomerId })
-          .eq("id", customerRecord.id);
-      }
-      // Save Square invoice details on the trip
-      await supabase
-        .from("trips")
-        .update({
-          square_invoice_id: result.data.invoiceId,
-          square_invoice_status: result.data.invoiceStatus,
-          square_invoice_url: result.data.invoiceUrl,
-          square_order_id: result.data.orderId,
-          square_error: null,
-        })
-        .eq("id", trip.id);
-    } else {
-      // Log error on trip but don't fail
-      console.error("Square invoice creation failed:", result.error);
-      await supabase
-        .from("trips")
-        .update({ square_error: result.error })
-        .eq("id", trip.id);
-    }
-  }
-
   revalidatePath("/app/trips");
   revalidatePath("/app");
-  revalidatePath(`/app/trips/${trip.id}`);
+  revalidatePath("/app/trips/" + trip.id);
   return { ok: true, id: trip.id };
 }
