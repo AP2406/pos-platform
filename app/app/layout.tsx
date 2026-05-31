@@ -12,6 +12,7 @@ const navByIndustry: Record<string, NavItem[]> = {
     { href: "/app/partners", label: "Partners" },
     { href: "/app/drivers", label: "Drivers" },
     { href: "/app/vehicles", label: "Vehicles" },
+    { href: "/app/profit", label: "Profit" },
     { href: "/app/settings", label: "Settings" },
   ],
   restaurant: [
