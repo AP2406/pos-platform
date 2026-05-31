@@ -1,9 +1,20 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { askAssistant } from "../assistant/actions";
+import { askAssistant, runAssistantAction } from "../assistant/actions";
 
-type Msg = { role: "user" | "assistant"; text: string };
+type ProposedAction = {
+  tool: string;
+  args: Record<string, unknown>;
+  summary: string;
+};
+type Msg = {
+  role: "user" | "assistant";
+  text: string;
+  action?: ProposedAction;
+  state?: "pending" | "running" | "done" | "cancelled";
+  result?: string;
+};
 
 export function AssistantWidget() {
   const [open, setOpen] = useState(false);
@@ -25,10 +36,46 @@ export function AssistantWidget() {
     setMessages(next);
     setInput("");
     setLoading(true);
-    const res = await askAssistant(q, next.slice(-6));
+    const res = await askAssistant(
+      q,
+      next
+        .filter((m) => !m.action)
+        .map((m) => ({ role: m.role, text: m.text }))
+        .slice(-6)
+    );
     setLoading(false);
-    const reply = "error" in res ? res.error : res.answer;
-    setMessages((m) => [...m, { role: "assistant", text: reply }]);
+    if (res.kind === "action") {
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", text: res.text, action: res.action, state: "pending" },
+      ]);
+    } else {
+      setMessages((m) => [...m, { role: "assistant", text: res.text }]);
+    }
+  }
+
+  async function confirm(index: number) {
+    const msg = messages[index];
+    if (!msg || !msg.action) return;
+    setMessages((m) =>
+      m.map((x, i) => (i === index ? { ...x, state: "running" } : x))
+    );
+    const res = await runAssistantAction(msg.action);
+    const ok = !("error" in res);
+    const result = "error" in res ? res.error : res.message;
+    setMessages((m) =>
+      m.map((x, i) =>
+        i === index ? { ...x, state: ok ? "done" : "pending", result } : x
+      )
+    );
+  }
+
+  function cancel(index: number) {
+    setMessages((m) =>
+      m.map((x, i) =>
+        i === index ? { ...x, state: "cancelled", result: "Cancelled." } : x
+      )
+    );
   }
 
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -77,21 +124,69 @@ export function AssistantWidget() {
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.length === 0 && (
               <div className="text-sm text-muted-foreground">
-                Ask me about your business — today&apos;s trips, what you&apos;ve
-                earned this week, who owes you, what&apos;s coming up.
+                Ask about your business, or tell me to do something — &quot;mark
+                the Pearson trip paid&quot;, &quot;who owes me money?&quot;,
+                &quot;add a customer named Maria&quot;.
               </div>
             )}
             {messages.map((m, i) => (
               <div
                 key={i}
                 className={
-                  "max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap " +
-                  (m.role === "user"
-                    ? "ml-auto bg-primary text-primary-foreground"
-                    : "mr-auto bg-secondary text-foreground")
+                  m.role === "user"
+                    ? "flex justify-end"
+                    : "flex flex-col items-start"
                 }
               >
-                {m.text}
+                <div
+                  className={
+                    "max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap " +
+                    (m.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-foreground")
+                  }
+                >
+                  {m.text}
+                </div>
+                {m.action && (
+                  <div className="mt-2 w-full">
+                    {m.state === "pending" && (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => confirm(i)}
+                          className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => cancel(i)}
+                          className="h-8 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                    {m.state === "running" && (
+                      <div className="text-xs text-muted-foreground">Working...</div>
+                    )}
+                    {m.result && (
+                      <div
+                        className={
+                          "text-sm mt-1 " +
+                          (m.state === "done"
+                            ? "text-emerald-600"
+                            : m.state === "cancelled"
+                            ? "text-muted-foreground"
+                            : "text-destructive")
+                        }
+                      >
+                        {m.result}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
             {loading && (
@@ -108,7 +203,7 @@ export function AssistantWidget() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={onKey}
                 rows={1}
-                placeholder="Ask anything..."
+                placeholder="Ask or tell me to do something..."
                 className="flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring max-h-24"
               />
               <button
