@@ -4,6 +4,7 @@ import { PageHeader, SectionHeader } from "../_components/ui";
 import { SettingsForm } from "./settings-form";
 import { LeadInboxCard } from "./lead-inbox-card";
 import { DriversSettingCard } from "./drivers-setting-card";
+import { NotificationsCard } from "./notifications-card";
 
 export default async function SettingsPage() {
   const { business, role } = await requireBusiness();
