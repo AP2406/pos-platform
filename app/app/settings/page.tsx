@@ -5,6 +5,7 @@ import { SettingsForm } from "./settings-form";
 import { LeadInboxCard } from "./lead-inbox-card";
 import { DriversSettingCard } from "./drivers-setting-card";
 import { NotificationsCard } from "./notifications-card";
+import { GoogleAdsCard } from "./google-ads-card";
 
 export default async function SettingsPage() {
   const { business, role } = await requireBusiness();
@@ -107,10 +108,11 @@ export default async function SettingsPage() {
         </div>
       )}
 
-      <div className="mb-4">
+   <div className="mb-4">
         <NotificationsCard initialPrefs={notifPrefs} />
       </div>
 
+      <GoogleAdsCard />
       <LeadInboxCard />
 
       <div className="bg-card border border-border rounded-lg p-6">
