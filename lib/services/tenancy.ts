@@ -19,6 +19,7 @@ export type BusinessContext = {
     currency: string;
     default_tax_rate: number;
     timezone: string;
+    drivers_enabled: boolean;
   };
 };
 
