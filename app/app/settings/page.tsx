@@ -96,6 +96,10 @@ export default async function SettingsPage() {
         </div>
       )}
 
+      <div className="mb-4">
+        <NotificationsCard />
+      </div>
+
       <LeadInboxCard />
 
       <div className="bg-card border border-border rounded-lg p-6">
