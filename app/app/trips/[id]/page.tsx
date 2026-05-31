@@ -13,6 +13,7 @@ import { SendReceiptButton } from "./send-receipt-button";
 import { LineItemsSection } from "./line-items";
 import { CreateInvoiceButton } from "./create-invoice-button";
 import { UpdateFromConversation } from "./update-from-conversation";
+import { AssignDriver } from "../../drivers/assign-driver";
 
 function formatDateTime(iso: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -69,12 +70,7 @@ export default async function TripDetailPage({
     supabase
       .from("trips")
       .select(
-        `
-          *,
-          customer:customers(id, name, email),
-          vehicle:vehicles(id, name),
-          partner:partners(id, name)
-        `
+        "*, customer:customers(id, name, email), vehicle:vehicles(id, name), partner:partners(id, name)"
       )
       .eq("id", id)
       .maybeSingle(),
@@ -242,6 +238,25 @@ export default async function TripDetailPage({
         </div>
       )}
 
+      {/* Driver assignment */}
+      <div className="bg-card border border-border rounded-lg p-6 mb-4">
+        <SectionHeader>Driver</SectionHeader>
+        <p className="text-sm text-muted-foreground mb-3">
+          Assign a driver to this trip. Only active drivers appear here.
+        </p>
+        <AssignDriver tripId={trip.id} currentDriverId={trip.driver_id ?? null} />
+      </div>
+
+      {/* Update from conversation */}
+      <div className="bg-card border border-border rounded-lg p-6 mb-4">
+        <SectionHeader>Update from conversation</SectionHeader>
+        <p className="text-sm text-muted-foreground mb-3">
+          Paste your email thread with the client and let AI fill in the final
+          details before you invoice.
+        </p>
+        <UpdateFromConversation tripId={trip.id} />
+      </div>
+
       {/* Invoice preview — THE HERO CARD */}
       <div className="bg-card border border-border rounded-lg p-6 mb-4">
         <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2">
@@ -262,7 +277,7 @@ export default async function TripDetailPage({
           <div className="flex items-center justify-between py-1.5">
             <div className="text-foreground">
               {trip.pricing_type === "hourly" && trip.hours
-                ? `Trip (${trip.hours}h hourly)`
+                ? "Trip (" + trip.hours + "h hourly)"
                 : "Trip (flat rate)"}
             </div>
             <div className="tabular-nums">${tripPrice.toFixed(2)}</div>
@@ -339,7 +354,7 @@ export default async function TripDetailPage({
       <div className="bg-card border border-border rounded-lg p-6 mb-4">
         <SectionHeader>
           {trip.handled_by === "partner"
-            ? `Farmed out to ${trip.partner?.name ?? "Unknown"}`
+            ? "Farmed out to " + (trip.partner?.name ?? "Unknown")
             : "Driving it myself"}
         </SectionHeader>
 
@@ -402,9 +417,7 @@ export default async function TripDetailPage({
                   Square invoice
                 </h2>
                 <span
-                  className={`text-xs px-2 py-0.5 rounded-md font-medium ${invoiceStatusColor(
-                    trip.square_invoice_status ?? "DRAFT"
-                  )}`}
+                  className={"text-xs px-2 py-0.5 rounded-md font-medium " + invoiceStatusColor(trip.square_invoice_status ?? "DRAFT")}
                 >
                   {trip.square_invoice_status ?? "DRAFT"}
                 </span>

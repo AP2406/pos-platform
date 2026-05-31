@@ -96,3 +96,22 @@ export async function deleteDriver(
   revalidatePath("/app/drivers");
   return { ok: true };
 }
+
+export async function assignDriverToTrip(
+  tripId: string,
+  driverId: string | null
+): Promise<{ ok: true } | { error: string }> {
+  await requireBusiness();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("trips")
+    .update({ driver_id: driverId })
+    .eq("id", tripId);
+  if (error) {
+    console.error("assignDriverToTrip:", error);
+    return { error: "Could not assign driver." };
+  }
+  revalidatePath("/app/trips/" + tripId);
+  revalidatePath("/app/trips");
+  return { ok: true };
+}
