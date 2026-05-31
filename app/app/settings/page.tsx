@@ -27,6 +27,17 @@ export default async function SettingsPage() {
   const squareConnected =
     squareIntegration != null && squareIntegration.is_active;
 
+    const notifPrefs: Record<string, boolean> = {};
+  if (user) {
+    const { data: prefRows } = await supabase
+      .from("notification_preferences")
+      .select("type, enabled")
+      .eq("user_id", user.id);
+    for (const r of (prefRows ?? []) as { type: string; enabled: boolean }[]) {
+      notifPrefs[r.type] = r.enabled;
+    }
+  }
+
   return (
     <div className="max-w-2xl">
       <PageHeader
@@ -97,7 +108,7 @@ export default async function SettingsPage() {
       )}
 
       <div className="mb-4">
-        <NotificationsCard />
+        <NotificationsCard initialPrefs={notifPrefs} />
       </div>
 
       <LeadInboxCard />

@@ -67,3 +67,31 @@ export async function sendPushToBusiness(businessId: string, payload: Payload) {
     .eq("business_id", businessId);
   if (data && data.length) await sendToRows(data as SubRow[], payload);
 }
+
+export async function notifyBusiness(
+  businessId: string,
+  type: string,
+  payload: Payload
+) {
+  if (!configured) return;
+  const sb = admin();
+  const [{ data: subs }, { data: prefs }] = await Promise.all([
+    sb
+      .from("push_subscriptions")
+      .select("user_id, endpoint, p256dh, auth")
+      .eq("business_id", businessId),
+    sb
+      .from("notification_preferences")
+      .select("user_id, enabled")
+      .eq("business_id", businessId)
+      .eq("type", type),
+  ]);
+  if (!subs || !subs.length) return;
+  const disabled = new Set(
+    (prefs || [])
+      .filter((p) => p.enabled === false)
+      .map((p) => p.user_id)
+  );
+  const allowed = subs.filter((s) => !disabled.has(s.user_id));
+  if (allowed.length) await sendToRows(allowed as SubRow[], payload);
+}

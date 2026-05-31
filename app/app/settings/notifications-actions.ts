@@ -62,3 +62,23 @@ export async function sendTestNotification(): Promise<{
   });
   return { ok: true, message: "Test sent — check your phone in a moment." };
 }
+
+export async function setNotificationPref(
+  type: string,
+  enabled: boolean
+): Promise<{ ok: boolean }> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData.user;
+  if (!user) return { ok: false };
+  const { error } = await supabase.from("notification_preferences").upsert(
+    { business_id: business.id, user_id: user.id, type, enabled },
+    { onConflict: "user_id,type" }
+  );
+  if (error) {
+    console.error("setNotificationPref:", error);
+    return { ok: false };
+  }
+  return { ok: true };
+}

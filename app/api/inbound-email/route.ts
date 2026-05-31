@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { parseEmailWithGemini, type ParsedLead } from "@/lib/services/leads";
-import { sendPushToBusiness } from "@/lib/push";
+import { notifyBusiness } from "@/lib/push";
 
 const STATUS_RANK: Record<string, number> = {
   booked: 0,
@@ -264,7 +264,7 @@ export async function POST(req: NextRequest) {
   }
 // Ping every subscribed device that a new lead came in
   try {
-    await sendPushToBusiness(businessId, {
+   await notifyBusiness(businessId, "new_lead", {
       title: "New lead",
       body:
         (parsed.customer_name || "Someone") +
@@ -285,3 +285,4 @@ export async function POST(req: NextRequest) {
     detected: tripStatus,
   });
 }
+
