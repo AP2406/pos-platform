@@ -104,10 +104,11 @@ export async function syncGoogleAdsSpend(): Promise<{
     );
   } catch (e) {
     console.error("google-ads sync:", e);
-    return {
-      ok: false,
-      message: "Couldn't reach Google Ads. Check the Customer ID and try again.",
-    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const err = e as any;
+    const detail =
+      err?.errors?.[0]?.message || err?.message || String(e);
+    return { ok: false, message: "Google Ads error: " + detail };
   }
 
   const byDate: Record<string, number> = {};
