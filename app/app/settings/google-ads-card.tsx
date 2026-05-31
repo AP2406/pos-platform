@@ -6,6 +6,7 @@ import {
   saveGoogleAdsAccount,
   disconnectGoogleAds,
 } from "./google-ads-actions";
+import { syncGoogleAdsSpend } from "./google-ads-actions";
 
 export function GoogleAdsCard() {
   const [loading, setLoading] = useState(true);
@@ -47,6 +48,13 @@ export function GoogleAdsCard() {
 
   function connect() {
     window.location.href = "/api/integrations/google-ads/connect";
+  }
+  async function sync() {
+    setBusy(true);
+    setMsg("Syncing...");
+    const res = await syncGoogleAdsSpend();
+    setBusy(false);
+    setMsg(res.message);
   }
 
   if (loading) {
@@ -100,6 +108,17 @@ export function GoogleAdsCard() {
               <span className="text-sm font-medium text-emerald-600">
                 Connected
               </span>
+              <span className="text-sm font-medium text-emerald-600">
+                Connected
+              </span>
+              <button
+                type="button"
+                onClick={sync}
+                disabled={busy}
+                className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50 hover:opacity-90"
+              >
+                Sync spend
+              </button>
               <button
                 type="button"
                 onClick={disconnect}
