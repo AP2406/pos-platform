@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Hanken_Grotesk, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "./theme-provider";
+import { SwRegister } from "./sw-register";
 import "./globals.css";
 
 const sans = Hanken_Grotesk({
@@ -18,6 +19,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Surge — Run your business",
   description: "The operations platform for service businesses.",
+  applicationName: "Surge",
+  appleWebApp: {
+    capable: true,
+    title: "Surge",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0b0e14",
 };
 
 export default function RootLayout({
@@ -33,6 +44,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThemeProvider>{children}</ThemeProvider>
+        <SwRegister />
       </body>
     </html>
   );
