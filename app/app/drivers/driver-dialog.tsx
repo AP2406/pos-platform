@@ -17,9 +17,11 @@ type Driver = {
 export function DriverDialog({
   mode,
   driver,
+  redirectOnDelete,
 }: {
   mode: "create" | "edit";
   driver?: Driver;
+  redirectOnDelete?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -80,7 +82,11 @@ export function DriverDialog({
       setError(res.error);
     } else {
       setOpen(false);
-      router.refresh();
+      if (redirectOnDelete) {
+        router.push(redirectOnDelete);
+      } else {
+        router.refresh();
+      }
     }
   }
 

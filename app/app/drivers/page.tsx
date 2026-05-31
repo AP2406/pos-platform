@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { DriverDialog } from "./driver-dialog";
@@ -30,9 +31,10 @@ export default async function DriversPage() {
       ) : (
         <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
           {drivers.map((d: DriverRow) => (
-            <div
+            <Link
               key={d.id}
-              className="flex items-center justify-between gap-4 p-4"
+              href={"/app/drivers/" + d.id}
+              className="flex items-center justify-between gap-4 p-4 hover:bg-accent transition-colors"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center text-sm font-semibold text-muted-foreground shrink-0">
@@ -53,8 +55,10 @@ export default async function DriversPage() {
                   </div>
                 </div>
               </div>
-              <DriverDialog mode="edit" driver={d} />
-            </div>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-muted-foreground shrink-0">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </Link>
           ))}
         </div>
       )}
