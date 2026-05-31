@@ -1,5 +1,6 @@
 import { requireBusiness } from "@/lib/services/tenancy";
 import { AppShell } from "./_components/app-shell";
+import { AssistantWidget } from "./_components/assistant-widget";
 
 type NavItem = { href: string; label: string };
 
@@ -62,13 +63,16 @@ export default async function AppLayout({
   }
 
   return (
-    <AppShell
-      businessName={business.name}
-      industry={business.industry}
-      role={role}
-      nav={nav}
-    >
-      {children}
-    </AppShell>
+    <>
+      <AppShell
+        businessName={business.name}
+        industry={business.industry}
+        role={role}
+        nav={nav}
+      >
+        {children}
+      </AppShell>
+      <AssistantWidget />
+    </>
   );
 }

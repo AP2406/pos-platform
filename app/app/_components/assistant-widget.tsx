@@ -1,0 +1,131 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import { askAssistant } from "../assistant/actions";
+
+type Msg = { role: "user" | "assistant"; text: string };
+
+export function AssistantWidget() {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, loading]);
+
+  async function send() {
+    const q = input.trim();
+    if (!q || loading) return;
+    const next: Msg[] = [...messages, { role: "user", text: q }];
+    setMessages(next);
+    setInput("");
+    setLoading(true);
+    const res = await askAssistant(q, next.slice(-6));
+    setLoading(false);
+    const reply = "error" in res ? res.error : res.answer;
+    setMessages((m) => [...m, { role: "assistant", text: reply }]);
+  }
+
+  function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Open assistant"
+        className="fixed bottom-5 right-5 z-30 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity"
+      >
+        {open ? (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-6 h-6">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+            <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4z" />
+            <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8z" />
+          </svg>
+        )}
+      </button>
+
+      {open && (
+        <div className="fixed bottom-24 right-5 z-40 w-[calc(100vw-2.5rem)] max-w-sm h-[70vh] max-h-[560px] bg-card border border-border rounded-2xl shadow-xl flex flex-col overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
+            <div className="font-semibold text-sm">Assistant</div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Close"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+            {messages.length === 0 && (
+              <div className="text-sm text-muted-foreground">
+                Ask me about your business — today&apos;s trips, what you&apos;ve
+                earned this week, who owes you, what&apos;s coming up.
+              </div>
+            )}
+            {messages.map((m, i) => (
+              <div
+                key={i}
+                className={
+                  "max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap " +
+                  (m.role === "user"
+                    ? "ml-auto bg-primary text-primary-foreground"
+                    : "mr-auto bg-secondary text-foreground")
+                }
+              >
+                {m.text}
+              </div>
+            ))}
+            {loading && (
+              <div className="mr-auto bg-secondary text-muted-foreground rounded-2xl px-3 py-2 text-sm">
+                Thinking...
+              </div>
+            )}
+          </div>
+
+          <div className="p-3 border-t border-border shrink-0">
+            <div className="flex items-end gap-2">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKey}
+                rows={1}
+                placeholder="Ask anything..."
+                className="flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring max-h-24"
+              />
+              <button
+                type="button"
+                onClick={send}
+                disabled={loading || !input.trim()}
+                className="h-9 w-9 shrink-0 rounded-lg bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-50 hover:opacity-90 transition-opacity"
+                aria-label="Send"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                  <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
