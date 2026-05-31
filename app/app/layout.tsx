@@ -55,7 +55,11 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const { business, role } = await requireBusiness();
-  const nav = navByIndustry[business.industry] ?? navByIndustry.transportation;
+  let nav = navByIndustry[business.industry] ?? navByIndustry.transportation;
+
+  if (business.drivers_enabled === false) {
+    nav = nav.filter((item) => item.href !== "/app/drivers");
+  }
 
   return (
     <AppShell

@@ -115,3 +115,22 @@ export async function assignDriverToTrip(
   revalidatePath("/app/trips");
   return { ok: true };
 }
+export async function setDriversEnabled(
+  enabled: boolean
+): Promise<{ ok: true } | { error: string }> {
+  const { business, role } = await requireBusiness();
+  if (role !== "owner") {
+    return { error: "Only the owner can change this." };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("businesses")
+    .update({ drivers_enabled: enabled })
+    .eq("id", business.id);
+  if (error) {
+    console.error("setDriversEnabled:", error);
+    return { error: "Could not update setting." };
+  }
+  revalidatePath("/app", "layout");
+  return { ok: true };
+}

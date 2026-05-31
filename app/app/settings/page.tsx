@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader, SectionHeader } from "../_components/ui";
 import { SettingsForm } from "./settings-form";
 import { LeadInboxCard } from "./lead-inbox-card";
+import { DriversSettingCard } from "./drivers-setting-card";
 
 export default async function SettingsPage() {
   const { business, role } = await requireBusiness();
@@ -84,6 +85,15 @@ export default async function SettingsPage() {
           </div>
         </div>
       ) : null}
+
+      {business.industry === "transportation" && role === "owner" && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Features</SectionHeader>
+          <DriversSettingCard
+            initialEnabled={business.drivers_enabled !== false}
+          />
+        </div>
+      )}
 
       <LeadInboxCard />
 

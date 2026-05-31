@@ -57,7 +57,7 @@ export default async function TripDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await requireBusiness();
+  const { business } = await requireBusiness();
   const supabase = await createClient();
 
   const [
@@ -239,13 +239,15 @@ export default async function TripDetailPage({
       )}
 
       {/* Driver assignment */}
-      <div className="bg-card border border-border rounded-lg p-6 mb-4">
-        <SectionHeader>Driver</SectionHeader>
-        <p className="text-sm text-muted-foreground mb-3">
-          Assign a driver to this trip. Only active drivers appear here.
-        </p>
-        <AssignDriver tripId={trip.id} currentDriverId={trip.driver_id ?? null} />
-      </div>
+      {business.drivers_enabled !== false && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Driver</SectionHeader>
+          <p className="text-sm text-muted-foreground mb-3">
+            Assign a driver to this trip. Only active drivers appear here.
+          </p>
+          <AssignDriver tripId={trip.id} currentDriverId={trip.driver_id ?? null} />
+        </div>
+      )}
 
       {/* Update from conversation */}
       <div className="bg-card border border-border rounded-lg p-6 mb-4">
