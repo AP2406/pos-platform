@@ -9,6 +9,7 @@ const navByIndustry: Record<string, NavItem[]> = {
     { href: "/app/trips", label: "Trips" },
     { href: "/app/customers", label: "Customers" },
     { href: "/app/partners", label: "Partners" },
+    { href: "/app/drivers", label: "Drivers" },
     { href: "/app/vehicles", label: "Vehicles" },
     { href: "/app/settings", label: "Settings" },
   ],
