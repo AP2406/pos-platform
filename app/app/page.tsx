@@ -6,6 +6,7 @@ import {
   getMonthBoundsUTC,
 } from "@/lib/utils/dates";
 import Link from "next/link";
+import { MiniCalendar } from "./mini-calendar";
 
 function formatCurrency(amount: number | string | null | undefined): string {
   const num = typeof amount === "number" ? amount : parseFloat(amount ?? "0");
@@ -306,6 +307,9 @@ export default async function DashboardPage() {
           }
         />
       </div>
+
+      <SectionHeader>Calendar</SectionHeader>
+      <MiniCalendar timezone={tz} />
 
       <SectionHeader>Revenue this week</SectionHeader>
       <div className="bg-card border border-border rounded-lg p-5 transition-shadow hover:shadow-sm">
