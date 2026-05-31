@@ -54,6 +54,13 @@ export function NotificationsCard() {
       }
       const reg = await navigator.serviceWorker.ready;
       const key = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
+      if (!key) {
+        setMsg(
+          "Push isn't configured yet — the public key is missing from the build. Add the VAPID env vars in Vercel and redeploy."
+        );
+        setBusy(false);
+        return;
+      }
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(key) as unknown as BufferSource,
@@ -67,7 +74,8 @@ export function NotificationsCard() {
       }
     } catch (e) {
       console.error(e);
-      setMsg("Something went wrong turning on notifications.");
+      const detail = e instanceof Error ? e.message : String(e);
+      setMsg("Couldn't turn on notifications: " + detail);
     }
     setBusy(false);
   }
