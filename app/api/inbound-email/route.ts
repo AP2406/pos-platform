@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { parseEmailWithGemini, type ParsedLead } from "@/lib/services/leads";
+import { sendPushToBusiness } from "@/lib/push";
 
 const STATUS_RANK: Record<string, number> = {
   booked: 0,
@@ -261,7 +262,21 @@ export async function POST(req: NextRequest) {
     console.error("inbound-email insert error:", tripError);
     return NextResponse.json({ ok: true, status: "insert_failed" });
   }
-
+// Ping every subscribed device that a new lead came in
+  try {
+    await sendPushToBusiness(businessId, {
+      title: "New lead",
+      body:
+        (parsed.customer_name || "Someone") +
+        " — " +
+        parsed.pickup_address +
+        " → " +
+        parsed.dropoff_address,
+      url: "/app/trips/" + trip.id,
+    });
+  } catch (e) {
+    console.error("lead push error:", e);
+  }
   console.log("inbound-email: IMPORTED trip " + trip.id);
   return NextResponse.json({
     ok: true,
