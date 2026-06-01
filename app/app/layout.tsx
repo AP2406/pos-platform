@@ -11,13 +11,18 @@ export default async function AppLayout({
 }) {
   const { business, role } = await requireBusiness();
 
-  const nav = resolveNav({
+  const businessConfig = {
     industry: business.industry,
+    config: (business as { config?: unknown }).config,
+  };
+
+  const nav = resolveNav({
+    ...businessConfig,
     driversEnabled: business.drivers_enabled,
   }).map((item) => ({ href: item.href, label: item.label }));
 
-  const vocab = getVocab(business.industry);
-  const fields = getFields(business.industry);
+  const vocab = getVocab(businessConfig);
+  const fields = getFields(businessConfig);
 
   return (
     <VocabProvider vocab={vocab} fields={fields}>

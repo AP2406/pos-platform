@@ -25,6 +25,9 @@ const tripSchema = z
     partner_id: z.string().uuid().optional().nullable(),
     cookie_amount: z.coerce.number().min(0).optional().nullable(),
     notes: z.string().max(2000).optional().or(z.literal("")),
+    details: z
+      .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+      .optional(),
   })
   .refine(
     (data) =>
@@ -50,6 +53,7 @@ type TripInput = {
   partner_id?: string | null;
   cookie_amount?: number | null;
   notes?: string;
+  details?: Record<string, string | number | boolean | null>;
 };
 
 type TripStatus =
@@ -92,6 +96,7 @@ export async function createTrip(
       partner_id: isPartner ? parsed.data.partner_id : null,
       cookie_amount: isPartner ? parsed.data.cookie_amount ?? null : null,
       notes: parsed.data.notes || null,
+      details: parsed.data.details ?? {},
     })
     .select()
     .single();
@@ -139,6 +144,7 @@ export async function updateTrip(
       partner_id: isPartner ? parsed.data.partner_id : null,
       cookie_amount: isPartner ? parsed.data.cookie_amount ?? null : null,
       notes: parsed.data.notes || null,
+      details: parsed.data.details ?? {},
     })
     .eq("id", id);
 
@@ -161,7 +167,8 @@ export async function updateTripStatus(
   const supabase = await createClient();
   const { error } = await supabase
     .from("trips")
-.update({ trip_status: status, is_lead: status === "new_lead" })    .eq("id", id);
+    .update({ trip_status: status, is_lead: status === "new_lead" })
+    .eq("id", id);
 
   if (error) {
     console.error("updateTripStatus:", error);
@@ -295,7 +302,7 @@ export async function refundTrip(input: {
           error:
             "Finix refund failed: " +
             refundResult.error +
-            ". The trip refund was NOT recorded — please try again or refund manually in the Finix dashboard.",
+            ". The trip refund was NOT recorded \u2014 please try again or refund manually in the Finix dashboard.",
         };
       }
 
