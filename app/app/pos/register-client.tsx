@@ -13,13 +13,100 @@ type CartLine = {
   unit_price: number;
   quantity: number;
 };
+type Receipt = {
+  id: string;
+  businessName: string;
+  items: CartLine[];
+  subtotal: number;
+  tax: number;
+  tip: number;
+  total: number;
+  paymentMethod: string;
+  at: string;
+};
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function printReceipt(r: Receipt) {
+  const win = window.open("", "_blank", "width=340,height=640");
+  if (!win) return;
+
+  const rows = r.items
+    .map(function (l) {
+      return (
+        "<tr><td>" +
+        escapeHtml(l.name) +
+        " x" +
+        l.quantity +
+        '</td><td style="text-align:right">$' +
+        (l.unit_price * l.quantity).toFixed(2) +
+        "</td></tr>"
+      );
+    })
+    .join("");
+
+  const html =
+    "<html><head><title>Receipt</title><style>" +
+    "body{font-family:monospace;font-size:12px;width:280px;margin:0 auto;padding:8px;color:#000}" +
+    "h2{text-align:center;font-size:14px;margin:4px 0}" +
+    "table{width:100%;border-collapse:collapse}" +
+    "td{padding:2px 0;vertical-align:top}" +
+    ".line{border-top:1px dashed #000;margin:6px 0}" +
+    ".tot td{font-weight:bold}" +
+    ".center{text-align:center}" +
+    "@media print{@page{margin:4mm}}" +
+    "</style></head><body>" +
+    "<h2>" +
+    escapeHtml(r.businessName) +
+    "</h2>" +
+    '<div class="center">' +
+    escapeHtml(r.at) +
+    "</div>" +
+    '<div class="center" style="font-size:10px">Ref: ' +
+    escapeHtml(r.id.slice(0, 8)) +
+    "</div>" +
+    '<div class="line"></div>' +
+    "<table>" +
+    rows +
+    "</table>" +
+    '<div class="line"></div>' +
+    "<table>" +
+    '<tr><td>Subtotal</td><td style="text-align:right">$' +
+    r.subtotal.toFixed(2) +
+    "</td></tr>" +
+    '<tr><td>Tax</td><td style="text-align:right">$' +
+    r.tax.toFixed(2) +
+    "</td></tr>" +
+    '<tr><td>Tip</td><td style="text-align:right">$' +
+    r.tip.toFixed(2) +
+    "</td></tr>" +
+    '<tr class="tot"><td>Total</td><td style="text-align:right">$' +
+    r.total.toFixed(2) +
+    "</td></tr>" +
+    "</table>" +
+    '<div class="line"></div>' +
+    '<div class="center">Paid: ' +
+    escapeHtml(r.paymentMethod) +
+    "</div>" +
+    '<div class="center" style="margin-top:8px">Thank you!</div>' +
+    "</body></html>";
+
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.print();
+}
 
 export function RegisterClient({
   items,
   taxRate,
+  businessName,
 }: {
   items: Item[];
   taxRate: number;
+  businessName: string;
 }) {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [tip, setTip] = useState("");
@@ -27,11 +114,11 @@ export function RegisterClient({
     "cash"
   );
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [pending, startTransition] = useTransition();
 
   function addItem(item: Item) {
-    setDone(false);
+    setReceipt(null);
     setCart((prev) => {
       const existing = prev.find((l) => l.catalog_item_id === item.id);
       if (existing) {
@@ -87,8 +174,18 @@ export function RegisterClient({
         setError(res.error);
         return;
       }
+      setReceipt({
+        id: res.id,
+        businessName,
+        items: cart,
+        subtotal,
+        tax,
+        tip: tipNum,
+        total,
+        paymentMethod,
+        at: new Date().toLocaleString(),
+      });
       clearCart();
-      setDone(true);
     });
   }
 
@@ -122,121 +219,160 @@ export function RegisterClient({
 
       <div className="lg:col-span-1">
         <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-medium">Current sale</h2>
-            {cart.length > 0 && (
-              <button
-                type="button"
-                onClick={clearCart}
-                className="text-xs text-muted-foreground underline hover:text-foreground"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-
-          {cart.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {done ? "Sale complete. Start the next one." : "No items yet."}
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {cart.map((line, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between gap-2"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">
-                      {line.name}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {"$" + line.unit_price.toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => changeQty(index, -1)}
-                      className="w-7 h-7 rounded-md border border-border hover:bg-accent"
-                    >
-                      -
-                    </button>
-                    <span className="w-6 text-center text-sm tabular-nums">
-                      {line.quantity}
+          {cart.length === 0 && receipt ? (
+            <div className="space-y-3">
+              <h2 className="font-medium">Sale complete</h2>
+              <div className="text-sm space-y-1">
+                {receipt.items.map((l, i) => (
+                  <div key={i} className="flex justify-between">
+                    <span className="truncate">
+                      {l.name} x{l.quantity}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => changeQty(index, 1)}
-                      className="w-7 h-7 rounded-md border border-border hover:bg-accent"
-                    >
-                      +
-                    </button>
+                    <span className="tabular-nums">
+                      {"$" + (l.unit_price * l.quantity).toFixed(2)}
+                    </span>
                   </div>
+                ))}
+                <div className="flex justify-between font-semibold pt-2 border-t border-border">
+                  <span>Total</span>
+                  <span className="tabular-nums">
+                    {"$" + receipt.total.toFixed(2)}
+                  </span>
                 </div>
-              ))}
-            </div>
-          )}
-
-          <div className="pt-3 border-t border-border space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span className="tabular-nums">{"$" + subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Tax</span>
-              <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Tip</span>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={tip}
-                onChange={(e) => setTip(e.target.value)}
-                placeholder="0.00"
-                className="w-24 h-8 text-right"
-              />
-            </div>
-            <div className="flex justify-between font-semibold pt-1">
-              <span>Total</span>
-              <span className="tabular-nums">{"$" + total.toFixed(2)}</span>
-            </div>
-          </div>
-
-          <div className="space-y-2 pt-2">
-            <Label className="text-xs">Payment</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {(["cash", "card", "other"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setPaymentMethod(m)}
-                  className={
-                    "px-2 py-2 text-sm rounded-md border transition-colors " +
-                    (paymentMethod === m
-                      ? "border-foreground bg-accent font-medium"
-                      : "border-border hover:border-foreground/40")
-                  }
+              </div>
+              <div className="flex gap-2">
+                <Button className="flex-1" onClick={() => printReceipt(receipt)}>
+                  Print receipt
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setReceipt(null)}
                 >
-                  {m.charAt(0).toUpperCase() + m.slice(1)}
-                </button>
-              ))}
+                  New sale
+                </Button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <h2 className="font-medium">Current sale</h2>
+                {cart.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearCart}
+                    className="text-xs text-muted-foreground underline hover:text-foreground"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+              {cart.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No items yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {cart.map((line, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {line.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {"$" + line.unit_price.toFixed(2)}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => changeQty(index, -1)}
+                          className="w-7 h-7 rounded-md border border-border hover:bg-accent"
+                        >
+                          -
+                        </button>
+                        <span className="w-6 text-center text-sm tabular-nums">
+                          {line.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => changeQty(index, 1)}
+                          className="w-7 h-7 rounded-md border border-border hover:bg-accent"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-          <Button
-            className="w-full"
-            onClick={handleComplete}
-            disabled={pending || cart.length === 0}
-          >
-            {pending
-              ? "Recording..."
-              : "Complete sale" + (total > 0 ? " - $" + total.toFixed(2) : "")}
-          </Button>
+              <div className="pt-3 border-t border-border space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span className="tabular-nums">
+                    {"$" + subtotal.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Tax</span>
+                  <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Tip</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={tip}
+                    onChange={(e) => setTip(e.target.value)}
+                    placeholder="0.00"
+                    className="w-24 h-8 text-right"
+                  />
+                </div>
+                <div className="flex justify-between font-semibold pt-1">
+                  <span>Total</span>
+                  <span className="tabular-nums">{"$" + total.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <Label className="text-xs">Payment</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["cash", "card", "other"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setPaymentMethod(m)}
+                      className={
+                        "px-2 py-2 text-sm rounded-md border transition-colors " +
+                        (paymentMethod === m
+                          ? "border-foreground bg-accent font-medium"
+                          : "border-border hover:border-foreground/40")
+                      }
+                    >
+                      {m.charAt(0).toUpperCase() + m.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {error && <p className="text-sm text-red-600">{error}</p>}
+
+              <Button
+                className="w-full"
+                onClick={handleComplete}
+                disabled={pending || cart.length === 0}
+              >
+                {pending
+                  ? "Recording..."
+                  : "Complete sale" +
+                    (total > 0 ? " - $" + total.toFixed(2) : "")}
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>

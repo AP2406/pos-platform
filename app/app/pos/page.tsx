@@ -31,7 +31,11 @@ export default async function PosPage() {
           Tap items to build a sale, then charge.
         </p>
       </div>
-      <RegisterClient items={items} taxRate={taxRate} />
+      <RegisterClient
+        items={items}
+        taxRate={taxRate}
+        businessName={business.name}
+      />
     </div>
   );
 }
