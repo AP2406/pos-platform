@@ -2,41 +2,158 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { VoidButton } from "./void-button";
 
+type Row = {
+  id: string;
+  created_at: string;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  tip: number;
+  total: number;
+  payment_method: string;
+  status: string;
+};
+
+function dayKey(iso: string, tz: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}
+
+function money(n: number): string {
+  return "$" + n.toFixed(2);
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 export default async function SalesPage() {
   const { business } = await requireBusiness();
   const supabase = await createClient();
+  const tz = business.timezone || "America/Toronto";
 
   const { data } = await supabase
     .from("orders")
-    .select("id, created_at, total, payment_method, status")
+    .select(
+      "id, created_at, subtotal, discount, tax, tip, total, payment_method, status"
+    )
     .eq("business_id", business.id)
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(200);
 
-  const orders = (data ?? []).map((o) => ({
+  const rows: Row[] = (data ?? []).map((o) => ({
     id: o.id as string,
     created_at: o.created_at as string,
-    total: Number(o.total),
+    subtotal: Number(o.subtotal) || 0,
+    discount: Number(o.discount) || 0,
+    tax: Number(o.tax) || 0,
+    tip: Number(o.tip) || 0,
+    total: Number(o.total) || 0,
     payment_method: (o.payment_method as string | null) ?? "cash",
     status: (o.status as string | null) ?? "paid",
   }));
 
+  const todayKey = dayKey(new Date().toISOString(), tz);
+  const today = rows.filter(
+    (r) => r.status !== "voided" && dayKey(r.created_at, tz) === todayKey
+  );
+
+  const sumOf = (f: (r: Row) => number) => round2(today.reduce((a, r) => a + f(r), 0));
+  const count = today.length;
+  const gross = sumOf((r) => r.subtotal);
+  const discounts = sumOf((r) => r.discount);
+  const tax = sumOf((r) => r.tax);
+  const tips = sumOf((r) => r.tip);
+  const collected = sumOf((r) => r.total);
+
+  const byMethod = (m: string) =>
+    round2(
+      today
+        .filter((r) => r.payment_method === m)
+        .reduce((a, r) => a + r.total, 0)
+    );
+  const cash = byMethod("cash");
+  const card = byMethod("card");
+  const other = byMethod("other");
+
+  const list = rows.slice(0, 50);
+
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Recent sales</h1>
+        <h1 className="text-2xl font-semibold">Sales</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Your last 50 sales. Void a sale to drop it from your totals.
+          Totals for today, plus your recent sales. Voided sales are not
+          counted.
         </p>
       </div>
 
-      {orders.length === 0 ? (
+      <div className="bg-card border border-border rounded-lg p-6 mb-4">
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="text-sm font-medium text-muted-foreground">Today</h2>
+          <span className="text-xs text-muted-foreground">
+            {count + (count === 1 ? " sale" : " sales")}
+          </span>
+        </div>
+
+        <div className="text-3xl font-semibold tabular-nums">
+          {money(collected)}
+        </div>
+        <div className="text-xs text-muted-foreground mt-1">collected</div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 text-sm">
+          <div>
+            <div className="text-muted-foreground text-xs">Gross</div>
+            <div className="tabular-nums">{money(gross)}</div>
+          </div>
+          <div>
+            <div className="text-muted-foreground text-xs">Discounts</div>
+            <div
+              className={"tabular-nums " + (discounts > 0 ? "text-red-600" : "")}
+            >
+              {discounts > 0 ? "-" + money(discounts) : money(0)}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground text-xs">Tax</div>
+            <div className="tabular-nums">{money(tax)}</div>
+          </div>
+          <div>
+            <div className="text-muted-foreground text-xs">Tips</div>
+            <div className="tabular-nums">{money(tips)}</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 mt-5 pt-4 border-t border-border text-sm">
+          <div>
+            <div className="text-muted-foreground text-xs">Cash</div>
+            <div className="tabular-nums">{money(cash)}</div>
+          </div>
+          <div>
+            <div className="text-muted-foreground text-xs">Card</div>
+            <div className="tabular-nums">{money(card)}</div>
+          </div>
+          <div>
+            <div className="text-muted-foreground text-xs">Other</div>
+            <div className="tabular-nums">{money(other)}</div>
+          </div>
+        </div>
+      </div>
+
+      <h2 className="text-sm font-medium text-muted-foreground mb-2">
+        Recent sales
+      </h2>
+      {list.length === 0 ? (
         <div className="bg-card border border-border rounded-lg p-6">
           <p className="text-sm text-muted-foreground">No sales yet.</p>
         </div>
       ) : (
         <div className="bg-card border border-border rounded-lg divide-y divide-border">
-          {orders.map((o) => {
+          {list.map((o) => {
             const voided = o.status === "voided";
             const method =
               o.payment_method.charAt(0).toUpperCase() +
@@ -48,7 +165,7 @@ export default async function SalesPage() {
               >
                 <div className="min-w-0">
                   <div className="text-sm font-medium">
-                    {"$" + o.total.toFixed(2)}
+                    {money(o.total)}
                     {voided && (
                       <span className="ml-2 text-xs text-red-600">Voided</span>
                     )}
