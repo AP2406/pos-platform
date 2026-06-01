@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { useVocab } from "../_components/vocab-provider";
 
 export function TripsTabs({
   tripCount,
@@ -11,6 +12,7 @@ export function TripsTabs({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const vocab = useVocab();
   const view = searchParams.get("view") === "leads" ? "leads" : "trips";
 
   function go(target: "trips" | "leads") {
@@ -33,7 +35,7 @@ export function TripsTabs({
         onClick={() => go("trips")}
         className={base + " " + (view === "trips" ? active : inactive)}
       >
-        Trips ({tripCount})
+        {vocab.job_plural} ({tripCount})
       </button>
       <button
         onClick={() => go("leads")}

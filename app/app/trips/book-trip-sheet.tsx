@@ -18,6 +18,9 @@ import {
 } from "@/components/ui/sheet";
 import { createTrip, updateTrip } from "./actions";
 import { createCustomer } from "../customers/actions";
+import { DynamicFields } from "../_components/dynamic-fields";
+import { useFields } from "../_components/vocab-provider";
+import { splitForSave, initialFieldValues } from "@/lib/modules/field-utils";
 
 type Option = { id: string; name: string };
 type Partner = {
@@ -33,19 +36,28 @@ type ExistingTrip = any;
 function isoToLocalDateTime(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
-    d.getDate()
-  )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return (
+    d.getFullYear() +
+    "-" +
+    pad(d.getMonth() + 1) +
+    "-" +
+    pad(d.getDate()) +
+    "T" +
+    pad(d.getHours()) +
+    ":" +
+    pad(d.getMinutes())
+  );
 }
 
 function toggleBtn(active: boolean, size: "sm" | "xs" = "sm") {
-  return `px-3 py-2 ${
-    size === "xs" ? "text-xs" : "text-sm"
-  } rounded-md border transition-colors ${
-    active
+  return (
+    "px-3 py-2 " +
+    (size === "xs" ? "text-xs" : "text-sm") +
+    " rounded-md border transition-colors " +
+    (active
       ? "border-foreground bg-accent font-medium"
-      : "border-border hover:border-foreground/40 hover:bg-accent/50"
-  }`;
+      : "border-border hover:border-foreground/40 hover:bg-accent/50")
+  );
 }
 
 export function BookTripSheet({
@@ -54,16 +66,20 @@ export function BookTripSheet({
   partners,
   existingTrip,
   trigger,
+  jobSingular = "Trip",
 }: {
   customers: Option[];
   vehicles: Option[];
   partners: Partner[];
   existingTrip?: ExistingTrip;
   trigger?: ReactNode;
+  jobSingular?: string;
 }) {
   const router = useRouter();
   const isEditMode = !!existingTrip;
   const [open, setOpen] = useState(false);
+
+  const fields = useFields();
 
   const [customers, setCustomers] = useState<Option[]>(initialCustomers);
 
@@ -73,11 +89,8 @@ export function BookTripSheet({
   const [vehicleId, setVehicleId] = useState<string>(
     existingTrip?.vehicle_id ?? ""
   );
-  const [pickup, setPickup] = useState<string>(
-    existingTrip?.pickup_address ?? ""
-  );
-  const [dropoff, setDropoff] = useState<string>(
-    existingTrip?.dropoff_address ?? ""
+  const [detailValues, setDetailValues] = useState<Record<string, string>>(() =>
+    initialFieldValues(existingTrip ?? null, fields)
   );
   const [scheduledAt, setScheduledAt] = useState<string>(
     existingTrip ? isoToLocalDateTime(existingTrip.scheduled_at) : ""
@@ -91,22 +104,6 @@ export function BookTripSheet({
   const [hours, setHours] = useState<string>(
     existingTrip?.hours ? String(existingTrip.hours) : ""
   );
-  const [passengerCount, setPassengerCount] = useState<string>(
-    existingTrip?.passenger_count != null
-      ? String(existingTrip.passenger_count)
-      : ""
-  );
-  const [luggageCount, setLuggageCount] = useState<string>(
-    existingTrip?.luggage_count != null
-      ? String(existingTrip.luggage_count)
-      : ""
-  );
-  const [flightNumber, setFlightNumber] = useState<string>(
-    existingTrip?.flight_number ?? ""
-  );
-  const [terminal, setTerminal] = useState<string>(
-    existingTrip?.terminal ?? ""
-  );
   const [notes, setNotes] = useState<string>(existingTrip?.notes ?? "");
 
   const [handledBy, setHandledBy] = useState<"self" | "partner">(
@@ -116,7 +113,6 @@ export function BookTripSheet({
     existingTrip?.partner_id ?? ""
   );
 
-  // Cookie: can be set as percentage or dollar amount
   const [cookieMode, setCookieMode] = useState<"percent" | "dollar">("dollar");
   const [cookiePercent, setCookiePercent] = useState<string>("");
   const [cookieAmount, setCookieAmount] = useState<string>(
@@ -126,7 +122,6 @@ export function BookTripSheet({
     isEditMode
   );
 
-  // Computed cookie dollar amount based on mode
   const computedCookieDollars = (() => {
     if (cookieMode === "percent") {
       const percent = parseFloat(cookiePercent);
@@ -147,7 +142,6 @@ export function BookTripSheet({
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [customerError, setCustomerError] = useState<string | null>(null);
 
-  // Auto-set cookie mode + value when partner changes (unless manually overridden)
   useEffect(() => {
     if (cookieManuallySet) return;
     if (handledBy !== "partner" || !partnerId) return;
@@ -168,28 +162,27 @@ export function BookTripSheet({
   let cookieHint = "";
   if (selectedPartner) {
     if (selectedPartner.default_cookie_percent != null) {
-      cookieHint = `Default: ${selectedPartner.default_cookie_percent}%`;
+      cookieHint = "Default: " + selectedPartner.default_cookie_percent + "%";
     } else if (selectedPartner.default_cookie_flat != null) {
-      cookieHint = `Default: $${selectedPartner.default_cookie_flat}`;
+      cookieHint = "Default: $" + selectedPartner.default_cookie_flat;
     } else {
       cookieHint = "No default set";
     }
+  }
+
+  function handleFieldChange(key: string, value: string) {
+    setDetailValues((prev) => ({ ...prev, [key]: value }));
   }
 
   function reset() {
     if (isEditMode) return;
     setCustomerId("");
     setVehicleId("");
-    setPickup("");
-    setDropoff("");
+    setDetailValues(initialFieldValues(null, fields));
     setScheduledAt("");
     setPricingType("flat");
     setPriceTotal("");
     setHours("");
-    setPassengerCount("");
-    setLuggageCount("");
-    setFlightNumber("");
-    setTerminal("");
     setNotes("");
     setHandledBy("self");
     setPartnerId("");
@@ -236,9 +229,21 @@ export function BookTripSheet({
     router.refresh();
   }
 
+  const requiredMissing = fields.some(
+    (f) => f.required && !(detailValues[f.key] ?? "").trim()
+  );
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    const missing = fields.find(
+      (f) => f.required && !(detailValues[f.key] ?? "").trim()
+    );
+    if (missing) {
+      setError("Please fill in " + missing.label.toLowerCase() + ".");
+      return;
+    }
 
     if (handledBy === "partner" && !partnerId) {
       setError("Please select a partner.");
@@ -246,19 +251,14 @@ export function BookTripSheet({
     }
 
     startTransition(async () => {
+      const { columns } = splitForSave(detailValues, fields);
       const payload = {
         customer_id: customerId || null,
         vehicle_id: handledBy === "self" ? vehicleId || null : null,
-        pickup_address: pickup,
-        dropoff_address: dropoff,
         scheduled_at: new Date(scheduledAt).toISOString(),
         pricing_type: pricingType,
         price_total: parseFloat(priceTotal),
         hours: pricingType === "hourly" && hours ? parseFloat(hours) : null,
-        passenger_count: passengerCount ? parseInt(passengerCount, 10) : null,
-        luggage_count: luggageCount ? parseInt(luggageCount, 10) : null,
-        flight_number: flightNumber,
-        terminal: terminal,
         handled_by: handledBy,
         partner_id: handledBy === "partner" ? partnerId : null,
         cookie_amount:
@@ -266,11 +266,12 @@ export function BookTripSheet({
             ? computedCookieDollars
             : null,
         notes,
+        ...columns,
       };
 
       const result = isEditMode
-        ? await updateTrip(existingTrip.id, payload)
-        : await createTrip(payload);
+        ? await updateTrip(existingTrip.id, payload as Parameters<typeof updateTrip>[1])
+        : await createTrip(payload as Parameters<typeof createTrip>[0]);
 
       if ("error" in result) {
         setError(result.error);
@@ -294,16 +295,16 @@ export function BookTripSheet({
       }}
     >
       <SheetTrigger asChild>
-        {trigger ?? <Button>+ Book trip</Button>}
+        {trigger ?? <Button>{"+ Book " + jobSingular.toLowerCase()}</Button>}
       </SheetTrigger>
       <SheetContent className="flex flex-col w-full sm:max-w-md">
         <form onSubmit={handleSubmit} className="flex flex-col flex-1">
           <SheetHeader>
-            <SheetTitle>{isEditMode ? "Edit trip" : "Book trip"}</SheetTitle>
+            <SheetTitle>{isEditMode ? "Edit " + jobSingular.toLowerCase() : "Book " + jobSingular.toLowerCase()}</SheetTitle>
             <SheetDescription>
               {isEditMode
                 ? "Update the details below and save."
-                : "Driving it yourself or farming it out — both work."}
+                : "Driving it yourself or farming it out \u2014 both work."}
             </SheetDescription>
           </SheetHeader>
 
@@ -402,32 +403,12 @@ export function BookTripSheet({
               )}
             </div>
 
-            {/* PICKUP / DROPOFF */}
-            <div className="space-y-2">
-              <Label htmlFor="pickup">
-                Pickup address <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="pickup"
-                required
-                value={pickup}
-                onChange={(e) => setPickup(e.target.value)}
-                placeholder="123 King St W, Toronto"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="dropoff">
-                Dropoff address <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="dropoff"
-                required
-                value={dropoff}
-                onChange={(e) => setDropoff(e.target.value)}
-                placeholder="Pearson Airport, Terminal 1"
-              />
-            </div>
+            {/* VERTICAL FIELDS — ROUTE */}
+            <DynamicFields
+              fields={fields.filter((f) => f.section === "Route")}
+              values={detailValues}
+              onChange={handleFieldChange}
+            />
 
             <div className="space-y-2">
               <Label htmlFor="scheduled">
@@ -444,7 +425,7 @@ export function BookTripSheet({
 
             {/* HANDLER */}
             <div className="space-y-2 pt-3 border-t border-border">
-              <Label>Who&apos;s handling this trip?</Label>
+              <Label>{"Who's handling this " + jobSingular.toLowerCase() + "?"}</Label>
               <div className="grid grid-cols-2 gap-2 mt-2">
                 <button
                   type="button"
@@ -521,7 +502,6 @@ export function BookTripSheet({
                     )}
                   </div>
 
-                  {/* Cookie section */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label>Cookie owed to me</Label>
@@ -532,7 +512,6 @@ export function BookTripSheet({
                       )}
                     </div>
 
-                    {/* Mode toggle */}
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
@@ -556,7 +535,6 @@ export function BookTripSheet({
                       </button>
                     </div>
 
-                    {/* Conditional input */}
                     {cookieMode === "percent" ? (
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
@@ -580,7 +558,7 @@ export function BookTripSheet({
                         <p className="text-xs text-muted-foreground">
                           Cookie: ${computedCookieDollars.toFixed(2)}
                           {priceTotal &&
-                            ` of $${parseFloat(priceTotal).toFixed(2)} trip`}
+                            " of $" + parseFloat(priceTotal).toFixed(2) + " " + jobSingular.toLowerCase()}
                         </p>
                       </div>
                     ) : (
@@ -612,74 +590,12 @@ export function BookTripSheet({
               )}
             </div>
 
-            {/* TRIP DETAILS */}
-            <div className="space-y-3 pt-3 border-t border-border">
-              <Label>Trip details</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label
-                    htmlFor="passengers"
-                    className="text-xs text-muted-foreground"
-                  >
-                    Passengers
-                  </Label>
-                  <Input
-                    id="passengers"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={passengerCount}
-                    onChange={(e) => setPassengerCount(e.target.value)}
-                    placeholder="2"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label
-                    htmlFor="luggage"
-                    className="text-xs text-muted-foreground"
-                  >
-                    Luggage
-                  </Label>
-                  <Input
-                    id="luggage"
-                    type="number"
-                    min="0"
-                    max="50"
-                    value={luggageCount}
-                    onChange={(e) => setLuggageCount(e.target.value)}
-                    placeholder="3"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label
-                    htmlFor="flight"
-                    className="text-xs text-muted-foreground"
-                  >
-                    Flight number
-                  </Label>
-                  <Input
-                    id="flight"
-                    value={flightNumber}
-                    onChange={(e) => setFlightNumber(e.target.value)}
-                    placeholder="AC123"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label
-                    htmlFor="terminal"
-                    className="text-xs text-muted-foreground"
-                  >
-                    Terminal
-                  </Label>
-                  <Input
-                    id="terminal"
-                    value={terminal}
-                    onChange={(e) => setTerminal(e.target.value)}
-                    placeholder="Terminal 1"
-                  />
-                </div>
-              </div>
-            </div>
+            {/* VERTICAL FIELDS — DETAILS */}
+            <DynamicFields
+              fields={fields.filter((f) => f.section === "Details")}
+              values={detailValues}
+              onChange={handleFieldChange}
+            />
 
             {/* PRICING */}
             <div className="space-y-2 pt-3 border-t border-border">
@@ -770,8 +686,7 @@ export function BookTripSheet({
               className="flex-1"
               disabled={
                 isPending ||
-                !pickup.trim() ||
-                !dropoff.trim() ||
+                requiredMissing ||
                 !scheduledAt ||
                 !priceTotal ||
                 showAddCustomer ||
@@ -784,7 +699,7 @@ export function BookTripSheet({
                   : "Booking..."
                 : isEditMode
                 ? "Save changes"
-                : "Book trip"}
+                : "Book " + jobSingular.toLowerCase()}
             </Button>
           </SheetFooter>
         </form>

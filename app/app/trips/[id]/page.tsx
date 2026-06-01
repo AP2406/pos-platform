@@ -14,6 +14,8 @@ import { LineItemsSection } from "./line-items";
 import { CreateInvoiceButton } from "./create-invoice-button";
 import { UpdateFromConversation } from "./update-from-conversation";
 import { AssignDriver } from "../../drivers/assign-driver";
+import { getVocab, getFields } from "@/lib/modules/resolve";
+import { readFieldValue } from "@/lib/modules/field-utils";
 
 function formatDateTime(iso: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -58,6 +60,7 @@ export default async function TripDetailPage({
 }) {
   const { id } = await params;
   const { business } = await requireBusiness();
+  const vocab = getVocab(business.industry);
   const supabase = await createClient();
 
   const [
@@ -140,16 +143,17 @@ export default async function TripDetailPage({
           className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 transition-colors"
         >
           <ChevronLeft className="w-4 h-4" />
-          All trips
+          All {vocab.job_plural.toLowerCase()}
         </Link>
         <BookTripSheet
           customers={customersResult.data ?? []}
           vehicles={vehiclesResult.data ?? []}
           partners={partnersResult.data ?? []}
           existingTrip={trip}
+          jobSingular={vocab.job_singular}
           trigger={
             <Button variant="outline" size="sm">
-              Edit trip
+              {"Edit " + vocab.job_singular.toLowerCase()}
             </Button>
           }
         />
@@ -160,7 +164,7 @@ export default async function TripDetailPage({
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
-              {trip.customer?.name ?? "One-off trip"}
+              {trip.customer?.name ?? "One-off " + vocab.job_singular.toLowerCase()}
             </h1>
             {trip.customer?.email && (
               <div className="text-sm text-muted-foreground mt-0.5">
@@ -198,39 +202,23 @@ export default async function TripDetailPage({
       {/* Trip details */}
       {hasDetails && (
         <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Trip details</SectionHeader>
+          <SectionHeader>{vocab.job_singular + " details"}</SectionHeader>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            {trip.passenger_count != null && (
-              <div>
-                <div className="text-xs text-muted-foreground">Passengers</div>
-                <div className="font-medium tabular-nums">
-                  {trip.passenger_count}
-                </div>
-              </div>
-            )}
-            {trip.luggage_count != null && (
-              <div>
-                <div className="text-xs text-muted-foreground">Luggage</div>
-                <div className="font-medium tabular-nums">
-                  {trip.luggage_count}
-                </div>
-              </div>
-            )}
-            {trip.flight_number && (
-              <div>
-                <div className="text-xs text-muted-foreground">Flight</div>
-                <div className="font-medium">{trip.flight_number}</div>
-              </div>
-            )}
-            {trip.terminal && (
-              <div>
-                <div className="text-xs text-muted-foreground">Terminal</div>
-                <div className="font-medium">{trip.terminal}</div>
-              </div>
-            )}
+            {getFields(business.industry)
+              .filter((f) => f.section === "Details")
+              .map((f) => {
+                const v = readFieldValue(trip, f);
+                if (v == null || v === "") return null;
+                return (
+                  <div key={f.key}>
+                    <div className="text-xs text-muted-foreground">{f.label}</div>
+                    <div className="font-medium tabular-nums">{String(v)}</div>
+                  </div>
+                );
+              })}
             {trip.vehicle?.name && (
               <div>
-                <div className="text-xs text-muted-foreground">Vehicle</div>
+                <div className="text-xs text-muted-foreground">{vocab.asset_singular}</div>
                 <div className="font-medium">{trip.vehicle.name}</div>
               </div>
             )}
@@ -241,9 +229,9 @@ export default async function TripDetailPage({
       {/* Driver assignment */}
       {business.drivers_enabled !== false && (
         <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Driver</SectionHeader>
+          <SectionHeader>{vocab.resource_singular}</SectionHeader>
           <p className="text-sm text-muted-foreground mb-3">
-            Assign a driver to this trip. Only active drivers appear here.
+      {"Assign a " + vocab.resource_singular.toLowerCase() + " to this " + vocab.job_singular.toLowerCase() + ". Only active " + vocab.resource_plural.toLowerCase() + " appear here."}
           </p>
           <AssignDriver tripId={trip.id} currentDriverId={trip.driver_id ?? null} />
         </div>
@@ -279,8 +267,8 @@ export default async function TripDetailPage({
           <div className="flex items-center justify-between py-1.5">
             <div className="text-foreground">
               {trip.pricing_type === "hourly" && trip.hours
-                ? "Trip (" + trip.hours + "h hourly)"
-                : "Trip (flat rate)"}
+                ? vocab.job_singular + " (" + trip.hours + "h hourly)"
+                : vocab.job_singular + " (flat rate)"}
             </div>
             <div className="tabular-nums">${tripPrice.toFixed(2)}</div>
           </div>
@@ -456,8 +444,7 @@ export default async function TripDetailPage({
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No invoice yet. Once the trip details are final, create a
-                  draft in Square, then review and send it from there.
+                  {"No invoice yet. Once the " + vocab.job_singular.toLowerCase() + " details are final, create a draft in Square, then review and send it from there."}
                 </p>
               )}
             </div>

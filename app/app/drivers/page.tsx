@@ -3,12 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { DriverDialog } from "./driver-dialog";
 import { PageHeader, EmptyState } from "../_components/ui";
+import { getVocab } from "@/lib/modules/resolve";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DriverRow = any;
 
 export default async function DriversPage() {
-  await requireBusiness();
+  const { business } = await requireBusiness();
+  const vocab = getVocab(business.industry);
   const supabase = await createClient();
   const { data: drivers } = await supabase
     .from("drivers")
@@ -18,15 +20,15 @@ export default async function DriversPage() {
   return (
     <div className="max-w-6xl">
       <PageHeader
-        title="Drivers"
-        subtitle="Your chauffeurs — manage them here, then assign them to trips."
+        title={vocab.resource_plural}
+        subtitle={"Manage your " + vocab.resource_plural.toLowerCase() + " here, then assign them to " + vocab.job_plural.toLowerCase() + "."}
         action={<DriverDialog mode="create" />}
       />
 
       {!drivers || drivers.length === 0 ? (
         <EmptyState
-          title="No drivers yet"
-          message="Add your first driver. You'll be able to assign them to trips."
+          title={"No " + vocab.resource_plural.toLowerCase() + " yet"}
+          message={"Add your first " + vocab.resource_singular.toLowerCase() + ". You'll be able to assign them to " + vocab.job_plural.toLowerCase() + "."}
         />
       ) : (
         <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { assignDriverToTrip } from "./actions";
+import { useVocab } from "../_components/vocab-provider";
 
 type Driver = { id: string; name: string };
 
@@ -15,6 +16,7 @@ export function AssignDriver({
   currentDriverId: string | null;
 }) {
   const router = useRouter();
+  const vocab = useVocab();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [selected, setSelected] = useState<string>(currentDriverId ?? "");
   const [loading, setLoading] = useState(true);
@@ -59,13 +61,13 @@ export function AssignDriver({
   const changed = selected !== (currentDriverId ?? "");
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground">Loading drivers...</p>;
+    return <p className="text-sm text-muted-foreground">{"Loading " + vocab.resource_plural.toLowerCase() + "..."}</p>;
   }
 
   if (drivers.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No active drivers yet. Add one on the Drivers page first.
+        {"No active " + vocab.resource_plural.toLowerCase() + " yet. Add one on the " + vocab.resource_plural + " page first."}
       </p>
     );
   }

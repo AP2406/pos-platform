@@ -2,9 +2,11 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { AddVehicleSheet } from "./add-vehicle-sheet";
 import { PageHeader, EmptyState } from "../_components/ui";
+import { getVocab } from "@/lib/modules/resolve";
 
 export default async function VehiclesPage() {
-  await requireBusiness();
+  const { business } = await requireBusiness();
+  const vocab = getVocab(business.industry);
   const supabase = await createClient();
 
   const { data: vehicles } = await supabase
@@ -15,15 +17,15 @@ export default async function VehiclesPage() {
   return (
     <div className="max-w-5xl">
       <PageHeader
-        title="Vehicles"
-        subtitle="The cars you use to serve trips."
+        title={vocab.asset_plural}
+        subtitle={"The " + vocab.asset_plural.toLowerCase() + " you use to serve " + vocab.job_plural.toLowerCase() + "."}
         action={<AddVehicleSheet />}
       />
 
       {!vehicles || vehicles.length === 0 ? (
         <EmptyState
-          title="No vehicles yet"
-          message="Add the cars you drive so you can assign them to trips later."
+          title={"No " + vocab.asset_plural.toLowerCase() + " yet"}
+          message={"Add the " + vocab.asset_plural.toLowerCase() + " you use so you can assign them to " + vocab.job_plural.toLowerCase() + " later."}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -38,10 +40,10 @@ export default async function VehiclesPage() {
                   <div className="text-sm text-muted-foreground mt-0.5">
                     {[
                       v.vehicle_type,
-                      v.capacity ? `${v.capacity} passengers` : null,
+                      v.capacity ? v.capacity + " passengers" : null,
                     ]
                       .filter(Boolean)
-                      .join(" · ") || (
+                      .join(" \u00b7 ") || (
                       <span className="text-muted-foreground/60 italic">
                         No details
                       </span>
@@ -54,11 +56,12 @@ export default async function VehiclesPage() {
                   )}
                 </div>
                 <span
-                  className={`text-xs px-2 py-0.5 rounded-md font-medium shrink-0 ${
-                    v.is_active
+                  className={
+                    "text-xs px-2 py-0.5 rounded-md font-medium shrink-0 " +
+                    (v.is_active
                       ? "bg-green-50 text-green-700"
-                      : "bg-secondary text-muted-foreground"
-                  }`}
+                      : "bg-secondary text-muted-foreground")
+                  }
                 >
                   {v.is_active ? "Active" : "Inactive"}
                 </span>

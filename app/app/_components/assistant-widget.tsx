@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { askAssistant, runAssistantAction } from "../assistant/actions";
+import { useVocab } from "./vocab-provider";
 
 type ProposedAction = {
   tool: string;
@@ -22,6 +23,7 @@ export function AssistantWidget() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const vocab = useVocab();
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -124,9 +126,7 @@ export function AssistantWidget() {
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.length === 0 && (
               <div className="text-sm text-muted-foreground">
-                Ask about your business, or tell me to do something — &quot;mark
-                the Pearson trip paid&quot;, &quot;who owes me money?&quot;,
-                &quot;add a customer named Maria&quot;.
+                {"Ask about your business, or tell me to do something \u2014 \"mark the Pearson " + vocab.job_singular.toLowerCase() + " paid\", \"who owes me money?\", \"add a customer named Maria\"."}
               </div>
             )}
             {messages.map((m, i) => (

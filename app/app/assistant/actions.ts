@@ -10,6 +10,7 @@ import {
   getMonthBoundsUTC,
 } from "@/lib/utils/dates";
 import { createSquareInvoiceForTrip } from "../trips/actions";
+import { getVocab } from "@/lib/modules/resolve";
 
 type ChatMessage = { role: "user" | "assistant"; text: string };
 
@@ -246,6 +247,10 @@ export async function askAssistant(
   const supabase = await createClient();
   const tz = business.timezone || "America/Toronto";
   const currency = business.currency || "CAD";
+  const vocab = getVocab(business.industry);
+  const J = vocab.job_singular;
+  const Jp = vocab.job_plural;
+  const j = J.toLowerCase();
 
   const todayStr = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
@@ -270,13 +275,24 @@ export async function askAssistant(
     ". Money is in " +
     currency +
     ".\n\n" +
+    "This business calls each job a \"" +
+    J +
+    "\" (plural \"" +
+    Jp +
+    "\"). Use that wording when you reply to the user. The tool names below still use \"trip\" internally no matter the wording; call them exactly as written.\n\n" +
     "You work in steps. Each step, respond with ONLY one JSON object (no markdown):\n" +
     '{ "action": "tool" | "final" | "confirm", "tool": "<read tool>", "args": {}, "answer": "<reply when final>", "write": { "tool": "<write tool>", "args": {}, "summary": "<short yes/no confirmation describing exactly what will change>" } }\n\n' +
     "Rules:\n" +
     "- To answer, call read tools (action=tool) until you have the facts, then action=final with your answer. Do any math yourself.\n" +
-    "- Use action=confirm ONLY when the user clearly asks to change/create something. First resolve ids with read tools (find the trip/customer). The summary must name the specific record and the exact change.\n" +
+    "- Use action=confirm ONLY when the user clearly asks to change/create something. First resolve ids with read tools (find the " +
+    j +
+    "/customer). The summary must name the specific record and the exact change.\n" +
     "- Never invent ids, names, or numbers. If unsure what they mean, action=final asking them to clarify.\n" +
-    "- For trip times (scheduled_at), use ISO 8601 with the timezone offset for " + tz + ".\n" +
+    "- For " +
+    j +
+    " times (scheduled_at), use ISO 8601 with the timezone offset for " +
+    tz +
+    ".\n" +
     "- Be concise. Format money like $1,234.50.\n\n" +
     "TOOLS:\n" +
     CATALOG;
@@ -315,9 +331,9 @@ export async function askAssistant(
     try {
       const cleaned = raw
         .trim()
-        .replace(/^```json\s*/i, "")
-        .replace(/^```\s*/, "")
-        .replace(/\s*```$/, "")
+        .replace(/^\u0060\u0060\u0060json\s*/i, "")
+        .replace(/^\u0060\u0060\u0060\s*/, "")
+        .replace(/\s*\u0060\u0060\u0060$/, "")
         .trim();
       parsed = JSON.parse(cleaned);
     } catch {
@@ -370,11 +386,14 @@ export async function runAssistantAction(
 ): Promise<{ ok: true; message: string } | { error: string }> {
   const { business } = await requireBusiness();
   const supabase = await createClient();
+  const vocab = getVocab(business.industry);
+  const J = vocab.job_singular;
+  const j = J.toLowerCase();
   const tool = action?.tool;
   const a = (action?.args ?? {}) as Row;
 
   if (tool === "mark_paid" || tool === "mark_unpaid") {
-    if (!a.trip_id) return { error: "No trip specified." };
+    if (!a.trip_id) return { error: "No " + j + " specified." };
     const collected = tool === "mark_paid";
     const { data, error } = await supabase
       .from("trips")
@@ -382,7 +401,7 @@ export async function runAssistantAction(
       .eq("id", a.trip_id)
       .select("id")
       .maybeSingle();
-    if (error || !data) return { error: "Couldn't update that trip." };
+    if (error || !data) return { error: "Couldn't update that " + j + "." };
     revalidatePath("/app/trips/" + a.trip_id);
     revalidatePath("/app/trips");
     revalidatePath("/app");
@@ -390,7 +409,7 @@ export async function runAssistantAction(
   }
 
   if (tool === "set_status") {
-    if (!a.trip_id) return { error: "No trip specified." };
+    if (!a.trip_id) return { error: "No " + j + " specified." };
     const allowed = ["new_lead", "confirmed", "decision_making", "completed", "lost"];
     const status = String(a.status ?? "");
     if (!allowed.includes(status)) return { error: "That status isn't valid." };
@@ -400,7 +419,7 @@ export async function runAssistantAction(
       .eq("id", a.trip_id)
       .select("id")
       .maybeSingle();
-    if (error || !data) return { error: "Couldn't update that trip." };
+    if (error || !data) return { error: "Couldn't update that " + j + "." };
     revalidatePath("/app/trips/" + a.trip_id);
     revalidatePath("/app/trips");
     revalidatePath("/app");
@@ -408,7 +427,7 @@ export async function runAssistantAction(
   }
 
   if (tool === "assign_driver") {
-    if (!a.trip_id) return { error: "No trip specified." };
+    if (!a.trip_id) return { error: "No " + j + " specified." };
     const { data, error } = await supabase
       .from("trips")
       .update({ driver_id: a.driver_id ?? null })
@@ -453,7 +472,7 @@ export async function runAssistantAction(
   }
 
   if (tool === "create_invoice") {
-    if (!a.trip_id) return { error: "No trip specified." };
+    if (!a.trip_id) return { error: "No " + j + " specified." };
     const res = await createSquareInvoiceForTrip(String(a.trip_id));
     if ("error" in res) return { error: res.error };
     revalidatePath("/app/trips/" + a.trip_id);
@@ -461,7 +480,7 @@ export async function runAssistantAction(
   }
 
   if (tool === "farm_out") {
-    if (!a.trip_id) return { error: "No trip specified." };
+    if (!a.trip_id) return { error: "No " + j + " specified." };
     if (!a.partner_id) return { error: "No partner specified." };
     const update: Row = {
       handled_by: "partner",
@@ -477,28 +496,28 @@ export async function runAssistantAction(
       .eq("id", a.trip_id)
       .select("id")
       .maybeSingle();
-    if (error || !data) return { error: "Couldn't farm out that trip." };
+    if (error || !data) return { error: "Couldn't farm out that " + j + "." };
     revalidatePath("/app/trips/" + a.trip_id);
     revalidatePath("/app/trips");
-    return { ok: true, message: "Trip farmed out to the partner." };
+    return { ok: true, message: J + " farmed out to the partner." };
   }
 
   if (tool === "unfarm") {
-    if (!a.trip_id) return { error: "No trip specified." };
+    if (!a.trip_id) return { error: "No " + j + " specified." };
     const { data, error } = await supabase
       .from("trips")
       .update({ handled_by: "self", partner_id: null, cookie_amount: null })
       .eq("id", a.trip_id)
       .select("id")
       .maybeSingle();
-    if (error || !data) return { error: "Couldn't bring that trip back in-house." };
+    if (error || !data) return { error: "Couldn't bring that " + j + " back in-house." };
     revalidatePath("/app/trips/" + a.trip_id);
     revalidatePath("/app/trips");
-    return { ok: true, message: "Trip brought back in-house." };
+    return { ok: true, message: J + " brought back in-house." };
   }
 
   if (tool === "edit_trip") {
-    if (!a.trip_id) return { error: "No trip specified." };
+    if (!a.trip_id) return { error: "No " + j + " specified." };
     const fields = (a.fields ?? {}) as Row;
     const allowed = [
       "pickup_address",
@@ -527,11 +546,11 @@ export async function runAssistantAction(
       .eq("id", a.trip_id)
       .select("id")
       .maybeSingle();
-    if (error || !data) return { error: "Couldn't update that trip." };
+    if (error || !data) return { error: "Couldn't update that " + j + "." };
     revalidatePath("/app/trips/" + a.trip_id);
     revalidatePath("/app/trips");
     revalidatePath("/app");
-    return { ok: true, message: "Trip updated." };
+    return { ok: true, message: J + " updated." };
   }
 
   if (tool === "create_trip") {
@@ -542,7 +561,7 @@ export async function runAssistantAction(
       return { error: "I need at least a pickup, dropoff, and time." };
     }
     if (a.price_total == null || a.price_total === "") {
-      return { error: "I need a price for the trip." };
+      return { error: "I need a price for the " + j + "." };
     }
     const { data, error } = await supabase
       .from("trips")
@@ -571,851 +590,11 @@ export async function runAssistantAction(
       .maybeSingle();
     if (error || !data) {
       console.error("create_trip:", error);
-      return { error: "Couldn't create the trip." };
+      return { error: "Couldn't create the " + j + "." };
     }
     revalidatePath("/app/trips");
     revalidatePath("/app");
-    return { ok: true, message: "Trip created." };
-  }
-
-  if (tool === "create_vehicle") {
-    const name = String(a.name ?? "").trim();
-    if (!name) return { error: "A vehicle name is required." };
-    const { error } = await supabase
-      .from("vehicles")
-      .insert({ business_id: business.id, name, is_active: true });
-    if (error) {
-      console.error("create_vehicle:", error);
-      return { error: "Couldn't add the vehicle." };
-    }
-    revalidatePath("/app/vehicles");
-    return { ok: true, message: "Added vehicle " + name + "." };
-  }
-
-  if (tool === "create_invoice") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const res = await createSquareInvoiceForTrip(String(a.trip_id));
-    if ("error" in res) return { error: res.error };
-    revalidatePath("/app/trips/" + a.trip_id);
-    return { ok: true, message: "Draft invoice created in Square." };
-  }
-
-  if (tool === "farm_out") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    if (!a.partner_id) return { error: "No partner specified." };
-    const update: Row = {
-      handled_by: "partner",
-      partner_id: a.partner_id,
-      vehicle_id: null,
-    };
-    if (a.cookie_amount != null && a.cookie_amount !== "") {
-      update.cookie_amount = num(a.cookie_amount);
-    }
-    const { data, error } = await supabase
-      .from("trips")
-      .update(update)
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't farm out that trip." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    return { ok: true, message: "Trip farmed out to the partner." };
-  }
-
-  if (tool === "unfarm") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const { data, error } = await supabase
-      .from("trips")
-      .update({ handled_by: "self", partner_id: null, cookie_amount: null })
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't bring that trip back in-house." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    return { ok: true, message: "Trip brought back in-house." };
-  }
-
-  if (tool === "edit_trip") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const fields = (a.fields ?? {}) as Row;
-    const allowed = [
-      "pickup_address",
-      "dropoff_address",
-      "scheduled_at",
-      "price_total",
-      "passenger_count",
-      "luggage_count",
-      "flight_number",
-      "terminal",
-      "notes",
-    ];
-    const update: Row = {};
-    for (const k of allowed) {
-      if (fields[k] !== undefined && fields[k] !== null && fields[k] !== "") {
-        if (k === "price_total") update[k] = num(fields[k]);
-        else if (k === "passenger_count" || k === "luggage_count")
-          update[k] = Math.round(num(fields[k]));
-        else update[k] = String(fields[k]);
-      }
-    }
-    if (Object.keys(update).length === 0) return { error: "Nothing to change." };
-    const { data, error } = await supabase
-      .from("trips")
-      .update(update)
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't update that trip." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    revalidatePath("/app");
-    return { ok: true, message: "Trip updated." };
-  }
-
-  if (tool === "create_trip") {
-    const pickup = String(a.pickup_address ?? "").trim();
-    const dropoff = String(a.dropoff_address ?? "").trim();
-    const when = String(a.scheduled_at ?? "").trim();
-    if (!pickup || !dropoff || !when) {
-      return { error: "I need at least a pickup, dropoff, and time." };
-    }
-    if (a.price_total == null || a.price_total === "") {
-      return { error: "I need a price for the trip." };
-    }
-    const { data, error } = await supabase
-      .from("trips")
-      .insert({
-        business_id: business.id,
-        customer_id: a.customer_id ? String(a.customer_id) : null,
-        pickup_address: pickup,
-        dropoff_address: dropoff,
-        scheduled_at: when,
-        pricing_type: "flat",
-        price_total: num(a.price_total),
-        passenger_count:
-          a.passenger_count != null && a.passenger_count !== ""
-            ? Math.round(num(a.passenger_count))
-            : null,
-        luggage_count:
-          a.luggage_count != null && a.luggage_count !== ""
-            ? Math.round(num(a.luggage_count))
-            : null,
-        flight_number: a.flight_number ? String(a.flight_number) : null,
-        terminal: a.terminal ? String(a.terminal) : null,
-        handled_by: "self",
-        notes: a.notes ? String(a.notes) : null,
-      })
-      .select("id")
-      .maybeSingle();
-    if (error || !data) {
-      console.error("create_trip:", error);
-      return { error: "Couldn't create the trip." };
-    }
-    revalidatePath("/app/trips");
-    revalidatePath("/app");
-    return { ok: true, message: "Trip created." };
-  }
-
-  if (tool === "create_vehicle") {
-    const name = String(a.name ?? "").trim();
-    if (!name) return { error: "A vehicle name is required." };
-    const { error } = await supabase
-      .from("vehicles")
-      .insert({ business_id: business.id, name, is_active: true });
-    if (error) {
-      console.error("create_vehicle:", error);
-      return { error: "Couldn't add the vehicle." };
-    }
-    revalidatePath("/app/vehicles");
-    return { ok: true, message: "Added vehicle " + name + "." };
-  }
-
-  if (tool === "create_invoice") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const res = await createSquareInvoiceForTrip(String(a.trip_id));
-    if ("error" in res) return { error: res.error };
-    revalidatePath("/app/trips/" + a.trip_id);
-    return { ok: true, message: "Draft invoice created in Square." };
-  }
-
-  if (tool === "farm_out") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    if (!a.partner_id) return { error: "No partner specified." };
-    const update: Row = {
-      handled_by: "partner",
-      partner_id: a.partner_id,
-      vehicle_id: null,
-    };
-    if (a.cookie_amount != null && a.cookie_amount !== "") {
-      update.cookie_amount = num(a.cookie_amount);
-    }
-    const { data, error } = await supabase
-      .from("trips")
-      .update(update)
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't farm out that trip." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    return { ok: true, message: "Trip farmed out to the partner." };
-  }
-
-  if (tool === "unfarm") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const { data, error } = await supabase
-      .from("trips")
-      .update({ handled_by: "self", partner_id: null, cookie_amount: null })
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't bring that trip back in-house." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    return { ok: true, message: "Trip brought back in-house." };
-  }
-
-  if (tool === "edit_trip") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const fields = (a.fields ?? {}) as Row;
-    const allowed = [
-      "pickup_address",
-      "dropoff_address",
-      "scheduled_at",
-      "price_total",
-      "passenger_count",
-      "luggage_count",
-      "flight_number",
-      "terminal",
-      "notes",
-    ];
-    const update: Row = {};
-    for (const k of allowed) {
-      if (fields[k] !== undefined && fields[k] !== null && fields[k] !== "") {
-        if (k === "price_total") update[k] = num(fields[k]);
-        else if (k === "passenger_count" || k === "luggage_count")
-          update[k] = Math.round(num(fields[k]));
-        else update[k] = String(fields[k]);
-      }
-    }
-    if (Object.keys(update).length === 0) return { error: "Nothing to change." };
-    const { data, error } = await supabase
-      .from("trips")
-      .update(update)
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't update that trip." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    revalidatePath("/app");
-    return { ok: true, message: "Trip updated." };
-  }
-
-  if (tool === "create_trip") {
-    const pickup = String(a.pickup_address ?? "").trim();
-    const dropoff = String(a.dropoff_address ?? "").trim();
-    const when = String(a.scheduled_at ?? "").trim();
-    if (!pickup || !dropoff || !when) {
-      return { error: "I need at least a pickup, dropoff, and time." };
-    }
-    if (a.price_total == null || a.price_total === "") {
-      return { error: "I need a price for the trip." };
-    }
-    const { data, error } = await supabase
-      .from("trips")
-      .insert({
-        business_id: business.id,
-        customer_id: a.customer_id ? String(a.customer_id) : null,
-        pickup_address: pickup,
-        dropoff_address: dropoff,
-        scheduled_at: when,
-        pricing_type: "flat",
-        price_total: num(a.price_total),
-        passenger_count:
-          a.passenger_count != null && a.passenger_count !== ""
-            ? Math.round(num(a.passenger_count))
-            : null,
-        luggage_count:
-          a.luggage_count != null && a.luggage_count !== ""
-            ? Math.round(num(a.luggage_count))
-            : null,
-        flight_number: a.flight_number ? String(a.flight_number) : null,
-        terminal: a.terminal ? String(a.terminal) : null,
-        handled_by: "self",
-        notes: a.notes ? String(a.notes) : null,
-      })
-      .select("id")
-      .maybeSingle();
-    if (error || !data) {
-      console.error("create_trip:", error);
-      return { error: "Couldn't create the trip." };
-    }
-    revalidatePath("/app/trips");
-    revalidatePath("/app");
-    return { ok: true, message: "Trip created." };
-  }
-
-  if (tool === "create_vehicle") {
-    const name = String(a.name ?? "").trim();
-    if (!name) return { error: "A vehicle name is required." };
-    const { error } = await supabase
-      .from("vehicles")
-      .insert({ business_id: business.id, name, is_active: true });
-    if (error) {
-      console.error("create_vehicle:", error);
-      return { error: "Couldn't add the vehicle." };
-    }
-    revalidatePath("/app/vehicles");
-    return { ok: true, message: "Added vehicle " + name + "." };
-  }
-
-  if (tool === "create_invoice") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const res = await createSquareInvoiceForTrip(String(a.trip_id));
-    if ("error" in res) return { error: res.error };
-    revalidatePath("/app/trips/" + a.trip_id);
-    return { ok: true, message: "Draft invoice created in Square." };
-  }
-
-  if (tool === "farm_out") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    if (!a.partner_id) return { error: "No partner specified." };
-    const update: Row = {
-      handled_by: "partner",
-      partner_id: a.partner_id,
-      vehicle_id: null,
-    };
-    if (a.cookie_amount != null && a.cookie_amount !== "") {
-      update.cookie_amount = num(a.cookie_amount);
-    }
-    const { data, error } = await supabase
-      .from("trips")
-      .update(update)
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't farm out that trip." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    return { ok: true, message: "Trip farmed out to the partner." };
-  }
-
-  if (tool === "unfarm") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const { data, error } = await supabase
-      .from("trips")
-      .update({ handled_by: "self", partner_id: null, cookie_amount: null })
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't bring that trip back in-house." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    return { ok: true, message: "Trip brought back in-house." };
-  }
-
-  if (tool === "edit_trip") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const fields = (a.fields ?? {}) as Row;
-    const allowed = [
-      "pickup_address",
-      "dropoff_address",
-      "scheduled_at",
-      "price_total",
-      "passenger_count",
-      "luggage_count",
-      "flight_number",
-      "terminal",
-      "notes",
-    ];
-    const update: Row = {};
-    for (const k of allowed) {
-      if (fields[k] !== undefined && fields[k] !== null && fields[k] !== "") {
-        if (k === "price_total") update[k] = num(fields[k]);
-        else if (k === "passenger_count" || k === "luggage_count")
-          update[k] = Math.round(num(fields[k]));
-        else update[k] = String(fields[k]);
-      }
-    }
-    if (Object.keys(update).length === 0) return { error: "Nothing to change." };
-    const { data, error } = await supabase
-      .from("trips")
-      .update(update)
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't update that trip." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    revalidatePath("/app");
-    return { ok: true, message: "Trip updated." };
-  }
-
-  if (tool === "create_trip") {
-    const pickup = String(a.pickup_address ?? "").trim();
-    const dropoff = String(a.dropoff_address ?? "").trim();
-    const when = String(a.scheduled_at ?? "").trim();
-    if (!pickup || !dropoff || !when) {
-      return { error: "I need at least a pickup, dropoff, and time." };
-    }
-    if (a.price_total == null || a.price_total === "") {
-      return { error: "I need a price for the trip." };
-    }
-    const { data, error } = await supabase
-      .from("trips")
-      .insert({
-        business_id: business.id,
-        customer_id: a.customer_id ? String(a.customer_id) : null,
-        pickup_address: pickup,
-        dropoff_address: dropoff,
-        scheduled_at: when,
-        pricing_type: "flat",
-        price_total: num(a.price_total),
-        passenger_count:
-          a.passenger_count != null && a.passenger_count !== ""
-            ? Math.round(num(a.passenger_count))
-            : null,
-        luggage_count:
-          a.luggage_count != null && a.luggage_count !== ""
-            ? Math.round(num(a.luggage_count))
-            : null,
-        flight_number: a.flight_number ? String(a.flight_number) : null,
-        terminal: a.terminal ? String(a.terminal) : null,
-        handled_by: "self",
-        notes: a.notes ? String(a.notes) : null,
-      })
-      .select("id")
-      .maybeSingle();
-    if (error || !data) {
-      console.error("create_trip:", error);
-      return { error: "Couldn't create the trip." };
-    }
-    revalidatePath("/app/trips");
-    revalidatePath("/app");
-    return { ok: true, message: "Trip created." };
-  }
-
-  if (tool === "create_vehicle") {
-    const name = String(a.name ?? "").trim();
-    if (!name) return { error: "A vehicle name is required." };
-    const { error } = await supabase
-      .from("vehicles")
-      .insert({ business_id: business.id, name, is_active: true });
-    if (error) {
-      console.error("create_vehicle:", error);
-      return { error: "Couldn't add the vehicle." };
-    }
-    revalidatePath("/app/vehicles");
-    return { ok: true, message: "Added vehicle " + name + "." };
-  }
-
-  if (tool === "create_invoice") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const res = await createSquareInvoiceForTrip(String(a.trip_id));
-    if ("error" in res) return { error: res.error };
-    revalidatePath("/app/trips/" + a.trip_id);
-    return { ok: true, message: "Draft invoice created in Square." };
-  }
-
-  if (tool === "farm_out") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    if (!a.partner_id) return { error: "No partner specified." };
-    const update: Row = {
-      handled_by: "partner",
-      partner_id: a.partner_id,
-      vehicle_id: null,
-    };
-    if (a.cookie_amount != null && a.cookie_amount !== "") {
-      update.cookie_amount = num(a.cookie_amount);
-    }
-    const { data, error } = await supabase
-      .from("trips")
-      .update(update)
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't farm out that trip." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    return { ok: true, message: "Trip farmed out to the partner." };
-  }
-
-  if (tool === "unfarm") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const { data, error } = await supabase
-      .from("trips")
-      .update({ handled_by: "self", partner_id: null, cookie_amount: null })
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't bring that trip back in-house." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    return { ok: true, message: "Trip brought back in-house." };
-  }
-
-  if (tool === "edit_trip") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const fields = (a.fields ?? {}) as Row;
-    const allowed = [
-      "pickup_address",
-      "dropoff_address",
-      "scheduled_at",
-      "price_total",
-      "passenger_count",
-      "luggage_count",
-      "flight_number",
-      "terminal",
-      "notes",
-    ];
-    const update: Row = {};
-    for (const k of allowed) {
-      if (fields[k] !== undefined && fields[k] !== null && fields[k] !== "") {
-        if (k === "price_total") update[k] = num(fields[k]);
-        else if (k === "passenger_count" || k === "luggage_count")
-          update[k] = Math.round(num(fields[k]));
-        else update[k] = String(fields[k]);
-      }
-    }
-    if (Object.keys(update).length === 0) return { error: "Nothing to change." };
-    const { data, error } = await supabase
-      .from("trips")
-      .update(update)
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't update that trip." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    revalidatePath("/app");
-    return { ok: true, message: "Trip updated." };
-  }
-
-  if (tool === "create_trip") {
-    const pickup = String(a.pickup_address ?? "").trim();
-    const dropoff = String(a.dropoff_address ?? "").trim();
-    const when = String(a.scheduled_at ?? "").trim();
-    if (!pickup || !dropoff || !when) {
-      return { error: "I need at least a pickup, dropoff, and time." };
-    }
-    if (a.price_total == null || a.price_total === "") {
-      return { error: "I need a price for the trip." };
-    }
-    const { data, error } = await supabase
-      .from("trips")
-      .insert({
-        business_id: business.id,
-        customer_id: a.customer_id ? String(a.customer_id) : null,
-        pickup_address: pickup,
-        dropoff_address: dropoff,
-        scheduled_at: when,
-        pricing_type: "flat",
-        price_total: num(a.price_total),
-        passenger_count:
-          a.passenger_count != null && a.passenger_count !== ""
-            ? Math.round(num(a.passenger_count))
-            : null,
-        luggage_count:
-          a.luggage_count != null && a.luggage_count !== ""
-            ? Math.round(num(a.luggage_count))
-            : null,
-        flight_number: a.flight_number ? String(a.flight_number) : null,
-        terminal: a.terminal ? String(a.terminal) : null,
-        handled_by: "self",
-        notes: a.notes ? String(a.notes) : null,
-      })
-      .select("id")
-      .maybeSingle();
-    if (error || !data) {
-      console.error("create_trip:", error);
-      return { error: "Couldn't create the trip." };
-    }
-    revalidatePath("/app/trips");
-    revalidatePath("/app");
-    return { ok: true, message: "Trip created." };
-  }
-
-  if (tool === "create_vehicle") {
-    const name = String(a.name ?? "").trim();
-    if (!name) return { error: "A vehicle name is required." };
-    const { error } = await supabase
-      .from("vehicles")
-      .insert({ business_id: business.id, name, is_active: true });
-    if (error) {
-      console.error("create_vehicle:", error);
-      return { error: "Couldn't add the vehicle." };
-    }
-    revalidatePath("/app/vehicles");
-    return { ok: true, message: "Added vehicle " + name + "." };
-  }
-
-  if (tool === "create_invoice") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const res = await createSquareInvoiceForTrip(String(a.trip_id));
-    if ("error" in res) return { error: res.error };
-    revalidatePath("/app/trips/" + a.trip_id);
-    return { ok: true, message: "Draft invoice created in Square." };
-  }
-
-  if (tool === "farm_out") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    if (!a.partner_id) return { error: "No partner specified." };
-    const update: Row = {
-      handled_by: "partner",
-      partner_id: a.partner_id,
-      vehicle_id: null,
-    };
-    if (a.cookie_amount != null && a.cookie_amount !== "") {
-      update.cookie_amount = num(a.cookie_amount);
-    }
-    const { data, error } = await supabase
-      .from("trips")
-      .update(update)
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't farm out that trip." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    return { ok: true, message: "Trip farmed out to the partner." };
-  }
-
-  if (tool === "unfarm") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const { data, error } = await supabase
-      .from("trips")
-      .update({ handled_by: "self", partner_id: null, cookie_amount: null })
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't bring that trip back in-house." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    return { ok: true, message: "Trip brought back in-house." };
-  }
-
-  if (tool === "edit_trip") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const fields = (a.fields ?? {}) as Row;
-    const allowed = [
-      "pickup_address",
-      "dropoff_address",
-      "scheduled_at",
-      "price_total",
-      "passenger_count",
-      "luggage_count",
-      "flight_number",
-      "terminal",
-      "notes",
-    ];
-    const update: Row = {};
-    for (const k of allowed) {
-      if (fields[k] !== undefined && fields[k] !== null && fields[k] !== "") {
-        if (k === "price_total") update[k] = num(fields[k]);
-        else if (k === "passenger_count" || k === "luggage_count")
-          update[k] = Math.round(num(fields[k]));
-        else update[k] = String(fields[k]);
-      }
-    }
-    if (Object.keys(update).length === 0) return { error: "Nothing to change." };
-    const { data, error } = await supabase
-      .from("trips")
-      .update(update)
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't update that trip." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    revalidatePath("/app");
-    return { ok: true, message: "Trip updated." };
-  }
-
-  if (tool === "create_trip") {
-    const pickup = String(a.pickup_address ?? "").trim();
-    const dropoff = String(a.dropoff_address ?? "").trim();
-    const when = String(a.scheduled_at ?? "").trim();
-    if (!pickup || !dropoff || !when) {
-      return { error: "I need at least a pickup, dropoff, and time." };
-    }
-    if (a.price_total == null || a.price_total === "") {
-      return { error: "I need a price for the trip." };
-    }
-    const { data, error } = await supabase
-      .from("trips")
-      .insert({
-        business_id: business.id,
-        customer_id: a.customer_id ? String(a.customer_id) : null,
-        pickup_address: pickup,
-        dropoff_address: dropoff,
-        scheduled_at: when,
-        pricing_type: "flat",
-        price_total: num(a.price_total),
-        passenger_count:
-          a.passenger_count != null && a.passenger_count !== ""
-            ? Math.round(num(a.passenger_count))
-            : null,
-        luggage_count:
-          a.luggage_count != null && a.luggage_count !== ""
-            ? Math.round(num(a.luggage_count))
-            : null,
-        flight_number: a.flight_number ? String(a.flight_number) : null,
-        terminal: a.terminal ? String(a.terminal) : null,
-        handled_by: "self",
-        notes: a.notes ? String(a.notes) : null,
-      })
-      .select("id")
-      .maybeSingle();
-    if (error || !data) {
-      console.error("create_trip:", error);
-      return { error: "Couldn't create the trip." };
-    }
-    revalidatePath("/app/trips");
-    revalidatePath("/app");
-    return { ok: true, message: "Trip created." };
-  }
-
-  if (tool === "create_vehicle") {
-    const name = String(a.name ?? "").trim();
-    if (!name) return { error: "A vehicle name is required." };
-    const { error } = await supabase
-      .from("vehicles")
-      .insert({ business_id: business.id, name, is_active: true });
-    if (error) {
-      console.error("create_vehicle:", error);
-      return { error: "Couldn't add the vehicle." };
-    }
-    revalidatePath("/app/vehicles");
-    return { ok: true, message: "Added vehicle " + name + "." };
-  }
-
-  if (tool === "create_invoice") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const res = await createSquareInvoiceForTrip(String(a.trip_id));
-    if ("error" in res) return { error: res.error };
-    revalidatePath("/app/trips/" + a.trip_id);
-    return { ok: true, message: "Draft invoice created in Square." };
-  }
-
-  if (tool === "farm_out") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    if (!a.partner_id) return { error: "No partner specified." };
-    const update: Row = {
-      handled_by: "partner",
-      partner_id: a.partner_id,
-      vehicle_id: null,
-    };
-    if (a.cookie_amount != null && a.cookie_amount !== "") {
-      update.cookie_amount = num(a.cookie_amount);
-    }
-    const { data, error } = await supabase
-      .from("trips")
-      .update(update)
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't farm out that trip." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    return { ok: true, message: "Trip farmed out to the partner." };
-  }
-
-  if (tool === "unfarm") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const { data, error } = await supabase
-      .from("trips")
-      .update({ handled_by: "self", partner_id: null, cookie_amount: null })
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't bring that trip back in-house." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    return { ok: true, message: "Trip brought back in-house." };
-  }
-
-  if (tool === "edit_trip") {
-    if (!a.trip_id) return { error: "No trip specified." };
-    const fields = (a.fields ?? {}) as Row;
-    const allowed = [
-      "pickup_address",
-      "dropoff_address",
-      "scheduled_at",
-      "price_total",
-      "passenger_count",
-      "luggage_count",
-      "flight_number",
-      "terminal",
-      "notes",
-    ];
-    const update: Row = {};
-    for (const k of allowed) {
-      if (fields[k] !== undefined && fields[k] !== null && fields[k] !== "") {
-        if (k === "price_total") update[k] = num(fields[k]);
-        else if (k === "passenger_count" || k === "luggage_count")
-          update[k] = Math.round(num(fields[k]));
-        else update[k] = String(fields[k]);
-      }
-    }
-    if (Object.keys(update).length === 0) return { error: "Nothing to change." };
-    const { data, error } = await supabase
-      .from("trips")
-      .update(update)
-      .eq("id", a.trip_id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't update that trip." };
-    revalidatePath("/app/trips/" + a.trip_id);
-    revalidatePath("/app/trips");
-    revalidatePath("/app");
-    return { ok: true, message: "Trip updated." };
-  }
-
-  if (tool === "create_trip") {
-    const pickup = String(a.pickup_address ?? "").trim();
-    const dropoff = String(a.dropoff_address ?? "").trim();
-    const when = String(a.scheduled_at ?? "").trim();
-    if (!pickup || !dropoff || !when) {
-      return { error: "I need at least a pickup, dropoff, and time." };
-    }
-    if (a.price_total == null || a.price_total === "") {
-      return { error: "I need a price for the trip." };
-    }
-    const { data, error } = await supabase
-      .from("trips")
-      .insert({
-        business_id: business.id,
-        customer_id: a.customer_id ? String(a.customer_id) : null,
-        pickup_address: pickup,
-        dropoff_address: dropoff,
-        scheduled_at: when,
-        pricing_type: "flat",
-        price_total: num(a.price_total),
-        passenger_count:
-          a.passenger_count != null && a.passenger_count !== ""
-            ? Math.round(num(a.passenger_count))
-            : null,
-        luggage_count:
-          a.luggage_count != null && a.luggage_count !== ""
-            ? Math.round(num(a.luggage_count))
-            : null,
-        flight_number: a.flight_number ? String(a.flight_number) : null,
-        terminal: a.terminal ? String(a.terminal) : null,
-        handled_by: "self",
-        notes: a.notes ? String(a.notes) : null,
-      })
-      .select("id")
-      .maybeSingle();
-    if (error || !data) {
-      console.error("create_trip:", error);
-      return { error: "Couldn't create the trip." };
-    }
-    revalidatePath("/app/trips");
-    revalidatePath("/app");
-    return { ok: true, message: "Trip created." };
+    return { ok: true, message: J + " created." };
   }
 
   return { error: "I can't do that one yet." };

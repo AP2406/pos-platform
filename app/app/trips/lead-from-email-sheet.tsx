@@ -17,6 +17,8 @@ import {
   SheetClose,
 } from "@/components/ui/sheet";
 import { parseLeadEmail, createTripFromLead } from "./lead-from-email-actions";
+import { useVocab } from "../_components/vocab-provider";
+
 
 function isoToLocalDateTime(iso: string | null): string {
   if (!iso) return "";
@@ -32,6 +34,7 @@ function isoToLocalDateTime(iso: string | null): string {
 
 export function LeadFromEmailSheet() {
   const router = useRouter();
+  const vocab = useVocab();
   const [open, setOpen] = useState(false);
   const [stage, setStage] = useState<"paste" | "review">("paste");
 
@@ -291,7 +294,7 @@ export function LeadFromEmailSheet() {
               </div>
 
               <div className="space-y-3 pt-3 border-t border-slate-100">
-                <Label>Trip details</Label>
+                <Label>{vocab.job_singular + " details"}</Label>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <Label htmlFor="lead-passengers" className="text-xs text-slate-500">
@@ -377,7 +380,7 @@ export function LeadFromEmailSheet() {
                 className="flex-1"
                 disabled={isSubmitting || !pickup.trim() || !dropoff.trim() || !scheduledAt || !priceTotal}
               >
-                {isSubmitting ? "Creating..." : "Create trip"}
+                {isSubmitting ? "Creating..." : "Create " + vocab.job_singular.toLowerCase()}
               </Button>
             )}
           </SheetFooter>

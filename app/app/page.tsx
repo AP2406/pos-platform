@@ -5,6 +5,7 @@ import {
   getWeekBoundsUTC,
   getMonthBoundsUTC,
 } from "@/lib/utils/dates";
+import { getVocab } from "@/lib/modules/resolve";
 import Link from "next/link";
 import { MiniCalendar } from "./mini-calendar";
 
@@ -55,6 +56,7 @@ function businessRevenue(trip: TripData): number {
 
 export default async function DashboardPage() {
   const { business } = await requireBusiness();
+  const vocab = getVocab(business.industry);
   const supabase = await createClient();
   const tz = business.timezone || "America/Toronto";
 
@@ -260,14 +262,14 @@ export default async function DashboardPage() {
           hint="What you actually earn"
         />
         <StatCard
-          label="Trips today"
+            label={vocab.job_plural + " today"}
           value={todayTrips.length.toString()}
           hint={`${todayCompleted.length} of ${todayTrips.length} done`}
         />
         <StatCard
           label="Customers owe me"
           value={formatCurrency(customerOwed)}
-          hint="From self-driven trips"
+          hint={"From self-driven " + vocab.job_plural.toLowerCase()}
           tone={customerOwed > 0 ? "warning" : "neutral"}
         />
         <StatCard
@@ -291,7 +293,7 @@ export default async function DashboardPage() {
           hint={`${monthTripCount} completed`}
         />
         <StatCard
-          label="Avg per trip"
+          label={"Avg per " + vocab.job_singular.toLowerCase()}
           value={formatCurrency(avgPerTrip)}
           hint="This month"
         />
@@ -303,7 +305,7 @@ export default async function DashboardPage() {
               ? `${formatCurrency(monthSelfRevenue)} / ${formatCurrency(
                   monthPartnerRevenue
                 )}`
-              : "No completed trips this month"
+                          : "No completed " + vocab.job_plural.toLowerCase() + " this month"
           }
         />
       </div>
@@ -408,7 +410,7 @@ export default async function DashboardPage() {
         <div>
           <SectionHeader noMargin>Top customers this month</SectionHeader>
           {topCustomers.length === 0 ? (
-            <EmptyState message="No completed trips this month yet." />
+                  <EmptyState message={"No completed " + vocab.job_plural.toLowerCase() + " this month yet."} />
           ) : (
             <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
               {topCustomers.map((c) => (
@@ -419,7 +421,7 @@ export default async function DashboardPage() {
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">{c.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {c.tripCount} trip{c.tripCount === 1 ? "" : "s"}
+                      {c.tripCount} {c.tripCount === 1 ? vocab.job_singular.toLowerCase() : vocab.job_plural.toLowerCase()}
                     </div>
                   </div>
                   <div className="font-semibold tabular-nums">
@@ -434,7 +436,7 @@ export default async function DashboardPage() {
         <div>
           <SectionHeader noMargin>Top partners this month</SectionHeader>
           {topPartners.length === 0 ? (
-            <EmptyState message="No farmed-out trips this month yet." />
+            <EmptyState message={"No farmed-out " + vocab.job_plural.toLowerCase() + " this month yet."} />
           ) : (
             <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
               {topPartners.map((p) => (
@@ -445,7 +447,7 @@ export default async function DashboardPage() {
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">{p.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {p.tripCount} trip{p.tripCount === 1 ? "" : "s"}
+                      {p.tripCount} {p.tripCount === 1 ? vocab.job_singular.toLowerCase() : vocab.job_plural.toLowerCase()}
                     </div>
                   </div>
                   <div className="font-semibold text-purple-700 tabular-nums">
@@ -460,7 +462,7 @@ export default async function DashboardPage() {
 
       <SectionHeader>Today&apos;s schedule</SectionHeader>
       {todayTrips.length === 0 ? (
-        <EmptyState message="No trips scheduled today." />
+        <EmptyState message={"No " + vocab.job_plural.toLowerCase() + " scheduled today."} />
       ) : (
         <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
           {todayTrips.map((t) => (
@@ -508,7 +510,7 @@ export default async function DashboardPage() {
 
       <SectionHeader>Coming up</SectionHeader>
       {upcomingTrips.length === 0 ? (
-        <EmptyState message="No upcoming trips after today." />
+        <EmptyState message={"No upcoming " + vocab.job_plural.toLowerCase() + " after today."} />
       ) : (
         <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
           {upcomingTrips.map((t) => (

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { getVocab } from "@/lib/modules/resolve";
 import { BookTripSheet } from "./book-trip-sheet";
 import { TripRowActions } from "./trip-row-actions";
 import { LeadFromEmailSheet } from "./lead-from-email-sheet";
@@ -26,7 +27,8 @@ export default async function TripsPage({
 }: {
   searchParams: Promise<{ handled?: string; view?: string }>;
 }) {
-  await requireBusiness();
+  const { business } = await requireBusiness();
+  const vocab = getVocab(business.industry);
   const { handled, view } = await searchParams;
   const supabase = await createClient();
 
@@ -70,8 +72,8 @@ export default async function TripsPage({
   return (
     <div className="max-w-6xl">
       <PageHeader
-        title="Trips"
-        subtitle="Every trip you've booked."
+        title={vocab.job_plural}
+        subtitle={"Every " + vocab.job_singular.toLowerCase() + " you've booked."}
         action={
           <>
             <LeadFromEmailSheet />
@@ -79,6 +81,7 @@ export default async function TripsPage({
               customers={customers ?? []}
               vehicles={vehicles ?? []}
               partners={partners ?? []}
+              jobSingular={vocab.job_singular}
             />
           </>
         }
@@ -91,12 +94,12 @@ export default async function TripsPage({
 
       {allTrips.length === 0 ? (
         <EmptyState
-          title="No trips yet"
-          message="Book your first trip to start tracking the work."
+          title={"No " + vocab.job_plural.toLowerCase() + " yet"}
+          message={"Book your first " + vocab.job_singular.toLowerCase() + " to start tracking the work."}
         />
       ) : filteredTrips.length === 0 ? (
         <EmptyState
-          title="No trips match this filter"
+          title={"No " + vocab.job_plural.toLowerCase() + " match this filter"}
           message="Try selecting a different filter above."
         />
       ) : (
