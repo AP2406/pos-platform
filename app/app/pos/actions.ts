@@ -16,6 +16,8 @@ const orderSchema = z.object({
   items: z.array(lineSchema).min(1, "Add at least one item."),
   tip: z.coerce.number().min(0).max(1000000).optional(),
   payment_method: z.enum(["cash", "card", "other"]).optional(),
+  discount_type: z.enum(["amount", "percent"]).optional(),
+  discount_value: z.coerce.number().min(0).max(1000000).optional(),
 });
 
 type OrderInput = {
@@ -27,6 +29,8 @@ type OrderInput = {
   }[];
   tip?: number;
   payment_method?: "cash" | "card" | "other";
+  discount_type?: "amount" | "percent";
+  discount_value?: number;
 };
 
 export async function createOrder(
@@ -45,13 +49,27 @@ export async function createOrder(
     0
   );
 
-  // Tax rate may be stored as 0.13 or as 13 — handle both safely.
+  // Discount is resolved server-side and clamped so a sale can never go negative.
+  const discountType = parsed.data.discount_type ?? "amount";
+  const discountValue = parsed.data.discount_value ?? 0;
+  let discount =
+    discountType === "percent"
+      ? subtotal * (discountValue / 100)
+      : discountValue;
+  if (discount < 0) discount = 0;
+  if (discount > subtotal) discount = subtotal;
+  discount = Math.round(discount * 100) / 100;
+
+  const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
+
+  // Tax rate may be stored as 0.13 or as 13 - handle both safely.
   let rate = Number(business.default_tax_rate) || 0;
   if (rate > 1) rate = rate / 100;
 
-  const tax = Math.round(subtotal * rate * 100) / 100;
+  // Tax applies to the discounted subtotal.
+  const tax = Math.round(discountedSubtotal * rate * 100) / 100;
   const tip = parsed.data.tip ?? 0;
-  const total = Math.round((subtotal + tax + tip) * 100) / 100;
+  const total = Math.round((discountedSubtotal + tax + tip) * 100) / 100;
 
   const { data: order, error: orderError } = await supabase
     .from("orders")
@@ -59,6 +77,7 @@ export async function createOrder(
       business_id: business.id,
       status: "paid",
       subtotal,
+      discount,
       tax,
       tip,
       total,

@@ -18,6 +18,7 @@ type Receipt = {
   businessName: string;
   items: CartLine[];
   subtotal: number;
+  discount: number;
   tax: number;
   tip: number;
   total: number;
@@ -46,6 +47,13 @@ function printReceipt(r: Receipt) {
       );
     })
     .join("");
+
+  const discountRow =
+    r.discount > 0
+      ? '<tr><td>Discount</td><td style="text-align:right">-$' +
+        r.discount.toFixed(2) +
+        "</td></tr>"
+      : "";
 
   const html =
     "<html><head><title>Receipt</title><style>" +
@@ -76,6 +84,7 @@ function printReceipt(r: Receipt) {
     '<tr><td>Subtotal</td><td style="text-align:right">$' +
     r.subtotal.toFixed(2) +
     "</td></tr>" +
+    discountRow +
     '<tr><td>Tax</td><td style="text-align:right">$' +
     r.tax.toFixed(2) +
     "</td></tr>" +
@@ -110,6 +119,10 @@ export function RegisterClient({
 }) {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [tip, setTip] = useState("");
+  const [discountMode, setDiscountMode] = useState<"amount" | "percent">(
+    "amount"
+  );
+  const [discountValue, setDiscountValue] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "other">(
     "cash"
   );
@@ -151,12 +164,24 @@ export function RegisterClient({
   function clearCart() {
     setCart([]);
     setTip("");
+    setDiscountValue("");
   }
 
   const subtotal = cart.reduce((sum, l) => sum + l.unit_price * l.quantity, 0);
-  const tax = Math.round(subtotal * taxRate * 100) / 100;
+
+  const discountInput = parseFloat(discountValue) || 0;
+  let discount =
+    discountMode === "percent"
+      ? subtotal * (discountInput / 100)
+      : discountInput;
+  if (discount < 0) discount = 0;
+  if (discount > subtotal) discount = subtotal;
+  discount = Math.round(discount * 100) / 100;
+
+  const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
+  const tax = Math.round(discountedSubtotal * taxRate * 100) / 100;
   const tipNum = parseFloat(tip) || 0;
-  const total = Math.round((subtotal + tax + tipNum) * 100) / 100;
+  const total = Math.round((discountedSubtotal + tax + tipNum) * 100) / 100;
 
   function handleComplete() {
     setError(null);
@@ -169,6 +194,8 @@ export function RegisterClient({
         items: cart,
         tip: tipNum,
         payment_method: paymentMethod,
+        discount_type: discountMode,
+        discount_value: discountInput,
       });
       if ("error" in res) {
         setError(res.error);
@@ -179,6 +206,7 @@ export function RegisterClient({
         businessName,
         items: cart,
         subtotal,
+        discount,
         tax,
         tip: tipNum,
         total,
@@ -233,6 +261,14 @@ export function RegisterClient({
                     </span>
                   </div>
                 ))}
+                {receipt.discount > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Discount</span>
+                    <span className="tabular-nums text-red-600">
+                      {"-$" + receipt.discount.toFixed(2)}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between font-semibold pt-2 border-t border-border">
                   <span>Total</span>
                   <span className="tabular-nums">
@@ -316,6 +352,59 @@ export function RegisterClient({
                     {"$" + subtotal.toFixed(2)}
                   </span>
                 </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Discount</span>
+                  <div className="flex items-center gap-1">
+                    <div className="flex rounded-md border border-border overflow-hidden text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setDiscountMode("amount")}
+                        className={
+                          "px-2 py-1 " +
+                          (discountMode === "amount"
+                            ? "bg-accent font-medium"
+                            : "hover:bg-accent/50")
+                        }
+                      >
+                        $
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDiscountMode("percent")}
+                        className={
+                          "px-2 py-1 border-l border-border " +
+                          (discountMode === "percent"
+                            ? "bg-accent font-medium"
+                            : "hover:bg-accent/50")
+                        }
+                      >
+                        %
+                      </button>
+                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(e.target.value)}
+                      placeholder="0"
+                      className="w-20 h-8 text-right"
+                    />
+                  </div>
+                </div>
+
+                {discount > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      Discount applied
+                    </span>
+                    <span className="tabular-nums text-red-600">
+                      {"-$" + discount.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Tax</span>
                   <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
