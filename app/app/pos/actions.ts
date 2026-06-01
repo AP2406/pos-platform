@@ -110,3 +110,29 @@ export async function createOrder(
   revalidatePath("/app/pos");
   return { ok: true, id: order.id };
 }
+
+export async function voidOrder(
+  orderId: string
+): Promise<{ ok: true } | { error: string }> {
+  if (!orderId) return { error: "Missing order." };
+
+  const { business, role } = await requireBusiness();
+  if (role !== "owner" && role !== "manager") {
+    return { error: "Only an owner or manager can void a sale." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("orders")
+    .update({ status: "voided" })
+    .eq("id", orderId)
+    .eq("business_id", business.id);
+
+  if (error) {
+    console.error("voidOrder:", error);
+    return { error: "Could not void the sale. Please try again." };
+  }
+
+  revalidatePath("/app/pos/sales");
+  return { ok: true };
+}
