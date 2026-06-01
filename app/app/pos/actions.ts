@@ -18,6 +18,7 @@ const orderSchema = z.object({
   payment_method: z.enum(["cash", "card", "other"]).optional(),
   discount_type: z.enum(["amount", "percent"]).optional(),
   discount_value: z.coerce.number().min(0).max(1000000).optional(),
+  customer_id: z.string().uuid().optional().nullable(),
 });
 
 type OrderInput = {
@@ -31,6 +32,7 @@ type OrderInput = {
   payment_method?: "cash" | "card" | "other";
   discount_type?: "amount" | "percent";
   discount_value?: number;
+  customer_id?: string | null;
 };
 
 export async function createOrder(
@@ -43,6 +45,18 @@ export async function createOrder(
 
   const { business } = await requireBusiness();
   const supabase = await createClient();
+
+  // If a customer was attached, confirm it belongs to this business before linking.
+  let customerId: string | null = parsed.data.customer_id ?? null;
+  if (customerId) {
+    const { data: cust } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("id", customerId)
+      .eq("business_id", business.id)
+      .maybeSingle();
+    if (!cust) customerId = null;
+  }
 
   const subtotal = parsed.data.items.reduce(
     (sum, i) => sum + i.unit_price * i.quantity,
@@ -82,6 +96,7 @@ export async function createOrder(
       tip,
       total,
       payment_method: parsed.data.payment_method ?? "cash",
+      customer_id: customerId,
     })
     .select("id")
     .single();
@@ -135,4 +150,61 @@ export async function voidOrder(
 
   revalidatePath("/app/pos/sales");
   return { ok: true };
+}
+
+export async function searchCustomers(
+  query: string
+): Promise<{ id: string; name: string; phone: string | null }[]> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  let q = supabase
+    .from("customers")
+    .select("id, name, phone")
+    .eq("business_id", business.id)
+    .order("name", { ascending: true })
+    .limit(10);
+
+  const term = (query || "").trim();
+  if (term) q = q.ilike("name", "%" + term + "%");
+
+  const { data, error } = await q;
+  if (error) {
+    console.error("searchCustomers:", error);
+    return [];
+  }
+  return (data ?? []).map((c) => ({
+    id: c.id as string,
+    name: c.name as string,
+    phone: (c.phone as string | null) ?? null,
+  }));
+}
+
+export async function quickCreateCustomer(
+  name: string,
+  phone?: string
+): Promise<{ ok: true; id: string; name: string } | { error: string }> {
+  const clean = (name || "").trim();
+  if (!clean) return { error: "Customer name is required." };
+
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("customers")
+    .insert({
+      business_id: business.id,
+      name: clean.slice(0, 120),
+      phone: phone && phone.trim() ? phone.trim().slice(0, 40) : null,
+    })
+    .select("id, name")
+    .single();
+
+  if (error || !data) {
+    console.error("quickCreateCustomer:", error);
+    return { error: "Could not add customer. Please try again." };
+  }
+
+  revalidatePath("/app/customers");
+  return { ok: true, id: data.id as string, name: data.name as string };
 }

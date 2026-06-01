@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createOrder } from "./actions";
+import { createOrder, searchCustomers, quickCreateCustomer } from "./actions";
 
 type Item = { id: string; name: string; price: number; category: string | null };
 type CartLine = {
@@ -13,9 +13,11 @@ type CartLine = {
   unit_price: number;
   quantity: number;
 };
+type Customer = { id: string; name: string };
 type Receipt = {
   id: string;
   businessName: string;
+  customerName: string | null;
   items: CartLine[];
   subtotal: number;
   discount: number;
@@ -55,6 +57,12 @@ function printReceipt(r: Receipt) {
         "</td></tr>"
       : "";
 
+  const customerLine = r.customerName
+    ? '<div class="center" style="font-size:11px">Customer: ' +
+      escapeHtml(r.customerName) +
+      "</div>"
+    : "";
+
   const html =
     "<html><head><title>Receipt</title><style>" +
     "body{font-family:monospace;font-size:12px;width:280px;margin:0 auto;padding:8px;color:#000}" +
@@ -75,6 +83,7 @@ function printReceipt(r: Receipt) {
     '<div class="center" style="font-size:10px">Ref: ' +
     escapeHtml(r.id.slice(0, 8)) +
     "</div>" +
+    customerLine +
     '<div class="line"></div>' +
     "<table>" +
     rows +
@@ -126,9 +135,38 @@ export function RegisterClient({
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "other">(
     "cash"
   );
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [customerResults, setCustomerResults] = useState<
+    { id: string; name: string; phone: string | null }[]
+  >([]);
+  const [searchingCustomers, setSearchingCustomers] = useState(false);
+  const [addingCustomer, setAddingCustomer] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (customer) return;
+    const term = customerQuery.trim();
+    if (!term) {
+      setCustomerResults([]);
+      return;
+    }
+    let active = true;
+    setSearchingCustomers(true);
+    const t = setTimeout(async () => {
+      const res = await searchCustomers(term);
+      if (active) {
+        setCustomerResults(res);
+        setSearchingCustomers(false);
+      }
+    }, 250);
+    return () => {
+      active = false;
+      clearTimeout(t);
+    };
+  }, [customerQuery, customer]);
 
   function addItem(item: Item) {
     setReceipt(null);
@@ -165,6 +203,30 @@ export function RegisterClient({
     setCart([]);
     setTip("");
     setDiscountValue("");
+    setCustomer(null);
+    setCustomerQuery("");
+    setCustomerResults([]);
+  }
+
+  function pickCustomer(c: { id: string; name: string }) {
+    setCustomer({ id: c.id, name: c.name });
+    setCustomerQuery("");
+    setCustomerResults([]);
+  }
+
+  async function handleCreateCustomer() {
+    const name = customerQuery.trim();
+    if (!name) return;
+    setAddingCustomer(true);
+    const res = await quickCreateCustomer(name);
+    setAddingCustomer(false);
+    if ("error" in res) {
+      setError(res.error);
+      return;
+    }
+    setCustomer({ id: res.id, name: res.name });
+    setCustomerQuery("");
+    setCustomerResults([]);
   }
 
   const subtotal = cart.reduce((sum, l) => sum + l.unit_price * l.quantity, 0);
@@ -189,6 +251,7 @@ export function RegisterClient({
       setError("Add at least one item.");
       return;
     }
+    const attachedCustomer = customer;
     startTransition(async () => {
       const res = await createOrder({
         items: cart,
@@ -196,6 +259,7 @@ export function RegisterClient({
         payment_method: paymentMethod,
         discount_type: discountMode,
         discount_value: discountInput,
+        customer_id: attachedCustomer ? attachedCustomer.id : null,
       });
       if ("error" in res) {
         setError(res.error);
@@ -204,6 +268,7 @@ export function RegisterClient({
       setReceipt({
         id: res.id,
         businessName,
+        customerName: attachedCustomer ? attachedCustomer.name : null,
         items: cart,
         subtotal,
         discount,
@@ -250,6 +315,11 @@ export function RegisterClient({
           {cart.length === 0 && receipt ? (
             <div className="space-y-3">
               <h2 className="font-medium">Sale complete</h2>
+              {receipt.customerName && (
+                <div className="text-xs text-muted-foreground">
+                  {"Customer: " + receipt.customerName}
+                </div>
+              )}
               <div className="text-sm space-y-1">
                 {receipt.items.map((l, i) => (
                   <div key={i} className="flex justify-between">
@@ -425,6 +495,72 @@ export function RegisterClient({
                   <span>Total</span>
                   <span className="tabular-nums">{"$" + total.toFixed(2)}</span>
                 </div>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <Label className="text-xs">Customer (optional)</Label>
+                {customer ? (
+                  <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                    <span className="text-sm font-medium truncate">
+                      {customer.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCustomer(null)}
+                      className="text-xs text-muted-foreground underline hover:text-foreground"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <Input
+                      value={customerQuery}
+                      onChange={(e) => setCustomerQuery(e.target.value)}
+                      placeholder="Search or add a customer"
+                      className="h-9"
+                    />
+                    {customerQuery.trim() && (
+                      <div className="mt-1 rounded-md border border-border divide-y divide-border overflow-hidden">
+                        {searchingCustomers ? (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">
+                            Searching...
+                          </div>
+                        ) : customerResults.length > 0 ? (
+                          customerResults.map((c) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => pickCustomer(c)}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-accent"
+                            >
+                              {c.name}
+                              {c.phone ? (
+                                <span className="text-xs text-muted-foreground">
+                                  {"  " + "\u00b7" + "  " + c.phone}
+                                </span>
+                              ) : null}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">
+                            No matches.
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleCreateCustomer}
+                          disabled={addingCustomer}
+                          className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-accent"
+                        >
+                          {addingCustomer
+                            ? "Adding..."
+                            : 'Add new customer "' + customerQuery.trim() + '"'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2 pt-2">
