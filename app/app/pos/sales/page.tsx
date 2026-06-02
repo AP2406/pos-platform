@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { VoidButton } from "./void-button";
+import { EmailReceiptButton } from "./email-receipt-button";
 import { VOID_REASONS, reasonLabel } from "../reason-codes";
 
 type Row = {
@@ -101,7 +102,7 @@ export default async function SalesPage() {
 
   const list = rows.slice(0, 50);
 
-  // Pull the recorded reason for any voided sales on screen.
+  // Recorded void reasons for any voided sales on screen.
   const voidedIds = list.filter((r) => r.status === "voided").map((r) => r.id);
   const voidReasons: Record<string, string> = {};
   if (voidedIds.length > 0) {
@@ -118,6 +119,21 @@ export default async function SalesPage() {
       const code = (e.reason_code as string | null) ?? "";
       const note = (e.reason_note as string | null) ?? "";
       voidReasons[oid] = voidReasonText(code, note);
+    }
+  }
+
+  // Which sales have had a receipt emailed.
+  const emailedIds = new Set<string>();
+  if (list.length > 0) {
+    const allIds = list.map((r) => r.id);
+    const { data: emails } = await supabase
+      .from("receipt_emails")
+      .select("order_id, status")
+      .eq("business_id", business.id)
+      .eq("status", "sent")
+      .in("order_id", allIds);
+    for (const e of emails ?? []) {
+      emailedIds.add(e.order_id as string);
     }
   }
 
@@ -240,7 +256,15 @@ export default async function SalesPage() {
                       </div>
                     </>
                   ) : (
-                    <VoidButton orderId={o.id} />
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="flex items-center gap-3">
+                        <EmailReceiptButton orderId={o.id} />
+                        <VoidButton orderId={o.id} />
+                      </div>
+                      {emailedIds.has(o.id) && (
+                        <span className="text-xs text-emerald-500">Emailed</span>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
