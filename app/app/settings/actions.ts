@@ -32,3 +32,39 @@ export async function updateBusinessSettings(input: {
   revalidatePath("/app/settings");
   return { ok: true };
 }
+
+const CURRENCIES = ["CAD", "USD"];
+
+export async function updateTaxAndCurrency(input: {
+  tax_percent: number;
+  currency: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const { business, role } = await requireBusiness();
+
+  if (role !== "owner") {
+    return { error: "Only owners can change settings." };
+  }
+
+  let pct = Number(input.tax_percent);
+  if (isNaN(pct) || pct < 0) pct = 0;
+  if (pct > 100) pct = 100;
+  const taxDecimal = Math.round((pct / 100) * 10000) / 10000;
+
+  const currency = CURRENCIES.includes(input.currency) ? input.currency : "CAD";
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("businesses")
+    .update({ default_tax_rate: taxDecimal, currency: currency })
+    .eq("id", business.id);
+
+  if (error) {
+    console.error("updateTaxAndCurrency:", error);
+    return { error: "Could not save tax settings. Please try again." };
+  }
+
+  revalidatePath("/app/settings");
+  revalidatePath("/app/pos");
+  revalidatePath("/app/pos/sales");
+  return { ok: true };
+}

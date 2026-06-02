@@ -2,6 +2,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, SectionHeader } from "../_components/ui";
 import { SettingsForm } from "./settings-form";
+import { TaxCurrencyForm } from "./tax-currency-form";
 import { LeadInboxCard } from "./lead-inbox-card";
 import { DriversSettingCard } from "./drivers-setting-card";
 import { NotificationsCard } from "./notifications-card";
@@ -28,7 +29,10 @@ export default async function SettingsPage() {
   const squareConnected =
     squareIntegration != null && squareIntegration.is_active;
 
-    const notifPrefs: Record<string, boolean> = {};
+  const rawTax = Number(business.default_tax_rate) || 0;
+  const taxPercent = Math.round((rawTax > 1 ? rawTax : rawTax * 100) * 100) / 100;
+
+  const notifPrefs: Record<string, boolean> = {};
   if (user) {
     const { data: prefRows } = await supabase
       .from("notification_preferences")
@@ -53,6 +57,16 @@ export default async function SettingsPage() {
           initialTimezone={business.timezone || "America/Toronto"}
         />
       </div>
+
+      {role === "owner" && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Tax and currency</SectionHeader>
+          <TaxCurrencyForm
+            initialTaxPercent={taxPercent}
+            initialCurrency={business.currency || "CAD"}
+          />
+        </div>
+      )}
 
       <div className="bg-card border border-border rounded-lg p-6 mb-4">
         <SectionHeader>Details</SectionHeader>
@@ -108,7 +122,7 @@ export default async function SettingsPage() {
         </div>
       )}
 
-   <div className="mb-4">
+      <div className="mb-4">
         <NotificationsCard initialPrefs={notifPrefs} />
       </div>
 
