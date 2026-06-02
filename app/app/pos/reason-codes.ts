@@ -19,6 +19,15 @@ export const DISCOUNT_REASONS: ReasonCode[] = [
   { code: "other", label: "Other" },
 ];
 
+export const REFUND_REASONS: ReasonCode[] = [
+  { code: "customer_request", label: "Customer request" },
+  { code: "defective", label: "Defective" },
+  { code: "wrong_item", label: "Wrong item" },
+  { code: "overcharge", label: "Overcharge" },
+  { code: "duplicate", label: "Duplicate charge" },
+  { code: "other", label: "Other" },
+];
+
 export function isValidReason(list: ReasonCode[], code: string): boolean {
   return list.some((r) => r.code === code);
 }
@@ -26,4 +35,11 @@ export function isValidReason(list: ReasonCode[], code: string): boolean {
 export function reasonLabel(list: ReasonCode[], code: string): string {
   const found = list.find((r) => r.code === code);
   return found ? found.label : code;
+}
+
+export function reasonLabelForAction(action: string, code: string): string {
+  if (action === "void") return reasonLabel(VOID_REASONS, code);
+  if (action === "discount") return reasonLabel(DISCOUNT_REASONS, code);
+  if (action === "refund") return reasonLabel(REFUND_REASONS, code);
+  return code;
 }
