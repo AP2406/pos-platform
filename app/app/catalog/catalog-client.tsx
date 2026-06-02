@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import {
   createCatalogItem,
   setCatalogItemActive,
+  setCatalogItemTaxable,
   createVariation,
   deleteVariation,
 } from "./actions";
@@ -18,6 +19,7 @@ type Item = {
   price: number;
   category: string | null;
   is_active: boolean;
+  taxable: boolean;
   variations: Variation[];
 };
 
@@ -26,6 +28,7 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("");
+  const [taxable, setTaxable] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -45,6 +48,7 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
         name,
         price: parseFloat(price) || 0,
         category,
+        taxable,
       });
       if ("error" in res) {
         setError(res.error);
@@ -58,12 +62,14 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
           price: parseFloat(price) || 0,
           category: category.trim() || null,
           is_active: true,
+          taxable: taxable,
           variations: [],
         },
       ]);
       setName("");
       setPrice("");
       setCategory("");
+      setTaxable(true);
     });
   }
 
@@ -74,6 +80,19 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
         setItems((prev) =>
           prev.map((i) =>
             i.id === item.id ? { ...i, is_active: !i.is_active } : i
+          )
+        );
+      }
+    });
+  }
+
+  function handleToggleTaxable(item: Item) {
+    startTransition(async () => {
+      const res = await setCatalogItemTaxable(item.id, !item.taxable);
+      if (!("error" in res)) {
+        setItems((prev) =>
+          prev.map((i) =>
+            i.id === item.id ? { ...i, taxable: !i.taxable } : i
           )
         );
       }
@@ -185,6 +204,15 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
             />
           </div>
         </div>
+        <label className="flex items-center gap-2 mt-3 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            checked={taxable}
+            onChange={(e) => setTaxable(e.target.checked)}
+            className="h-4 w-4"
+          />
+          <span>Taxable (apply tax at checkout)</span>
+        </label>
         <div className="mt-3">
           <Button onClick={handleAdd} disabled={pending || !name.trim()}>
             {pending ? "Saving..." : "Add item"}
@@ -216,6 +244,9 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
                         }
                       >
                         {item.name}
+                        {!item.taxable && (
+                          <span className="ml-2 text-xs text-amber-500">Tax-free</span>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {item.variations.length > 0
@@ -235,6 +266,14 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
                         onClick={() => toggleExpand(item.id)}
                       >
                         {expanded ? "Done" : "Variations"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleToggleTaxable(item)}
+                        disabled={pending}
+                      >
+                        {item.taxable ? "Taxable" : "Tax-free"}
                       </Button>
                       <Button
                         variant="outline"

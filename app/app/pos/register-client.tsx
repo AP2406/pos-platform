@@ -15,13 +15,14 @@ import {
 import { DISCOUNT_REASONS } from "./reason-codes";
 
 type Variation = { id: string; name: string; price: number };
-type Item = { id: string; name: string; price: number; category: string | null; variations: Variation[] };
+type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; variations: Variation[] };
 type CartLine = {
   catalog_item_id: string | null;
   variation_id: string | null;
   name: string;
   unit_price: number;
   quantity: number;
+  taxable: boolean;
 };
 type Customer = { id: string; name: string };
 type PaymentLine = {
@@ -203,6 +204,9 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   const [pending, startTransition] = useTransition();
   const splitIdRef = useRef(1);
 
+  const itemTaxableById: Record<string, boolean> = {};
+  for (const it of items) itemTaxableById[it.id] = it.taxable;
+
   useEffect(() => {
     if (customer) return;
     const term = customerQuery.trim();
@@ -240,7 +244,7 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
     setOpenTickets(t);
   }
 
-  function addLine(line: { catalog_item_id: string | null; variation_id: string | null; name: string; unit_price: number }) {
+  function addLine(line: { catalog_item_id: string | null; variation_id: string | null; name: string; unit_price: number; taxable: boolean }) {
     setReceipt(null);
     setCart((prev) => {
       const existing = prev.find(
@@ -261,6 +265,7 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
           name: line.name,
           unit_price: line.unit_price,
           quantity: 1,
+          taxable: line.taxable,
         },
       ];
     });
@@ -272,7 +277,7 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
       setPickerItem(item);
       return;
     }
-    addLine({ catalog_item_id: item.id, variation_id: null, name: item.name, unit_price: item.price });
+    addLine({ catalog_item_id: item.id, variation_id: null, name: item.name, unit_price: item.price, taxable: item.taxable });
   }
 
   function pickVariation(item: Item, v: Variation) {
@@ -281,6 +286,7 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
       variation_id: v.id,
       name: item.name + " - " + v.name,
       unit_price: v.price,
+      taxable: item.taxable,
     });
     setPickerItem(null);
   }
@@ -326,6 +332,7 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   }
 
   const subtotal = cart.reduce((sum, l) => sum + l.unit_price * l.quantity, 0);
+  const taxableSubtotal = cart.reduce((sum, l) => sum + (l.taxable ? l.unit_price * l.quantity : 0), 0);
 
   const discountInput = parseFloat(discountValue) || 0;
   let discount = discountMode === "percent" ? subtotal * (discountInput / 100) : discountInput;
@@ -334,7 +341,9 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   discount = Math.round(discount * 100) / 100;
 
   const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
-  const tax = Math.round(discountedSubtotal * taxRate * 100) / 100;
+  const taxF = subtotal > 0 ? discountedSubtotal / subtotal : 0;
+  const taxableBase = Math.round(taxableSubtotal * taxF * 100) / 100;
+  const tax = Math.round(taxableBase * taxRate * 100) / 100;
   const tipNum = parseFloat(tip) || 0;
   const total = Math.round((discountedSubtotal + tax + tipNum) * 100) / 100;
 
@@ -391,13 +400,17 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
     const c = res.cart;
     const lines = Array.isArray(c.items) ? c.items : [];
     setCart(
-      lines.map((it) => ({
-        catalog_item_id: it.catalog_item_id ?? null,
-        variation_id: it.variation_id ?? null,
-        name: it.name,
-        unit_price: Number(it.unit_price) || 0,
-        quantity: Number(it.quantity) || 1,
-      }))
+      lines.map((it) => {
+        const cid = it.catalog_item_id ?? null;
+        return {
+          catalog_item_id: cid,
+          variation_id: it.variation_id ?? null,
+          name: it.name,
+          unit_price: Number(it.unit_price) || 0,
+          quantity: Number(it.quantity) || 1,
+          taxable: cid ? (itemTaxableById[cid] ?? true) : true,
+        };
+      })
     );
     setTip(c.tip ?? "");
     setDiscountMode(c.discount_mode === "percent" ? "percent" : "amount");
@@ -1044,7 +1057,7 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
                         <div className="min-w-0">
                           <div className="text-sm font-medium truncate">{line.name}</div>
                           <div className="text-xs text-muted-foreground">
-                            {"$" + line.unit_price.toFixed(2)}
+                            {"$" + line.unit_price.toFixed(2) + (line.taxable ? "" : "  " + "\u00b7" + "  Tax-free")}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">

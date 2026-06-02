@@ -8,7 +8,7 @@ export default async function CatalogPage() {
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, is_active")
+    .select("id, name, price, category, is_active, taxable")
     .eq("business_id", business.id)
     .order("created_at", { ascending: true });
 
@@ -19,7 +19,7 @@ export default async function CatalogPage() {
     .eq("is_active", true)
     .order("created_at", { ascending: true });
 
-const varsByItem: Record<string, { id: string; name: string; price: number }[]> = {};
+  const varsByItem: Record<string, { id: string; name: string; price: number }[]> = {};
   for (const v of varsData ?? []) {
     const itemId = v.catalog_item_id as string;
     if (!varsByItem[itemId]) varsByItem[itemId] = [];
@@ -36,6 +36,7 @@ const varsByItem: Record<string, { id: string; name: string; price: number }[]> 
     price: Number(i.price),
     category: (i.category as string | null) ?? null,
     is_active: i.is_active as boolean,
+    taxable: (i.taxable as boolean | null) ?? true,
     variations: varsByItem[i.id as string] ?? [],
   }));
 

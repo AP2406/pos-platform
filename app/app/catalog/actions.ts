@@ -9,9 +9,10 @@ const itemSchema = z.object({
   name: z.string().min(1, "Name is required").max(120),
   price: z.coerce.number().min(0).max(1000000),
   category: z.string().max(60).optional().or(z.literal("")),
+  taxable: z.boolean().optional(),
 });
 
-type ItemInput = { name: string; price: number; category?: string };
+type ItemInput = { name: string; price: number; category?: string; taxable?: boolean };
 
 export async function createCatalogItem(
   input: ItemInput
@@ -29,6 +30,7 @@ export async function createCatalogItem(
       name: parsed.data.name,
       price: parsed.data.price,
       category: parsed.data.category || null,
+      taxable: parsed.data.taxable === false ? false : true,
     })
     .select("id")
     .single();
@@ -50,13 +52,19 @@ export async function updateCatalogItem(
   }
   await requireBusiness();
   const supabase = await createClient();
+
+  const updateData: Record<string, unknown> = {
+    name: parsed.data.name,
+    price: parsed.data.price,
+    category: parsed.data.category || null,
+  };
+  if (typeof parsed.data.taxable === "boolean") {
+    updateData.taxable = parsed.data.taxable;
+  }
+
   const { error } = await supabase
     .from("catalog_items")
-    .update({
-      name: parsed.data.name,
-      price: parsed.data.price,
-      category: parsed.data.category || null,
-    })
+    .update(updateData)
     .eq("id", id);
   if (error) {
     console.error("updateCatalogItem:", error);
@@ -78,6 +86,26 @@ export async function setCatalogItemActive(
     .eq("id", id);
   if (error) {
     console.error("setCatalogItemActive:", error);
+    return { error: "Could not update item." };
+  }
+  revalidatePath("/app/catalog");
+  return { ok: true };
+}
+
+export async function setCatalogItemTaxable(
+  id: string,
+  taxable: boolean
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing item." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("catalog_items")
+    .update({ taxable: taxable })
+    .eq("id", id)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("setCatalogItemTaxable:", error);
     return { error: "Could not update item." };
   }
   revalidatePath("/app/catalog");

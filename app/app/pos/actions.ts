@@ -130,7 +130,35 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   let rate = Number(business.default_tax_rate) || 0;
   if (rate > 1) rate = rate / 100;
 
-  const tax = Math.round(discountedSubtotal * rate * 100) / 100;
+  // Item-level taxability: tax applies only to the taxable portion, with the
+  // discount spread proportionally across the whole sale.
+  const taxLineIds = Array.from(
+    new Set(
+      parsed.data.items
+        .map((i) => i.catalog_item_id)
+        .filter((id): id is string => !!id)
+    )
+  );
+  const taxableById: Record<string, boolean> = {};
+  if (taxLineIds.length > 0) {
+    const { data: taxRows } = await supabase
+      .from("catalog_items")
+      .select("id, taxable")
+      .eq("business_id", business.id)
+      .in("id", taxLineIds);
+    for (const r of taxRows ?? []) {
+      taxableById[r.id as string] = (r.taxable as boolean | null) ?? true;
+    }
+  }
+  let taxableSubtotal = 0;
+  for (const i of parsed.data.items) {
+    const isTaxable = i.catalog_item_id ? (taxableById[i.catalog_item_id] ?? true) : true;
+    if (isTaxable) taxableSubtotal += i.unit_price * i.quantity;
+  }
+  const taxF = subtotal > 0 ? discountedSubtotal / subtotal : 0;
+  const taxableBase = Math.round(taxableSubtotal * taxF * 100) / 100;
+  const tax = Math.round(taxableBase * rate * 100) / 100;
+
   const tip = parsed.data.tip ?? 0;
   const total = Math.round((discountedSubtotal + tax + tip) * 100) / 100;
   const paymentMethod = parsed.data.payment_method ?? "cash";
@@ -205,7 +233,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       reason_code: discount > 0 ? discountReasonCode : null,
       reason_note: discount > 0 && discountReasonNote ? discountReasonNote : null,
     },
-    tax: { rate: rate, amount: tax },
+    tax: { rate: rate, amount: tax, taxable_base: taxableBase },
     tip: tip,
     total: total,
     payment_method: orderPaymentMethod,

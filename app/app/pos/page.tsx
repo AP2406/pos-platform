@@ -8,7 +8,7 @@ export default async function PosPage() {
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category")
+    .select("id, name, price, category, taxable")
     .eq("business_id", business.id)
     .eq("is_active", true)
     .order("name", { ascending: true });
@@ -36,6 +36,7 @@ export default async function PosPage() {
     name: i.name as string,
     price: Number(i.price),
     category: (i.category as string | null) ?? null,
+    taxable: (i.taxable as boolean | null) ?? true,
     variations: varsByItem[i.id as string] ?? [],
   }));
 
