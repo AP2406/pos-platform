@@ -64,6 +64,15 @@ export async function createOrder(
     }
   }
 
+  // Link this sale to the open register/drawer session, if one is open.
+  const { data: openSession } = await supabase
+    .from("drawer_sessions")
+    .select("id")
+    .eq("business_id", business.id)
+    .eq("status", "open")
+    .maybeSingle();
+  const drawerSessionId = openSession ? (openSession.id as string) : null;
+
   const subtotal = parsed.data.items.reduce(
     (sum, i) => sum + i.unit_price * i.quantity,
     0
@@ -132,6 +141,7 @@ export async function createOrder(
       total,
       payment_method: paymentMethod,
       customer_id: customerId,
+      drawer_session_id: drawerSessionId,
       snapshot: snapshot,
     })
     .select("id")
