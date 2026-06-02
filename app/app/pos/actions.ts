@@ -37,7 +37,7 @@ type OrderInput = {
 
 export async function createOrder(
   input: OrderInput
-): Promise<{ ok: true; id: string } | { error: string }> {
+): Promise<{ ok: true; id: string; sale_number: number } | { error: string }> {
   const parsed = orderSchema.safeParse(input);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid order." };
@@ -46,16 +46,22 @@ export async function createOrder(
   const { business } = await requireBusiness();
   const supabase = await createClient();
 
-  // If a customer was attached, confirm it belongs to this business before linking.
+  // If a customer was attached, confirm it belongs to this business and
+  // capture the name so the snapshot freezes it.
   let customerId: string | null = parsed.data.customer_id ?? null;
+  let customerName: string | null = null;
   if (customerId) {
     const { data: cust } = await supabase
       .from("customers")
-      .select("id")
+      .select("id, name")
       .eq("id", customerId)
       .eq("business_id", business.id)
       .maybeSingle();
-    if (!cust) customerId = null;
+    if (cust) {
+      customerName = (cust.name as string | null) ?? null;
+    } else {
+      customerId = null;
+    }
   }
 
   const subtotal = parsed.data.items.reduce(
@@ -63,7 +69,6 @@ export async function createOrder(
     0
   );
 
-  // Discount is resolved server-side and clamped so a sale can never go negative.
   const discountType = parsed.data.discount_type ?? "amount";
   const discountValue = parsed.data.discount_value ?? 0;
   let discount =
@@ -80,23 +85,54 @@ export async function createOrder(
   let rate = Number(business.default_tax_rate) || 0;
   if (rate > 1) rate = rate / 100;
 
-  // Tax applies to the discounted subtotal.
   const tax = Math.round(discountedSubtotal * rate * 100) / 100;
   const tip = parsed.data.tip ?? 0;
   const total = Math.round((discountedSubtotal + tax + tip) * 100) / 100;
+  const paymentMethod = parsed.data.payment_method ?? "cash";
+
+  // Concurrency-safe per-business sale number (atomic in the database).
+  const { data: numData, error: numError } = await supabase.rpc(
+    "next_sale_number",
+    { p_business_id: business.id }
+  );
+  if (numError || numData === null || numData === undefined) {
+    console.error("next_sale_number:", numError);
+    return { error: "Could not generate a sale number. Please try again." };
+  }
+  const saleNumber = Number(numData);
+
+  // Immutable snapshot of the sale exactly as completed.
+  const snapshot = {
+    sale_number: saleNumber,
+    items: parsed.data.items.map((i) => ({
+      name: i.name,
+      unit_price: i.unit_price,
+      quantity: i.quantity,
+    })),
+    subtotal: Math.round(subtotal * 100) / 100,
+    discount: { type: discountType, value: discountValue, amount: discount },
+    tax: { rate: rate, amount: tax },
+    tip: tip,
+    total: total,
+    payment_method: paymentMethod,
+    customer: customerId ? { id: customerId, name: customerName } : null,
+    completed_at: new Date().toISOString(),
+  };
 
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .insert({
       business_id: business.id,
       status: "paid",
+      sale_number: saleNumber,
       subtotal,
       discount,
       tax,
       tip,
       total,
-      payment_method: parsed.data.payment_method ?? "cash",
+      payment_method: paymentMethod,
       customer_id: customerId,
+      snapshot: snapshot,
     })
     .select("id")
     .single();
@@ -123,7 +159,7 @@ export async function createOrder(
   }
 
   revalidatePath("/app/pos");
-  return { ok: true, id: order.id };
+  return { ok: true, id: order.id, sale_number: saleNumber };
 }
 
 export async function voidOrder(

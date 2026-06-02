@@ -12,6 +12,8 @@ type Row = {
   total: number;
   payment_method: string;
   status: string;
+  sale_number: number | null;
+  customer_name: string | null;
 };
 
 function dayKey(iso: string, tz: string): string {
@@ -31,104 +33,75 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function addDaysKey(key: string, delta: number): string {
-  const parts = key.split("-").map(Number);
-  const dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
-  dt.setUTCDate(dt.getUTCDate() + delta);
-  const yy = dt.getUTCFullYear();
-  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getUTCDate()).padStart(2, "0");
-  return yy + "-" + mm + "-" + dd;
-}
-
-function isoFromKey(key: string): string {
-  const parts = key.split("-").map(Number);
-  return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])).toISOString();
-}
-
 export default async function SalesPage() {
   const { business } = await requireBusiness();
   const supabase = await createClient();
   const tz = business.timezone || "America/Toronto";
 
-  const todayKey = dayKey(new Date().toISOString(), tz);
-  const monthPrefix = todayKey.slice(0, 7);
-  const monthStartKey = monthPrefix + "-01";
-  const weekStartKey = addDaysKey(todayKey, -6);
-  const earliestKey =
-    weekStartKey < monthStartKey ? weekStartKey : monthStartKey;
-  const sinceIso = isoFromKey(addDaysKey(earliestKey, -2));
+  const { data } = await supabase
+    .from("orders")
+    .select(
+      "id, created_at, subtotal, discount, tax, tip, total, payment_method, status, sale_number, customer:customers(name)"
+    )
+    .eq("business_id", business.id)
+    .order("created_at", { ascending: false })
+    .limit(200);
 
-  const selectCols =
-    "id, created_at, subtotal, discount, tax, tip, total, payment_method, status";
-
-  const [summaryRes, listRes] = await Promise.all([
-    supabase
-      .from("orders")
-      .select(selectCols)
-      .eq("business_id", business.id)
-      .gte("created_at", sinceIso),
-    supabase
-      .from("orders")
-      .select(selectCols)
-      .eq("business_id", business.id)
-      .order("created_at", { ascending: false })
-      .limit(200),
-  ]);
-
-  const toRow = (o: Record<string, unknown>): Row => ({
-    id: o.id as string,
-    created_at: o.created_at as string,
-    subtotal: Number(o.subtotal) || 0,
-    discount: Number(o.discount) || 0,
-    tax: Number(o.tax) || 0,
-    tip: Number(o.tip) || 0,
-    total: Number(o.total) || 0,
-    payment_method: (o.payment_method as string | null) ?? "cash",
-    status: (o.status as string | null) ?? "paid",
+  const rows: Row[] = (data ?? []).map((o) => {
+    const rawCustomer = (o as { customer?: unknown }).customer;
+    let customerName: string | null = null;
+    if (rawCustomer) {
+      const c = Array.isArray(rawCustomer) ? rawCustomer[0] : rawCustomer;
+      customerName = (c && (c as { name?: string }).name) || null;
+    }
+    return {
+      id: o.id as string,
+      created_at: o.created_at as string,
+      subtotal: Number(o.subtotal) || 0,
+      discount: Number(o.discount) || 0,
+      tax: Number(o.tax) || 0,
+      tip: Number(o.tip) || 0,
+      total: Number(o.total) || 0,
+      payment_method: (o.payment_method as string | null) ?? "cash",
+      status: (o.status as string | null) ?? "paid",
+      sale_number: o.sale_number != null ? Number(o.sale_number) : null,
+      customer_name: customerName,
+    };
   });
 
-  const summaryRows: Row[] = (summaryRes.data ?? []).map(toRow);
-  const listRows: Row[] = (listRes.data ?? []).map(toRow);
-
-  const live = summaryRows.filter((r) => r.status !== "voided");
-  const today = live.filter((r) => dayKey(r.created_at, tz) === todayKey);
-  const week = live.filter((r) => dayKey(r.created_at, tz) >= weekStartKey);
-  const month = live.filter(
-    (r) => dayKey(r.created_at, tz).slice(0, 7) === monthPrefix
+  const todayKey = dayKey(new Date().toISOString(), tz);
+  const today = rows.filter(
+    (r) => r.status !== "voided" && dayKey(r.created_at, tz) === todayKey
   );
 
-  const sumOf = (arr: Row[], f: (r: Row) => number) =>
-    round2(arr.reduce((a, r) => a + f(r), 0));
-
+  const sumOf = (f: (r: Row) => number) =>
+    round2(today.reduce((a, r) => a + f(r), 0));
   const count = today.length;
-  const gross = sumOf(today, (r) => r.subtotal);
-  const discounts = sumOf(today, (r) => r.discount);
-  const tax = sumOf(today, (r) => r.tax);
-  const tips = sumOf(today, (r) => r.tip);
-  const collected = sumOf(today, (r) => r.total);
+  const gross = sumOf((r) => r.subtotal);
+  const discounts = sumOf((r) => r.discount);
+  const tax = sumOf((r) => r.tax);
+  const tips = sumOf((r) => r.tip);
+  const collected = sumOf((r) => r.total);
 
   const byMethod = (m: string) =>
-    sumOf(
-      today.filter((r) => r.payment_method === m),
-      (r) => r.total
+    round2(
+      today
+        .filter((r) => r.payment_method === m)
+        .reduce((a, r) => a + r.total, 0)
     );
   const cash = byMethod("cash");
   const card = byMethod("card");
   const other = byMethod("other");
 
-  const weekCollected = sumOf(week, (r) => r.total);
-  const monthCollected = sumOf(month, (r) => r.total);
-
-  const list = listRows.slice(0, 50);
+  const list = rows.slice(0, 50);
 
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-semibold">Sales</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Totals for today, this week, and this month, plus your recent sales.
-          Voided sales are not counted.
+          Totals for today, plus your recent sales. Voided sales are not
+          counted.
         </p>
       </div>
 
@@ -184,38 +157,6 @@ export default async function SalesPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-        <div className="bg-card border border-border rounded-lg p-6">
-          <div className="flex items-baseline justify-between mb-2">
-            <h2 className="text-sm font-medium text-muted-foreground">
-              Last 7 days
-            </h2>
-            <span className="text-xs text-muted-foreground">
-              {week.length + (week.length === 1 ? " sale" : " sales")}
-            </span>
-          </div>
-          <div className="text-2xl font-semibold tabular-nums">
-            {money(weekCollected)}
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">collected</div>
-        </div>
-
-        <div className="bg-card border border-border rounded-lg p-6">
-          <div className="flex items-baseline justify-between mb-2">
-            <h2 className="text-sm font-medium text-muted-foreground">
-              This month
-            </h2>
-            <span className="text-xs text-muted-foreground">
-              {month.length + (month.length === 1 ? " sale" : " sales")}
-            </span>
-          </div>
-          <div className="text-2xl font-semibold tabular-nums">
-            {money(monthCollected)}
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">collected</div>
-        </div>
-      </div>
-
       <h2 className="text-sm font-medium text-muted-foreground mb-2">
         Recent sales
       </h2>
@@ -230,6 +171,10 @@ export default async function SalesPage() {
             const method =
               o.payment_method.charAt(0).toUpperCase() +
               o.payment_method.slice(1);
+            const numberPrefix =
+              o.sale_number != null
+                ? "#" + o.sale_number + "  " + "\u00b7" + "  "
+                : "";
             return (
               <div
                 key={o.id}
@@ -242,8 +187,14 @@ export default async function SalesPage() {
                       <span className="ml-2 text-xs text-red-600">Voided</span>
                     )}
                   </div>
+                  {o.customer_name && (
+                    <div className="text-xs text-muted-foreground truncate">
+                      {o.customer_name}
+                    </div>
+                  )}
                   <div className="text-xs text-muted-foreground">
-                    {new Date(o.created_at).toLocaleString() +
+                    {numberPrefix +
+                      new Date(o.created_at).toLocaleString() +
                       "  " +
                       "\u00b7" +
                       "  " +
