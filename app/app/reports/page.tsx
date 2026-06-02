@@ -49,13 +49,12 @@ export default async function ReportsPage({
     "30d": "Last 30 days",
   };
 
-  // Pull a generous window once, then narrow in code (keeps day boundaries
-  // correct in the business timezone without offset math).
   const cutoffIso = new Date(Date.now() - 31 * 86400000).toISOString();
   const { data: ordersData } = await supabase
     .from("orders")
     .select("id, created_at, subtotal, discount, tax, tip, total, payment_method, status")
     .eq("business_id", business.id)
+    .neq("is_training", true)
     .gte("created_at", cutoffIso)
     .order("created_at", { ascending: false })
     .limit(3000);
@@ -80,7 +79,6 @@ export default async function ReportsPage({
     return new Date(o.created_at).getTime() >= now - 30 * 86400000;
   };
 
-  // Non-voided sales count as collected; refunds are tracked separately.
   const orders = allOrders.filter((o) => o.status !== "voided" && inRange(o));
   const orderIds = orders.map((o) => o.id);
 
@@ -91,7 +89,6 @@ export default async function ReportsPage({
   const tips = round2(orders.reduce((a, o) => a + o.tip, 0));
   const collected = round2(orders.reduce((a, o) => a + o.total, 0));
 
-  // Payments by method (from the ledger, with fallback for older sales).
   const payTotals: Record<string, number> = { cash: 0, card: 0, other: 0 };
   let refunds = 0;
   const itemAgg: Record<string, { name: string; qty: number; revenue: number; catId: string | null }> = {};

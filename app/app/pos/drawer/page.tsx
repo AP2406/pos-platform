@@ -35,7 +35,8 @@ export default async function DrawerPage() {
       .from("orders")
       .select("id, total, payment_method, status")
       .eq("business_id", business.id)
-      .eq("drawer_session_id", sessionData.id);
+      .eq("drawer_session_id", sessionData.id)
+      .neq("is_training", true);
 
     const liveOrders = (orders ?? []).filter(
       (o) => (o.status as string) !== "voided"
@@ -62,13 +63,11 @@ export default async function DrawerPage() {
     let card = 0;
     let other = 0;
 
-    // Sales with a payments ledger (incl. split tenders) bucket by portion.
     for (const p of payments) {
       if (p.method === "cash") cash += p.amount;
       else if (p.method === "card") card += p.amount;
       else other += p.amount;
     }
-    // Older sales without ledger rows fall back to the single method on order.
     for (const o of liveOrders) {
       if (ordersWithPayments.has(o.id as string)) continue;
       const t = Number(o.total) || 0;

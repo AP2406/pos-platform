@@ -51,6 +51,7 @@ export default async function SalesPage() {
       "id, created_at, subtotal, discount, tax, tip, total, payment_method, status, sale_number, customer:customers(name)"
     )
     .eq("business_id", business.id)
+    .neq("is_training", true)
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -102,7 +103,6 @@ export default async function SalesPage() {
 
   const list = rows.slice(0, 50);
 
-  // Recorded void reasons for any voided sales on screen.
   const voidedIds = list.filter((r) => r.status === "voided").map((r) => r.id);
   const voidReasons: Record<string, string> = {};
   if (voidedIds.length > 0) {
@@ -122,7 +122,6 @@ export default async function SalesPage() {
     }
   }
 
-  // Which sales have had a receipt emailed.
   const emailedIds = new Set<string>();
   if (list.length > 0) {
     const allIds = list.map((r) => r.id);

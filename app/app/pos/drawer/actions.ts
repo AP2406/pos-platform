@@ -68,15 +68,14 @@ export async function closeDrawerSession(input: {
     .from("orders")
     .select("id, total, payment_method, status")
     .eq("business_id", business.id)
-    .eq("drawer_session_id", session.id);
+    .eq("drawer_session_id", session.id)
+    .neq("is_training", true);
 
   const liveOrders = (sessionOrders ?? []).filter(
     (o) => (o.status as string) !== "voided"
   );
   const orderIds = liveOrders.map((o) => o.id as string);
 
-  // Cash taken is the sum of the cash PORTION of each sale. Split tenders make
-  // a single order both cash and card, so we read from the payments ledger.
   let payments: { order_id: string; method: string; amount: number }[] = [];
   if (orderIds.length > 0) {
     const { data: payData } = await supabase
@@ -96,8 +95,6 @@ export async function closeDrawerSession(input: {
   for (const p of payments) {
     if (p.method === "cash") cashSales += p.amount;
   }
-  // Back-compat: sales recorded before the payments ledger have no rows; fall
-  // back to the single method stored on the order.
   for (const o of liveOrders) {
     if (
       !ordersWithPayments.has(o.id as string) &&
