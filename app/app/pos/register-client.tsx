@@ -72,14 +72,15 @@ function printReceipt(r: Receipt) {
 
   const html =
     "<html><head><title>Receipt</title><style>" +
-    "body{font-family:monospace;font-size:12px;width:280px;margin:0 auto;padding:8px;color:#000}" +
-    "h2{text-align:center;font-size:14px;margin:4px 0}" +
+    "@page{size:80mm auto;margin:0}" +
+    "*{margin:0;padding:0;box-sizing:border-box}" +
+    "body{font-family:'Courier New',monospace;font-size:12px;line-height:1.35;width:80mm;padding:4mm 5mm;color:#000}" +
+    "h2{text-align:center;font-size:15px;margin-bottom:2px}" +
     "table{width:100%;border-collapse:collapse}" +
-    "td{padding:2px 0;vertical-align:top}" +
-    ".line{border-top:1px dashed #000;margin:6px 0}" +
-    ".tot td{font-weight:bold}" +
+    "td{padding:1px 0;vertical-align:top}" +
+    ".line{border-top:1px dashed #000;margin:5px 0}" +
+    ".tot td{font-weight:bold;font-size:13px}" +
     ".center{text-align:center}" +
-    "@media print{@page{margin:4mm}}" +
     "</style></head><body>" +
     "<h2>" +
     escapeHtml(r.businessName) +
@@ -115,12 +116,16 @@ function printReceipt(r: Receipt) {
     '<div class="center">Paid: ' +
     escapeHtml(r.paymentMethod) +
     "</div>" +
-    '<div class="center" style="margin-top:8px">Thank you!</div>' +
+    '<div class="center" style="margin-top:10px">Thank you!</div>' +
+    '<div class="center" style="margin-top:6px;font-size:18px">.</div>' +
     "</body></html>";
 
   win.document.write(html);
   win.document.close();
   win.focus();
+  win.onafterprint = function () {
+    win.close();
+  };
   win.print();
 }
 
