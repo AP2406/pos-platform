@@ -6,6 +6,7 @@ import { SidebarNav } from "./sidebar-nav";
 import { SignOutButton } from "./sign-out";
 import { ThemeToggle } from "./theme-toggle";
 import { PageTransition } from "./page-transition";
+import { OnboardingNudge } from "./onboarding-nudge";
 
 type NavItem = { href: string; label: string };
 
@@ -14,12 +15,14 @@ export function AppShell({
   industry,
   role,
   nav,
+  showOnboarding,
   children,
 }: {
   businessName: string;
   industry: string;
   role: string;
   nav: NavItem[];
+  showOnboarding?: boolean;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -124,6 +127,7 @@ export function AppShell({
       {/* Main */}
       <main className="flex-1 overflow-auto">
         <div className="max-w-7xl mx-auto px-5 md:px-8 pt-20 md:pt-8 pb-10">
+          {showOnboarding && <OnboardingNudge />}
           <PageTransition>{children}</PageTransition>
         </div>
       </main>
