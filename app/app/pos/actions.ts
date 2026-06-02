@@ -46,8 +46,6 @@ export async function createOrder(
   const { business } = await requireBusiness();
   const supabase = await createClient();
 
-  // If a customer was attached, confirm it belongs to this business and
-  // capture the name so the snapshot freezes it.
   let customerId: string | null = parsed.data.customer_id ?? null;
   let customerName: string | null = null;
   if (customerId) {
@@ -64,7 +62,6 @@ export async function createOrder(
     }
   }
 
-  // Link this sale to the open register/drawer session, if one is open.
   const { data: openSession } = await supabase
     .from("drawer_sessions")
     .select("id")
@@ -90,7 +87,6 @@ export async function createOrder(
 
   const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
 
-  // Tax rate may be stored as 0.13 or as 13 - handle both safely.
   let rate = Number(business.default_tax_rate) || 0;
   if (rate > 1) rate = rate / 100;
 
@@ -99,7 +95,6 @@ export async function createOrder(
   const total = Math.round((discountedSubtotal + tax + tip) * 100) / 100;
   const paymentMethod = parsed.data.payment_method ?? "cash";
 
-  // Concurrency-safe per-business sale number (atomic in the database).
   const { data: numData, error: numError } = await supabase.rpc(
     "next_sale_number",
     { p_business_id: business.id }
@@ -110,7 +105,6 @@ export async function createOrder(
   }
   const saleNumber = Number(numData);
 
-  // Immutable snapshot of the sale exactly as completed.
   const snapshot = {
     sale_number: saleNumber,
     items: parsed.data.items.map((i) => ({
@@ -166,6 +160,54 @@ export async function createOrder(
     console.error("createOrder lines:", linesError);
     await supabase.from("orders").delete().eq("id", order.id);
     return { error: "Could not save the order. Please try again." };
+  }
+
+  // Decrement stock for tracked items. A completed sale must never fail because
+  // of inventory bookkeeping, so problems here are logged, not surfaced.
+  try {
+    const itemIds = Array.from(
+      new Set(
+        parsed.data.items
+          .map((i) => i.catalog_item_id)
+          .filter((id): id is string => !!id)
+      )
+    );
+    if (itemIds.length > 0) {
+      const { data: tracked } = await supabase
+        .from("catalog_items")
+        .select("id, track_inventory")
+        .eq("business_id", business.id)
+        .in("id", itemIds);
+
+      const trackedSet = new Set(
+        (tracked ?? []).filter((r) => r.track_inventory).map((r) => r.id as string)
+      );
+
+      const qtyByItem: Record<string, number> = {};
+      for (const line of parsed.data.items) {
+        const id = line.catalog_item_id;
+        if (id && trackedSet.has(id)) {
+          qtyByItem[id] = (qtyByItem[id] || 0) + line.quantity;
+        }
+      }
+
+      for (const id of Object.keys(qtyByItem)) {
+        const qty = qtyByItem[id];
+        const { error: invError } = await supabase.rpc("apply_inventory_change", {
+          p_business_id: business.id,
+          p_item_id: id,
+          p_change: -qty,
+          p_reason: "sale",
+          p_note: null,
+          p_order_id: order.id,
+        });
+        if (invError) {
+          console.error("inventory decrement (order " + order.id + ", item " + id + "):", invError);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("inventory decrement block:", e);
   }
 
   revalidatePath("/app/pos");
