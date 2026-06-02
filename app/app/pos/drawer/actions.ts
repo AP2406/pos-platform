@@ -43,10 +43,14 @@ export async function openDrawerSession(
   return { ok: true };
 }
 
+type CloseResult =
+  | { ok: true; expected: number; counted: number; over_short: number }
+  | { error: string };
+
 export async function closeDrawerSession(input: {
   counted_cash: number;
   note?: string;
-}): Promise<{ ok: true; expected: number; counted: number; over_short: number } | { error: string }> {
+}): Promise<CloseResult> {
   const { business } = await requireBusiness();
   const supabase = await createClient();
 
@@ -60,16 +64,43 @@ export async function closeDrawerSession(input: {
     return { error: "There is no open register session to close." };
   }
 
-  const { data: orders } = await supabase
+  const { data: sessionOrders } = await supabase
     .from("orders")
-    .select("total, payment_method, status")
+    .select("id, total, payment_method, status")
     .eq("business_id", business.id)
     .eq("drawer_session_id", session.id);
 
+  const liveOrders = (sessionOrders ?? []).filter(
+    (o) => (o.status as string) !== "voided"
+  );
+  const orderIds = liveOrders.map((o) => o.id as string);
+
+  // Cash taken is the sum of the cash PORTION of each sale. Split tenders make
+  // a single order both cash and card, so we read from the payments ledger.
+  let payments: { order_id: string; method: string; amount: number }[] = [];
+  if (orderIds.length > 0) {
+    const { data: payData } = await supabase
+      .from("payments")
+      .select("order_id, method, amount")
+      .eq("business_id", business.id)
+      .in("order_id", orderIds);
+    payments = (payData ?? []).map((p) => ({
+      order_id: p.order_id as string,
+      method: p.method as string,
+      amount: Number(p.amount) || 0,
+    }));
+  }
+  const ordersWithPayments = new Set(payments.map((p) => p.order_id));
+
   let cashSales = 0;
-  for (const o of orders ?? []) {
+  for (const p of payments) {
+    if (p.method === "cash") cashSales += p.amount;
+  }
+  // Back-compat: sales recorded before the payments ledger have no rows; fall
+  // back to the single method stored on the order.
+  for (const o of liveOrders) {
     if (
-      (o.status as string) !== "voided" &&
+      !ordersWithPayments.has(o.id as string) &&
       (o.payment_method as string) === "cash"
     ) {
       cashSales += Number(o.total) || 0;

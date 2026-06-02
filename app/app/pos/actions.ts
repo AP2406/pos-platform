@@ -12,14 +12,27 @@ const lineSchema = z.object({
   quantity: z.coerce.number().int().min(1).max(1000),
 });
 
+const paymentLineSchema = z.object({
+  method: z.enum(["cash", "card", "other"]),
+  amount: z.coerce.number().min(0).max(1000000),
+  tendered: z.coerce.number().min(0).max(1000000).optional().nullable(),
+});
+
 const orderSchema = z.object({
   items: z.array(lineSchema).min(1, "Add at least one item."),
   tip: z.coerce.number().min(0).max(1000000).optional(),
   payment_method: z.enum(["cash", "card", "other"]).optional(),
+  payments: z.array(paymentLineSchema).optional(),
   discount_type: z.enum(["amount", "percent"]).optional(),
   discount_value: z.coerce.number().min(0).max(1000000).optional(),
   customer_id: z.string().uuid().optional().nullable(),
 });
+
+type PaymentInput = {
+  method: "cash" | "card" | "other";
+  amount: number;
+  tendered?: number | null;
+};
 
 type OrderInput = {
   items: {
@@ -30,14 +43,24 @@ type OrderInput = {
   }[];
   tip?: number;
   payment_method?: "cash" | "card" | "other";
+  payments?: PaymentInput[];
   discount_type?: "amount" | "percent";
   discount_value?: number;
   customer_id?: string | null;
 };
 
-export async function createOrder(
-  input: OrderInput
-): Promise<{ ok: true; id: string; sale_number: number } | { error: string }> {
+type Tender = {
+  method: "cash" | "card" | "other";
+  amount: number;
+  tendered: number | null;
+  change: number | null;
+};
+
+type CreateOrderResult =
+  | { ok: true; id: string; sale_number: number }
+  | { error: string };
+
+export async function createOrder(input: OrderInput): Promise<CreateOrderResult> {
   const parsed = orderSchema.safeParse(input);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid order." };
@@ -95,6 +118,52 @@ export async function createOrder(
   const total = Math.round((discountedSubtotal + tax + tip) * 100) / 100;
   const paymentMethod = parsed.data.payment_method ?? "cash";
 
+  // Resolve tender lines. If the register sent an explicit split, validate it
+  // covers the total to the cent; otherwise record a single payment for the
+  // whole total using the chosen method. Cash lines may carry a "tendered"
+  // amount (cash handed over) so change can be recorded.
+  let tenders: Tender[] = [];
+  const providedPayments = parsed.data.payments ?? [];
+  if (providedPayments.length > 0) {
+    const cleaned = providedPayments
+      .map((p) => ({
+        method: p.method,
+        amount: Math.round((Number(p.amount) || 0) * 100) / 100,
+        tendered:
+          p.tendered === null || p.tendered === undefined
+            ? null
+            : Math.round((Number(p.tendered) || 0) * 100) / 100,
+      }))
+      .filter((p) => p.amount > 0);
+
+    if (cleaned.length === 0) {
+      return { error: "Enter at least one payment amount." };
+    }
+
+    const sumCents = cleaned.reduce((s, p) => s + Math.round(p.amount * 100), 0);
+    if (sumCents !== Math.round(total * 100)) {
+      return {
+        error: "Payments must add up to the sale total of " + total.toFixed(2) + ".",
+      };
+    }
+
+    tenders = cleaned.map((p) => ({
+      method: p.method,
+      amount: p.amount,
+      tendered: p.method === "cash" ? p.tendered : null,
+      change:
+        p.method === "cash" && p.tendered !== null
+          ? Math.round((p.tendered - p.amount) * 100) / 100
+          : null,
+    }));
+  } else {
+    tenders = [{ method: paymentMethod, amount: total, tendered: null, change: null }];
+  }
+
+  const distinctMethods = Array.from(new Set(tenders.map((t) => t.method)));
+  const orderPaymentMethod =
+    distinctMethods.length > 1 ? "split" : distinctMethods[0];
+
   const { data: numData, error: numError } = await supabase.rpc(
     "next_sale_number",
     { p_business_id: business.id }
@@ -117,7 +186,13 @@ export async function createOrder(
     tax: { rate: rate, amount: tax },
     tip: tip,
     total: total,
-    payment_method: paymentMethod,
+    payment_method: orderPaymentMethod,
+    payments: tenders.map((t) => ({
+      method: t.method,
+      amount: t.amount,
+      tendered: t.tendered,
+      change: t.change,
+    })),
     customer: customerId ? { id: customerId, name: customerName } : null,
     completed_at: new Date().toISOString(),
   };
@@ -133,7 +208,7 @@ export async function createOrder(
       tax,
       tip,
       total,
-      payment_method: paymentMethod,
+      payment_method: orderPaymentMethod,
       customer_id: customerId,
       drawer_session_id: drawerSessionId,
       snapshot: snapshot,
@@ -160,6 +235,23 @@ export async function createOrder(
     console.error("createOrder lines:", linesError);
     await supabase.from("orders").delete().eq("id", order.id);
     return { error: "Could not save the order. Please try again." };
+  }
+
+  const paymentRows = tenders.map((t) => ({
+    business_id: business.id,
+    order_id: order.id,
+    method: t.method,
+    amount: t.amount,
+    tendered: t.tendered,
+    change_given: t.change,
+  }));
+
+  const { error: payError } = await supabase.from("payments").insert(paymentRows);
+  if (payError) {
+    console.error("createOrder payments:", payError);
+    await supabase.from("order_items").delete().eq("order_id", order.id);
+    await supabase.from("orders").delete().eq("id", order.id);
+    return { error: "Could not record payment. Please try again." };
   }
 
   // Decrement stock for tracked items. A completed sale must never fail because

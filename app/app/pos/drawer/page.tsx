@@ -6,6 +6,17 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+type OpenSession = {
+  id: string;
+  opened_at: string;
+  starting_cash: number;
+  cash: number;
+  card: number;
+  other: number;
+  expected: number;
+  count: number;
+};
+
 export default async function DrawerPage() {
   const { business } = await requireBusiness();
   const supabase = await createClient();
@@ -17,38 +28,54 @@ export default async function DrawerPage() {
     .eq("status", "open")
     .maybeSingle();
 
-  let open:
-    | null
-    | {
-        id: string;
-        opened_at: string;
-        starting_cash: number;
-        cash: number;
-        card: number;
-        other: number;
-        expected: number;
-        count: number;
-      } = null;
+  let open: OpenSession | null = null;
 
   if (sessionData) {
     const { data: orders } = await supabase
       .from("orders")
-      .select("total, payment_method, status")
+      .select("id, total, payment_method, status")
       .eq("business_id", business.id)
       .eq("drawer_session_id", sessionData.id);
+
+    const liveOrders = (orders ?? []).filter(
+      (o) => (o.status as string) !== "voided"
+    );
+    const count = liveOrders.length;
+    const orderIds = liveOrders.map((o) => o.id as string);
+
+    let payments: { order_id: string; method: string; amount: number }[] = [];
+    if (orderIds.length > 0) {
+      const { data: payData } = await supabase
+        .from("payments")
+        .select("order_id, method, amount")
+        .eq("business_id", business.id)
+        .in("order_id", orderIds);
+      payments = (payData ?? []).map((p) => ({
+        order_id: p.order_id as string,
+        method: p.method as string,
+        amount: Number(p.amount) || 0,
+      }));
+    }
+    const ordersWithPayments = new Set(payments.map((p) => p.order_id));
 
     let cash = 0;
     let card = 0;
     let other = 0;
-    let count = 0;
-    for (const o of orders ?? []) {
-      if ((o.status as string) === "voided") continue;
+
+    // Sales with a payments ledger (incl. split tenders) bucket by portion.
+    for (const p of payments) {
+      if (p.method === "cash") cash += p.amount;
+      else if (p.method === "card") card += p.amount;
+      else other += p.amount;
+    }
+    // Older sales without ledger rows fall back to the single method on order.
+    for (const o of liveOrders) {
+      if (ordersWithPayments.has(o.id as string)) continue;
       const t = Number(o.total) || 0;
       const m = (o.payment_method as string) || "cash";
       if (m === "cash") cash += t;
       else if (m === "card") card += t;
       else other += t;
-      count += 1;
     }
 
     const startingCash = Number(sessionData.starting_cash) || 0;
