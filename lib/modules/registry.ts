@@ -4,7 +4,7 @@
 export type ModuleKey =
   | "dashboard" | "jobs" | "customers" | "partners" | "drivers" | "vehicles"
   | "profit" | "leads" | "calendar" | "invoices" | "proposals"
-  | "pos" | "orders" | "catalog" | "staff" | "settings";
+  | "pos" | "orders" | "kitchen" | "catalog" | "staff" | "settings";
 
 export type Vocab = {
   job_singular: string;
@@ -46,6 +46,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
   proposals: { key: "proposals", href: "/app/proposals", staticLabel: "Proposals", icon: "doc" },
   pos: { key: "pos", href: "/app/pos", staticLabel: "POS", icon: "cash" },
   orders: { key: "orders", href: "/app/orders", staticLabel: "Orders", icon: "list" },
+  kitchen: { key: "kitchen", href: "/app/kitchen", staticLabel: "Kitchen", icon: "list" },
   catalog: { key: "catalog", href: "/app/catalog", staticLabel: "Catalog", icon: "grid" },
   staff: { key: "staff", href: "/app/staff", staticLabel: "Staff", icon: "users" },
   settings: { key: "settings", href: "/app/settings", staticLabel: "Settings", icon: "settings" },

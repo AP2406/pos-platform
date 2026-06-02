@@ -43,7 +43,7 @@ export const PRESETS: Record<string, Preset> = {
     ],
   },
   restaurant: {
-    modules: ["dashboard", "pos", "orders", "catalog", "customers", "staff", "settings"],
+    modules: ["dashboard", "pos", "orders", "kitchen", "catalog", "customers", "staff", "settings"],
     vocab: DEFAULT_VOCAB,
     labels: { catalog: "Menu" },
   },
