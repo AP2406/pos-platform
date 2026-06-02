@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createOrder, searchCustomers, quickCreateCustomer } from "./actions";
+import { DISCOUNT_REASONS } from "./reason-codes";
 
 type Variation = { id: string; name: string; price: number };
 type Item = { id: string; name: string; price: number; category: string | null; variations: Variation[] };
@@ -174,6 +175,8 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   const [tip, setTip] = useState("");
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
   const [discountValue, setDiscountValue] = useState("");
+  const [discountReason, setDiscountReason] = useState("");
+  const [discountReasonNote, setDiscountReasonNote] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "other">("cash");
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [customerQuery, setCustomerQuery] = useState("");
@@ -267,6 +270,8 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
     setCart([]);
     setTip("");
     setDiscountValue("");
+    setDiscountReason("");
+    setDiscountReasonNote("");
     setCustomer(null);
     setCustomerQuery("");
     setCustomerResults([]);
@@ -306,6 +311,10 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   const tipNum = parseFloat(tip) || 0;
   const total = Math.round((discountedSubtotal + tax + tipNum) * 100) / 100;
 
+  const discountReasonOk =
+    discount <= 0 ||
+    (discountReason !== "" && (discountReason !== "other" || discountReasonNote.trim().length > 0));
+
   // ---- Split tender helpers ----
   function newSplitLine(method: "cash" | "card" | "other"): SplitLine {
     const id = splitIdRef.current;
@@ -321,6 +330,10 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
     }
     if (total <= 0) {
       setError("Total must be more than zero.");
+      return;
+    }
+    if (discount > 0 && !discountReasonOk) {
+      setError("Choose a reason for the discount.");
       return;
     }
     setSplitLines([newSplitLine("cash"), newSplitLine("card")]);
@@ -379,6 +392,10 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
       setError("Add at least one item.");
       return;
     }
+    if (discount > 0 && !discountReasonOk) {
+      setError("Choose a reason for the discount.");
+      return;
+    }
     const attachedCustomer = customer;
     const snapItems = cart;
     const snapSubtotal = subtotal;
@@ -394,6 +411,9 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
         payment_method: method,
         discount_type: discountMode,
         discount_value: discountInput,
+        discount_reason_code: discount > 0 ? discountReason : undefined,
+        discount_reason_note:
+          discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
         customer_id: attachedCustomer ? attachedCustomer.id : null,
       });
       if ("error" in res) {
@@ -427,6 +447,10 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
     }
     if (total <= 0) {
       setError("Total must be more than zero.");
+      return;
+    }
+    if (discount > 0 && !discountReasonOk) {
+      setError("Choose a reason for the discount.");
       return;
     }
     const built = splitLines
@@ -464,6 +488,9 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
         payments: built.map((p) => ({ method: p.method, amount: p.amount, tendered: p.tendered })),
         discount_type: discountMode,
         discount_value: discountInput,
+        discount_reason_code: discount > 0 ? discountReason : undefined,
+        discount_reason_note:
+          discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
         customer_id: attachedCustomer ? attachedCustomer.id : null,
       });
       if ("error" in res) {
@@ -854,6 +881,32 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
                     </div>
                   )}
 
+                  {discount > 0 && (
+                    <div className="space-y-1 pt-1">
+                      <Label className="text-xs">Discount reason</Label>
+                      <select
+                        value={discountReason}
+                        onChange={(e) => setDiscountReason(e.target.value)}
+                        className="w-full h-8 rounded-md border border-border bg-transparent text-foreground px-2 text-sm"
+                      >
+                        <option value="">Select a reason...</option>
+                        {DISCOUNT_REASONS.map((r) => (
+                          <option key={r.code} value={r.code}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                      {discountReason === "other" && (
+                        <Input
+                          value={discountReasonNote}
+                          onChange={(e) => setDiscountReasonNote(e.target.value)}
+                          placeholder="Reason note"
+                          className="h-8"
+                        />
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Tax</span>
                     <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
@@ -960,7 +1013,11 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
 
                 {error && <p className="text-sm text-red-600">{error}</p>}
 
-                <Button className="w-full" onClick={handleComplete} disabled={pending || cart.length === 0}>
+                <Button
+                  className="w-full"
+                  onClick={handleComplete}
+                  disabled={pending || cart.length === 0 || (discount > 0 && !discountReasonOk)}
+                >
                   {pending ? "Recording..." : "Complete sale" + (total > 0 ? " - $" + total.toFixed(2) : "")}
                 </Button>
               </>

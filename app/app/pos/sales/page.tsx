@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { VoidButton } from "./void-button";
+import { VOID_REASONS, reasonLabel } from "../reason-codes";
 
 type Row = {
   id: string;
@@ -31,6 +32,11 @@ function money(n: number): string {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function voidReasonText(code: string, note: string): string {
+  if (code === "other") return note ? note : "Other";
+  return reasonLabel(VOID_REASONS, code);
 }
 
 export default async function SalesPage() {
@@ -94,6 +100,26 @@ export default async function SalesPage() {
   const other = byMethod("other");
 
   const list = rows.slice(0, 50);
+
+  // Pull the recorded reason for any voided sales on screen.
+  const voidedIds = list.filter((r) => r.status === "voided").map((r) => r.id);
+  const voidReasons: Record<string, string> = {};
+  if (voidedIds.length > 0) {
+    const { data: voidEvents } = await supabase
+      .from("audit_events")
+      .select("order_id, reason_code, reason_note, created_at")
+      .eq("business_id", business.id)
+      .eq("action", "void")
+      .in("order_id", voidedIds)
+      .order("created_at", { ascending: false });
+    for (const e of voidEvents ?? []) {
+      const oid = (e.order_id as string | null) ?? "";
+      if (!oid || voidReasons[oid]) continue;
+      const code = (e.reason_code as string | null) ?? "";
+      const note = (e.reason_note as string | null) ?? "";
+      voidReasons[oid] = voidReasonText(code, note);
+    }
+  }
 
   return (
     <div>
@@ -201,11 +227,18 @@ export default async function SalesPage() {
                       method}
                   </div>
                 </div>
-                <div className="shrink-0">
+                <div className="shrink-0 text-right">
                   {voided ? (
-                    <span className="text-xs text-muted-foreground">
-                      {"Ref: " + o.id.slice(0, 8)}
-                    </span>
+                    <>
+                      {voidReasons[o.id] && (
+                        <div className="text-xs text-muted-foreground max-w-[160px] truncate">
+                          {voidReasons[o.id]}
+                        </div>
+                      )}
+                      <div className="text-xs text-muted-foreground">
+                        {"Ref: " + o.id.slice(0, 8)}
+                      </div>
+                    </>
                   ) : (
                     <VoidButton orderId={o.id} />
                   )}

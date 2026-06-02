@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { VOID_REASONS, DISCOUNT_REASONS, isValidReason } from "./reason-codes";
 
 const lineSchema = z.object({
   catalog_item_id: z.string().uuid().optional().nullable(),
@@ -25,6 +26,8 @@ const orderSchema = z.object({
   payments: z.array(paymentLineSchema).optional(),
   discount_type: z.enum(["amount", "percent"]).optional(),
   discount_value: z.coerce.number().min(0).max(1000000).optional(),
+  discount_reason_code: z.string().max(60).optional(),
+  discount_reason_note: z.string().max(500).optional(),
   customer_id: z.string().uuid().optional().nullable(),
 });
 
@@ -46,6 +49,8 @@ type OrderInput = {
   payments?: PaymentInput[];
   discount_type?: "amount" | "percent";
   discount_value?: number;
+  discount_reason_code?: string;
+  discount_reason_note?: string;
   customer_id?: string | null;
 };
 
@@ -66,7 +71,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     return { error: parsed.error.issues[0]?.message ?? "Invalid order." };
   }
 
-  const { business } = await requireBusiness();
+  const { business, role } = await requireBusiness();
   const supabase = await createClient();
 
   let customerId: string | null = parsed.data.customer_id ?? null;
@@ -108,6 +113,18 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   if (discount > subtotal) discount = subtotal;
   discount = Math.round(discount * 100) / 100;
 
+  // A discount is a sensitive action: require a reason before the sale records.
+  const discountReasonCode = (parsed.data.discount_reason_code || "").trim();
+  const discountReasonNote = (parsed.data.discount_reason_note || "").trim();
+  if (discount > 0) {
+    if (!isValidReason(DISCOUNT_REASONS, discountReasonCode)) {
+      return { error: "Choose a reason for the discount." };
+    }
+    if (discountReasonCode === "other" && !discountReasonNote) {
+      return { error: "Add a note explaining the discount." };
+    }
+  }
+
   const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
 
   let rate = Number(business.default_tax_rate) || 0;
@@ -120,8 +137,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
 
   // Resolve tender lines. If the register sent an explicit split, validate it
   // covers the total to the cent; otherwise record a single payment for the
-  // whole total using the chosen method. Cash lines may carry a "tendered"
-  // amount (cash handed over) so change can be recorded.
+  // whole total using the chosen method.
   let tenders: Tender[] = [];
   const providedPayments = parsed.data.payments ?? [];
   if (providedPayments.length > 0) {
@@ -182,7 +198,13 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       quantity: i.quantity,
     })),
     subtotal: Math.round(subtotal * 100) / 100,
-    discount: { type: discountType, value: discountValue, amount: discount },
+    discount: {
+      type: discountType,
+      value: discountValue,
+      amount: discount,
+      reason_code: discount > 0 ? discountReasonCode : null,
+      reason_note: discount > 0 && discountReasonNote ? discountReasonNote : null,
+    },
     tax: { rate: rate, amount: tax },
     tip: tip,
     total: total,
@@ -254,6 +276,27 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     return { error: "Could not record payment. Please try again." };
   }
 
+  // Log the discount as a sensitive action. The sale is already committed, so a
+  // failed audit write is logged, not surfaced.
+  if (discount > 0) {
+    const {
+      data: { user: discUser },
+    } = await supabase.auth.getUser();
+    const { error: discAuditError } = await supabase.from("audit_events").insert({
+      business_id: business.id,
+      actor_id: discUser ? discUser.id : null,
+      actor_role: role,
+      action: "discount",
+      order_id: order.id,
+      reason_code: discountReasonCode,
+      reason_note: discountReasonNote ? discountReasonNote.slice(0, 500) : null,
+      metadata: { type: discountType, value: discountValue, amount: discount },
+    });
+    if (discAuditError) {
+      console.error("createOrder discount audit:", discAuditError);
+    }
+  }
+
   // Decrement stock for tracked items. A completed sale must never fail because
   // of inventory bookkeeping, so problems here are logged, not surfaced.
   try {
@@ -307,7 +350,9 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
 }
 
 export async function voidOrder(
-  orderId: string
+  orderId: string,
+  reasonCode: string,
+  reasonNote?: string
 ): Promise<{ ok: true } | { error: string }> {
   if (!orderId) return { error: "Missing order." };
 
@@ -316,7 +361,20 @@ export async function voidOrder(
     return { error: "Only an owner or manager can void a sale." };
   }
 
+  const code = (reasonCode || "").trim();
+  if (!isValidReason(VOID_REASONS, code)) {
+    return { error: "Choose a reason for voiding this sale." };
+  }
+  const note = (reasonNote || "").trim();
+  if (code === "other" && !note) {
+    return { error: "Add a note explaining the reason." };
+  }
+
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const { error } = await supabase
     .from("orders")
     .update({ status: "voided" })
@@ -326,6 +384,20 @@ export async function voidOrder(
   if (error) {
     console.error("voidOrder:", error);
     return { error: "Could not void the sale. Please try again." };
+  }
+
+  const { error: auditError } = await supabase.from("audit_events").insert({
+    business_id: business.id,
+    actor_id: user ? user.id : null,
+    actor_role: role,
+    action: "void",
+    order_id: orderId,
+    reason_code: code,
+    reason_note: note ? note.slice(0, 500) : null,
+    metadata: {},
+  });
+  if (auditError) {
+    console.error("voidOrder audit:", auditError);
   }
 
   revalidatePath("/app/pos/sales");
