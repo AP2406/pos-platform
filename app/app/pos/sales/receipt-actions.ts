@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
-import { sendEmail } from "@/lib/services/email";
+import { sendEmail, isEmailConfigured } from "@/lib/services/email";
 
 function money(n: number): string {
   return "$" + (Math.round((Number(n) || 0) * 100) / 100).toFixed(2);
@@ -101,6 +101,10 @@ export async function emailReceipt(
   const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to);
   if (!emailOk) return { error: "Enter a valid email address." };
 
+  if (!isEmailConfigured()) {
+    return { error: "Email isn't set up yet (missing RESEND_API_KEY)." };
+  }
+
   const { business } = await requireBusiness();
   const supabase = await createClient();
 
@@ -123,7 +127,10 @@ export async function emailReceipt(
     business.name +
     (order.sale_number != null ? " - Sale #" + order.sale_number : "");
 
-  const sent = await sendEmail({ to: to, subject: subject, html: html });
+  const from =
+    process.env.RECEIPT_FROM_EMAIL || business.name + " <onboarding@resend.dev>";
+
+  const sent = await sendEmail({ to: to, from: from, subject: subject, html: html });
 
   const {
     data: { user },
@@ -146,7 +153,7 @@ export async function emailReceipt(
     order_id: orderId,
     to_email: to,
     status: "sent",
-    provider_id: sent.id,
+    provider_id: null,
     sent_by: user ? user.id : null,
   });
 
