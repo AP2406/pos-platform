@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,18 @@ type CartLine = {
   quantity: number;
 };
 type Customer = { id: string; name: string };
+type PaymentLine = {
+  method: string;
+  amount: number;
+  tendered: number | null;
+  change: number | null;
+};
+type SplitLine = {
+  id: number;
+  method: "cash" | "card" | "other";
+  amount: string;
+  cashGiven: string;
+};
 type Receipt = {
   id: string;
   saleNumber: number;
@@ -28,8 +40,20 @@ type Receipt = {
   tip: number;
   total: number;
   paymentMethod: string;
+  payments: PaymentLine[];
   at: string;
 };
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function methodLabel(m: string): string {
+  if (m === "cash") return "Cash";
+  if (m === "card") return "Card";
+  if (m === "split") return "Split";
+  return "Other";
+}
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -59,6 +83,27 @@ function printReceipt(r: Receipt) {
         r.discount.toFixed(2) +
         "</td></tr>"
       : "";
+
+  const payRows = r.payments
+    .map(function (p) {
+      var line =
+        "<tr><td>" +
+        escapeHtml(methodLabel(p.method)) +
+        '</td><td style="text-align:right">$' +
+        p.amount.toFixed(2) +
+        "</td></tr>";
+      if (p.method === "cash" && p.change !== null && p.change > 0) {
+        line +=
+          '<tr><td style="font-size:10px">Cash given</td><td style="text-align:right;font-size:10px">$' +
+          (p.tendered || 0).toFixed(2) +
+          "</td></tr>" +
+          '<tr><td style="font-size:10px">Change</td><td style="text-align:right;font-size:10px">$' +
+          p.change.toFixed(2) +
+          "</td></tr>";
+      }
+      return line;
+    })
+    .join("");
 
   const customerLine = r.customerName
     ? '<div class="center" style="font-size:11px">Customer: ' +
@@ -111,9 +156,10 @@ function printReceipt(r: Receipt) {
     "</td></tr>" +
     "</table>" +
     '<div class="line"></div>' +
-    '<div class="center">Paid: ' +
-    escapeHtml(r.paymentMethod) +
-    "</div>" +
+    '<div class="center" style="font-size:11px;margin-bottom:2px">Payment</div>' +
+    "<table>" +
+    payRows +
+    "</table>" +
     '<div class="center" style="margin-top:8px">Thank you!</div>' +
     "</body></html>";
 
@@ -135,9 +181,12 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [pickerItem, setPickerItem] = useState<Item | null>(null);
+  const [splitOpen, setSplitOpen] = useState(false);
+  const [splitLines, setSplitLines] = useState<SplitLine[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [pending, startTransition] = useTransition();
+  const splitIdRef = useRef(1);
 
   useEffect(() => {
     if (customer) return;
@@ -257,6 +306,73 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   const tipNum = parseFloat(tip) || 0;
   const total = Math.round((discountedSubtotal + tax + tipNum) * 100) / 100;
 
+  // ---- Split tender helpers ----
+  function newSplitLine(method: "cash" | "card" | "other"): SplitLine {
+    const id = splitIdRef.current;
+    splitIdRef.current = id + 1;
+    return { id: id, method: method, amount: "", cashGiven: "" };
+  }
+
+  function openSplit() {
+    setError(null);
+    if (cart.length === 0) {
+      setError("Add at least one item.");
+      return;
+    }
+    if (total <= 0) {
+      setError("Total must be more than zero.");
+      return;
+    }
+    setSplitLines([newSplitLine("cash"), newSplitLine("card")]);
+    setSplitOpen(true);
+  }
+
+  function closeSplit() {
+    setSplitOpen(false);
+    setSplitLines([]);
+  }
+
+  function updateSplitLine(id: number, patch: Partial<SplitLine>) {
+    setSplitLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  }
+
+  function removeSplitLine(id: number) {
+    setSplitLines((prev) => (prev.length <= 1 ? prev : prev.filter((l) => l.id !== id)));
+  }
+
+  function addSplitLine(method: "cash" | "card" | "other") {
+    setSplitLines((prev) => [...prev, newSplitLine(method)]);
+  }
+
+  function setRest(id: number) {
+    setSplitLines((prev) => {
+      const otherCents = prev
+        .filter((l) => l.id !== id)
+        .reduce((s, l) => s + Math.round((parseFloat(l.amount) || 0) * 100), 0);
+      let restCents = Math.round(total * 100) - otherCents;
+      if (restCents < 0) restCents = 0;
+      const rest = (restCents / 100).toFixed(2);
+      return prev.map((l) => (l.id === id ? { ...l, amount: rest } : l));
+    });
+  }
+
+  const splitSumCents = splitLines.reduce(
+    (s, l) => s + Math.round((parseFloat(l.amount) || 0) * 100),
+    0
+  );
+  const splitRemainingCents = Math.round(total * 100) - splitSumCents;
+  const splitRemaining = splitRemainingCents / 100;
+  const splitCanComplete = total > 0 && splitRemainingCents === 0 && splitSumCents > 0;
+
+  function lineChange(l: SplitLine): number | null {
+    if (l.method !== "cash") return null;
+    const given = l.cashGiven.trim() ? Math.round((parseFloat(l.cashGiven) || 0) * 100) / 100 : null;
+    if (given === null) return null;
+    const amt = Math.round((parseFloat(l.amount) || 0) * 100) / 100;
+    const change = Math.round((given - amt) * 100) / 100;
+    return change > 0 ? change : 0;
+  }
+
   function handleComplete() {
     setError(null);
     if (cart.length === 0) {
@@ -264,11 +380,18 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
       return;
     }
     const attachedCustomer = customer;
+    const snapItems = cart;
+    const snapSubtotal = subtotal;
+    const snapDiscount = discount;
+    const snapTax = tax;
+    const snapTip = tipNum;
+    const snapTotal = total;
+    const method = paymentMethod;
     startTransition(async () => {
       const res = await createOrder({
         items: cart,
         tip: tipNum,
-        payment_method: paymentMethod,
+        payment_method: method,
         discount_type: discountMode,
         discount_value: discountInput,
         customer_id: attachedCustomer ? attachedCustomer.id : null,
@@ -282,15 +405,88 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
         saleNumber: res.sale_number,
         businessName,
         customerName: attachedCustomer ? attachedCustomer.name : null,
-        items: cart,
-        subtotal,
-        discount,
-        tax,
-        tip: tipNum,
-        total,
-        paymentMethod,
+        items: snapItems,
+        subtotal: snapSubtotal,
+        discount: snapDiscount,
+        tax: snapTax,
+        tip: snapTip,
+        total: snapTotal,
+        paymentMethod: method,
+        payments: [{ method: method, amount: snapTotal, tendered: null, change: null }],
         at: new Date().toLocaleString(),
       });
+      clearCart();
+    });
+  }
+
+  function handleCompleteSplit() {
+    setError(null);
+    if (cart.length === 0) {
+      setError("Add at least one item.");
+      return;
+    }
+    if (total <= 0) {
+      setError("Total must be more than zero.");
+      return;
+    }
+    const built = splitLines
+      .map((l) => {
+        const amt = Math.round((parseFloat(l.amount) || 0) * 100) / 100;
+        const givenRaw = l.cashGiven.trim()
+          ? Math.round((parseFloat(l.cashGiven) || 0) * 100) / 100
+          : null;
+        const tendered = l.method === "cash" ? givenRaw : null;
+        const change =
+          l.method === "cash" && tendered !== null
+            ? Math.round((tendered - amt) * 100) / 100
+            : null;
+        return { method: l.method, amount: amt, tendered: tendered, change: change };
+      })
+      .filter((p) => p.amount > 0);
+
+    const sumCents = built.reduce((s, p) => s + Math.round(p.amount * 100), 0);
+    if (sumCents !== Math.round(total * 100)) {
+      setError("Split amounts must add up to the total.");
+      return;
+    }
+
+    const attachedCustomer = customer;
+    const snapItems = cart;
+    const snapSubtotal = subtotal;
+    const snapDiscount = discount;
+    const snapTax = tax;
+    const snapTip = tipNum;
+    const snapTotal = total;
+    startTransition(async () => {
+      const res = await createOrder({
+        items: cart,
+        tip: tipNum,
+        payments: built.map((p) => ({ method: p.method, amount: p.amount, tendered: p.tendered })),
+        discount_type: discountMode,
+        discount_value: discountInput,
+        customer_id: attachedCustomer ? attachedCustomer.id : null,
+      });
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      setReceipt({
+        id: res.id,
+        saleNumber: res.sale_number,
+        businessName,
+        customerName: attachedCustomer ? attachedCustomer.name : null,
+        items: snapItems,
+        subtotal: snapSubtotal,
+        discount: snapDiscount,
+        tax: snapTax,
+        tip: snapTip,
+        total: snapTotal,
+        paymentMethod: "split",
+        payments: built,
+        at: new Date().toLocaleString(),
+      });
+      setSplitOpen(false);
+      setSplitLines([]);
       clearCart();
     });
   }
@@ -329,6 +525,148 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {splitOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={closeSplit}
+        >
+          <div
+            className="bg-card border border-border rounded-lg p-4 w-full max-w-sm max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-medium">Split payment</h3>
+              <button
+                type="button"
+                onClick={closeSplit}
+                className="text-xs text-muted-foreground underline"
+              >
+                Cancel
+              </button>
+            </div>
+            <div className="text-sm text-muted-foreground mb-3">
+              {"Total $" + total.toFixed(2)}
+            </div>
+
+            <div className="space-y-2">
+              {splitLines.map((l) => {
+                const change = lineChange(l);
+                return (
+                  <div key={l.id} className="rounded-md border border-border p-2 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex rounded-md border border-border overflow-hidden text-xs">
+                        {(["cash", "card", "other"] as const).map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => updateSplitLine(l.id, { method: m })}
+                            className={"px-2 py-1 " + (l.method === m ? "bg-accent font-medium" : "hover:bg-accent/50")}
+                          >
+                            {methodLabel(m)}
+                          </button>
+                        ))}
+                      </div>
+                      {splitLines.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeSplitLine(l.id)}
+                          className="text-xs text-muted-foreground underline hover:text-foreground"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={l.amount}
+                        onChange={(e) => updateSplitLine(l.id, { amount: e.target.value })}
+                        placeholder="0.00"
+                        className="flex-1 h-8 text-right"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setRest(l.id)}
+                        className="px-2 py-1 text-xs rounded-md border border-border hover:bg-accent whitespace-nowrap"
+                      >
+                        Rest
+                      </button>
+                    </div>
+                    {l.method === "cash" && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Cash given</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={l.cashGiven}
+                          onChange={(e) => updateSplitLine(l.id, { cashGiven: e.target.value })}
+                          placeholder="optional"
+                          className="w-28 h-8 text-right"
+                        />
+                      </div>
+                    )}
+                    {change !== null && change > 0 && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Change</span>
+                        <span className="tabular-nums">{"$" + change.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => addSplitLine("cash")}
+                className="flex-1 px-2 py-1 text-xs rounded-md border border-border hover:bg-accent"
+              >
+                + Cash
+              </button>
+              <button
+                type="button"
+                onClick={() => addSplitLine("card")}
+                className="flex-1 px-2 py-1 text-xs rounded-md border border-border hover:bg-accent"
+              >
+                + Card
+              </button>
+              <button
+                type="button"
+                onClick={() => addSplitLine("other")}
+                className="flex-1 px-2 py-1 text-xs rounded-md border border-border hover:bg-accent"
+              >
+                + Other
+              </button>
+            </div>
+
+            <div className="flex justify-between text-sm mt-3 pt-2 border-t border-border">
+              <span className="text-muted-foreground">Allocated</span>
+              <span className="tabular-nums">{"$" + (splitSumCents / 100).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm font-medium">
+              <span>{splitRemainingCents < 0 ? "Over by" : "Remaining"}</span>
+              <span className={"tabular-nums " + (splitRemainingCents === 0 ? "text-emerald-500" : "text-red-500")}>
+                {"$" + Math.abs(splitRemaining).toFixed(2)}
+              </span>
+            </div>
+
+            {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+
+            <Button
+              className="w-full mt-3"
+              onClick={handleCompleteSplit}
+              disabled={pending || !splitCanComplete}
+            >
+              {pending ? "Recording..." : "Complete split sale - $" + total.toFixed(2)}
+            </Button>
           </div>
         </div>
       )}
@@ -399,6 +737,19 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
                   <div className="flex justify-between font-semibold pt-2 border-t border-border">
                     <span>Total</span>
                     <span className="tabular-nums">{"$" + receipt.total.toFixed(2)}</span>
+                  </div>
+                  <div className="pt-2 border-t border-border space-y-1">
+                    {receipt.payments.map((p, i) => (
+                      <div key={i} className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">
+                          {methodLabel(p.method)}
+                          {p.method === "cash" && p.change !== null && p.change > 0
+                            ? " (change $" + p.change.toFixed(2) + ")"
+                            : ""}
+                        </span>
+                        <span className="tabular-nums">{"$" + p.amount.toFixed(2)}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -597,6 +948,14 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
                       </button>
                     ))}
                   </div>
+                  <button
+                    type="button"
+                    onClick={openSplit}
+                    disabled={cart.length === 0}
+                    className="w-full px-2 py-2 text-sm rounded-md border border-border hover:border-foreground/40 transition-colors disabled:opacity-50"
+                  >
+                    Split payment...
+                  </button>
                 </div>
 
                 {error && <p className="text-sm text-red-600">{error}</p>}
