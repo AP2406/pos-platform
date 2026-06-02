@@ -21,14 +21,18 @@ export default async function AppLayout({
     driversEnabled: business.drivers_enabled,
   }).map((item) => ({ href: item.href, label: item.label }));
 
-  // Activity log: owner/manager only, and only where POS is in use (so it
-  // never appears on the transportation vertical's sidebar).
-  const canSeeAudit = role === "owner" || role === "manager";
+  // POS-only extras: Reports for everyone, Activity log for owner/manager.
+  // Gated to businesses that actually use POS so the transportation vertical's
+  // sidebar is untouched.
   const hasPos = nav.some((n) => n.href === "/app/pos");
-  const finalNav =
-    canSeeAudit && hasPos
-      ? [...nav, { href: "/app/audit", label: "Activity log" }]
-      : nav;
+  const extras: { href: string; label: string }[] = [];
+  if (hasPos) {
+    extras.push({ href: "/app/reports", label: "Reports" });
+    if (role === "owner" || role === "manager") {
+      extras.push({ href: "/app/audit", label: "Activity log" });
+    }
+  }
+  const finalNav = [...nav, ...extras];
 
   const vocab = getVocab(businessConfig);
   const fields = getFields(businessConfig);

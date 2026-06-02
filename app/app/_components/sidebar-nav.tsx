@@ -14,6 +14,7 @@ import {
   Package,
   UserCog,
   ScrollText,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 
@@ -29,6 +30,7 @@ const iconMap: Record<string, LucideIcon> = {
   "/app/catalog": Package,
   "/app/staff": UserCog,
   "/app/audit": ScrollText,
+  "/app/reports": BarChart3,
 };
 
 type NavItem = { href: string; label: string };
