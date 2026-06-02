@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import {
   createCatalogItem,
   setCatalogItemActive,
+  setCatalogItemBarcode,
 } from "./actions";
 
 type Item = {
@@ -14,6 +15,7 @@ type Item = {
   name: string;
   price: number;
   category: string | null;
+  barcode: string | null;
   is_active: boolean;
 };
 
@@ -22,8 +24,12 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("");
+  const [barcode, setBarcode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBarcode, setEditBarcode] = useState("");
 
   function handleAdd() {
     setError(null);
@@ -36,6 +42,7 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
         name,
         price: parseFloat(price) || 0,
         category,
+        barcode,
       });
       if ("error" in res) {
         setError(res.error);
@@ -48,12 +55,14 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
           name: name.trim(),
           price: parseFloat(price) || 0,
           category: category.trim() || null,
+          barcode: barcode.trim() || null,
           is_active: true,
         },
       ]);
       setName("");
       setPrice("");
       setCategory("");
+      setBarcode("");
     });
   }
 
@@ -70,11 +79,37 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
     });
   }
 
+  function startEditBarcode(item: Item) {
+    setEditingId(item.id);
+    setEditBarcode(item.barcode || "");
+  }
+
+  function cancelEditBarcode() {
+    setEditingId(null);
+    setEditBarcode("");
+  }
+
+  function saveBarcode(item: Item) {
+    const value = editBarcode.trim();
+    startTransition(async () => {
+      const res = await setCatalogItemBarcode(item.id, value);
+      if (!("error" in res)) {
+        setItems((prev) =>
+          prev.map((i) =>
+            i.id === item.id ? { ...i, barcode: value || null } : i
+          )
+        );
+        setEditingId(null);
+        setEditBarcode("");
+      }
+    });
+  }
+
   return (
     <div className="space-y-4 max-w-2xl">
       <div className="bg-card border border-border rounded-lg p-6">
         <h2 className="text-sm font-medium mb-3">Add an item</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="space-y-1">
             <Label htmlFor="item-name" className="text-xs">
               Name
@@ -111,6 +146,17 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
               placeholder="Services"
             />
           </div>
+          <div className="space-y-1">
+            <Label htmlFor="item-barcode" className="text-xs">
+              Barcode (optional)
+            </Label>
+            <Input
+              id="item-barcode"
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              placeholder="Scan or type"
+            />
+          </div>
         </div>
         <div className="mt-3">
           <Button onClick={handleAdd} disabled={pending || !name.trim()}>
@@ -129,33 +175,72 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
         ) : (
           <div className="divide-y divide-border">
             {items.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between py-3"
-              >
-                <div>
-                  <div
-                    className={
-                      "font-medium " +
-                      (item.is_active ? "" : "text-muted-foreground line-through")
-                    }
+              <div key={item.id} className="py-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div
+                      className={
+                        "font-medium " +
+                        (item.is_active
+                          ? ""
+                          : "text-muted-foreground line-through")
+                      }
+                    >
+                      {item.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {"$" +
+                        item.price.toFixed(2) +
+                        (item.category ? " - " + item.category : "")}
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleToggleActive(item)}
+                    disabled={pending}
                   >
-                    {item.name}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {"$" +
-                      item.price.toFixed(2) +
-                      (item.category ? " - " + item.category : "")}
-                  </div>
+                    {item.is_active ? "Disable" : "Enable"}
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleToggleActive(item)}
-                  disabled={pending}
-                >
-                  {item.is_active ? "Disable" : "Enable"}
-                </Button>
+
+                <div className="mt-2">
+                  {editingId === item.id ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={editBarcode}
+                        onChange={(e) => setEditBarcode(e.target.value)}
+                        placeholder="Scan or type barcode"
+                        className="h-8 max-w-xs"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => saveBarcode(item)}
+                        disabled={pending}
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={cancelEditBarcode}
+                        disabled={pending}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => startEditBarcode(item)}
+                      className="text-xs text-muted-foreground underline hover:text-foreground"
+                    >
+                      {item.barcode
+                        ? "Barcode: " + item.barcode
+                        : "Add barcode"}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

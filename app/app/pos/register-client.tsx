@@ -1,12 +1,18 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createOrder, searchCustomers, quickCreateCustomer } from "./actions";
 
-type Item = { id: string; name: string; price: number; category: string | null };
+type Item = {
+  id: string;
+  name: string;
+  price: number;
+  category: string | null;
+  barcode: string | null;
+};
 type CartLine = {
   catalog_item_id: string | null;
   name: string;
@@ -145,6 +151,11 @@ export function RegisterClient({
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [pending, startTransition] = useTransition();
+  const [scanFeedback, setScanFeedback] = useState<string | null>(null);
+
+  // Keep latest items available to the scanner listener without re-binding it.
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
 
   useEffect(() => {
     if (customer) return;
@@ -167,6 +178,63 @@ export function RegisterClient({
       clearTimeout(t);
     };
   }, [customerQuery, customer]);
+
+  // Barcode scanner support. USB/Bluetooth scanners act like keyboards:
+  // they type the code very fast and then send Enter. We buffer the rapid
+  // keystrokes and, on Enter, look up the matching item and add it to the
+  // cart. We ignore keystrokes while a text field is focused so manual
+  // typing is never mistaken for a scan.
+  useEffect(() => {
+    let buffer = "";
+    let lastKeyTime = 0;
+
+    function handleScan(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) {
+          return;
+        }
+      }
+
+      const now = Date.now();
+      if (now - lastKeyTime > 100) {
+        buffer = "";
+      }
+      lastKeyTime = now;
+
+      if (e.key === "Enter") {
+        if (buffer.length >= 3) {
+          const code = buffer;
+          const match = itemsRef.current.find((it) => it.barcode === code);
+          if (match) {
+            addItem(match);
+            setScanFeedback("Added: " + match.name);
+          } else {
+            setScanFeedback("No item for barcode " + code);
+          }
+        }
+        buffer = "";
+        return;
+      }
+
+      if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    }
+
+    window.addEventListener("keydown", handleScan);
+    return () => window.removeEventListener("keydown", handleScan);
+    // addItem only uses stable state setters, so binding once is safe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Clear the scan message after a moment.
+  useEffect(() => {
+    if (!scanFeedback) return;
+    const t = setTimeout(() => setScanFeedback(null), 2000);
+    return () => clearTimeout(t);
+  }, [scanFeedback]);
 
   function addItem(item: Item) {
     setReceipt(null);
@@ -286,6 +354,11 @@ export function RegisterClient({
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2">
         <div className="bg-card border border-border rounded-lg p-4">
+          {scanFeedback && (
+            <div className="mb-3 text-xs px-3 py-2 rounded-md bg-accent text-foreground">
+              {scanFeedback}
+            </div>
+          )}
           {items.length === 0 ? (
             <p className="text-sm text-muted-foreground p-4">
               No items yet. Add some in the Catalog first.

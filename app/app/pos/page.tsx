@@ -8,7 +8,7 @@ export default async function PosPage() {
 
   const { data } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category")
+    .select("id, name, price, category, barcode")
     .eq("business_id", business.id)
     .eq("is_active", true)
     .order("name", { ascending: true });
@@ -18,6 +18,7 @@ export default async function PosPage() {
     name: i.name as string,
     price: Number(i.price),
     category: (i.category as string | null) ?? null,
+    barcode: (i.barcode as string | null) ?? null,
   }));
 
   let taxRate = Number(business.default_tax_rate) || 0;

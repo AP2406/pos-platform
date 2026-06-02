@@ -9,9 +9,15 @@ const itemSchema = z.object({
   name: z.string().min(1, "Name is required").max(120),
   price: z.coerce.number().min(0).max(1000000),
   category: z.string().max(60).optional().or(z.literal("")),
+  barcode: z.string().max(64).optional().or(z.literal("")),
 });
 
-type ItemInput = { name: string; price: number; category?: string };
+type ItemInput = {
+  name: string;
+  price: number;
+  category?: string;
+  barcode?: string;
+};
 
 export async function createCatalogItem(
   input: ItemInput
@@ -29,6 +35,7 @@ export async function createCatalogItem(
       name: parsed.data.name,
       price: parsed.data.price,
       category: parsed.data.category || null,
+      barcode: parsed.data.barcode || null,
     })
     .select("id")
     .single();
@@ -56,6 +63,7 @@ export async function updateCatalogItem(
       name: parsed.data.name,
       price: parsed.data.price,
       category: parsed.data.category || null,
+      barcode: parsed.data.barcode || null,
     })
     .eq("id", id);
   if (error) {
@@ -79,6 +87,25 @@ export async function setCatalogItemActive(
   if (error) {
     console.error("setCatalogItemActive:", error);
     return { error: "Could not update item." };
+  }
+  revalidatePath("/app/catalog");
+  return { ok: true };
+}
+
+export async function setCatalogItemBarcode(
+  id: string,
+  barcode: string
+): Promise<{ ok: true } | { error: string }> {
+  await requireBusiness();
+  const supabase = await createClient();
+  const clean = barcode.trim();
+  const { error } = await supabase
+    .from("catalog_items")
+    .update({ barcode: clean || null })
+    .eq("id", id);
+  if (error) {
+    console.error("setCatalogItemBarcode:", error);
+    return { error: "Could not save barcode." };
   }
   revalidatePath("/app/catalog");
   return { ok: true };
