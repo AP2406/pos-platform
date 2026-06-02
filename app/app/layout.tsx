@@ -21,6 +21,15 @@ export default async function AppLayout({
     driversEnabled: business.drivers_enabled,
   }).map((item) => ({ href: item.href, label: item.label }));
 
+  // Activity log: owner/manager only, and only where POS is in use (so it
+  // never appears on the transportation vertical's sidebar).
+  const canSeeAudit = role === "owner" || role === "manager";
+  const hasPos = nav.some((n) => n.href === "/app/pos");
+  const finalNav =
+    canSeeAudit && hasPos
+      ? [...nav, { href: "/app/audit", label: "Activity log" }]
+      : nav;
+
   const vocab = getVocab(businessConfig);
   const fields = getFields(businessConfig);
 
@@ -30,7 +39,7 @@ export default async function AppLayout({
         businessName={business.name}
         industry={business.industry}
         role={role}
-        nav={nav}
+        nav={finalNav}
       >
         {children}
       </AppShell>

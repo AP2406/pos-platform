@@ -13,6 +13,7 @@ import {
   ShoppingBag,
   Package,
   UserCog,
+  ScrollText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -27,6 +28,7 @@ const iconMap: Record<string, LucideIcon> = {
   "/app/orders": ShoppingBag,
   "/app/catalog": Package,
   "/app/staff": UserCog,
+  "/app/audit": ScrollText,
 };
 
 type NavItem = { href: string; label: string };
