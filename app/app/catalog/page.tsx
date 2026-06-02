@@ -6,19 +6,37 @@ export default async function CatalogPage() {
   const { business } = await requireBusiness();
   const supabase = await createClient();
 
-  const { data } = await supabase
+  const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, is_active, barcode")
+    .select("id, name, price, category, is_active")
     .eq("business_id", business.id)
     .order("created_at", { ascending: true });
 
-  const items = (data ?? []).map((i) => ({
+  const { data: varsData } = await supabase
+    .from("catalog_item_variations")
+    .select("id, catalog_item_id, name, price")
+    .eq("business_id", business.id)
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
+
+const varsByItem: Record<string, { id: string; name: string; price: number }[]> = {};
+  for (const v of varsData ?? []) {
+    const itemId = v.catalog_item_id as string;
+    if (!varsByItem[itemId]) varsByItem[itemId] = [];
+    varsByItem[itemId].push({
+      id: v.id as string,
+      name: v.name as string,
+      price: Number(v.price),
+    });
+  }
+
+  const items = (itemsData ?? []).map((i) => ({
     id: i.id as string,
     name: i.name as string,
     price: Number(i.price),
     category: (i.category as string | null) ?? null,
-    barcode: (i.barcode as string | null) ?? null,
     is_active: i.is_active as boolean,
+    variations: varsByItem[i.id as string] ?? [],
   }));
 
   return (

@@ -9,15 +9,9 @@ const itemSchema = z.object({
   name: z.string().min(1, "Name is required").max(120),
   price: z.coerce.number().min(0).max(1000000),
   category: z.string().max(60).optional().or(z.literal("")),
-  barcode: z.string().max(64).optional().or(z.literal("")),
 });
 
-type ItemInput = {
-  name: string;
-  price: number;
-  category?: string;
-  barcode?: string;
-};
+type ItemInput = { name: string; price: number; category?: string };
 
 export async function createCatalogItem(
   input: ItemInput
@@ -35,7 +29,6 @@ export async function createCatalogItem(
       name: parsed.data.name,
       price: parsed.data.price,
       category: parsed.data.category || null,
-      barcode: parsed.data.barcode || null,
     })
     .select("id")
     .single();
@@ -63,7 +56,6 @@ export async function updateCatalogItem(
       name: parsed.data.name,
       price: parsed.data.price,
       category: parsed.data.category || null,
-      barcode: parsed.data.barcode || null,
     })
     .eq("id", id);
   if (error) {
@@ -92,20 +84,68 @@ export async function setCatalogItemActive(
   return { ok: true };
 }
 
-export async function setCatalogItemBarcode(
-  id: string,
-  barcode: string
-): Promise<{ ok: true } | { error: string }> {
-  await requireBusiness();
+const variationSchema = z.object({
+  catalog_item_id: z.string().uuid(),
+  name: z.string().min(1, "Variation name is required").max(80),
+  price: z.coerce.number().min(0).max(1000000),
+});
+
+export async function createVariation(
+  catalogItemId: string,
+  name: string,
+  price: number
+): Promise<{ ok: true; id: string } | { error: string }> {
+  const parsed = variationSchema.safeParse({
+    catalog_item_id: catalogItemId,
+    name: name,
+    price: price,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const { business } = await requireBusiness();
   const supabase = await createClient();
-  const clean = barcode.trim();
-  const { error } = await supabase
+
+  const { data: item } = await supabase
     .from("catalog_items")
-    .update({ barcode: clean || null })
-    .eq("id", id);
+    .select("id")
+    .eq("id", parsed.data.catalog_item_id)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!item) return { error: "Item not found." };
+
+  const { data, error } = await supabase
+    .from("catalog_item_variations")
+    .insert({
+      business_id: business.id,
+      catalog_item_id: parsed.data.catalog_item_id,
+      name: parsed.data.name,
+      price: parsed.data.price,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    console.error("createVariation:", error);
+    return { error: "Could not add variation. Please try again." };
+  }
+  revalidatePath("/app/catalog");
+  return { ok: true, id: data.id as string };
+}
+
+export async function deleteVariation(
+  variationId: string
+): Promise<{ ok: true } | { error: string }> {
+  if (!variationId) return { error: "Missing variation." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("catalog_item_variations")
+    .delete()
+    .eq("id", variationId)
+    .eq("business_id", business.id);
   if (error) {
-    console.error("setCatalogItemBarcode:", error);
-    return { error: "Could not save barcode." };
+    console.error("deleteVariation:", error);
+    return { error: "Could not remove variation. Please try again." };
   }
   revalidatePath("/app/catalog");
   return { ok: true };

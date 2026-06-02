@@ -7,16 +7,18 @@ import { Label } from "@/components/ui/label";
 import {
   createCatalogItem,
   setCatalogItemActive,
-  setCatalogItemBarcode,
+  createVariation,
+  deleteVariation,
 } from "./actions";
 
+type Variation = { id: string; name: string; price: number };
 type Item = {
   id: string;
   name: string;
   price: number;
   category: string | null;
-  barcode: string | null;
   is_active: boolean;
+  variations: Variation[];
 };
 
 export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
@@ -24,12 +26,13 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("");
-  const [barcode, setBarcode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editBarcode, setEditBarcode] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [varName, setVarName] = useState("");
+  const [varPrice, setVarPrice] = useState("");
+  const [varError, setVarError] = useState<string | null>(null);
 
   function handleAdd() {
     setError(null);
@@ -42,7 +45,6 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
         name,
         price: parseFloat(price) || 0,
         category,
-        barcode,
       });
       if ("error" in res) {
         setError(res.error);
@@ -55,14 +57,13 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
           name: name.trim(),
           price: parseFloat(price) || 0,
           category: category.trim() || null,
-          barcode: barcode.trim() || null,
           is_active: true,
+          variations: [],
         },
       ]);
       setName("");
       setPrice("");
       setCategory("");
-      setBarcode("");
     });
   }
 
@@ -79,28 +80,65 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
     });
   }
 
-  function startEditBarcode(item: Item) {
-    setEditingId(item.id);
-    setEditBarcode(item.barcode || "");
+  function toggleExpand(itemId: string) {
+    setVarName("");
+    setVarPrice("");
+    setVarError(null);
+    setExpandedId((prev) => (prev === itemId ? null : itemId));
   }
 
-  function cancelEditBarcode() {
-    setEditingId(null);
-    setEditBarcode("");
-  }
-
-  function saveBarcode(item: Item) {
-    const value = editBarcode.trim();
+  function handleAddVariation(itemId: string) {
+    setVarError(null);
+    if (!varName.trim()) {
+      setVarError("Variation name is required.");
+      return;
+    }
     startTransition(async () => {
-      const res = await setCatalogItemBarcode(item.id, value);
+      const res = await createVariation(
+        itemId,
+        varName.trim(),
+        parseFloat(varPrice) || 0
+      );
+      if ("error" in res) {
+        setVarError(res.error);
+        return;
+      }
+      setItems((prev) =>
+        prev.map((i) =>
+          i.id === itemId
+            ? {
+                ...i,
+                variations: [
+                  ...i.variations,
+                  {
+                    id: res.id,
+                    name: varName.trim(),
+                    price: parseFloat(varPrice) || 0,
+                  },
+                ],
+              }
+            : i
+        )
+      );
+      setVarName("");
+      setVarPrice("");
+    });
+  }
+
+  function handleDeleteVariation(itemId: string, variationId: string) {
+    startTransition(async () => {
+      const res = await deleteVariation(variationId);
       if (!("error" in res)) {
         setItems((prev) =>
           prev.map((i) =>
-            i.id === item.id ? { ...i, barcode: value || null } : i
+            i.id === itemId
+              ? {
+                  ...i,
+                  variations: i.variations.filter((v) => v.id !== variationId),
+                }
+              : i
           )
         );
-        setEditingId(null);
-        setEditBarcode("");
       }
     });
   }
@@ -109,7 +147,7 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
     <div className="space-y-4 max-w-2xl">
       <div className="bg-card border border-border rounded-lg p-6">
         <h2 className="text-sm font-medium mb-3">Add an item</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="space-y-1">
             <Label htmlFor="item-name" className="text-xs">
               Name
@@ -146,17 +184,6 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
               placeholder="Services"
             />
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="item-barcode" className="text-xs">
-              Barcode (optional)
-            </Label>
-            <Input
-              id="item-barcode"
-              value={barcode}
-              onChange={(e) => setBarcode(e.target.value)}
-              placeholder="Scan or type"
-            />
-          </div>
         </div>
         <div className="mt-3">
           <Button onClick={handleAdd} disabled={pending || !name.trim()}>
@@ -174,75 +201,129 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
           </p>
         ) : (
           <div className="divide-y divide-border">
-            {items.map((item) => (
-              <div key={item.id} className="py-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div
-                      className={
-                        "font-medium " +
-                        (item.is_active
-                          ? ""
-                          : "text-muted-foreground line-through")
-                      }
-                    >
-                      {item.name}
+            {items.map((item) => {
+              const expanded = expandedId === item.id;
+              return (
+                <div key={item.id} className="py-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div
+                        className={
+                          "font-medium " +
+                          (item.is_active
+                            ? ""
+                            : "text-muted-foreground line-through")
+                        }
+                      >
+                        {item.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {item.variations.length > 0
+                          ? item.variations.length +
+                            (item.variations.length === 1
+                              ? " variation"
+                              : " variations")
+                          : "$" +
+                            item.price.toFixed(2) +
+                            (item.category ? " - " + item.category : "")}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {"$" +
-                        item.price.toFixed(2) +
-                        (item.category ? " - " + item.category : "")}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => toggleExpand(item.id)}
+                      >
+                        {expanded ? "Done" : "Variations"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleToggleActive(item)}
+                        disabled={pending}
+                      >
+                        {item.is_active ? "Disable" : "Enable"}
+                      </Button>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleToggleActive(item)}
-                    disabled={pending}
-                  >
-                    {item.is_active ? "Disable" : "Enable"}
-                  </Button>
-                </div>
 
-                <div className="mt-2">
-                  {editingId === item.id ? (
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={editBarcode}
-                        onChange={(e) => setEditBarcode(e.target.value)}
-                        placeholder="Scan or type barcode"
-                        className="h-8 max-w-xs"
-                      />
-                      <Button
-                        size="sm"
-                        onClick={() => saveBarcode(item)}
-                        disabled={pending}
-                      >
-                        Save
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={cancelEditBarcode}
-                        disabled={pending}
-                      >
-                        Cancel
-                      </Button>
+                  {expanded && (
+                    <div className="mt-3 border-l-2 border-border space-y-3">
+                      <p className="text-xs text-muted-foreground pl-3">
+                        Options like sizes. When an item has variations, the
+                        customer picks one at checkout and its price is used.
+                      </p>
+
+                      <div className="pl-3 space-y-2">
+                        {item.variations.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            No variations yet.
+                          </p>
+                        ) : (
+                          item.variations.map((v) => (
+                            <div
+                              key={v.id}
+                              className="flex items-center justify-between"
+                            >
+                              <div className="text-sm">
+                                {v.name}
+                                <span className="text-muted-foreground">
+                                  {"  " + "\u00b7" + "  $" + v.price.toFixed(2)}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDeleteVariation(item.id, v.id)
+                                }
+                                disabled={pending}
+                                className="text-xs text-muted-foreground underline hover:text-red-600"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      <div className="pl-3 flex flex-wrap items-end gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Variation</Label>
+                          <Input
+                            value={varName}
+                            onChange={(e) => setVarName(e.target.value)}
+                            placeholder="Large"
+                            className="h-9 w-32"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Price</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={varPrice}
+                            onChange={(e) => setVarPrice(e.target.value)}
+                            placeholder="0.00"
+                            className="h-9 w-24 text-right"
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => handleAddVariation(item.id)}
+                          disabled={pending || !varName.trim()}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                      {varError && (
+                        <p className="text-sm text-red-600 pl-3">{varError}</p>
+                      )}
                     </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => startEditBarcode(item)}
-                      className="text-xs text-muted-foreground underline hover:text-foreground"
-                    >
-                      {item.barcode
-                        ? "Barcode: " + item.barcode
-                        : "Add barcode"}
-                    </button>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
