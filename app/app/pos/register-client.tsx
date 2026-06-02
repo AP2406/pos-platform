@@ -6,9 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createOrder, searchCustomers, quickCreateCustomer } from "./actions";
 
-type Item = { id: string; name: string; price: number; category: string | null };
+type Variation = { id: string; name: string; price: number };
+type Item = { id: string; name: string; price: number; category: string | null; variations: Variation[] };
 type CartLine = {
   catalog_item_id: string | null;
+  variation_id: string | null;
   name: string;
   unit_price: number;
   quantity: number;
@@ -121,29 +123,18 @@ function printReceipt(r: Receipt) {
   win.print();
 }
 
-export function RegisterClient({
-  items,
-  taxRate,
-  businessName,
-}: {
-  items: Item[];
-  taxRate: number;
-  businessName: string;
-}) {
+export function RegisterClient({ items, taxRate, businessName }: { items: Item[]; taxRate: number; businessName: string }) {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [tip, setTip] = useState("");
-  const [discountMode, setDiscountMode] = useState<"amount" | "percent">(
-    "amount"
-  );
+  const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
   const [discountValue, setDiscountValue] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "other">(
-    "cash"
-  );
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "other">("cash");
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<{ id: string; name: string; phone: string | null }[]>([]);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
+  const [pickerItem, setPickerItem] = useState<Item | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [pending, startTransition] = useTransition();
@@ -170,13 +161,15 @@ export function RegisterClient({
     };
   }, [customerQuery, customer]);
 
-  function addItem(item: Item) {
+  function addLine(line: { catalog_item_id: string | null; variation_id: string | null; name: string; unit_price: number }) {
     setReceipt(null);
     setCart((prev) => {
-      const existing = prev.find((l) => l.catalog_item_id === item.id);
+      const existing = prev.find(
+        (l) => l.catalog_item_id === line.catalog_item_id && l.variation_id === line.variation_id
+      );
       if (existing) {
         return prev.map((l) =>
-          l.catalog_item_id === item.id
+          l.catalog_item_id === line.catalog_item_id && l.variation_id === line.variation_id
             ? { ...l, quantity: l.quantity + 1 }
             : l
         );
@@ -184,13 +177,33 @@ export function RegisterClient({
       return [
         ...prev,
         {
-          catalog_item_id: item.id,
-          name: item.name,
-          unit_price: item.price,
+          catalog_item_id: line.catalog_item_id,
+          variation_id: line.variation_id,
+          name: line.name,
+          unit_price: line.unit_price,
           quantity: 1,
         },
       ];
     });
+  }
+
+  function addItem(item: Item) {
+    if (item.variations.length > 0) {
+      setReceipt(null);
+      setPickerItem(item);
+      return;
+    }
+    addLine({ catalog_item_id: item.id, variation_id: null, name: item.name, unit_price: item.price });
+  }
+
+  function pickVariation(item: Item, v: Variation) {
+    addLine({
+      catalog_item_id: item.id,
+      variation_id: v.id,
+      name: item.name + " - " + v.name,
+      unit_price: v.price,
+    });
+    setPickerItem(null);
   }
 
   function changeQty(index: number, delta: number) {
@@ -234,10 +247,7 @@ export function RegisterClient({
   const subtotal = cart.reduce((sum, l) => sum + l.unit_price * l.quantity, 0);
 
   const discountInput = parseFloat(discountValue) || 0;
-  let discount =
-    discountMode === "percent"
-      ? subtotal * (discountInput / 100)
-      : discountInput;
+  let discount = discountMode === "percent" ? subtotal * (discountInput / 100) : discountInput;
   if (discount < 0) discount = 0;
   if (discount > subtotal) discount = subtotal;
   discount = Math.round(discount * 100) / 100;
@@ -286,326 +296,319 @@ export function RegisterClient({
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <div className="lg:col-span-2">
-        <div className="bg-card border border-border rounded-lg p-4">
-          {items.length === 0 ? (
-            <p className="text-sm text-muted-foreground p-4">
-              No items yet. Add some in the Catalog first.
-            </p>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {items.map((item) => (
+    <>
+      {pickerItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setPickerItem(null)}
+        >
+          <div
+            className="bg-card border border-border rounded-lg p-4 w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium">{pickerItem.name}</h3>
+              <button
+                type="button"
+                onClick={() => setPickerItem(null)}
+                className="text-xs text-muted-foreground underline"
+              >
+                Cancel
+              </button>
+            </div>
+            <div className="space-y-2">
+              {pickerItem.variations.map((v) => (
                 <button
-                  key={item.id}
+                  key={v.id}
                   type="button"
-                  onClick={() => addItem(item)}
-                  className="text-left p-3 rounded-md border border-border hover:border-foreground/40 hover:bg-accent/50 transition-colors"
+                  onClick={() => pickVariation(pickerItem, v)}
+                  className="w-full flex items-center justify-between p-3 rounded-md border border-border hover:border-foreground/40 hover:bg-accent/50 text-left"
                 >
-                  <div className="font-medium text-sm">{item.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {"$" + item.price.toFixed(2)}
-                  </div>
+                  <span className="text-sm font-medium">{v.name}</span>
+                  <span className="text-sm tabular-nums">{"$" + v.price.toFixed(2)}</span>
                 </button>
               ))}
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="lg:col-span-1">
-        <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-          {cart.length === 0 && receipt ? (
-            <div className="space-y-3">
-              <h2 className="font-medium">Sale complete</h2>
-              <div className="text-xs text-muted-foreground">
-                {"Sale #" + receipt.saleNumber}
-              </div>
-              {receipt.customerName && (
-                <div className="text-xs text-muted-foreground">
-                  {"Customer: " + receipt.customerName}
-                </div>
-              )}
-              <div className="text-sm space-y-1">
-                {receipt.items.map((l, i) => (
-                  <div key={i} className="flex justify-between">
-                    <span className="truncate">
-                      {l.name} x{l.quantity}
-                    </span>
-                    <span className="tabular-nums">
-                      {"$" + (l.unit_price * l.quantity).toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-                {receipt.discount > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Discount</span>
-                    <span className="tabular-nums text-red-600">
-                      {"-$" + receipt.discount.toFixed(2)}
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between font-semibold pt-2 border-t border-border">
-                  <span>Total</span>
-                  <span className="tabular-nums">
-                    {"$" + receipt.total.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button className="flex-1" onClick={() => printReceipt(receipt)}>
-                  Print receipt
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setReceipt(null)}
-                >
-                  New sale
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between">
-                <h2 className="font-medium">Current sale</h2>
-                {cart.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={clearCart}
-                    className="text-xs text-muted-foreground underline hover:text-foreground"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-
-              {cart.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No items yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {cart.map((line, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between gap-2"
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2">
+          <div className="bg-card border border-border rounded-lg p-4">
+            {items.length === 0 ? (
+              <p className="text-sm text-muted-foreground p-4">
+                No items yet. Add some in the Catalog first.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {items.map((item) => {
+                  const hasVars = item.variations.length > 0;
+                  const priceLabel = hasVars
+                    ? "From $" + Math.min(...item.variations.map((v) => v.price)).toFixed(2)
+                    : "$" + item.price.toFixed(2);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => addItem(item)}
+                      className="text-left p-3 rounded-md border border-border hover:border-foreground/40 hover:bg-accent/50 transition-colors"
                     >
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium truncate">
-                          {line.name}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {"$" + line.unit_price.toFixed(2)}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => changeQty(index, -1)}
-                          className="w-7 h-7 rounded-md border border-border hover:bg-accent"
-                        >
-                          -
-                        </button>
-                        <span className="w-6 text-center text-sm tabular-nums">
-                          {line.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => changeQty(index, 1)}
-                          className="w-7 h-7 rounded-md border border-border hover:bg-accent"
-                        >
-                          +
-                        </button>
-                      </div>
+                      <div className="font-medium text-sm">{item.name}</div>
+                      <div className="text-xs text-muted-foreground">{priceLabel}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="lg:col-span-1">
+          <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+            {cart.length === 0 && receipt ? (
+              <div className="space-y-3">
+                <h2 className="font-medium">Sale complete</h2>
+                <div className="text-xs text-muted-foreground">
+                  {"Sale #" + receipt.saleNumber}
+                </div>
+                {receipt.customerName && (
+                  <div className="text-xs text-muted-foreground">
+                    {"Customer: " + receipt.customerName}
+                  </div>
+                )}
+                <div className="text-sm space-y-1">
+                  {receipt.items.map((l, i) => (
+                    <div key={i} className="flex justify-between">
+                      <span className="truncate">
+                        {l.name} x{l.quantity}
+                      </span>
+                      <span className="tabular-nums">
+                        {"$" + (l.unit_price * l.quantity).toFixed(2)}
+                      </span>
                     </div>
                   ))}
-                </div>
-              )}
-
-              <div className="pt-3 border-t border-border space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span className="tabular-nums">
-                    {"$" + subtotal.toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Discount</span>
-                  <div className="flex items-center gap-1">
-                    <div className="flex rounded-md border border-border overflow-hidden text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setDiscountMode("amount")}
-                        className={
-                          "px-2 py-1 " +
-                          (discountMode === "amount"
-                            ? "bg-accent font-medium"
-                            : "hover:bg-accent/50")
-                        }
-                      >
-                        $
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDiscountMode("percent")}
-                        className={
-                          "px-2 py-1 border-l border-border " +
-                          (discountMode === "percent"
-                            ? "bg-accent font-medium"
-                            : "hover:bg-accent/50")
-                        }
-                      >
-                        %
-                      </button>
+                  {receipt.discount > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Discount</span>
+                      <span className="tabular-nums text-red-600">
+                        {"-$" + receipt.discount.toFixed(2)}
+                      </span>
                     </div>
+                  )}
+                  <div className="flex justify-between font-semibold pt-2 border-t border-border">
+                    <span>Total</span>
+                    <span className="tabular-nums">{"$" + receipt.total.toFixed(2)}</span>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button className="flex-1" onClick={() => printReceipt(receipt)}>
+                    Print receipt
+                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={() => setReceipt(null)}>
+                    New sale
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <h2 className="font-medium">Current sale</h2>
+                  {cart.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearCart}
+                      className="text-xs text-muted-foreground underline hover:text-foreground"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {cart.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No items yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {cart.map((line, index) => (
+                      <div key={index} className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">{line.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {"$" + line.unit_price.toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => changeQty(index, -1)}
+                            className="w-7 h-7 rounded-md border border-border hover:bg-accent"
+                          >
+                            -
+                          </button>
+                          <span className="w-6 text-center text-sm tabular-nums">{line.quantity}</span>
+                          <button
+                            type="button"
+                            onClick={() => changeQty(index, 1)}
+                            className="w-7 h-7 rounded-md border border-border hover:bg-accent"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="pt-3 border-t border-border space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span className="tabular-nums">{"$" + subtotal.toFixed(2)}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground">Discount</span>
+                    <div className="flex items-center gap-1">
+                      <div className="flex rounded-md border border-border overflow-hidden text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setDiscountMode("amount")}
+                          className={"px-2 py-1 " + (discountMode === "amount" ? "bg-accent font-medium" : "hover:bg-accent/50")}
+                        >
+                          $
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDiscountMode("percent")}
+                          className={"px-2 py-1 border-l border-border " + (discountMode === "percent" ? "bg-accent font-medium" : "hover:bg-accent/50")}
+                        >
+                          %
+                        </button>
+                      </div>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={discountValue}
+                        onChange={(e) => setDiscountValue(e.target.value)}
+                        placeholder="0"
+                        className="w-20 h-8 text-right"
+                      />
+                    </div>
+                  </div>
+
+                  {discount > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Discount applied</span>
+                      <span className="tabular-nums text-red-600">{"-$" + discount.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Tax</span>
+                    <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Tip</span>
                     <Input
                       type="number"
                       min="0"
                       step="0.01"
-                      value={discountValue}
-                      onChange={(e) => setDiscountValue(e.target.value)}
-                      placeholder="0"
-                      className="w-20 h-8 text-right"
+                      value={tip}
+                      onChange={(e) => setTip(e.target.value)}
+                      placeholder="0.00"
+                      className="w-24 h-8 text-right"
                     />
                   </div>
-                </div>
-
-                {discount > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">
-                      Discount applied
-                    </span>
-                    <span className="tabular-nums text-red-600">
-                      {"-$" + discount.toFixed(2)}
-                    </span>
+                  <div className="flex justify-between font-semibold pt-1">
+                    <span>Total</span>
+                    <span className="tabular-nums">{"$" + total.toFixed(2)}</span>
                   </div>
-                )}
+                </div>
 
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tax</span>
-                  <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
+                <div className="space-y-2 pt-2">
+                  <Label className="text-xs">Customer (optional)</Label>
+                  {customer ? (
+                    <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                      <span className="text-sm font-medium truncate">{customer.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setCustomer(null)}
+                        className="text-xs text-muted-foreground underline hover:text-foreground"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <Input
+                        value={customerQuery}
+                        onChange={(e) => setCustomerQuery(e.target.value)}
+                        placeholder="Search or add a customer"
+                        className="h-9"
+                      />
+                      {customerQuery.trim() && (
+                        <div className="mt-1 rounded-md border border-border divide-y divide-border overflow-hidden">
+                          {searchingCustomers ? (
+                            <div className="px-3 py-2 text-xs text-muted-foreground">Searching...</div>
+                          ) : customerResults.length > 0 ? (
+                            customerResults.map((c) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => pickCustomer(c)}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-accent"
+                              >
+                                {c.name}
+                                {c.phone ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    {"  " + "\u00b7" + "  " + c.phone}
+                                  </span>
+                                ) : null}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-3 py-2 text-xs text-muted-foreground">No matches.</div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={handleCreateCustomer}
+                            disabled={addingCustomer}
+                            className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-accent"
+                          >
+                            {addingCustomer ? "Adding..." : 'Add new customer "' + customerQuery.trim() + '"'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Tip</span>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={tip}
-                    onChange={(e) => setTip(e.target.value)}
-                    placeholder="0.00"
-                    className="w-24 h-8 text-right"
-                  />
-                </div>
-                <div className="flex justify-between font-semibold pt-1">
-                  <span>Total</span>
-                  <span className="tabular-nums">{"$" + total.toFixed(2)}</span>
-                </div>
-              </div>
 
-              <div className="space-y-2 pt-2">
-                <Label className="text-xs">Customer (optional)</Label>
-                {customer ? (
-                  <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                    <span className="text-sm font-medium truncate">
-                      {customer.name}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setCustomer(null)}
-                      className="text-xs text-muted-foreground underline hover:text-foreground"
-                    >
-                      Remove
-                    </button>
+                <div className="space-y-2 pt-2">
+                  <Label className="text-xs">Payment</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["cash", "card", "other"] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setPaymentMethod(m)}
+                        className={"px-2 py-2 text-sm rounded-md border transition-colors " + (paymentMethod === m ? "border-foreground bg-accent font-medium" : "border-border hover:border-foreground/40")}
+                      >
+                        {m.charAt(0).toUpperCase() + m.slice(1)}
+                      </button>
+                    ))}
                   </div>
-                ) : (
-                  <div>
-                    <Input
-                      value={customerQuery}
-                      onChange={(e) => setCustomerQuery(e.target.value)}
-                      placeholder="Search or add a customer"
-                      className="h-9"
-                    />
-                    {customerQuery.trim() && (
-                      <div className="mt-1 rounded-md border border-border divide-y divide-border overflow-hidden">
-                        {searchingCustomers ? (
-                          <div className="px-3 py-2 text-xs text-muted-foreground">
-                            Searching...
-                          </div>
-                        ) : customerResults.length > 0 ? (
-                          customerResults.map((c) => (
-                            <button
-                              key={c.id}
-                              type="button"
-                              onClick={() => pickCustomer(c)}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-accent"
-                            >
-                              {c.name}
-                              {c.phone ? (
-                                <span className="text-xs text-muted-foreground">
-                                  {"  " + "\u00b7" + "  " + c.phone}
-                                </span>
-                              ) : null}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-3 py-2 text-xs text-muted-foreground">
-                            No matches.
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={handleCreateCustomer}
-                          disabled={addingCustomer}
-                          className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-accent"
-                        >
-                          {addingCustomer
-                            ? "Adding..."
-                            : 'Add new customer "' + customerQuery.trim() + '"'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2 pt-2">
-                <Label className="text-xs">Payment</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["cash", "card", "other"] as const).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setPaymentMethod(m)}
-                      className={
-                        "px-2 py-2 text-sm rounded-md border transition-colors " +
-                        (paymentMethod === m
-                          ? "border-foreground bg-accent font-medium"
-                          : "border-border hover:border-foreground/40")
-                      }
-                    >
-                      {m.charAt(0).toUpperCase() + m.slice(1)}
-                    </button>
-                  ))}
                 </div>
-              </div>
 
-              {error && <p className="text-sm text-red-600">{error}</p>}
+                {error && <p className="text-sm text-red-600">{error}</p>}
 
-              <Button
-                className="w-full"
-                onClick={handleComplete}
-                disabled={pending || cart.length === 0}
-              >
-                {pending
-                  ? "Recording..."
-                  : "Complete sale" +
-                    (total > 0 ? " - $" + total.toFixed(2) : "")}
-              </Button>
-            </>
-          )}
+                <Button className="w-full" onClick={handleComplete} disabled={pending || cart.length === 0}>
+                  {pending ? "Recording..." : "Complete sale" + (total > 0 ? " - $" + total.toFixed(2) : "")}
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -6,19 +6,37 @@ export default async function PosPage() {
   const { business } = await requireBusiness();
   const supabase = await createClient();
 
-  const { data } = await supabase
+  const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, barcode")
+    .select("id, name, price, category")
     .eq("business_id", business.id)
     .eq("is_active", true)
     .order("name", { ascending: true });
 
-  const items = (data ?? []).map((i) => ({
+  const { data: varsData } = await supabase
+    .from("catalog_item_variations")
+    .select("id, catalog_item_id, name, price")
+    .eq("business_id", business.id)
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
+
+  const varsByItem: Record<string, { id: string; name: string; price: number }[]> = {};
+  for (const v of varsData ?? []) {
+    const itemId = v.catalog_item_id as string;
+    if (!varsByItem[itemId]) varsByItem[itemId] = [];
+    varsByItem[itemId].push({
+      id: v.id as string,
+      name: v.name as string,
+      price: Number(v.price),
+    });
+  }
+
+  const items = (itemsData ?? []).map((i) => ({
     id: i.id as string,
     name: i.name as string,
     price: Number(i.price),
     category: (i.category as string | null) ?? null,
-    barcode: (i.barcode as string | null) ?? null,
+    variations: varsByItem[i.id as string] ?? [],
   }));
 
   let taxRate = Number(business.default_tax_rate) || 0;
@@ -32,11 +50,7 @@ export default async function PosPage() {
           Tap items to build a sale, then charge.
         </p>
       </div>
-      <RegisterClient
-        items={items}
-        taxRate={taxRate}
-        businessName={business.name}
-      />
+      <RegisterClient items={items} taxRate={taxRate} businessName={business.name} />
     </div>
   );
 }
