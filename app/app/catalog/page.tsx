@@ -8,7 +8,7 @@ export default async function CatalogPage() {
 
   const { data } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, is_active")
+    .select("id, name, price, category, is_active, barcode")
     .eq("business_id", business.id)
     .order("created_at", { ascending: true });
 
@@ -17,6 +17,7 @@ export default async function CatalogPage() {
     name: i.name as string,
     price: Number(i.price),
     category: (i.category as string | null) ?? null,
+    barcode: (i.barcode as string | null) ?? null,
     is_active: i.is_active as boolean,
   }));
 
