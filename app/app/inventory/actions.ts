@@ -72,3 +72,39 @@ export async function adjustStock(
   revalidatePath("/app/inventory");
   return { ok: true, new_qty: Number(data) };
 }
+
+export async function recordCount(
+  itemId: string,
+  counted: number,
+  note?: string
+): Promise<{ ok: true; variance: number } | { error: string }> {
+  if (!itemId) return { error: "Missing item." };
+  const c = Math.round((Number(counted) || 0) * 100) / 100;
+  if (c < 0) return { error: "Counted quantity must be 0 or more." };
+
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data: item } = await supabase
+    .from("catalog_items")
+    .select("id")
+    .eq("id", itemId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!item) return { error: "Item not found." };
+
+  const { data, error } = await supabase.rpc("set_inventory_count", {
+    p_business_id: business.id,
+    p_item_id: itemId,
+    p_counted: c,
+    p_note: note && note.trim() ? note.trim().slice(0, 300) : null,
+  });
+
+  if (error || data === null || data === undefined) {
+    console.error("recordCount:", error);
+    return { error: "Could not record the count. Please try again." };
+  }
+
+  revalidatePath("/app/inventory");
+  return { ok: true, variance: Number(data) };
+}
