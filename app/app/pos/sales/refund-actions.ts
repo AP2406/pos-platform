@@ -253,6 +253,28 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     .eq("business_id", business.id);
   if (statusError) console.error("refundItems status:", statusError);
 
+  // Log the refund to the shared sensitive-actions trail. The refund is already
+  // recorded, so a failed audit write is logged, not surfaced.
+  const { error: refundAuditError } = await supabase.from("audit_events").insert({
+    business_id: business.id,
+    actor_id: user ? user.id : null,
+    actor_role: role,
+    action: "refund",
+    order_id: orderId,
+    reason_code: input.reason,
+    reason_note: input.note && input.note.trim() ? input.note.trim().slice(0, 500) : null,
+    metadata: {
+      amount: amount,
+      returned_subtotal: returnedSubtotal,
+      discount_portion: discountPortion,
+      tax_portion: taxPortion,
+      restocked: restocked,
+      fully: fully,
+      line_count: refundLines.length,
+    },
+  });
+  if (refundAuditError) console.error("refundItems audit:", refundAuditError);
+
   revalidatePath("/app/pos/sales");
   return { ok: true, amount: amount, fully: fully, returned_subtotal: returnedSubtotal, discount_portion: discountPortion, tax_portion: taxPortion };
 }
