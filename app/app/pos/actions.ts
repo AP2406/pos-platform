@@ -72,6 +72,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   }
 
   const { business, role } = await requireBusiness();
+  const isTraining = (business as { training_mode?: boolean }).training_mode === true;
   const supabase = await createClient();
 
   let customerId: string | null = parsed.data.customer_id ?? null;
@@ -113,7 +114,6 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   if (discount > subtotal) discount = subtotal;
   discount = Math.round(discount * 100) / 100;
 
-  // A discount is a sensitive action: require a reason before the sale records.
   const discountReasonCode = (parsed.data.discount_reason_code || "").trim();
   const discountReasonNote = (parsed.data.discount_reason_note || "").trim();
   if (discount > 0) {
@@ -130,8 +130,6 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   let rate = Number(business.default_tax_rate) || 0;
   if (rate > 1) rate = rate / 100;
 
-  // Item-level taxability: tax applies only to the taxable portion, with the
-  // discount spread proportionally across the whole sale.
   const taxLineIds = Array.from(
     new Set(
       parsed.data.items
@@ -163,9 +161,6 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   const total = Math.round((discountedSubtotal + tax + tip) * 100) / 100;
   const paymentMethod = parsed.data.payment_method ?? "cash";
 
-  // Resolve tender lines. If the register sent an explicit split, validate it
-  // covers the total to the cent; otherwise record a single payment for the
-  // whole total using the chosen method.
   let tenders: Tender[] = [];
   const providedPayments = parsed.data.payments ?? [];
   if (providedPayments.length > 0) {
@@ -244,6 +239,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       change: t.change,
     })),
     customer: customerId ? { id: customerId, name: customerName } : null,
+    is_training: isTraining,
     completed_at: new Date().toISOString(),
   };
 
@@ -261,6 +257,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       payment_method: orderPaymentMethod,
       customer_id: customerId,
       drawer_session_id: drawerSessionId,
+      is_training: isTraining,
       snapshot: snapshot,
     })
     .select("id")
@@ -304,9 +301,10 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     return { error: "Could not record payment. Please try again." };
   }
 
-  // Log the discount as a sensitive action. The sale is already committed, so a
-  // failed audit write is logged, not surfaced.
-  if (discount > 0) {
+  // Log the discount as a sensitive action. Practice sales are skipped so the
+  // activity log stays clean. The sale is already committed, so a failed audit
+  // write is logged, not surfaced.
+  if (discount > 0 && !isTraining) {
     const {
       data: { user: discUser },
     } = await supabase.auth.getUser();
@@ -325,52 +323,55 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     }
   }
 
-  // Decrement stock for tracked items. A completed sale must never fail because
-  // of inventory bookkeeping, so problems here are logged, not surfaced.
-  try {
-    const itemIds = Array.from(
-      new Set(
-        parsed.data.items
-          .map((i) => i.catalog_item_id)
-          .filter((id): id is string => !!id)
-      )
-    );
-    if (itemIds.length > 0) {
-      const { data: tracked } = await supabase
-        .from("catalog_items")
-        .select("id, track_inventory")
-        .eq("business_id", business.id)
-        .in("id", itemIds);
-
-      const trackedSet = new Set(
-        (tracked ?? []).filter((r) => r.track_inventory).map((r) => r.id as string)
+  // Decrement stock for tracked items. Practice (training) sales must not touch
+  // real inventory. A completed sale must never fail because of inventory
+  // bookkeeping, so problems here are logged, not surfaced.
+  if (!isTraining) {
+    try {
+      const itemIds = Array.from(
+        new Set(
+          parsed.data.items
+            .map((i) => i.catalog_item_id)
+            .filter((id): id is string => !!id)
+        )
       );
+      if (itemIds.length > 0) {
+        const { data: tracked } = await supabase
+          .from("catalog_items")
+          .select("id, track_inventory")
+          .eq("business_id", business.id)
+          .in("id", itemIds);
 
-      const qtyByItem: Record<string, number> = {};
-      for (const line of parsed.data.items) {
-        const id = line.catalog_item_id;
-        if (id && trackedSet.has(id)) {
-          qtyByItem[id] = (qtyByItem[id] || 0) + line.quantity;
+        const trackedSet = new Set(
+          (tracked ?? []).filter((r) => r.track_inventory).map((r) => r.id as string)
+        );
+
+        const qtyByItem: Record<string, number> = {};
+        for (const line of parsed.data.items) {
+          const id = line.catalog_item_id;
+          if (id && trackedSet.has(id)) {
+            qtyByItem[id] = (qtyByItem[id] || 0) + line.quantity;
+          }
+        }
+
+        for (const id of Object.keys(qtyByItem)) {
+          const qty = qtyByItem[id];
+          const { error: invError } = await supabase.rpc("apply_inventory_change", {
+            p_business_id: business.id,
+            p_item_id: id,
+            p_change: -qty,
+            p_reason: "sale",
+            p_note: null,
+            p_order_id: order.id,
+          });
+          if (invError) {
+            console.error("inventory decrement (order " + order.id + ", item " + id + "):", invError);
+          }
         }
       }
-
-      for (const id of Object.keys(qtyByItem)) {
-        const qty = qtyByItem[id];
-        const { error: invError } = await supabase.rpc("apply_inventory_change", {
-          p_business_id: business.id,
-          p_item_id: id,
-          p_change: -qty,
-          p_reason: "sale",
-          p_note: null,
-          p_order_id: order.id,
-        });
-        if (invError) {
-          console.error("inventory decrement (order " + order.id + ", item " + id + "):", invError);
-        }
-      }
+    } catch (e) {
+      console.error("inventory decrement block:", e);
     }
-  } catch (e) {
-    console.error("inventory decrement block:", e);
   }
 
   revalidatePath("/app/pos");

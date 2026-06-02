@@ -43,8 +43,16 @@ export default async function PosPage() {
   let taxRate = Number(business.default_tax_rate) || 0;
   if (taxRate > 1) taxRate = taxRate / 100;
 
+  const trainingMode =
+    (business as { training_mode?: boolean }).training_mode === true;
+
   return (
     <div>
+      {trainingMode && (
+        <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-600 font-medium">
+          Training mode is on — these sales are practice and won&apos;t count toward your reports or cash drawer.
+        </div>
+      )}
       <div className="mb-6">
         <h1 className="text-2xl font-semibold">Register</h1>
         <p className="text-muted-foreground text-sm mt-1">

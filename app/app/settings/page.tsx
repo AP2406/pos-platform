@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader, SectionHeader } from "../_components/ui";
 import { SettingsForm } from "./settings-form";
 import { TaxCurrencyForm } from "./tax-currency-form";
+import { TrainingModeForm } from "./training-mode-form";
 import { LeadInboxCard } from "./lead-inbox-card";
 import { DriversSettingCard } from "./drivers-setting-card";
 import { NotificationsCard } from "./notifications-card";
@@ -31,6 +32,9 @@ export default async function SettingsPage() {
 
   const rawTax = Number(business.default_tax_rate) || 0;
   const taxPercent = Math.round((rawTax > 1 ? rawTax : rawTax * 100) * 100) / 100;
+
+  const trainingMode =
+    (business as { training_mode?: boolean }).training_mode === true;
 
   const notifPrefs: Record<string, boolean> = {};
   if (user) {
@@ -65,6 +69,13 @@ export default async function SettingsPage() {
             initialTaxPercent={taxPercent}
             initialCurrency={business.currency || "CAD"}
           />
+        </div>
+      )}
+
+      {role === "owner" && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Training mode</SectionHeader>
+          <TrainingModeForm initialEnabled={trainingMode} />
         </div>
       )}
 
