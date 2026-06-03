@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { VoidButton } from "./void-button";
+import { RefundButton } from "./refund-button";
 import { EmailReceiptButton } from "./email-receipt-button";
 import { VOID_REASONS, reasonLabel } from "../reason-codes";
 
@@ -209,6 +210,8 @@ export default async function SalesPage() {
         <div className="bg-card border border-border rounded-lg divide-y divide-border">
           {list.map((o) => {
             const voided = o.status === "voided";
+            const refunded = o.status === "refunded";
+            const partiallyRefunded = o.status === "partially_refunded";
             const method =
               o.payment_method.charAt(0).toUpperCase() +
               o.payment_method.slice(1);
@@ -226,6 +229,16 @@ export default async function SalesPage() {
                     {money(o.total)}
                     {voided && (
                       <span className="ml-2 text-xs text-red-600">Voided</span>
+                    )}
+                    {refunded && (
+                      <span className="ml-2 text-xs text-amber-600">
+                        Refunded
+                      </span>
+                    )}
+                    {partiallyRefunded && (
+                      <span className="ml-2 text-xs text-amber-600">
+                        Partial refund
+                      </span>
                     )}
                   </div>
                   {o.customer_name && (
@@ -257,8 +270,16 @@ export default async function SalesPage() {
                   ) : (
                     <div className="flex flex-col items-end gap-1">
                       <div className="flex items-center gap-3">
+                        {!refunded && (
+                          <RefundButton
+                            orderId={o.id}
+                            saleNumber={o.sale_number ?? 0}
+                            total={o.total}
+                            businessName={business.name}
+                          />
+                        )}
                         <EmailReceiptButton orderId={o.id} />
-                        <VoidButton orderId={o.id} />
+                        {o.status === "paid" && <VoidButton orderId={o.id} />}
                       </div>
                       {emailedIds.has(o.id) && (
                         <span className="text-xs text-emerald-500">Emailed</span>
