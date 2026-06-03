@@ -5,16 +5,18 @@ import { SavingsEstimator } from "./savings-estimator";
 import { Reveal } from "./reveal";
 
 export const metadata: Metadata = {
-  title: { absolute: "Surge \u2014 Transparent payments for local business in the GTA" },
-  description: "Stop overpaying to get paid. Surge gives GTA businesses lower card processing rates, software included, and real local support. See exactly how much you could save and book a free call.",
+  title: { absolute: "Payment Processing & Point of Sale for the GTA | Surge" },
+  description: "Surge delivers transparent payment processing and point-of-sale software for local businesses across the GTA — lower card rates, no junk fees. Book a free call.",
+  keywords: ["payment processing", "point of sale", "POS system", "payment solutions", "merchant services", "card processing", "credit card processing", "GTA", "Toronto", "Durham", "Ontario"],
   alternates: { canonical: "/" },
+  openGraph: { title: "Payment Processing & Point of Sale for the GTA | Surge", description: "Transparent payment processing and point-of-sale software for local business. Lower card rates, no junk fees, no lock-in.", url: "https://surgetechpos.com", type: "website" },
 };
 
 const org = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "Surge",
-  description: "Transparent, lower-cost payment processing and point-of-sale software for local businesses.",
+  description: "Transparent payment processing and point-of-sale (POS) software for local businesses in the Greater Toronto Area.",
   url: "https://surgetechpos.com",
   areaServed: "Greater Toronto Area, Ontario, Canada",
 };
@@ -46,9 +48,9 @@ export default function HomePage() {
         <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-36">
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <div className="text-center lg:text-left">
-              <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white/80 px-4 py-1.5 text-xs font-medium text-blue-700 shadow-sm backdrop-blur [animation:surge-fade_1s_ease-out_both]"><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" /></span>Lower fees on every sale</span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white/80 px-4 py-1.5 text-xs font-medium text-blue-700 shadow-sm backdrop-blur [animation:surge-fade_1s_ease-out_both]"><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" /></span>Payment processing &amp; point of sale</span>
               <h1 className="mt-6 text-5xl font-bold leading-[1.03] tracking-tight text-slate-900 sm:text-6xl lg:text-7xl [animation:surge-rise_0.8s_ease-out_both]">Stop <span className="bg-[linear-gradient(90deg,#2563eb,#06b6d4,#38bdf8,#06b6d4,#2563eb)] bg-[length:200%_auto] bg-clip-text text-transparent [animation:surge-shimmer_5s_linear_infinite]">overpaying</span> to get paid.</h1>
-              <p className="mt-6 max-w-xl text-lg text-slate-600 [animation:surge-rise_0.8s_ease-out_0.12s_both]">Hidden rates. Junk monthly fees. Statements built to confuse you. Surge is transparent payments for local business &mdash; a lower rate, software included, and a real person who answers the phone.</p>
+              <p className="mt-6 max-w-xl text-lg text-slate-600 [animation:surge-rise_0.8s_ease-out_0.12s_both]">Hidden rates and junk monthly fees, gone. Surge is the all-in-one payment solution for local business &mdash; transparent card payment processing and built-in point-of-sale software, at a lower rate, with a real person who answers the phone.</p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start [animation:surge-rise_0.8s_ease-out_0.24s_both]">
                 <Link href="/book" className="rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-7 py-3.5 text-sm font-semibold text-white shadow-[0_12px_40px_-10px_rgba(37,99,235,0.6)] transition-shadow hover:shadow-[0_16px_50px_-8px_rgba(6,182,212,0.6)]">Book a free call</Link>
                 <Link href="/pricing" className="rounded-full border border-slate-200 bg-white px-7 py-3.5 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50">See pricing</Link>
@@ -183,7 +185,7 @@ export default function HomePage() {
             <div className="grid items-center gap-10 lg:grid-cols-2">
               <div>
                 <Eyebrow color="blue">Point of sale</Eyebrow>
-                <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">A full register, included with your payments</h2>
+                <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">A point-of-sale system included with your payments</h2>
                 <p className="mt-4 leading-relaxed text-slate-600">Ring up sales, split tender, run refunds, track inventory, and print or email receipts &mdash; all in one place, on the device you already have. No separate POS bill.</p>
                 <Link href="/pos" className="mt-7 inline-flex rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-medium text-slate-900 transition-colors hover:bg-white">Explore the POS</Link>
               </div>
