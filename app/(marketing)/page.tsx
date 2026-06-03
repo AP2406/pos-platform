@@ -74,8 +74,7 @@ export default function HomePage() {
                 <Image src="/jpg6.jpg" alt="A local business owner taking a tap card payment at a salon counter" fill priority sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover" />
                 <div className="absolute bottom-4 left-4 rounded-2xl border border-white/60 bg-white/85 px-4 py-3 shadow-lg backdrop-blur">
                   <div className="text-[11px] font-medium text-slate-500">You save</div>
-                  <div className="text-xl font-bold tabular-nums text-emerald-600">0.4% + 12&cent;</div>
-                  <div className="text-[11px] text-slate-500">on every sale</div>
+<div className="text-xl font-bold tabular-nums text-emerald-600">0.4% + 15&cent;</div>                  <div className="text-[11px] text-slate-500">on every sale</div>
                 </div>
               </div>
             </div>

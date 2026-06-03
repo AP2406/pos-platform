@@ -13,7 +13,7 @@ export default async function OnboardingPage() {
         dangerouslySetInnerHTML={{
           __html:
             "@keyframes oaRise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}.oa-rise{animation:oaRise .7s cubic-bezier(0.16,1,0.3,1) both}@keyframes oaFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-28px)}}.oa-float{animation:oaFloat 9s ease-in-out infinite}",
-        }}
+        }}  
       />
 
       {/* Brand panel — desktop only */}

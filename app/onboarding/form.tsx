@@ -3,70 +3,58 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createBusiness } from "./actions";
+import { BUSINESS_MODES } from "@/lib/modules/modes";
 
-type Industry =
-  | "transportation"
-  | "restaurant"
-  | "retail"
-  | "service"
-  | "mobile_seller";
-
-const industries: { value: Industry; label: string; icon: React.ReactNode }[] = [
-  {
-    value: "transportation",
-    label: "Transportation",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-        <path d="M3 13l1.8-5A2 2 0 0 1 6.7 6.7h10.6A2 2 0 0 1 19.2 8L21 13" />
-        <path d="M3 13h18v4h-2a2 2 0 0 1-4 0H9a2 2 0 0 1-4 0H3z" />
-      </svg>
-    ),
-  },
-  {
-    value: "restaurant",
-    label: "Restaurant",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-        <path d="M5 3v7a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3M7 12v9M16 3a3 3 0 0 1 3 3v6h-3M16 3v18" />
-      </svg>
-    ),
-  },
-  {
-    value: "retail",
-    label: "Retail",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-        <path d="M6 8h12l-1 12H7L6 8z" />
-        <path d="M9 8a3 3 0 0 1 6 0" />
-      </svg>
-    ),
-  },
-  {
-    value: "service",
-    label: "Service",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-        <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.3 2.3-2-2 2.3-2.3z" />
-      </svg>
-    ),
-  },
-  {
-    value: "mobile_seller",
-    label: "Mobile seller",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-        <path d="M3 7h11v8H3zM14 10h4l3 3v2h-7z" />
-        <circle cx="7.5" cy="17.5" r="1.5" />
-        <circle cx="17.5" cy="17.5" r="1.5" />
-      </svg>
-    ),
-  },
-];
+const icons: Record<string, React.ReactNode> = {
+  register: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <rect x="3" y="4" width="18" height="12" rx="1.5" />
+      <path d="M3 20h18M8 16v4M16 16v4" />
+    </svg>
+  ),
+  bag: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M6 8h12l-1 12H7L6 8z" />
+      <path d="M9 8a3 3 0 0 1 6 0" />
+    </svg>
+  ),
+  cup: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M4 8h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8z" />
+      <path d="M17 9h2a2 2 0 0 1 0 4h-2" />
+      <path d="M7 2v2M11 2v2" />
+    </svg>
+  ),
+  utensils: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M5 3v7a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3M7 12v9M16 3a3 3 0 0 1 3 3v6h-3M16 3v18" />
+    </svg>
+  ),
+  glass: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M4 4h16l-8 8-8-8z" />
+      <path d="M12 12v7M8 21h8" />
+    </svg>
+  ),
+  scissors: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <circle cx="6" cy="6" r="2.5" />
+      <circle cx="6" cy="18" r="2.5" />
+      <path d="M8 8l12 8M8 16l12-8" />
+    </svg>
+  ),
+  calendar: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 9h18M8 3v4M16 3v4" />
+    </svg>
+  ),
+};
 
 export function OnboardingForm() {
   const router = useRouter();
   const [name, setName] = useState("");
-  const [industry, setIndustry] = useState<Industry | null>(null);
+  const [mode, setMode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -76,12 +64,12 @@ export function OnboardingForm() {
       setError("Please enter your business name.");
       return;
     }
-    if (!industry) {
+    if (!mode) {
       setError("Pick what kind of business you run.");
       return;
     }
     startTransition(async () => {
-      const res = await createBusiness({ name: name.trim(), industry });
+      const res = await createBusiness({ name: name.trim(), mode });
       if ("error" in res) {
         setError(res.error);
       } else {
@@ -91,7 +79,7 @@ export function OnboardingForm() {
   }
 
   return (
-    <div className="w-full max-w-md">
+    <div className="w-full max-w-lg">
       <div className="lg:hidden flex items-center gap-2 mb-8 oa-rise">
         <span className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
           <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
@@ -116,7 +104,7 @@ export function OnboardingForm() {
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Airlink Ride"
+          placeholder="e.g. Aat&apos;s Cafe"
           autoFocus
           className="mt-2 flex h-11 w-full rounded-lg border border-input bg-card px-3.5 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
         />
@@ -124,32 +112,55 @@ export function OnboardingForm() {
 
       <div className="oa-rise mt-6" style={{ animationDelay: "0.16s" }}>
         <label className="text-sm font-medium">What do you run?</label>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-2">
-          {industries.map((ind) => {
-            const selected = industry === ind.value;
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-2">
+          {BUSINESS_MODES.map((m) => {
+            const selected = mode === m.key;
+            const soon = m.status !== "live";
             return (
               <button
-                key={ind.value}
+                key={m.key}
                 type="button"
-                onClick={() => setIndustry(ind.value)}
+                disabled={soon}
+                onClick={() => setMode(m.key)}
                 className={
-                  "flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition-all " +
-                  (selected
-                    ? "border-primary bg-primary/10 ring-2 ring-primary/30 text-foreground"
-                    : "border-border bg-card hover:border-primary/40 hover:bg-accent text-muted-foreground")
+                  "relative flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all " +
+                  (soon
+                    ? "border-border bg-card opacity-55 cursor-not-allowed"
+                    : selected
+                    ? "border-primary bg-primary/10 ring-2 ring-primary/30"
+                    : "border-border bg-card hover:border-primary/40 hover:bg-accent")
                 }
               >
-                <span className={selected ? "text-primary" : ""}>{ind.icon}</span>
-                <span className="text-xs font-medium">{ind.label}</span>
+                <span
+                  className={
+                    "mt-0.5 shrink-0 " +
+                    (selected ? "text-primary" : "text-muted-foreground")
+                  }
+                >
+                  {icons[m.icon]}
+                </span>
+                <span className="min-w-0">
+                  <span className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">
+                      {m.label}
+                    </span>
+                    {soon && (
+                      <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                        Soon
+                      </span>
+                    )}
+                  </span>
+                  <span className="block text-xs text-muted-foreground mt-0.5 leading-snug">
+                    {m.tagline}
+                  </span>
+                </span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {error && (
-        <p className="mt-5 text-sm text-destructive">{error}</p>
-      )}
+      {error && <p className="mt-5 text-sm text-destructive">{error}</p>}
 
       <div className="oa-rise mt-8" style={{ animationDelay: "0.24s" }}>
         <button
@@ -164,7 +175,7 @@ export function OnboardingForm() {
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
                 <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
               </svg>
-              Setting up your workspace…
+              Setting up your workspace...
             </>
           ) : (
             "Create workspace"
