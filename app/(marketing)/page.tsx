@@ -19,12 +19,30 @@ const org = {
   areaServed: "Greater Toronto Area, Ontario, Canada",
 };
 
+function Divider() {
+  return (
+    <div className="mx-auto flex max-w-6xl items-center gap-4 px-6">
+      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
+      <div className="h-2.5 w-2.5 rotate-45 rounded-[3px] bg-gradient-to-br from-indigo-500 to-cyan-500 shadow-[0_0_0_4px_rgba(99,102,241,0.08)]" />
+      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
+    </div>
+  );
+}
+
+function DotGrid() {
+  const mask = "radial-gradient(ellipse at center, black, transparent 72%)";
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10" style={{ backgroundImage: "radial-gradient(#e2e8f0 1px, transparent 1px)", backgroundSize: "22px 22px", maskImage: mask, WebkitMaskImage: mask }} />
+  );
+}
+
 export default function HomePage() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(org) }} />
 
       <section className="relative mx-auto max-w-6xl px-6 pb-20 pt-36">
+        <DotGrid />
         <div className="grid items-center gap-12 lg:grid-cols-2">
           <div className="text-center lg:text-left">
             <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-xs font-medium text-indigo-700 [animation:surge-fade_1s_ease-out_both]">Payments powered by Finix</div>
@@ -55,14 +73,18 @@ export default function HomePage() {
         </div>
       </section>
 
+      <Divider />
+
       <section className="relative py-16">
         <div className="mx-auto max-w-5xl px-6">
           <Reveal>
-            <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-indigo-50 via-white to-cyan-50 p-8 sm:p-12">
+            <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-indigo-50 via-white to-cyan-50 p-8 sm:p-12">
+              <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-indigo-500 via-fuchsia-500 to-cyan-500" />
               <div className="text-center">
                 <div className="text-xs font-semibold uppercase tracking-widest text-fuchsia-600">The fee reality check</div>
                 <h2 className="mt-3 text-3xl font-semibold text-slate-900 sm:text-4xl">How much are card fees really costing you?</h2>
                 <p className="mt-3 text-slate-600">Drag the slider. Most owners are not ready for the number.</p>
+                <div className="mx-auto mt-5 h-1 w-16 rounded-full bg-gradient-to-r from-fuchsia-500 to-indigo-500" />
               </div>
               <div className="mt-8 grid items-center gap-8 lg:grid-cols-5">
                 <div className="relative hidden aspect-[4/5] overflow-hidden rounded-2xl border border-white shadow-md lg:col-span-2 lg:block">
@@ -75,24 +97,30 @@ export default function HomePage() {
         </div>
       </section>
 
+      <Divider />
+
       <section className="relative mx-auto max-w-6xl px-6 py-16">
         <Reveal>
           <div className="mb-10 text-center">
             <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Why owners switch to Surge</h2>
             <p className="mx-auto mt-3 max-w-xl text-slate-600">Three things the big processors structurally can&apos;t give you.</p>
+            <div className="mx-auto mt-5 h-1 w-16 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-500" />
           </div>
           <div className="grid gap-5 md:grid-cols-3">
-            <div className="group rounded-2xl border border-slate-200 bg-white p-7 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-indigo-200 hover:shadow-lg">
+            <div className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-7 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-indigo-200 hover:shadow-lg">
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 to-cyan-500 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-400 text-lg font-bold text-white">$</div>
               <h3 className="mt-5 text-lg font-semibold text-slate-900">Transparent pricing</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-600">One clear rate. No statement-fee maze, no surprise line items. You always know what a sale actually earned.</p>
             </div>
-            <div className="group rounded-2xl border border-slate-200 bg-white p-7 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-cyan-200 hover:shadow-lg">
+            <div className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-7 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-cyan-200 hover:shadow-lg">
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-500 to-teal-400 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-teal-400 text-lg font-bold text-white">@</div>
               <h3 className="mt-5 text-lg font-semibold text-slate-900">Real local support</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-600">Based in the GTA. We set up your terminal in person and pick up the phone &mdash; you talk to a human, not a ticket queue.</p>
             </div>
-            <div className="group rounded-2xl border border-slate-200 bg-white p-7 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-fuchsia-200 hover:shadow-lg">
+            <div className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-7 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-fuchsia-200 hover:shadow-lg">
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-fuchsia-500 to-pink-400 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-500 to-pink-400 text-lg font-bold text-white">+</div>
               <h3 className="mt-5 text-lg font-semibold text-slate-900">Software included</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-600">Point of sale, sales reports, and insights on what to reorder and when &mdash; built in, not a costly monthly add-on.</p>
@@ -101,24 +129,28 @@ export default function HomePage() {
         </Reveal>
       </section>
 
+      <Divider />
+
       <section className="relative mx-auto max-w-6xl px-6 py-16">
+        <DotGrid />
         <Reveal>
           <div className="mb-10 text-center">
             <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Built for businesses like yours</h2>
             <p className="mx-auto mt-3 max-w-xl text-slate-600">From the counter to the chair, Surge runs the real-world spots across the GTA.</p>
+            <div className="mx-auto mt-5 h-1 w-16 rounded-full bg-gradient-to-r from-cyan-500 to-fuchsia-500" />
           </div>
           <div className="grid gap-5 sm:grid-cols-3">
-            <figure className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+            <figure className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-slate-200 shadow-sm ring-1 ring-transparent transition-shadow duration-300 hover:shadow-lg hover:ring-indigo-200">
               <Image src="/jpg9.jpg" alt="A customer paying at the counter of a local coffee shop" fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-transparent" />
               <figcaption className="absolute bottom-4 left-4 text-sm font-semibold text-white">Cafes &amp; coffee shops</figcaption>
             </figure>
-            <figure className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+            <figure className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-slate-200 shadow-sm ring-1 ring-transparent transition-shadow duration-300 hover:shadow-lg hover:ring-fuchsia-200">
               <Image src="/jpg3.jpg" alt="A stylist taking a mobile payment at a salon front desk" fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-transparent" />
               <figcaption className="absolute bottom-4 left-4 text-sm font-semibold text-white">Salons &amp; spas</figcaption>
             </figure>
-            <figure className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+            <figure className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-slate-200 shadow-sm ring-1 ring-transparent transition-shadow duration-300 hover:shadow-lg hover:ring-cyan-200">
               <Image src="/jpg1.jpg" alt="A customer tapping a phone to pay at a checkout terminal" fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-transparent" />
               <figcaption className="absolute bottom-4 left-4 text-sm font-semibold text-white">Retail &amp; service counters</figcaption>
@@ -127,9 +159,12 @@ export default function HomePage() {
         </Reveal>
       </section>
 
+      <Divider />
+
       <section className="relative mx-auto max-w-6xl px-6 py-16">
         <Reveal>
-          <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-8 lg:p-12">
+          <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-8 lg:p-12">
+            <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-indigo-500 via-fuchsia-500 to-cyan-500" />
             <div className="grid items-center gap-10 lg:grid-cols-2">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-widest text-indigo-600">Point of sale</div>
@@ -144,6 +179,8 @@ export default function HomePage() {
           </div>
         </Reveal>
       </section>
+
+      <Divider />
 
       <section className="relative px-6 py-24">
         <Reveal>
