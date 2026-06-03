@@ -16,12 +16,7 @@ function ExportCard({
         <p className="font-medium text-sm">{title}</p>
         <p className="text-muted-foreground text-sm">{description}</p>
       </div>
-      
-        href={href}
-        className="inline-flex items-center justify-center rounded-md bg-foreground text-background px-4 py-2 text-sm font-medium hover:opacity-90 whitespace-nowrap shrink-0"
-      >
-        Download CSV
-      </a>
+      <a href={href} className="inline-flex items-center justify-center rounded-md bg-foreground text-background px-4 py-2 text-sm font-medium hover:opacity-90 whitespace-nowrap shrink-0">Download CSV</a>
     </div>
   );
 }
