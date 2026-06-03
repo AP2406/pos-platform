@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Pricing",
-  description: "One honest rate: 2.5% + $0.18 per transaction. No monthly fees, no statement fees, no lock-in contracts. See exactly what you pay with Surge and book a free call.",
+  description: "One honest rate: 2.5% + $0.18 per transaction, plus a one-time $10 setup. Free Basic POS, optional Advanced features with a free trial. No monthly fees on payments, no lock-in. Book a free call.",
   alternates: { canonical: "/pricing" },
 };
 
@@ -24,29 +24,32 @@ function Check({ className }: { className?: string }) {
 
 const included = [
   "Tap, chip, swipe, and mobile payments",
-  "Point-of-sale software, no extra charge",
   "Sales reports and inventory tracking",
   "In-person terminal setup across the GTA",
   "A real person on the phone when you need one",
   "Next-business-day payouts",
+  "Free Basic POS software",
 ];
 
 const noFees = ["No monthly fee", "No statement fee", "No lock-in contract", "No hidden junk fees"];
 
+const basicFeatures = ["Unlimited sales and checkout", "Tap, chip, swipe and mobile payments", "Printed and emailed receipts", "Daily sales reports", "Simple inventory tracking", "One register"];
+const advancedFeatures = ["Everything in Basic", "Barcode and low-stock inventory", "Appointments and bookings", "Staff roles and permissions", "Advanced analytics and insights", "Priority support"];
+
 const compare = [
   { label: "Per-transaction rate", surge: "2.5% + $0.18", typical: "2.9% + $0.30" },
-  { label: "Monthly fee", surge: "$0", typical: "$10 to $30" },
-  { label: "Statement fee", surge: "$0", typical: "Often" },
+  { label: "Setup fee", surge: "$10 one-time", typical: "Up to $99" },
+  { label: "Monthly fee on payments", surge: "$0", typical: "$10 to $30" },
   { label: "Lock-in contract", surge: "None, cancel anytime", typical: "1 to 3 years" },
-  { label: "POS software", surge: "Included", typical: "Paid add-on" },
+  { label: "Basic POS software", surge: "Included free", typical: "Paid add-on" },
   { label: "Support", surge: "GTA-based, real human", typical: "Call center" },
 ];
 
 const faqs = [
-  { q: "Are there really no monthly fees?", a: "Correct. You pay the per-transaction rate and nothing else. No monthly software fee, no statement fee, no PCI fee." },
+  { q: "Is there a setup fee?", a: "Just a one-time $10 to get your account and terminal configured and tested. After that there are no monthly or statement fees on your payments." },
+  { q: "What is the difference between Basic and Advanced?", a: "Basic POS is free and included with your payments. Advanced adds barcode inventory, appointments, staff roles, and deeper analytics. You can try every Advanced feature free before you pay a cent." },
   { q: "Am I locked into a contract?", a: "No. There is no term contract and no early-termination fee. If Surge is not saving you money, you walk away." },
-  { q: "Do I need to buy new hardware?", a: "Usually not. Surge runs on the tablet or phone you already have, and we can supply a terminal if you want one. We set it up with you in person." },
-  { q: "How fast can I start taking payments?", a: "Most local businesses are approved and live within a few business days. We handle the setup with you." },
+  { q: "How fast can I start taking payments?", a: "Most local businesses are approved and live within a few business days, and we handle the setup with you in person." },
 ];
 
 export default function PricingPage() {
@@ -58,11 +61,11 @@ export default function PricingPage() {
         <div className="relative mx-auto max-w-3xl px-6 text-center">
           <Eyebrow>Pricing</Eyebrow>
           <h1 className="mt-5 text-5xl font-bold tracking-tight text-slate-900 sm:text-6xl">One rate. No surprises.</h1>
-          <p className="mx-auto mt-5 max-w-xl text-lg text-slate-600">The number you see is the number you pay. No monthly fees, no statement maze, no contract holding you hostage.</p>
+          <p className="mx-auto mt-5 max-w-xl text-lg text-slate-600">The number you see is the number you pay. A lower rate, free Basic POS, and a one-time setup of just $10 &mdash; no contract holding you hostage.</p>
         </div>
       </section>
 
-      <section className="relative pb-20">
+      <section className="relative pb-16">
         <div className="mx-auto max-w-3xl px-6">
           <div className="relative">
             <div className="absolute -inset-[2px] overflow-hidden rounded-[calc(1.5rem+2px)]">
@@ -76,6 +79,7 @@ export default function PricingPage() {
                   <span className="mb-2 text-2xl font-semibold text-slate-500">+ $0.18</span>
                 </div>
                 <div className="mt-2 text-sm text-slate-500">per transaction &mdash; tap, chip, swipe, or mobile</div>
+                <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5 text-xs font-medium text-slate-600">Plus a one-time $10 setup &mdash; no recurring fees, ever</div>
                 <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
                   {noFees.map((f) => (<span key={f} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{f}</span>))}
                 </div>
@@ -94,6 +98,56 @@ export default function PricingPage() {
               <p className="mt-3 text-center text-xs text-slate-400">Your final rate is confirmed on a quick call. Most local businesses qualify for the rate above.</p>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="relative overflow-hidden bg-gradient-to-b from-white via-blue-50/50 to-white py-20">
+        <div className="relative mx-auto max-w-5xl px-6">
+          <div className="mb-10 flex flex-col items-center text-center">
+            <Eyebrow>Software</Eyebrow>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Pick the POS that fits</h2>
+            <p className="mx-auto mt-3 max-w-xl text-slate-600">Start free with Basic. Upgrade to Advanced when you are ready &mdash; and try every Advanced feature free first.</p>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+              <div className="text-sm font-semibold uppercase tracking-wider text-slate-500">Basic</div>
+              <div className="mt-3 flex items-end gap-1">
+                <span className="text-4xl font-bold tracking-tight text-slate-900">Free</span>
+                <span className="mb-1 text-sm text-slate-500">included with payments</span>
+              </div>
+              <p className="mt-2 text-sm text-slate-500">Everything you need to ring up sales and get paid.</p>
+              <div className="mt-6 space-y-3">
+                {basicFeatures.map((f) => (
+                  <div key={f} className="flex items-start gap-2.5">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600"><Check className="h-3 w-3" /></span>
+                    <span className="text-sm text-slate-700">{f}</span>
+                  </div>
+                ))}
+              </div>
+              <Link href="/book" className="mt-7 flex w-full items-center justify-center rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-50">Start with Basic</Link>
+            </div>
+
+            <div className="relative rounded-3xl border-2 border-blue-300 bg-white p-8 shadow-lg">
+              <span className="absolute -top-3 left-8 rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-3 py-1 text-xs font-semibold text-white shadow">30-day free trial</span>
+              <div className="text-sm font-semibold uppercase tracking-wider text-blue-700">Advanced</div>
+              <div className="mt-3 flex items-end gap-1">
+                <span className="text-4xl font-bold tracking-tight text-slate-900">$29</span>
+                <span className="mb-1 text-sm text-slate-500">/ month, after your free trial</span>
+              </div>
+              <p className="mt-2 text-sm text-slate-500">For shops that want to run the whole operation, not just the till.</p>
+              <div className="mt-6 space-y-3">
+                {advancedFeatures.map((f) => (
+                  <div key={f} className="flex items-start gap-2.5">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700"><Check className="h-3 w-3" /></span>
+                    <span className="text-sm text-slate-700">{f}</span>
+                  </div>
+                ))}
+              </div>
+              <Link href="/book" className="mt-7 flex w-full items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-6 py-3 text-sm font-semibold text-white shadow-[0_12px_40px_-10px_rgba(37,99,235,0.6)] transition-shadow hover:shadow-[0_16px_50px_-8px_rgba(6,182,212,0.6)]">Start my free trial</Link>
+            </div>
+          </div>
+          <p className="mt-5 text-center text-xs text-slate-400">The payment rate of 2.5% + $0.18 applies on both plans. Cancel Advanced anytime.</p>
         </div>
       </section>
 
