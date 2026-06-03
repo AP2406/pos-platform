@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getOrderForRefund, refundItems } from "./refund-actions";
+import { emailRefundReceipt } from "./receipt-actions";
 
 const REASONS = [
   { value: "customer_request", label: "Customer request" },
@@ -88,6 +89,10 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState<DoneInfo | null>(null);
   const [pending, startTransition] = useTransition();
+  const [emailTo, setEmailTo] = useState("");
+  const [emailErr, setEmailErr] = useState<string | null>(null);
+  const [emailDone, setEmailDone] = useState(false);
+  const [emailBusy, setEmailBusy] = useState(false);
 
   async function start() {
     setOpen(true);
@@ -100,6 +105,10 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
     setQty({});
     setOrder(null);
     setLines([]);
+    setEmailTo("");
+    setEmailErr(null);
+    setEmailDone(false);
+    setEmailBusy(false);
     const res = await getOrderForRefund(orderId);
     setLoading(false);
     if ("error" in res) {
@@ -121,6 +130,24 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
     const next: Record<string, number> = {};
     for (const l of lines) next[l.order_item_id] = l.returnable;
     setQty(next);
+  }
+
+  function sendRefundEmail() {
+    setEmailErr(null);
+    const to = emailTo.trim();
+    if (!to) {
+      setEmailErr("Enter an email address.");
+      return;
+    }
+    setEmailBusy(true);
+    emailRefundReceipt(orderId, to).then((res) => {
+      setEmailBusy(false);
+      if ("error" in res) {
+        setEmailErr(res.error);
+        return;
+      }
+      setEmailDone(true);
+    });
   }
 
   const returnedSubtotal = round2(lines.reduce((a, l) => a + (qty[l.order_item_id] || 0) * l.unit_price, 0));
@@ -169,6 +196,20 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
                 <div className="flex gap-2">
                   <Button className="flex-1" onClick={() => printRefundReceipt({ businessName, saleNumber, info: done })}>Print receipt</Button>
                   <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>Close</Button>
+                </div>
+                <div className="pt-3 border-t border-border space-y-2">
+                  <Label className="text-xs">Email refund receipt (optional)</Label>
+                  {emailDone ? (
+                    <p className="text-sm text-emerald-500">Refund receipt sent.</p>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input type="email" value={emailTo} onChange={(e) => setEmailTo(e.target.value)} placeholder="customer@email.com" className="h-9 flex-1" />
+                      <Button variant="outline" onClick={sendRefundEmail} disabled={emailBusy}>
+                        {emailBusy ? "Sending..." : "Send"}
+                      </Button>
+                    </div>
+                  )}
+                  {emailErr && <p className="text-sm text-red-600">{emailErr}</p>}
                 </div>
               </div>
             ) : err && !order ? (

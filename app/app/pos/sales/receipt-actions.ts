@@ -13,6 +13,15 @@ function esc(s: string): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+const REFUND_REASON_LABELS: Record<string, string> = {
+  customer_request: "Customer request",
+  defective: "Defective / damaged",
+  wrong_item: "Wrong item",
+  overcharge: "Overcharge",
+  duplicate: "Duplicate charge",
+  other: "Other",
+};
+
 type OrderForEmail = {
   sale_number: number | null;
   snapshot: unknown;
@@ -92,6 +101,82 @@ function buildReceiptHtml(businessName: string, order: OrderForEmail): string {
   );
 }
 
+type RefundForEmail = {
+  sale_number: number | null;
+  refunded_at: string;
+  fully: boolean;
+  reason: string;
+  items: { name: string; quantity: number; line_subtotal: number }[];
+  returned_subtotal: number;
+  discount_portion: number;
+  tax_portion: number;
+  amount: number;
+};
+
+function buildRefundReceiptHtml(businessName: string, refund: RefundForEmail): string {
+  const reasonLabel = REFUND_REASON_LABELS[refund.reason] || refund.reason;
+
+  const rows = refund.items
+    .map(function (l) {
+      return (
+        '<tr><td style="padding:4px 0">' +
+        esc(l.name) +
+        " x" +
+        l.quantity +
+        '</td><td style="padding:4px 0;text-align:right">' +
+        money(l.line_subtotal) +
+        "</td></tr>"
+      );
+    })
+    .join("");
+
+  const discountRow =
+    refund.discount_portion > 0
+      ? '<tr><td>Less discount</td><td style="text-align:right">-' + money(refund.discount_portion) + "</td></tr>"
+      : "";
+
+  const taxRow =
+    refund.tax_portion > 0
+      ? '<tr><td>Tax</td><td style="text-align:right">+' + money(refund.tax_portion) + "</td></tr>"
+      : "";
+
+  return (
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#111">' +
+    '<h2 style="text-align:center;margin:0 0 4px">' +
+    esc(businessName) +
+    "</h2>" +
+    '<div style="text-align:center;font-weight:bold;letter-spacing:1px">REFUND</div>' +
+    (refund.sale_number != null
+      ? '<div style="text-align:center">For sale #' + refund.sale_number + "</div>"
+      : "") +
+    '<div style="text-align:center;color:#666;font-size:12px">' +
+    (refund.fully ? "Full refund" : "Partial refund") +
+    "</div>" +
+    '<div style="text-align:center;color:#666;font-size:12px;margin-bottom:12px">' +
+    esc(new Date(refund.refunded_at).toLocaleString()) +
+    "</div>" +
+    '<table style="width:100%;border-collapse:collapse;font-size:14px">' +
+    rows +
+    "</table>" +
+    '<hr style="border:none;border-top:1px solid #ddd;margin:10px 0" />' +
+    '<table style="width:100%;border-collapse:collapse;font-size:14px">' +
+    '<tr><td>Items returned</td><td style="text-align:right">' +
+    money(refund.returned_subtotal) +
+    "</td></tr>" +
+    discountRow +
+    taxRow +
+    '<tr><td style="font-weight:bold;padding-top:6px">Refunded</td><td style="text-align:right;font-weight:bold;padding-top:6px">-' +
+    money(refund.amount) +
+    "</td></tr>" +
+    "</table>" +
+    '<div style="text-align:center;color:#666;font-size:12px;margin-top:10px">Reason: ' +
+    esc(reasonLabel) +
+    "</div>" +
+    '<p style="text-align:center;color:#666;font-size:12px;margin-top:12px">Thank you!</p>' +
+    "</div>"
+  );
+}
+
 export async function emailReceipt(
   orderId: string,
   email: string
@@ -158,5 +243,83 @@ export async function emailReceipt(
   });
 
   revalidatePath("/app/pos/sales");
+  return { ok: true };
+}
+
+export async function emailRefundReceipt(
+  orderId: string,
+  email: string
+): Promise<{ ok: true } | { error: string }> {
+  if (!orderId) return { error: "Missing sale." };
+  const to = (email || "").trim();
+  const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to);
+  if (!emailOk) return { error: "Enter a valid email address." };
+
+  if (!isEmailConfigured()) {
+    return { error: "Email isn't set up yet (missing RESEND_API_KEY)." };
+  }
+
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select("id, sale_number, status, created_at")
+    .eq("id", orderId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!order) return { error: "Sale not found." };
+
+  const { data: refund } = await supabase
+    .from("refunds")
+    .select("amount, reason, snapshot, created_at")
+    .eq("order_id", orderId)
+    .eq("business_id", business.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!refund) return { error: "No refund has been recorded for this sale." };
+
+  const snap =
+    (refund.snapshot as {
+      items?: { name?: string; quantity?: number; line_subtotal?: number }[];
+      returned_subtotal?: number;
+      discount_portion?: number;
+      tax_portion?: number;
+    } | null) || {};
+
+  const items = (Array.isArray(snap.items) ? snap.items : []).map(function (l) {
+    return {
+      name: (l.name as string) || "Item",
+      quantity: Number(l.quantity) || 0,
+      line_subtotal: Number(l.line_subtotal) || 0,
+    };
+  });
+
+  const html = buildRefundReceiptHtml(business.name, {
+    sale_number: order.sale_number != null ? Number(order.sale_number) : null,
+    refunded_at: refund.created_at as string,
+    fully: (order.status as string) === "refunded",
+    reason: (refund.reason as string) || "other",
+    items: items,
+    returned_subtotal: typeof snap.returned_subtotal === "number" ? snap.returned_subtotal : 0,
+    discount_portion: typeof snap.discount_portion === "number" ? snap.discount_portion : 0,
+    tax_portion: typeof snap.tax_portion === "number" ? snap.tax_portion : 0,
+    amount: Number(refund.amount) || 0,
+  });
+
+  const subject =
+    "Refund from " +
+    business.name +
+    (order.sale_number != null ? " - Sale #" + order.sale_number : "");
+
+  const from =
+    process.env.RECEIPT_FROM_EMAIL || business.name + " <onboarding@resend.dev>";
+
+  const sent = await sendEmail({ to: to, from: from, subject: subject, html: html });
+  if ("error" in sent) {
+    return { error: sent.error };
+  }
+
   return { ok: true };
 }
