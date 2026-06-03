@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SavingsEstimator } from "./savings-estimator";
 
 export const metadata: Metadata = {
   title: { absolute: "Surge — Transparent payments for local business in the GTA" },
-  description: "Card processing powered by Finix with no hidden fees, real human support across the GTA, and built-in software that shows you exactly what you keep. Book a call with Surge.",
+  description: "Card processing powered by Finix with no hidden fees, real human support across the GTA, and built-in software that shows you exactly what you keep. See what you're overpaying and book a call with Surge.",
   alternates: { canonical: "/" },
 };
 
@@ -21,34 +22,23 @@ export default function HomePage() {
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(org) }} />
 
-      <section className="relative mx-auto max-w-6xl px-6 pb-28 pt-40 text-center">
+      <section className="relative mx-auto max-w-6xl px-6 pb-24 pt-36 text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5 text-xs text-slate-600 [animation:surge-fade_1s_ease-out_both]">Payments powered by Finix</div>
-        <h1 className="mx-auto mt-7 max-w-4xl text-5xl font-semibold leading-[1.05] tracking-tight text-slate-900 sm:text-6xl lg:text-7xl [animation:surge-rise_0.8s_ease-out_both]">Payments that show you <span className="bg-gradient-to-r from-indigo-600 via-cyan-500 to-fuchsia-600 bg-clip-text text-transparent">exactly what you keep</span></h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-600 [animation:surge-rise_0.8s_ease-out_0.12s_both]">Surge is transparent card processing for local businesses &mdash; no buried fees, a real person on the phone, and software that shows your true margin on every sale.</p>
-        <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row [animation:surge-rise_0.8s_ease-out_0.24s_both]">
-          <Link href="/book" className="rounded-full bg-gradient-to-r from-indigo-600 to-cyan-500 px-7 py-3.5 text-sm font-semibold text-white shadow-[0_12px_40px_-10px_rgba(79,70,229,0.6)] transition-shadow hover:shadow-[0_16px_50px_-8px_rgba(6,182,212,0.6)]">Book a call</Link>
-          <Link href="/pricing" className="rounded-full border border-slate-200 bg-white px-7 py-3.5 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50">See transparent pricing</Link>
-        </div>
+        <h1 className="mx-auto mt-7 max-w-4xl text-5xl font-semibold leading-[1.05] tracking-tight text-slate-900 sm:text-6xl lg:text-7xl [animation:surge-rise_0.8s_ease-out_both]">Keep <span className="bg-gradient-to-r from-indigo-600 via-cyan-500 to-fuchsia-600 bg-clip-text text-transparent">more</span> of every sale</h1>
+        <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-600 [animation:surge-rise_0.8s_ease-out_0.12s_both]">Most processors bury their fees in a statement you can&apos;t read. Surge shows you exactly what you keep &mdash; transparent pricing, real local support, and software included. See what you&apos;re overpaying:</p>
 
-        <div className="relative mt-20 [animation:surge-rise_1s_ease-out_0.36s_both]">
-          <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_30px_80px_-30px_rgba(15,23,42,0.25)]">
-            <div className="flex items-center justify-between text-left">
-              <div>
-                <div className="text-xs text-slate-400">Today</div>
-                <div className="text-3xl font-semibold tabular-nums text-slate-900">$4,820.00</div>
-                <div className="mt-1 text-xs text-emerald-600">You keep $4,694.68 after fees</div>
-              </div>
-              <div className="text-right text-xs text-slate-400">
-                <div>Processing</div>
-                <div className="text-slate-700">$125.32</div>
-              </div>
-            </div>
-            <div className="mt-5 h-2 w-full overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full w-[97.4%] rounded-full bg-gradient-to-r from-indigo-500 to-cyan-500" />
-            </div>
-            <div className="mt-2 text-left text-[11px] text-slate-400">Illustrative. Your real numbers appear here.</div>
-          </div>
+        <div className="mt-10 [animation:surge-rise_0.9s_ease-out_0.24s_both]"><SavingsEstimator /></div>
+
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs text-slate-400 [animation:surge-fade_1.4s_ease-out_both]">
+          <span>Powered by Finix</span>
+          <span className="text-slate-300">&bull;</span>
+          <span>Tap, chip &amp; swipe</span>
+          <span className="text-slate-300">&bull;</span>
+          <span>Apple Pay &amp; Google Pay</span>
+          <span className="text-slate-300">&bull;</span>
+          <span>Interac</span>
         </div>
+        <div className="mt-4 text-sm text-slate-500">Prefer to browse first? <Link href="/pricing" className="font-medium text-indigo-600 hover:text-indigo-700">See transparent pricing</Link></div>
       </section>
 
       <section className="relative mx-auto max-w-6xl px-6 py-20">
