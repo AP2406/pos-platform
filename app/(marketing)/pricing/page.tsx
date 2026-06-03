@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Pricing",
-  description: "One honest rate: 2.5% + $0.18 per transaction, plus a one-time $10 setup. Free Basic POS, optional Advanced features with a free trial. No monthly fees on payments, no lock-in. Book a free call.",
+  description: "One honest rate: 2.5% + $0.18 per transaction, plus a one-time $10 setup. Free Basic POS, optional Advanced features, and custom software, CRM and SaaS builds. Book a free call.",
   alternates: { canonical: "/pricing" },
 };
 
@@ -35,6 +35,7 @@ const noFees = ["No monthly fee", "No statement fee", "No lock-in contract", "No
 
 const basicFeatures = ["Unlimited sales and checkout", "Tap, chip, swipe and mobile payments", "Printed and emailed receipts", "Daily sales reports", "Simple inventory tracking", "One register"];
 const advancedFeatures = ["Everything in Basic", "Barcode and low-stock inventory", "Appointments and bookings", "Staff roles and permissions", "Advanced analytics and insights", "Priority support"];
+const customBuilds = ["Custom CRM systems", "Business dashboards and reporting", "Workflow automation and integrations", "Booking and customer portals", "Internal tools and admin panels", "Full custom web apps and SaaS"];
 
 const compare = [
   { label: "Per-transaction rate", surge: "2.5% + $0.18", typical: "2.9% + $0.30" },
@@ -48,8 +49,8 @@ const compare = [
 const faqs = [
   { q: "Is there a setup fee?", a: "Just a one-time $10 to get your account and terminal configured and tested. After that there are no monthly or statement fees on your payments." },
   { q: "What is the difference between Basic and Advanced?", a: "Basic POS is free and included with your payments. Advanced adds barcode inventory, appointments, staff roles, and deeper analytics. You can try every Advanced feature free before you pay a cent." },
+  { q: "Can you build custom software for my business?", a: "Yes. Beyond the POS we build bespoke software &mdash; CRMs, dashboards, automations and full custom apps. Pricing is scoped to your project, so book a call and we will work it out together." },
   { q: "Am I locked into a contract?", a: "No. There is no term contract and no early-termination fee. If Surge is not saving you money, you walk away." },
-  { q: "How fast can I start taking payments?", a: "Most local businesses are approved and live within a few business days, and we handle the setup with you in person." },
 ];
 
 export default function PricingPage() {
@@ -151,6 +152,41 @@ export default function PricingPage() {
         </div>
       </section>
 
+      <section className="relative overflow-hidden bg-white py-20">
+        <div className="pointer-events-none absolute -right-24 top-10 h-80 w-80 rounded-full bg-cyan-300/20 blur-[110px]" />
+        <div className="relative mx-auto max-w-5xl px-6">
+          <div className="relative">
+            <div className="absolute -inset-[2px] overflow-hidden rounded-[calc(1.5rem+2px)]">
+              <div className="absolute left-1/2 top-1/2 h-[260%] w-[260%] bg-[conic-gradient(from_0deg,#2563eb,#06b6d4,#38bdf8,#a5f3fc,#06b6d4,#2563eb)] [animation:surge-spin_12s_linear_infinite]" />
+            </div>
+            <div className="relative rounded-3xl bg-white p-8 shadow-2xl sm:p-10">
+              <div className="grid gap-8 md:grid-cols-2 md:items-center">
+                <div>
+                  <Eyebrow>Custom builds</Eyebrow>
+                  <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Need software built just for you?</h2>
+                  <p className="mt-4 leading-relaxed text-slate-600">Beyond the POS, we build custom software for your business &mdash; a CRM that fits how you actually work, dashboards, automations, or a full custom app. You imagine it, we design, build and ship it.</p>
+                  <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5 text-sm font-semibold text-slate-700">Custom pricing &mdash; scoped to your project</div>
+                  <div className="mt-7">
+                    <Link href="/book" className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-7 py-3.5 text-sm font-semibold text-white shadow-[0_12px_40px_-10px_rgba(37,99,235,0.6)] transition-shadow hover:shadow-[0_16px_50px_-8px_rgba(6,182,212,0.6)]">Book a call to scope your build</Link>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
+                  <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">What we can build</div>
+                  <div className="mt-4 space-y-3">
+                    {customBuilds.map((c) => (
+                      <div key={c} className="flex items-start gap-2.5">
+                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700"><Check className="h-3 w-3" /></span>
+                        <span className="text-sm text-slate-700">{c}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="relative overflow-hidden bg-[#0E1A2B] py-20 text-white">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent" />
         <div className="pointer-events-none absolute -left-40 top-0 h-[28rem] w-[28rem] rounded-full bg-blue-500/20 blur-[120px]" />
@@ -187,7 +223,7 @@ export default function PricingPage() {
             {faqs.map((f) => (
               <div key={f.q} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h3 className="text-base font-semibold text-slate-900">{f.q}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-600">{f.a}</p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600" dangerouslySetInnerHTML={{ __html: f.a }} />
               </div>
             ))}
           </div>
