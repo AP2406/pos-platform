@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { SavingsEstimator } from "./savings-estimator";
 import { Reveal } from "./reveal";
 
 export const metadata: Metadata = {
-  title: { absolute: "Surge — Transparent payments for local business in the GTA" },
-  description: "Stop overpaying to get paid. Surge is transparent card processing powered by Finix, with software included and real local support across the GTA. See what you're overpaying and book a free call.",
+  title: { absolute: "Surge \u2014 Transparent payments for local business in the GTA" },
+  description: "Stop overpaying to get paid. Surge is transparent card processing powered by Finix, with software included and real local support across the GTA. See what you are overpaying and book a free call.",
   alternates: { canonical: "/" },
 };
 
@@ -40,32 +41,22 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="relative mx-auto max-w-md [animation:surge-rise_1s_ease-out_0.2s_both]">
+          <div className="relative mx-auto w-full max-w-xl [animation:surge-rise_1s_ease-out_0.2s_both]">
             <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-tr from-indigo-500/20 via-fuchsia-500/15 to-cyan-500/20 blur-2xl" />
-            <div className="relative rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-              <div className="flex items-center justify-between">
-                <div className="text-xs font-medium text-slate-400">Today&apos;s sales</div>
-                <div className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">Live</div>
-              </div>
-              <div className="mt-2 text-4xl font-bold tabular-nums text-slate-900">$4,820.00</div>
-              <div className="mt-4 space-y-2">
-                <div className="flex justify-between text-sm"><span className="text-slate-500">Processing fees</span><span className="tabular-nums text-rose-500">- $125.32</span></div>
-                <div className="flex justify-between text-sm font-semibold"><span className="text-slate-700">You keep</span><span className="tabular-nums text-emerald-600">$4,694.68</span></div>
-              </div>
-              <div className="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-slate-100"><div className="h-full w-[97.4%] rounded-full bg-gradient-to-r from-indigo-500 via-fuchsia-500 to-cyan-500" /></div>
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[11px] font-medium">
-                <div className="rounded-lg bg-indigo-50 py-2 text-indigo-700">Tap</div>
-                <div className="rounded-lg bg-cyan-50 py-2 text-cyan-700">Chip</div>
-                <div className="rounded-lg bg-fuchsia-50 py-2 text-fuchsia-700">Apple Pay</div>
+            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-3xl border border-slate-200 shadow-2xl">
+              <Image src="/jpg6.jpg" alt="A local business owner taking a tap card payment at a salon counter" fill priority sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover" />
+              <div className="absolute bottom-4 left-4 rounded-2xl border border-white/60 bg-white/85 px-4 py-3 shadow-lg backdrop-blur">
+                <div className="text-[11px] font-medium text-slate-500">You keep</div>
+                <div className="text-2xl font-bold tabular-nums text-emerald-600">97.4%</div>
+                <div className="text-[11px] text-slate-500">of every sale</div>
               </div>
             </div>
-            <div className="mt-3 text-center text-[11px] text-slate-400">Sample dashboard</div>
           </div>
         </div>
       </section>
 
       <section className="relative py-16">
-        <div className="mx-auto max-w-4xl px-6">
+        <div className="mx-auto max-w-5xl px-6">
           <Reveal>
             <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-indigo-50 via-white to-cyan-50 p-8 sm:p-12">
               <div className="text-center">
@@ -73,7 +64,12 @@ export default function HomePage() {
                 <h2 className="mt-3 text-3xl font-semibold text-slate-900 sm:text-4xl">How much are card fees really costing you?</h2>
                 <p className="mt-3 text-slate-600">Drag the slider. Most owners are not ready for the number.</p>
               </div>
-              <div className="mt-8"><SavingsEstimator /></div>
+              <div className="mt-8 grid items-center gap-8 lg:grid-cols-5">
+                <div className="relative hidden aspect-[4/5] overflow-hidden rounded-2xl border border-white shadow-md lg:col-span-2 lg:block">
+                  <Image src="/jpg11.jpg" alt="A small plant growing out of a cup full of coins" fill sizes="40vw" className="object-cover" />
+                </div>
+                <div className="lg:col-span-3"><SavingsEstimator /></div>
+              </div>
             </div>
           </Reveal>
         </div>
@@ -107,12 +103,43 @@ export default function HomePage() {
 
       <section className="relative mx-auto max-w-6xl px-6 py-16">
         <Reveal>
-          <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-10 lg:p-14">
-            <div className="max-w-2xl">
-              <div className="text-xs font-semibold uppercase tracking-widest text-indigo-600">Point of sale</div>
-              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">A full register, included with your payments</h2>
-              <p className="mt-4 leading-relaxed text-slate-600">Ring up sales, split tender, run refunds, track inventory, and email receipts &mdash; all in one place, on the device you already have. No separate POS bill.</p>
-              <Link href="/pos" className="mt-7 inline-flex rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50">Explore the POS</Link>
+          <div className="mb-10 text-center">
+            <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Built for businesses like yours</h2>
+            <p className="mx-auto mt-3 max-w-xl text-slate-600">From the counter to the chair, Surge runs the real-world spots across the GTA.</p>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-3">
+            <figure className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+              <Image src="/jpg9.jpg" alt="A customer paying at the counter of a local coffee shop" fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-transparent" />
+              <figcaption className="absolute bottom-4 left-4 text-sm font-semibold text-white">Cafes &amp; coffee shops</figcaption>
+            </figure>
+            <figure className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+              <Image src="/jpg3.jpg" alt="A stylist taking a mobile payment at a salon front desk" fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-transparent" />
+              <figcaption className="absolute bottom-4 left-4 text-sm font-semibold text-white">Salons &amp; spas</figcaption>
+            </figure>
+            <figure className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+              <Image src="/jpg1.jpg" alt="A customer tapping a phone to pay at a checkout terminal" fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-transparent" />
+              <figcaption className="absolute bottom-4 left-4 text-sm font-semibold text-white">Retail &amp; service counters</figcaption>
+            </figure>
+          </div>
+        </Reveal>
+      </section>
+
+      <section className="relative mx-auto max-w-6xl px-6 py-16">
+        <Reveal>
+          <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-8 lg:p-12">
+            <div className="grid items-center gap-10 lg:grid-cols-2">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-widest text-indigo-600">Point of sale</div>
+                <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">A full register, included with your payments</h2>
+                <p className="mt-4 leading-relaxed text-slate-600">Ring up sales, split tender, run refunds, track inventory, and print or email receipts &mdash; all in one place, on the device you already have. No separate POS bill.</p>
+                <Link href="/pos" className="mt-7 inline-flex rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50">Explore the POS</Link>
+              </div>
+              <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-slate-200 shadow-md">
+                <Image src="/jpg4.jpg" alt="A card terminal printing a paper receipt" fill sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover" />
+              </div>
             </div>
           </div>
         </Reveal>
