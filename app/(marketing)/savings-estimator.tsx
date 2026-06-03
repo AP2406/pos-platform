@@ -6,7 +6,7 @@ import Link from "next/link";
 const TYPICAL_PCT = 0.029;
 const TYPICAL_FIXED = 0.30;
 const SURGE_PCT = 0.025;
-const SURGE_FIXED = 0.18;
+const SURGE_FIXED = 0.15;
 
 function dollars(n: number): string {
   return "$" + Math.round(n).toLocaleString("en-CA");
@@ -48,7 +48,7 @@ export function SavingsEstimator() {
         </div>
         <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-cyan-50 p-4">
           <div className="text-xs font-medium text-blue-700">With Surge</div>
-          <div className="text-[11px] text-blue-500">2.5% + $0.18 / sale</div>
+          <div className="text-[11px] text-blue-500">2.5% + $0.15 / sale</div>
           <div className="mt-2 text-2xl font-semibold tabular-nums text-slate-900">{dollars(surgeAnnual)}</div>
           <div className="text-[11px] text-slate-400">in fees / year</div>
         </div>
@@ -66,7 +66,7 @@ export function SavingsEstimator() {
       </div>
 
       <Link href="/book" className="mt-6 flex w-full items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_40px_-10px_rgba(37,99,235,0.6)] transition-shadow hover:shadow-[0_16px_50px_-8px_rgba(6,182,212,0.6)]">Show me my exact savings &mdash; book a free call</Link>
-      <p className="mt-3 text-[11px] leading-relaxed text-slate-400">Estimate only. Compares a common 2.9% + $0.30 per-transaction rate against Surge pricing of 2.5% + $0.18 per transaction. Your exact savings are confirmed on the call.</p>
+      <p className="mt-3 text-[11px] leading-relaxed text-slate-400">Estimate only. Compares a common 2.9% + $0.30 per-transaction rate against Surge pricing of 2.5% + $0.15 per transaction. Your exact savings are confirmed on the call.</p>
     </div>
   );
 }
