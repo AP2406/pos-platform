@@ -6,7 +6,7 @@ import { Reveal } from "./reveal";
 
 export const metadata: Metadata = {
   title: { absolute: "Surge \u2014 Transparent payments for local business in the GTA" },
-  description: "Stop overpaying to get paid. Surge is transparent card processing powered by Finix, with software included and real local support across the GTA. See what you are overpaying and book a free call.",
+  description: "Stop overpaying to get paid. Surge gives GTA businesses lower card processing rates, software included, and real local support. See exactly how much you could save and book a free call.",
   alternates: { canonical: "/" },
 };
 
@@ -14,7 +14,7 @@ const org = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "Surge",
-  description: "Transparent payment processing and point-of-sale software for local businesses, powered by Finix.",
+  description: "Transparent, lower-cost payment processing and point-of-sale software for local businesses.",
   url: "https://surgetechpos.com",
   areaServed: "Greater Toronto Area, Ontario, Canada",
 };
@@ -46,9 +46,9 @@ export default function HomePage() {
         <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-36">
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <div className="text-center lg:text-left">
-              <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white/80 px-4 py-1.5 text-xs font-medium text-blue-700 shadow-sm backdrop-blur [animation:surge-fade_1s_ease-out_both]"><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" /></span>Payments powered by Finix</span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white/80 px-4 py-1.5 text-xs font-medium text-blue-700 shadow-sm backdrop-blur [animation:surge-fade_1s_ease-out_both]"><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" /></span>Lower fees on every sale</span>
               <h1 className="mt-6 text-5xl font-bold leading-[1.03] tracking-tight text-slate-900 sm:text-6xl lg:text-7xl [animation:surge-rise_0.8s_ease-out_both]">Stop <span className="bg-[linear-gradient(90deg,#2563eb,#06b6d4,#38bdf8,#06b6d4,#2563eb)] bg-[length:200%_auto] bg-clip-text text-transparent [animation:surge-shimmer_5s_linear_infinite]">overpaying</span> to get paid.</h1>
-              <p className="mt-6 max-w-xl text-lg text-slate-600 [animation:surge-rise_0.8s_ease-out_0.12s_both]">Hidden rates. Junk monthly fees. Statements built to confuse you. Surge is transparent payments for local business &mdash; a fair rate, software included, and a real person who answers the phone.</p>
+              <p className="mt-6 max-w-xl text-lg text-slate-600 [animation:surge-rise_0.8s_ease-out_0.12s_both]">Hidden rates. Junk monthly fees. Statements built to confuse you. Surge is transparent payments for local business &mdash; a lower rate, software included, and a real person who answers the phone.</p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start [animation:surge-rise_0.8s_ease-out_0.24s_both]">
                 <Link href="/book" className="rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-7 py-3.5 text-sm font-semibold text-white shadow-[0_12px_40px_-10px_rgba(37,99,235,0.6)] transition-shadow hover:shadow-[0_16px_50px_-8px_rgba(6,182,212,0.6)]">Book a free call</Link>
                 <Link href="/pricing" className="rounded-full border border-slate-200 bg-white px-7 py-3.5 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50">See pricing</Link>
@@ -71,9 +71,9 @@ export default function HomePage() {
               <div className="relative aspect-[4/3] w-full overflow-hidden rounded-3xl border border-white/60 shadow-2xl">
                 <Image src="/jpg6.jpg" alt="A local business owner taking a tap card payment at a salon counter" fill priority sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover" />
                 <div className="absolute bottom-4 left-4 rounded-2xl border border-white/60 bg-white/85 px-4 py-3 shadow-lg backdrop-blur">
-                  <div className="text-[11px] font-medium text-slate-500">You keep</div>
-                  <div className="text-2xl font-bold tabular-nums text-emerald-600">97.4%</div>
-                  <div className="text-[11px] text-slate-500">of every sale</div>
+                  <div className="text-[11px] font-medium text-slate-500">You save</div>
+                  <div className="text-xl font-bold tabular-nums text-emerald-600">0.4% + 12&cent;</div>
+                  <div className="text-[11px] text-slate-500">on every sale</div>
                 </div>
               </div>
             </div>
@@ -127,8 +127,8 @@ export default function HomePage() {
             <div className="grid gap-5 md:grid-cols-3">
               <div className="group rounded-2xl border border-white/10 bg-white/5 p-7 transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.08]">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 text-lg font-bold text-white">$</div>
-                <h3 className="mt-5 text-lg font-semibold">Transparent pricing</h3>
-                <p className="mt-2 text-sm leading-relaxed text-white/70">One clear rate. No statement-fee maze, no surprise line items. You always know what a sale actually earned.</p>
+                <h3 className="mt-5 text-lg font-semibold">A lower, honest rate</h3>
+                <p className="mt-2 text-sm leading-relaxed text-white/70">One clear rate, less than the big guys. No statement-fee maze, no surprise line items &mdash; you keep more of every sale you fight for.</p>
               </div>
               <div className="group rounded-2xl border border-white/10 bg-white/5 p-7 transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.08]">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-sky-400 text-lg font-bold text-white">@</div>
@@ -200,10 +200,10 @@ export default function HomePage() {
         <div className="pointer-events-none absolute -left-20 -top-20 h-80 w-80 rounded-full bg-white/15 blur-[100px]" />
         <div className="pointer-events-none absolute -right-20 -bottom-24 h-80 w-80 rounded-full bg-cyan-200/30 blur-[110px]" />
         <div className="relative mx-auto max-w-4xl px-6 text-center">
-          <h2 className="text-4xl font-bold tracking-tight sm:text-5xl">See what you&apos;d actually keep</h2>
-          <p className="mx-auto mt-4 max-w-xl text-white/85">A 15-minute call, a clear quote, and an honest look at your current processor&apos;s fees. No pressure, no jargon.</p>
+          <h2 className="text-4xl font-bold tracking-tight sm:text-5xl">See how much you&apos;re overpaying</h2>
+          <p className="mx-auto mt-4 max-w-xl text-white/85">A free 15-minute call, a clear quote, and the exact dollar amount you&apos;d save by switching to Surge. No pressure, no jargon.</p>
           <div className="mt-8 flex justify-center">
-            <Link href="/book" className="rounded-full bg-white px-8 py-4 text-sm font-semibold text-blue-700 shadow-lg transition-transform hover:scale-105">Book my free call</Link>
+            <Link href="/book" className="rounded-full bg-white px-8 py-4 text-sm font-semibold text-blue-700 shadow-lg transition-transform hover:scale-105">Book my free savings call</Link>
           </div>
         </div>
       </section>

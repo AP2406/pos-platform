@@ -41,26 +41,32 @@ export function SavingsEstimator() {
 
       <div className="mt-6 grid grid-cols-2 gap-4">
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <div className="text-xs font-medium text-slate-500">Typical processor</div>
+          <div className="text-xs font-medium text-slate-500">What you pay now</div>
           <div className="text-[11px] text-slate-400">2.9% + $0.30 / sale</div>
           <div className="mt-2 text-2xl font-semibold tabular-nums text-slate-900">{dollars(typicalAnnual)}</div>
           <div className="text-[11px] text-slate-400">in fees / year</div>
         </div>
         <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-cyan-50 p-4">
-          <div className="text-xs font-medium text-blue-700">Surge</div>
+          <div className="text-xs font-medium text-blue-700">With Surge</div>
           <div className="text-[11px] text-blue-500">2.5% + $0.18 / sale</div>
           <div className="mt-2 text-2xl font-semibold tabular-nums text-slate-900">{dollars(surgeAnnual)}</div>
           <div className="text-[11px] text-slate-400">in fees / year</div>
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-        <span className="text-sm font-medium text-emerald-800">You could keep / year</span>
-        <span className="text-2xl font-bold tabular-nums text-emerald-600">{dollars(savings)}</span>
+      <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-cyan-50 px-4 py-4">
+        <div>
+          <div className="text-sm font-semibold text-emerald-800">Your savings with Surge</div>
+          <div className="text-[11px] text-emerald-700">about {dollars(savings / 12)} back in your pocket every month</div>
+        </div>
+        <div className="text-right">
+          <div className="text-3xl font-bold tabular-nums text-emerald-600">{dollars(savings)}</div>
+          <div className="text-[11px] font-medium text-emerald-700">saved / year</div>
+        </div>
       </div>
 
-      <Link href="/book" className="mt-6 flex w-full items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_40px_-10px_rgba(37,99,235,0.6)] transition-shadow hover:shadow-[0_16px_50px_-8px_rgba(6,182,212,0.6)]">See my exact savings on a 15-min call</Link>
-      <p className="mt-3 text-[11px] leading-relaxed text-slate-400">Estimate only. Compares a common 2.9% + $0.30 per-transaction rate against Surge pricing of 2.5% + $0.18 per transaction. Your exact rate is confirmed on the call.</p>
+      <Link href="/book" className="mt-6 flex w-full items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_40px_-10px_rgba(37,99,235,0.6)] transition-shadow hover:shadow-[0_16px_50px_-8px_rgba(6,182,212,0.6)]">Show me my exact savings &mdash; book a free call</Link>
+      <p className="mt-3 text-[11px] leading-relaxed text-slate-400">Estimate only. Compares a common 2.9% + $0.30 per-transaction rate against Surge pricing of 2.5% + $0.18 per transaction. Your exact savings are confirmed on the call.</p>
     </div>
   );
 }

@@ -6,10 +6,10 @@ import { SurgeMark } from "./surge-mark";
 export const metadata: Metadata = {
   metadataBase: new URL("https://surgetechpos.com"),
   title: { default: "Surge \u2014 Transparent payments for local business", template: "%s \u2014 Surge" },
-  description: "Surge gives local businesses transparent card processing powered by Finix, real human support, and software that shows you exactly what you keep.",
+  description: "Surge gives local businesses lower card processing rates, real human support, and built-in software that shows exactly how much you save on every sale.",
   icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }], apple: "/icon-192.png" },
-  openGraph: { title: "Surge \u2014 Transparent payments for local business", description: "Card processing powered by Finix, real human support, and software that shows you exactly what you keep.", url: "https://surgetechpos.com", siteName: "Surge", type: "website" },
-  twitter: { card: "summary_large_image", title: "Surge \u2014 Transparent payments for local business", description: "Card processing powered by Finix, with software that shows you exactly what you keep." },
+  openGraph: { title: "Surge \u2014 Transparent payments for local business", description: "Lower card processing rates, real local support, and software that shows your savings on every sale.", url: "https://surgetechpos.com", siteName: "Surge", type: "website" },
+  twitter: { card: "summary_large_image", title: "Surge \u2014 Transparent payments for local business", description: "Lower card processing rates and software that shows your savings on every sale." },
 };
 
 const keyframes = "@keyframes surge-drift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(4%,-3%) scale(1.06)}66%{transform:translate(-3%,4%) scale(0.96)}}@keyframes surge-rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}@keyframes surge-fade{from{opacity:0}to{opacity:1}}@keyframes surge-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}@keyframes surge-shimmer{0%{background-position:0% center}100%{background-position:200% center}}@keyframes surge-spin{from{transform:translate(-50%,-50%) rotate(0deg)}to{transform:translate(-50%,-50%) rotate(360deg)}}";
@@ -40,7 +40,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
               <SurgeMark className="h-[28px] w-[47px]" />
               <span className="text-xl font-semibold tracking-tight text-white">Surge</span>
             </div>
-            <p className="mt-3 max-w-sm text-sm text-white/60">Transparent payments powered by Finix, with software that shows you exactly what you keep &mdash; and a real person on the other end of the phone.</p>
+            <p className="mt-3 max-w-sm text-sm text-white/60">Lower card processing rates and software that shows your savings on every sale &mdash; plus a real person on the other end of the phone.</p>
           </div>
           <div>
             <div className="text-xs uppercase tracking-widest text-white/40">Product</div>
@@ -58,7 +58,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             </ul>
           </div>
         </div>
-        <div className="relative mx-auto max-w-6xl border-t border-white/10 px-6 py-6 text-xs text-white/40">&copy; 2026 Surge. Payments powered by Finix.</div>
+        <div className="relative mx-auto max-w-6xl border-t border-white/10 px-6 py-6 text-xs text-white/40">&copy; 2026 Surge. Smarter payments for local business.</div>
       </footer>
     </div>
   );
