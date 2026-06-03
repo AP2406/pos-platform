@@ -3,19 +3,27 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { submitBooking } from "../actions";
 
-const choiceSteps = [
-  { key: "businessType", q: "What kind of business do you run?", options: ["Cafe / quick-serve", "Restaurant / bar", "Retail / shop", "Salon / services", "Transportation", "Other"] },
-  { key: "volume", q: "Roughly how much do you process in card sales each month?", options: ["Under $5k", "$5k - $20k", "$20k - $50k", "$50k - $100k", "$100k+"] },
-  { key: "avgTicket", q: "What is your average sale size?", options: ["Under $15", "$15 - $50", "$50 - $150", "$150+"] },
-  { key: "paymentMix", q: "How do most customers pay?", options: ["Mostly in person", "A mix of both", "Mostly online or phone"] },
+const businessTypeOptions = ["Cafe / quick-serve", "Restaurant / bar", "Retail / shop", "Salon / services", "Transportation", "Other", "New / not open yet"];
+const volumeRanges = ["Under $5k", "$5k - $20k", "$20k - $50k", "$50k - $100k", "$100k+"];
+const ticketOptions = ["Under $15", "$15 - $50", "$50 - $150", "$150+", "New business / not sure"];
+const mixOptions = ["Mostly in person", "A mix of both", "Mostly online or phone", "New business / not sure"];
+
+const steps: { key?: string; type: string; q?: string; options?: string[] }[] = [
+  { key: "businessType", type: "choice", q: "What kind of business do you run?", options: businessTypeOptions },
+  { key: "volume", type: "volume", q: "Roughly how much do you process in card sales each month?" },
+  { key: "avgTicket", type: "choice", q: "What is your average sale size?", options: ticketOptions },
+  { key: "paymentMix", type: "choice", q: "How do most customers pay?", options: mixOptions },
+  { type: "contact" },
 ];
 
-const TOTAL = choiceSteps.length + 1;
+const TOTAL = steps.length;
 
 export function BookWizard() {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [volumeInput, setVolumeInput] = useState("");
+  const [volumeExact, setVolumeExact] = useState("");
   const [name, setName] = useState("");
   const [business, setBusiness] = useState("");
   const [email, setEmail] = useState("");
@@ -33,6 +41,7 @@ export function BookWizard() {
 
   function start() {
     setStep(0); setAnswers({}); setStatus("idle"); setError("");
+    setVolumeInput(""); setVolumeExact("");
     setName(""); setBusiness(""); setEmail(""); setPhone(""); setInterest(""); setPreferred(""); setMessage("");
     setOpen(true);
   }
@@ -42,17 +51,32 @@ export function BookWizard() {
     setStep(function (s) { return s + 1; });
   }
 
+  function chooseVolume(label: string, exact: string) {
+    setAnswers(function (a) { const next = Object.assign({}, a); next.volume = label; return next; });
+    setVolumeExact(exact);
+    setStep(function (s) { return s + 1; });
+  }
+
+  function submitVolumeNumber() {
+    const n = parseInt(volumeInput.replace(/[^0-9]/g, ""), 10);
+    if (!n || n <= 0) return;
+    chooseVolume("$" + n.toLocaleString("en-CA") + " entered", String(n));
+  }
+
   function back() { setStep(function (s) { return Math.max(0, s - 1); }); }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setStatus("sending"); setError("");
-    const res = await submitBooking({ name: name, business: business, email: email, phone: phone, businessType: answers.businessType || "", volume: answers.volume || "", avgTicket: answers.avgTicket || "", paymentMix: answers.paymentMix || "", interest: interest, preferred: preferred, message: message });
+    const res = await submitBooking({ name: name, business: business, email: email, phone: phone, businessType: answers.businessType || "", volume: answers.volume || "", volumeExact: volumeExact, avgTicket: answers.avgTicket || "", paymentMix: answers.paymentMix || "", interest: interest, preferred: preferred, message: message });
     if (res.ok) { setStatus("ok"); } else { setStatus("error"); setError(res.error || "Something went wrong."); }
   }
 
   const pct = Math.round((step / TOTAL) * 100);
   const inputClass = "mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
+  const current = steps[step];
+  const curKey = current.key || "";
+  const curOptions = current.options || [];
 
   return (
     <>
@@ -82,13 +106,34 @@ export function BookWizard() {
                   </div>
 
                   <div key={step} className="mt-6 [animation:surge-rise_0.3s_ease-out]">
-                    {step < choiceSteps.length ? (
+                    {current.type === "choice" ? (
                       <div>
-                        <h3 className="text-xl font-bold tracking-tight text-slate-900">{choiceSteps[step].q}</h3>
+                        <h3 className="text-xl font-bold tracking-tight text-slate-900">{current.q}</h3>
                         <div className="mt-5 grid gap-2.5">
-                          {choiceSteps[step].options.map((opt) => (
-                            <button key={opt} type="button" onClick={() => choose(choiceSteps[step].key, opt)} className={"flex items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-medium transition " + (answers[choiceSteps[step].key] === opt ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-slate-50")}><span>{opt}</span><span className="text-slate-300">&rarr;</span></button>
+                          {curOptions.map((opt) => (
+                            <button key={opt} type="button" onClick={() => choose(curKey, opt)} className={"flex items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-medium transition " + (answers[curKey] === opt ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-slate-50")}><span>{opt}</span><span className="text-slate-300">&rarr;</span></button>
                           ))}
+                        </div>
+                      </div>
+                    ) : current.type === "volume" ? (
+                      <div>
+                        <h3 className="text-xl font-bold tracking-tight text-slate-900">{current.q}</h3>
+                        <div className="mt-5">
+                          <label htmlFor="b-vol" className="text-sm font-medium text-slate-700">Enter an exact amount</label>
+                          <div className="mt-1.5 flex gap-2">
+                            <div className="relative flex-1">
+                              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+                              <input id="b-vol" type="number" inputMode="numeric" min="0" value={volumeInput} onChange={(e) => setVolumeInput(e.target.value)} placeholder="e.g. 20000" className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-7 pr-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                            </div>
+                            <button type="button" onClick={submitVolumeNumber} disabled={!volumeInput} className="shrink-0 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-5 py-3 text-sm font-semibold text-white transition disabled:opacity-50">Continue</button>
+                          </div>
+                        </div>
+                        <div className="my-4 flex items-center gap-3 text-xs text-slate-400"><span className="h-px flex-1 bg-slate-200" />or pick a range<span className="h-px flex-1 bg-slate-200" /></div>
+                        <div className="grid gap-2.5">
+                          {volumeRanges.map((opt) => (
+                            <button key={opt} type="button" onClick={() => chooseVolume(opt, "")} className={"flex items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-medium transition " + (answers.volume === opt ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-slate-50")}><span>{opt}</span><span className="text-slate-300">&rarr;</span></button>
+                          ))}
+                          <button type="button" onClick={() => chooseVolume("New business (no sales yet)", "")} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:bg-slate-50"><span>New business &mdash; no sales yet</span><span className="text-slate-300">&rarr;</span></button>
                         </div>
                       </div>
                     ) : (

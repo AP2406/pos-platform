@@ -3,14 +3,16 @@
 import { z } from "zod";
 import { sendEmail, isEmailConfigured } from "@/lib/services/email";
 
-const LEADS_TO = process.env.SURGE_LEADS_EMAIL || "aathis2006@gmail.com";
+const LEADS_TO = process.env.SURGE_LEADS_EMAIL || "info@surgetechpos.com";
 const LEADS_FROM = process.env.SURGE_LEADS_FROM || "Surge <noreply@surgetechpos.com>";
+const SUPPORT_EMAIL = process.env.SURGE_SUPPORT_EMAIL || "info@surgetechpos.com";
+const SITE_URL = process.env.SURGE_SITE_URL || "https://app.surgetechpos.com";
 
 // ----- Profit estimate assumptions (tune as you learn your real Finix costs) -----
-const PER_MERCHANT_MONTHLY = 2.50; // Finix active sub-merchant fee
-const PAYOUT_MONTHLY = 12;          // estimated payout fees per month (batched)
-const FINIX_FIXED = 0.15;           // Finix per-transaction fee
-const ADVANCED_MONTHLY = 29;        // recurring if they take Advanced
+const PER_MERCHANT_MONTHLY = 2.50;
+const PAYOUT_MONTHLY = 12;
+const FINIX_FIXED = 0.15;
+const ADVANCED_MONTHLY = 29;
 
 const VOLUME_MID: Record<string, number> = { "Under $5k": 3000, "$5k - $20k": 12500, "$20k - $50k": 35000, "$50k - $100k": 75000, "$100k+": 150000 };
 const TICKET_MID: Record<string, number> = { "Under $15": 10, "$15 - $50": 32, "$50 - $150": 100, "$150+": 250 };
@@ -31,6 +33,60 @@ function esc(s: string): string {
 
 function nl2br(s: string): string {
   return esc(s).replace(/\n/g, "<br>");
+}
+
+function confirmationHtml(name: string, kind: string): string {
+  const safeName = esc(name) || "there";
+  const isCall = kind === "call";
+  const heading = isCall ? "Your free call is booked" : "We got your message";
+  const intro = isCall
+    ? "Thanks for reaching out, " + safeName + ". We have your details and will contact you shortly to lock in a time that works &mdash; no pressure, no jargon."
+    : "Thanks for reaching out, " + safeName + ". We have your message and a real person will get back to you shortly, usually the same day.";
+
+  let steps = "";
+  if (isCall) {
+    const items = ["We review your business details to prep your numbers.", "We reach out to set a time that suits you.", "On the call, we show you exactly what you could save."];
+    let rows = "";
+    for (let i = 0; i < items.length; i++) {
+      rows = rows +
+        "<tr>" +
+          "<td valign='top' style='padding:6px 12px 6px 0;'><div style='width:26px;height:26px;line-height:26px;text-align:center;border-radius:9999px;background-color:#e0edff;color:#2563eb;font-weight:700;font-size:13px;'>" + (i + 1) + "</div></td>" +
+          "<td valign='top' style='padding:6px 0;color:#475569;font-size:14px;line-height:1.5;'>" + items[i] + "</td>" +
+        "</tr>";
+    }
+    steps =
+      "<div style='margin-top:22px;'>" +
+        "<div style='font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#94a3b8;margin-bottom:8px;'>What happens next</div>" +
+        "<table role='presentation' cellpadding='0' cellspacing='0' border='0' width='100%'>" + rows + "</table>" +
+      "</div>";
+  }
+
+  return "" +
+    "<div style='margin:0;padding:0;background-color:#f1f5f9;'>" +
+      "<table role='presentation' cellpadding='0' cellspacing='0' border='0' width='100%' style='background-color:#f1f5f9;padding:24px 0;'>" +
+        "<tr><td align='center'>" +
+          "<table role='presentation' cellpadding='0' cellspacing='0' border='0' width='560' style='width:560px;max-width:560px;'>" +
+            "<tr><td style='background-color:#2563eb;background-image:linear-gradient(135deg,#2563eb 0%,#06b6d4 100%);border-radius:18px 18px 0 0;padding:26px 32px;text-align:center;'>" +
+              "<img src='" + SITE_URL + "/icon-192.png' width='38' height='38' alt='Surge' style='display:inline-block;vertical-align:middle;border-radius:9px;border:0;' />" +
+              "<span style='display:inline-block;vertical-align:middle;margin-left:10px;color:#ffffff;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:22px;font-weight:700;letter-spacing:-0.01em;'>Surge</span>" +
+            "</td></tr>" +
+            "<tr><td style='background-color:#ffffff;padding:34px 32px 30px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'>" +
+              "<div style='width:54px;height:54px;line-height:54px;text-align:center;border-radius:9999px;background-color:#d1fae5;color:#059669;font-size:26px;margin:0 auto 18px;'>&#10003;</div>" +
+              "<h1 style='margin:0 0 10px;text-align:center;color:#0f172a;font-size:24px;font-weight:700;'>" + heading + "</h1>" +
+              "<p style='margin:0;text-align:center;color:#475569;font-size:15px;line-height:1.6;'>" + intro + "</p>" +
+              steps +
+              "<div style='text-align:center;margin-top:26px;'><a href='" + SITE_URL + "' style='display:inline-block;background-color:#2563eb;background-image:linear-gradient(135deg,#2563eb 0%,#06b6d4 100%);color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:13px 30px;border-radius:9999px;'>Visit Surge</a></div>" +
+              "<p style='margin:22px 0 0;text-align:center;color:#94a3b8;font-size:13px;line-height:1.5;'>Questions in the meantime? Just reply to this email.</p>" +
+            "</td></tr>" +
+            "<tr><td style='background-color:#0e1a2b;border-radius:0 0 18px 18px;padding:22px 32px;text-align:center;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'>" +
+              "<div style='color:#ffffff;font-size:14px;font-weight:700;'>Surge</div>" +
+              "<div style='color:#94a3b8;font-size:12px;margin-top:6px;line-height:1.6;'>Smarter payments for local business<br/>Serving the GTA &amp; Durham Region<br/>" + esc(SUPPORT_EMAIL) + "</div>" +
+              "<div style='color:#64748b;font-size:11px;margin-top:10px;'>&copy; 2026 Surge</div>" +
+            "</td></tr>" +
+          "</table>" +
+        "</td></tr>" +
+      "</table>" +
+    "</div>";
 }
 
 const contactSchema = z.object({
@@ -61,12 +117,16 @@ export async function submitContact(input: ContactInput): Promise<{ ok: boolean;
     "<p>" + nl2br(d.message) + "</p>";
   try {
     await sendEmail({ to: LEADS_TO, from: LEADS_FROM, replyTo: d.email, subject: "Surge contact: " + d.name, html: html });
-    return { ok: true };
   } catch (err) {
     return { ok: false, error: "Something went wrong sending your message. Please try again or email us." };
   }
+  try {
+    await sendEmail({ to: d.email, from: LEADS_FROM, replyTo: SUPPORT_EMAIL, subject: "Thanks for reaching out \u2014 Surge", html: confirmationHtml(d.name, "message") });
+  } catch (err2) {
+    // confirmation is best-effort; the lead already went through
+  }
+  return { ok: true };
 }
-
 const bookingSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
   business: z.string().trim().max(160).optional().or(z.literal("")),
@@ -74,6 +134,7 @@ const bookingSchema = z.object({
   phone: z.string().trim().max(40).optional().or(z.literal("")),
   businessType: z.string().trim().max(60).optional().or(z.literal("")),
   volume: z.string().trim().max(60).optional().or(z.literal("")),
+  volumeExact: z.string().trim().max(20).optional().or(z.literal("")),
   avgTicket: z.string().trim().max(60).optional().or(z.literal("")),
   paymentMix: z.string().trim().max(60).optional().or(z.literal("")),
   interest: z.string().trim().max(60).optional().or(z.literal("")),
@@ -93,8 +154,8 @@ export async function submitBooking(input: BookingInput): Promise<{ ok: boolean;
   }
   const d = parsed.data;
 
-  // ----- Internal profit + risk estimate (only you see this) -----
-  const volume = VOLUME_MID[d.volume || ""] || 0;
+  const exactNum = d.volumeExact ? Number(d.volumeExact.replace(/[^0-9]/g, "")) : 0;
+  const volume = exactNum > 0 ? exactNum : (VOLUME_MID[d.volume || ""] || 0);
   const ticket = TICKET_MID[d.avgTicket || ""] || 0;
   const txns = ticket > 0 ? Math.round(volume / ticket) : 0;
   const r = rateFor(d.paymentMix || "");
@@ -111,12 +172,12 @@ export async function submitBooking(input: BookingInput): Promise<{ ok: boolean;
   if (d.avgTicket === "$150+") { flags.push("large average ticket (bigger dispute exposure)"); if (risk === "Low") risk = "Medium"; }
   if (d.businessType === "Transportation") { flags.push("transportation (verify chargeback profile)"); }
 
-  let estimateHtml = "";
+ let estimateHtml = "";
   if (volume > 0) {
     estimateHtml =
       "<hr>" +
       "<h3>Estimated value (internal &mdash; rough)</h3>" +
-      "<p><strong>Est. monthly volume:</strong> " + money(volume) + "</p>" +
+      "<p><strong>Est. monthly volume:</strong> " + money(volume) + (exactNum > 0 ? " (exact)" : " (range midpoint)") + "</p>" +
       "<p><strong>Est. transactions / mo:</strong> " + txns.toLocaleString("en-CA") + "</p>" +
       "<p><strong>Est. processing revenue:</strong> " + money(revenue) + " / mo</p>" +
       "<p><strong>Est. cost (interchange + Finix):</strong> " + money(cost) + " / mo</p>" +
@@ -125,9 +186,10 @@ export async function submitBooking(input: BookingInput): Promise<{ ok: boolean;
       "<p><strong>Est. net profit:</strong> ~" + money(netMonthly) + " / mo (~" + money(netAnnual) + " / yr)</p>" +
       "<p><strong>If they take Advanced:</strong> + $" + ADVANCED_MONTHLY + " / mo near-pure margin</p>" +
       "<p><strong>Risk:</strong> " + risk + (flags.length ? " &mdash; " + esc(flags.join("; ")) : "") + "</p>" +
-      "<p style='color:#888;font-size:12px'>Rough estimate from range midpoints and assumed costs. Tune the constants at the top of actions.ts as you learn your real Finix numbers.</p>";
+      "<p style='color:#888;font-size:12px'>Rough estimate. Tune the constants at the top of actions.ts as you learn your real Finix numbers.</p>";
+  } else {
+    estimateHtml = "<hr><p><em>New / no-history business &mdash; no processing numbers yet, so no profit estimate. Assess growth potential on the call.</em></p>";
   }
-
   const html =
     "<h2>New call request</h2>" +
     "<p><strong>Name:</strong> " + esc(d.name) + "</p>" +
@@ -151,8 +213,13 @@ export async function submitBooking(input: BookingInput): Promise<{ ok: boolean;
 
   try {
     await sendEmail({ to: LEADS_TO, from: LEADS_FROM, replyTo: d.email, subject: subject, html: html });
-    return { ok: true };
   } catch (err) {
     return { ok: false, error: "Something went wrong. Please try again or email us." };
   }
+  try {
+    await sendEmail({ to: d.email, from: LEADS_FROM, replyTo: SUPPORT_EMAIL, subject: "We got your request \u2014 Surge", html: confirmationHtml(d.name, "call") });
+  } catch (err2) {
+    // confirmation is best-effort; the lead already went through
+  }
+  return { ok: true };
 }
