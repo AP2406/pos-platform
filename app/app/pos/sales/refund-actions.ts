@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 
 const REASONS = ["customer_request", "defective", "wrong_item", "overcharge", "duplicate", "other"];
 
@@ -10,11 +11,45 @@ function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
+// Resolve the PIN-identified operator on this device (if any).
+async function getActiveStaffRow(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string
+): Promise<{ id: string; name: string; role: string } | null> {
+  const cookieStore = await cookies();
+  const sid = cookieStore.get("surge_active_staff")?.value || null;
+  if (!sid) return null;
+  const { data } = await supabase
+    .from("staff_members")
+    .select("id, name, role, is_active")
+    .eq("id", sid)
+    .eq("business_id", businessId)
+    .maybeSingle();
+  if (!data || data.is_active === false) return null;
+  return { id: data.id as string, name: data.name as string, role: data.role as string };
+}
+
+// Verify a PIN belongs to an active manager. Returns the manager or null.
+async function getManagerByPin(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  pin: string | undefined
+): Promise<{ id: string; name: string } | null> {
+  if (!pin || !/^[0-9]{4,6}$/.test(pin)) return null;
+  const { data } = await supabase.rpc("verify_staff_member_pin", {
+    p_business_id: businessId,
+    p_pin: pin,
+  });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || row.role !== "manager") return null;
+  return { id: row.id as string, name: row.name as string };
+}
+
 type RefundLineInput = { order_item_id: string; quantity: number };
 
 type RefundOrderResult = { ok: true; order: { id: string; sale_number: number | null; status: string; subtotal: number; discount: number; tax: number; tip: number; total: number; refunded_amount: number }; lines: { order_item_id: string; name: string; unit_price: number; sold: number; returned: number; returnable: number }[] } | { error: string };
 
-type RefundItemsResult = { ok: true; amount: number; fully: boolean; returned_subtotal: number; discount_portion: number; tax_portion: number } | { error: string };
+type RefundItemsResult = { ok: true; amount: number; fully: boolean; returned_subtotal: number; discount_portion: number; tax_portion: number } | { needs_approval: true } | { error: string };
 
 export async function getOrderForRefund(orderId: string): Promise<RefundOrderResult> {
   if (!orderId) return { error: "Missing sale." };
@@ -88,7 +123,7 @@ export async function getOrderForRefund(orderId: string): Promise<RefundOrderRes
   };
 }
 
-export async function refundItems(input: { order_id: string; lines: RefundLineInput[]; reason: string; note?: string; restock: boolean }): Promise<RefundItemsResult> {
+export async function refundItems(input: { order_id: string; lines: RefundLineInput[]; reason: string; note?: string; restock: boolean; approver_pin?: string }): Promise<RefundItemsResult> {
   const orderId = input.order_id;
   if (!orderId) return { error: "Missing sale." };
   if (!input.reason || !REASONS.includes(input.reason)) {
@@ -100,6 +135,15 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     return { error: "Only an owner or manager can refund a sale." };
   }
   const supabase = await createClient();
+
+  // If a staff/trainee is the active operator, a manager must approve.
+  const active = await getActiveStaffRow(supabase, business.id);
+  let approver: { id: string; name: string } | null = null;
+  if (active && (active.role === "staff" || active.role === "trainee")) {
+    if (!input.approver_pin) return { needs_approval: true };
+    approver = await getManagerByPin(supabase, business.id, input.approver_pin);
+    if (!approver) return { error: "Manager PIN not recognized." };
+  }
 
   const { data: order } = await supabase
     .from("orders")
@@ -213,6 +257,8 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     tax_portion: taxPortion,
     amount: amount,
     reason: input.reason,
+    staff: active ? { id: active.id, name: active.name, role: active.role } : null,
+    approver: approver ? { id: approver.id, name: approver.name } : null,
     refunded_at: new Date().toISOString(),
   };
 
@@ -271,6 +317,10 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
       restocked: restocked,
       fully: fully,
       line_count: refundLines.length,
+      staff_id: active ? active.id : null,
+      staff_name: active ? active.name : null,
+      approved_by: approver ? approver.id : null,
+      approver_name: approver ? approver.name : null,
     },
   });
   if (refundAuditError) console.error("refundItems audit:", refundAuditError);

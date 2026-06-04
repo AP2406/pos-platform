@@ -93,6 +93,8 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
   const [emailErr, setEmailErr] = useState<string | null>(null);
   const [emailDone, setEmailDone] = useState(false);
   const [emailBusy, setEmailBusy] = useState(false);
+  const [needsApproval, setNeedsApproval] = useState(false);
+  const [mgrPin, setMgrPin] = useState("");
 
   async function start() {
     setOpen(true);
@@ -109,6 +111,8 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
     setEmailErr(null);
     setEmailDone(false);
     setEmailBusy(false);
+    setNeedsApproval(false);
+    setMgrPin("");
     const res = await getOrderForRefund(orderId);
     setLoading(false);
     if ("error" in res) {
@@ -157,6 +161,24 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
   const previewAmount = round2(returnedSubtotal - discountPortion + taxPortion);
   const anySelected = lines.some((l) => (qty[l.order_item_id] || 0) > 0);
 
+  function runRefund(approverPin?: string) {
+    setErr(null);
+    const selected = lines.filter((l) => (qty[l.order_item_id] || 0) > 0).map((l) => ({ order_item_id: l.order_item_id, quantity: qty[l.order_item_id] || 0 }));
+    const selectedForReceipt = lines.filter((l) => (qty[l.order_item_id] || 0) > 0).map((l) => ({ name: l.name, quantity: qty[l.order_item_id] || 0, line_subtotal: round2((qty[l.order_item_id] || 0) * l.unit_price) }));
+    startTransition(async () => {
+      const res = await refundItems({ order_id: orderId, lines: selected, reason, note, restock, approver_pin: approverPin });
+      if ("needs_approval" in res) {
+        setNeedsApproval(true);
+        return;
+      }
+      if ("error" in res) {
+        setErr(res.error);
+        return;
+      }
+      setDone({ amount: res.amount, fully: res.fully, discount_portion: res.discount_portion, tax_portion: res.tax_portion, returned_subtotal: res.returned_subtotal, items: selectedForReceipt, reason: reason, at: new Date().toLocaleString() });
+    });
+  }
+
   function submit() {
     setErr(null);
     if (!reason) {
@@ -167,16 +189,15 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
       setErr("Select at least one item to return.");
       return;
     }
-    const selected = lines.filter((l) => (qty[l.order_item_id] || 0) > 0).map((l) => ({ order_item_id: l.order_item_id, quantity: qty[l.order_item_id] || 0 }));
-    const selectedForReceipt = lines.filter((l) => (qty[l.order_item_id] || 0) > 0).map((l) => ({ name: l.name, quantity: qty[l.order_item_id] || 0, line_subtotal: round2((qty[l.order_item_id] || 0) * l.unit_price) }));
-    startTransition(async () => {
-      const res = await refundItems({ order_id: orderId, lines: selected, reason, note, restock });
-      if ("error" in res) {
-        setErr(res.error);
-        return;
-      }
-      setDone({ amount: res.amount, fully: res.fully, discount_portion: res.discount_portion, tax_portion: res.tax_portion, returned_subtotal: res.returned_subtotal, items: selectedForReceipt, reason: reason, at: new Date().toLocaleString() });
-    });
+    runRefund(undefined);
+  }
+
+  function approveRefund() {
+    if (!/^[0-9]{4,6}$/.test(mgrPin)) {
+      setErr("Enter the manager's 4 to 6 digit PIN.");
+      return;
+    }
+    runRefund(mgrPin);
   }
 
   return (
@@ -216,6 +237,23 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
               <div className="space-y-3">
                 <p className="text-sm text-red-600">{err}</p>
                 <Button variant="outline" className="w-full" onClick={() => setOpen(false)}>Close</Button>
+              </div>
+            ) : needsApproval ? (
+              <div className="space-y-3">
+                <h3 className="font-medium">Manager approval</h3>
+                <p className="text-sm text-muted-foreground">
+                  A manager must approve this refund of {cad(previewAmount)}. Ask a manager to enter their PIN.
+                </p>
+                <Input type="password" inputMode="numeric" value={mgrPin} onChange={(e) => setMgrPin(e.target.value)} placeholder="Manager PIN" className="h-9" />
+                {err && <p className="text-sm text-red-600">{err}</p>}
+                <div className="flex gap-2">
+                  <Button className="flex-1" onClick={approveRefund} disabled={pending || !mgrPin}>
+                    {pending ? "Refunding..." : "Approve & refund"}
+                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={() => { setNeedsApproval(false); setMgrPin(""); setErr(null); }}>
+                    Back
+                  </Button>
+                </div>
               </div>
             ) : order ? (
               <div className="space-y-4">
