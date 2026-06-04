@@ -203,6 +203,7 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [pending, startTransition] = useTransition();
   const splitIdRef = useRef(1);
+  const idemKeyRef = useRef<string | null>(null);
 
   const itemTaxableById: Record<string, boolean> = {};
   for (const it of items) itemTaxableById[it.id] = it.taxable;
@@ -308,6 +309,14 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
     setCustomer(null);
     setCustomerQuery("");
     setCustomerResults([]);
+    idemKeyRef.current = null;
+  }
+
+  // One idempotency key per checkout attempt. It survives a failed/retried
+  // submit (so a retry can't double-charge) and resets when the cart clears.
+  function nextIdemKey(): string {
+    if (!idemKeyRef.current) idemKeyRef.current = crypto.randomUUID();
+    return idemKeyRef.current;
   }
 
   function pickCustomer(c: { id: string; name: string }) {
@@ -527,6 +536,7 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
         items: cart,
         tip: tipNum,
         payment_method: method,
+        idempotency_key: nextIdemKey(),
         discount_type: discountMode,
         discount_value: discountInput,
         discount_reason_code: discount > 0 ? discountReason : undefined,
@@ -604,6 +614,7 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
         items: cart,
         tip: tipNum,
         payments: built.map((p) => ({ method: p.method, amount: p.amount, tendered: p.tendered })),
+        idempotency_key: nextIdemKey(),
         discount_type: discountMode,
         discount_value: discountInput,
         discount_reason_code: discount > 0 ? discountReason : undefined,
