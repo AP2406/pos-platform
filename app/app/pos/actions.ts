@@ -149,6 +149,8 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
 
   const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
 
+  // Per-item tax. Each catalog item uses the business default rate, a named
+  // rate, or is tax-exempt. Custom lines (no catalog item) use the default rate.
   let rate = Number(business.default_tax_rate) || 0;
   if (rate > 1) rate = rate / 100;
 
@@ -159,25 +161,74 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
         .filter((id): id is string => !!id)
     )
   );
-  const taxableById: Record<string, boolean> = {};
+  const itemTaxMeta: Record<string, { taxable: boolean; tax_rate_id: string | null }> = {};
   if (taxLineIds.length > 0) {
     const { data: taxRows } = await supabase
       .from("catalog_items")
-      .select("id, taxable")
+      .select("id, taxable, tax_rate_id")
       .eq("business_id", business.id)
       .in("id", taxLineIds);
     for (const r of taxRows ?? []) {
-      taxableById[r.id as string] = (r.taxable as boolean | null) ?? true;
+      itemTaxMeta[r.id as string] = {
+        taxable: (r.taxable as boolean | null) ?? true,
+        tax_rate_id: (r.tax_rate_id as string | null) ?? null,
+      };
     }
   }
-  let taxableSubtotal = 0;
-  for (const i of parsed.data.items) {
-    const isTaxable = i.catalog_item_id ? (taxableById[i.catalog_item_id] ?? true) : true;
-    if (isTaxable) taxableSubtotal += i.unit_price * i.quantity;
+
+  const usedRateIds = Array.from(
+    new Set(
+      Object.values(itemTaxMeta)
+        .map((m) => m.tax_rate_id)
+        .filter((id): id is string => !!id)
+    )
+  );
+  const rateFracById: Record<string, number> = {};
+  const rateNameById: Record<string, string> = {};
+  if (usedRateIds.length > 0) {
+    const { data: rateRows } = await supabase
+      .from("tax_rates")
+      .select("id, name, rate")
+      .eq("business_id", business.id)
+      .in("id", usedRateIds);
+    for (const r of rateRows ?? []) {
+      rateFracById[r.id as string] = (Number(r.rate) || 0) / 100;
+      rateNameById[r.id as string] = r.name as string;
+    }
   }
+
   const taxF = subtotal > 0 ? discountedSubtotal / subtotal : 0;
-  const taxableBase = Math.round(taxableSubtotal * taxF * 100) / 100;
-  const tax = Math.round(taxableBase * rate * 100) / 100;
+
+  const rateBuckets: Record<string, { label: string; frac: number; base: number }> = {};
+  for (const i of parsed.data.items) {
+    const meta = i.catalog_item_id ? itemTaxMeta[i.catalog_item_id] : undefined;
+    const isTaxable = meta ? meta.taxable : true;
+    if (!isTaxable) continue;
+    let frac = rate;
+    let label = "Tax";
+    if (meta && meta.tax_rate_id && rateFracById[meta.tax_rate_id] !== undefined) {
+      frac = rateFracById[meta.tax_rate_id];
+      label = rateNameById[meta.tax_rate_id] || "Tax";
+    }
+    if (frac <= 0) continue;
+    const key = label + "@" + frac.toFixed(6);
+    if (!rateBuckets[key]) rateBuckets[key] = { label: label, frac: frac, base: 0 };
+    rateBuckets[key].base += i.unit_price * i.quantity;
+  }
+
+  let tax = 0;
+  let taxableBase = 0;
+  const taxBreakdown: { label: string; rate: number; base: number; amount: number }[] = [];
+  for (const key of Object.keys(rateBuckets)) {
+    const b = rateBuckets[key];
+    const discountedBase = Math.round(b.base * taxF * 100) / 100;
+    const amount = Math.round(discountedBase * b.frac * 100) / 100;
+    tax += amount;
+    taxableBase += discountedBase;
+    taxBreakdown.push({ label: b.label, rate: b.frac, base: discountedBase, amount: amount });
+  }
+  tax = Math.round(tax * 100) / 100;
+  taxableBase = Math.round(taxableBase * 100) / 100;
 
   const tip = parsed.data.tip ?? 0;
   const total = Math.round((discountedSubtotal + tax + tip) * 100) / 100;
@@ -250,7 +301,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       reason_code: discount > 0 ? discountReasonCode : null,
       reason_note: discount > 0 && discountReasonNote ? discountReasonNote : null,
     },
-    tax: { rate: rate, amount: tax, taxable_base: taxableBase },
+    tax: { rate: rate, amount: tax, taxable_base: taxableBase, breakdown: taxBreakdown },
     tip: tip,
     total: total,
     payment_method: orderPaymentMethod,
