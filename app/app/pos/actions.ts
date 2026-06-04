@@ -68,6 +68,40 @@ type CreateOrderResult =
   | { ok: true; id: string; sale_number: number }
   | { error: string };
 
+// Resolve the PIN-identified operator on this device (if any).
+async function getActiveStaffRow(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string
+): Promise<{ id: string; name: string; role: string } | null> {
+  const cookieStore = await cookies();
+  const sid = cookieStore.get("surge_active_staff")?.value || null;
+  if (!sid) return null;
+  const { data } = await supabase
+    .from("staff_members")
+    .select("id, name, role, is_active")
+    .eq("id", sid)
+    .eq("business_id", businessId)
+    .maybeSingle();
+  if (!data || data.is_active === false) return null;
+  return { id: data.id as string, name: data.name as string, role: data.role as string };
+}
+
+// Verify a PIN belongs to an active manager. Returns the manager or null.
+async function getManagerByPin(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  pin: string | undefined
+): Promise<{ id: string; name: string } | null> {
+  if (!pin || !/^[0-9]{4,6}$/.test(pin)) return null;
+  const { data } = await supabase.rpc("verify_staff_member_pin", {
+    p_business_id: businessId,
+    p_pin: pin,
+  });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || row.role !== "manager") return null;
+  return { id: row.id as string, name: row.name as string };
+}
+
 export async function createOrder(input: OrderInput): Promise<CreateOrderResult> {
   const parsed = orderSchema.safeParse(input);
   if (!parsed.success) {
@@ -497,8 +531,9 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
 export async function voidOrder(
   orderId: string,
   reasonCode: string,
-  reasonNote?: string
-): Promise<{ ok: true } | { error: string }> {
+  reasonNote?: string,
+  approverPin?: string
+): Promise<{ ok: true } | { needs_approval: true } | { error: string }> {
   if (!orderId) return { error: "Missing order." };
 
   const { business, role } = await requireBusiness();
@@ -516,6 +551,16 @@ export async function voidOrder(
   }
 
   const supabase = await createClient();
+
+  // If a staff/trainee is the active operator, a manager must approve.
+  const active = await getActiveStaffRow(supabase, business.id);
+  let approver: { id: string; name: string } | null = null;
+  if (active && (active.role === "staff" || active.role === "trainee")) {
+    if (!approverPin) return { needs_approval: true };
+    approver = await getManagerByPin(supabase, business.id, approverPin);
+    if (!approver) return { error: "Manager PIN not recognized." };
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -539,7 +584,12 @@ export async function voidOrder(
     order_id: orderId,
     reason_code: code,
     reason_note: note ? note.slice(0, 500) : null,
-    metadata: {},
+    metadata: {
+      staff_id: active ? active.id : null,
+      staff_name: active ? active.name : null,
+      approved_by: approver ? approver.id : null,
+      approver_name: approver ? approver.name : null,
+    },
   });
   if (auditError) {
     console.error("voidOrder audit:", auditError);
