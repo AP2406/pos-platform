@@ -244,3 +244,33 @@ export async function deleteModifier(
   revalidatePath("/app/catalog");
   return { ok: true };
 }
+export async function setCatalogItemTaxRate(
+  id: string,
+  taxRateId: string | null
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing item." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  if (taxRateId) {
+    const { data: rate } = await supabase
+      .from("tax_rates")
+      .select("id")
+      .eq("id", taxRateId)
+      .eq("business_id", business.id)
+      .maybeSingle();
+    if (!rate) return { error: "Tax rate not found." };
+  }
+
+  const { error } = await supabase
+    .from("catalog_items")
+    .update({ tax_rate_id: taxRateId })
+    .eq("id", id)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("setCatalogItemTaxRate:", error);
+    return { error: "Could not update the tax rate. Please try again." };
+  }
+  revalidatePath("/app/catalog");
+  return { ok: true };
+}

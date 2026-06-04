@@ -8,6 +8,7 @@ import {
   createCatalogItem,
   setCatalogItemActive,
   setCatalogItemTaxable,
+  setCatalogItemTaxRate,
   createVariation,
   deleteVariation,
   createModifier,
@@ -15,6 +16,7 @@ import {
 } from "./actions";
 
 type Option = { id: string; name: string; price: number };
+type TaxRate = { id: string; name: string; rate: number };
 type Item = {
   id: string;
   name: string;
@@ -22,11 +24,12 @@ type Item = {
   category: string | null;
   is_active: boolean;
   taxable: boolean;
+  tax_rate_id: string | null;
   variations: Option[];
   modifiers: Option[];
 };
 
-export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
+export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]; taxRates: TaxRate[] }) {
   const [items, setItems] = useState<Item[]>(initialItems);
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
@@ -42,6 +45,9 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
   const [modName, setModName] = useState("");
   const [modPrice, setModPrice] = useState("");
   const [modError, setModError] = useState<string | null>(null);
+
+  const rateNameById: Record<string, string> = {};
+  for (const r of taxRates) rateNameById[r.id] = r.name;
 
   function handleAdd() {
     setError(null);
@@ -69,6 +75,7 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
           category: category.trim() || null,
           is_active: true,
           taxable: taxable,
+          tax_rate_id: null,
           variations: [],
           modifiers: [],
         },
@@ -100,6 +107,19 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
         setItems((prev) =>
           prev.map((i) =>
             i.id === item.id ? { ...i, taxable: !i.taxable } : i
+          )
+        );
+      }
+    });
+  }
+
+  function handleSetTaxRate(item: Item, taxRateId: string | null) {
+    startTransition(async () => {
+      const res = await setCatalogItemTaxRate(item.id, taxRateId);
+      if (!("error" in res)) {
+        setItems((prev) =>
+          prev.map((i) =>
+            i.id === item.id ? { ...i, tax_rate_id: taxRateId } : i
           )
         );
       }
@@ -328,6 +348,11 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
                         {!item.taxable && (
                           <span className="ml-2 text-xs text-amber-500">Tax-free</span>
                         )}
+                        {item.taxable && item.tax_rate_id && rateNameById[item.tax_rate_id] && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {rateNameById[item.tax_rate_id]}
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {base + modSuffix}
@@ -362,8 +387,36 @@ export function CatalogClient({ initialItems }: { initialItems: Item[] }) {
 
                   {expanded && (
                     <div className="mt-3 border-l-2 border-border space-y-4">
+                      {/* Tax */}
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground pl-3">
+                          Tax &mdash; which rate applies at checkout.
+                        </p>
+                        <div className="pl-3">
+                          {item.taxable ? (
+                            <select
+                              value={item.tax_rate_id ?? ""}
+                              onChange={(e) => handleSetTaxRate(item, e.target.value || null)}
+                              disabled={pending}
+                              className="h-9 rounded-md border border-border bg-transparent text-foreground px-2 text-sm"
+                            >
+                              <option value="">Default rate</option>
+                              {taxRates.map((r) => (
+                                <option key={r.id} value={r.id}>
+                                  {r.name + " (" + r.rate.toFixed(2) + "%)"}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              This item is Tax-free. Switch it to Taxable to choose a rate.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
                       {/* Variations */}
-                      <div className="space-y-3">
+                      <div className="space-y-3 pt-3 border-t border-border">
                         <p className="text-xs text-muted-foreground pl-3">
                           Variations &mdash; options like sizes. The customer picks
                           one at checkout and its price is used.

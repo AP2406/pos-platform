@@ -8,7 +8,7 @@ export default async function CatalogPage() {
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, is_active, taxable")
+    .select("id, name, price, category, is_active, taxable, tax_rate_id")
     .eq("business_id", business.id)
     .order("created_at", { ascending: true });
 
@@ -22,6 +22,13 @@ export default async function CatalogPage() {
   const { data: modsData } = await supabase
     .from("catalog_item_modifiers")
     .select("id, catalog_item_id, name, price")
+    .eq("business_id", business.id)
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
+
+  const { data: ratesData } = await supabase
+    .from("tax_rates")
+    .select("id, name, rate")
     .eq("business_id", business.id)
     .eq("is_active", true)
     .order("created_at", { ascending: true });
@@ -55,8 +62,15 @@ export default async function CatalogPage() {
     category: (i.category as string | null) ?? null,
     is_active: i.is_active as boolean,
     taxable: (i.taxable as boolean | null) ?? true,
+    tax_rate_id: (i.tax_rate_id as string | null) ?? null,
     variations: varsByItem[i.id as string] ?? [],
     modifiers: modsByItem[i.id as string] ?? [],
+  }));
+
+  const taxRates = (ratesData ?? []).map((r) => ({
+    id: r.id as string,
+    name: r.name as string,
+    rate: Number(r.rate),
   }));
 
   return (
@@ -67,7 +81,7 @@ export default async function CatalogPage() {
           The products and services you sell at checkout.
         </p>
       </div>
-      <CatalogClient initialItems={items} />
+      <CatalogClient initialItems={items} taxRates={taxRates} />
     </div>
   );
 }
