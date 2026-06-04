@@ -1,15 +1,17 @@
+import type { ReactNode } from "react";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, SectionHeader } from "../_components/ui";
 import { SettingsForm } from "./settings-form";
 import { TaxCurrencyForm } from "./tax-currency-form";
+import { TaxRatesCard } from "./tax-rates-card";
 import { TrainingModeForm } from "./training-mode-form";
+import { StaffCard } from "./staff-card";
 import { LeadInboxCard } from "./lead-inbox-card";
 import { DriversSettingCard } from "./drivers-setting-card";
 import { NotificationsCard } from "./notifications-card";
 import { GoogleAdsCard } from "./google-ads-card";
-import { StaffCard } from "./staff-card";
-import { TaxRatesCard } from "./tax-rates-card";
+import { SettingsTabs } from "./settings-tabs";
 
 export default async function SettingsPage() {
   const { business, role } = await requireBusiness();
@@ -77,171 +79,162 @@ export default async function SettingsPage() {
     }
   }
 
+  const sections: { key: string; label: string; content: ReactNode }[] = [];
+
+  sections.push({
+    key: "general",
+    label: "General",
+    content: (
+      <>
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Business profile</SectionHeader>
+          <SettingsForm
+            initialName={business.name}
+            initialTimezone={business.timezone || "America/Toronto"}
+          />
+        </div>
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Details</SectionHeader>
+          <dl className="space-y-3 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">Industry</dt>
+              <dd className="font-medium capitalize">
+                {business.industry.replace("_", " ")}
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">Your role</dt>
+              <dd className="font-medium capitalize">{role}</dd>
+            </div>
+          </dl>
+        </div>
+        <div className="bg-card border border-border rounded-lg p-6">
+          <SectionHeader>Account</SectionHeader>
+          <dl className="space-y-3 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">Email</dt>
+              <dd className="font-medium">{user?.email ?? "\u2014"}</dd>
+            </div>
+          </dl>
+        </div>
+      </>
+    ),
+  });
+
+  if (role === "owner") {
+    sections.push({
+      key: "tax",
+      label: "Tax",
+      content: (
+        <>
+          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+            <SectionHeader>Tax and currency</SectionHeader>
+            <TaxCurrencyForm
+              initialTaxPercent={taxPercent}
+              initialCurrency={business.currency || "CAD"}
+            />
+          </div>
+          <div className="bg-card border border-border rounded-lg p-6">
+            <SectionHeader>Additional tax rates</SectionHeader>
+            <TaxRatesCard initialRates={taxRates} />
+          </div>
+        </>
+      ),
+    });
+  }
+
+  if (role === "owner" || role === "manager") {
+    sections.push({
+      key: "team",
+      label: "Team",
+      content: (
+        <div className="bg-card border border-border rounded-lg p-6">
+          <SectionHeader>Staff and PINs</SectionHeader>
+          <StaffCard initialStaff={staffList} />
+        </div>
+      ),
+    });
+  }
+
+  if (role === "owner") {
+    sections.push({
+      key: "operations",
+      label: "Operations",
+      content: (
+        <>
+          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+            <SectionHeader>Training mode</SectionHeader>
+            <TrainingModeForm initialEnabled={trainingMode} />
+          </div>
+          {business.industry === "transportation" && (
+            <div className="bg-card border border-border rounded-lg p-6">
+              <SectionHeader>Features</SectionHeader>
+              <DriversSettingCard
+                initialEnabled={business.drivers_enabled !== false}
+              />
+            </div>
+          )}
+        </>
+      ),
+    });
+  }
+
+  sections.push({
+    key: "integrations",
+    label: "Integrations",
+    content: (
+      <>
+        {role === "owner" && (
+          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+            <SectionHeader>Square</SectionHeader>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="font-medium text-sm">Square invoices</p>
+                <p className="text-muted-foreground text-sm">
+                  Auto-create draft invoices in your Square account when a trip is
+                  booked.
+                </p>
+              </div>
+              {squareConnected ? (
+                <span className="text-sm font-medium text-green-600">
+                  Connected
+                </span>
+              ) : (
+                <form action="/api/integrations/square/connect" method="get">
+                  <button
+                    type="submit"
+                    className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 whitespace-nowrap"
+                  >
+                    Connect with Square
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
+        <GoogleAdsCard />
+        <LeadInboxCard />
+      </>
+    ),
+  });
+
+  sections.push({
+    key: "notifications",
+    label: "Notifications",
+    content: (
+      <div className="mb-4">
+        <NotificationsCard initialPrefs={notifPrefs} />
+      </div>
+    ),
+  });
+
   return (
     <div className="max-w-2xl">
       <PageHeader
         title="Settings"
         subtitle="Manage your business profile and account."
       />
-
-      <div className="bg-card border border-border rounded-lg p-6 mb-4">
-        <SectionHeader>Business profile</SectionHeader>
-        <SettingsForm
-          initialName={business.name}
-          initialTimezone={business.timezone || "America/Toronto"}
-        />
-      </div>
-
-      {role === "owner" && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Tax and currency</SectionHeader>
-          <TaxCurrencyForm
-            initialTaxPercent={taxPercent}
-            initialCurrency={business.currency || "CAD"}
-          />
-        </div>
-      )}
-
-      {role === "owner" && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Additional tax rates</SectionHeader>
-          <TaxRatesCard initialRates={taxRates} />
-        </div>
-      )}
-
-      {role === "owner" && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Training mode</SectionHeader>
-          <TrainingModeForm initialEnabled={trainingMode} />
-        </div>
-      )}
-
-      {(role === "owner" || role === "manager") && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Staff and PINs</SectionHeader>
-          <StaffCard initialStaff={staffList} />
-        </div>
-      )}
-
-      {(role === "owner" || role === "manager") && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Staff and PINs</SectionHeader>
-          <StaffCard initialStaff={staffList} />
-        </div>
-      )}
-
-      {(role === "owner" || role === "manager") && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Staff and PINs</SectionHeader>
-          <StaffCard initialStaff={staffList} />
-        </div>
-      )}
-
-      {(role === "owner" || role === "manager") && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Staff and PINs</SectionHeader>
-          <StaffCard initialStaff={staffList} />
-        </div>
-      )}
-
-      {(role === "owner" || role === "manager") && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Staff and PINs</SectionHeader>
-          <StaffCard initialStaff={staffList} />
-        </div>
-      )}
-
-      {(role === "owner" || role === "manager") && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Staff and PINs</SectionHeader>
-          <StaffCard initialStaff={staffList} />
-        </div>
-      )}
-
-      {(role === "owner" || role === "manager") && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Staff and PINs</SectionHeader>
-          <StaffCard initialStaff={staffList} />
-        </div>
-      )}
-
-      {(role === "owner" || role === "manager") && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Staff and PINs</SectionHeader>
-          <StaffCard initialStaff={staffList} />
-        </div>
-      )}
-
-      <div className="bg-card border border-border rounded-lg p-6 mb-4">
-        <SectionHeader>Details</SectionHeader>
-        <dl className="space-y-3 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-muted-foreground">Industry</dt>
-            <dd className="font-medium capitalize">
-              {business.industry.replace("_", " ")}
-            </dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-muted-foreground">Your role</dt>
-            <dd className="font-medium capitalize">{role}</dd>
-          </div>
-        </dl>
-      </div>
-
-      {role === "owner" ? (
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Integrations</SectionHeader>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="font-medium text-sm">Square invoices</p>
-              <p className="text-muted-foreground text-sm">
-                Auto-create draft invoices in your Square account when a trip is
-                booked.
-              </p>
-            </div>
-            {squareConnected ? (
-              <span className="text-sm font-medium text-green-600">
-                Connected
-              </span>
-            ) : (
-              <form action="/api/integrations/square/connect" method="get">
-                <button
-                  type="submit"
-                  className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 whitespace-nowrap"
-                >
-                  Connect with Square
-                </button>
-              </form>
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      {business.industry === "transportation" && role === "owner" && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-          <SectionHeader>Features</SectionHeader>
-          <DriversSettingCard
-            initialEnabled={business.drivers_enabled !== false}
-          />
-        </div>
-      )}
-
-      <div className="mb-4">
-        <NotificationsCard initialPrefs={notifPrefs} />
-      </div>
-
-      <GoogleAdsCard />
-      <LeadInboxCard />
-
-      <div className="bg-card border border-border rounded-lg p-6">
-        <SectionHeader>Account</SectionHeader>
-        <dl className="space-y-3 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-muted-foreground">Email</dt>
-            <dd className="font-medium">{user?.email ?? "—"}</dd>
-          </div>
-        </dl>
-      </div>
+      <SettingsTabs sections={sections} />
     </div>
   );
 }
