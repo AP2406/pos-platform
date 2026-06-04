@@ -15,7 +15,7 @@ import {
 import { DISCOUNT_REASONS } from "./reason-codes";
 
 type Variation = { id: string; name: string; price: number };
-type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; variations: Variation[] };
+type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; variations: Variation[]; modifiers: Variation[] };
 type CartLine = {
   catalog_item_id: string | null;
   variation_id: string | null;
@@ -192,6 +192,8 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [pickerItem, setPickerItem] = useState<Item | null>(null);
+  const [pickerVariationId, setPickerVariationId] = useState<string | null>(null);
+  const [pickerMods, setPickerMods] = useState<string[]>([]);
   const [splitOpen, setSplitOpen] = useState(false);
   const [splitLines, setSplitLines] = useState<SplitLine[]>([]);
   const [openTickets, setOpenTickets] = useState<OpenTicketSummary[]>([]);
@@ -249,11 +251,16 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
     setReceipt(null);
     setCart((prev) => {
       const existing = prev.find(
-        (l) => l.catalog_item_id === line.catalog_item_id && l.variation_id === line.variation_id
+        (l) =>
+          l.catalog_item_id === line.catalog_item_id &&
+          l.variation_id === line.variation_id &&
+          l.name === line.name
       );
       if (existing) {
         return prev.map((l) =>
-          l.catalog_item_id === line.catalog_item_id && l.variation_id === line.variation_id
+          l.catalog_item_id === line.catalog_item_id &&
+          l.variation_id === line.variation_id &&
+          l.name === line.name
             ? { ...l, quantity: l.quantity + 1 }
             : l
         );
@@ -273,20 +280,58 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   }
 
   function addItem(item: Item) {
-    if (item.variations.length > 0) {
+    if (item.variations.length > 0 || item.modifiers.length > 0) {
       setReceipt(null);
+      setPickerVariationId(null);
+      setPickerMods([]);
       setPickerItem(item);
       return;
     }
     addLine({ catalog_item_id: item.id, variation_id: null, name: item.name, unit_price: item.price, taxable: item.taxable });
   }
 
-  function pickVariation(item: Item, v: Variation) {
+  function togglePickerMod(id: string) {
+    setPickerMods((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
+  function pickerUnitPrice(item: Item): number {
+    let unit = item.price;
+    if (item.variations.length > 0) {
+      const v = item.variations.find((x) => x.id === pickerVariationId);
+      if (v) unit = v.price;
+    }
+    for (const m of item.modifiers) {
+      if (pickerMods.includes(m.id)) unit = unit + m.price;
+    }
+    return Math.round(unit * 100) / 100;
+  }
+
+  function confirmOptions() {
+    const item = pickerItem;
+    if (!item) return;
+    let varId: string | null = null;
+    let label = item.name;
+    let unit = item.price;
+    if (item.variations.length > 0) {
+      const v = item.variations.find((x) => x.id === pickerVariationId);
+      if (!v) return;
+      varId = v.id;
+      unit = v.price;
+      label = item.name + " - " + v.name;
+    }
+    const chosen = item.modifiers.filter((m) => pickerMods.includes(m.id));
+    if (chosen.length > 0) {
+      unit = unit + chosen.reduce((s, m) => s + m.price, 0);
+      label = label + " (" + chosen.map((m) => "+ " + m.name).join(", ") + ")";
+    }
+    unit = Math.round(unit * 100) / 100;
     addLine({
       catalog_item_id: item.id,
-      variation_id: v.id,
-      name: item.name + " - " + v.name,
-      unit_price: v.price,
+      variation_id: varId,
+      name: label,
+      unit_price: unit,
       taxable: item.taxable,
     });
     setPickerItem(null);
@@ -650,37 +695,51 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   return (
     <>
       {pickerItem && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setPickerItem(null)}
-        >
-          <div
-            className="bg-card border border-border rounded-lg p-4 w-full max-w-sm"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setPickerItem(null)}>
+          <div className="bg-card border border-border rounded-lg p-4 w-full max-w-sm max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-medium">{pickerItem.name}</h3>
-              <button
-                type="button"
-                onClick={() => setPickerItem(null)}
-                className="text-xs text-muted-foreground underline"
-              >
+              <button type="button" onClick={() => setPickerItem(null)} className="text-xs text-muted-foreground underline">
                 Cancel
               </button>
             </div>
-            <div className="space-y-2">
-              {pickerItem.variations.map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => pickVariation(pickerItem, v)}
-                  className="w-full flex items-center justify-between p-3 rounded-md border border-border hover:border-foreground/40 hover:bg-accent/50 text-left"
-                >
-                  <span className="text-sm font-medium">{v.name}</span>
-                  <span className="text-sm tabular-nums">{"$" + v.price.toFixed(2)}</span>
-                </button>
-              ))}
-            </div>
+
+            {pickerItem.variations.length > 0 && (
+              <div className="space-y-2 mb-3">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Choose one</div>
+                {pickerItem.variations.map((v) => {
+                  const selected = pickerVariationId === v.id;
+                  return (
+                    <button key={v.id} type="button" onClick={() => setPickerVariationId(v.id)} className={"w-full flex items-center justify-between p-3 rounded-md border text-left transition-colors " + (selected ? "border-foreground bg-accent" : "border-border hover:border-foreground/40 hover:bg-accent/50")}>
+                      <span className="text-sm font-medium">{v.name}</span>
+                      <span className="text-sm tabular-nums">{"$" + v.price.toFixed(2)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {pickerItem.modifiers.length > 0 && (
+              <div className="space-y-2 mb-3">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Add-ons</div>
+                {pickerItem.modifiers.map((m) => {
+                  const checked = pickerMods.includes(m.id);
+                  return (
+                    <button key={m.id} type="button" onClick={() => togglePickerMod(m.id)} className={"w-full flex items-center justify-between p-3 rounded-md border text-left transition-colors " + (checked ? "border-foreground bg-accent" : "border-border hover:border-foreground/40 hover:bg-accent/50")}>
+                      <span className="flex items-center gap-2">
+                        <span className={"w-4 h-4 rounded border flex items-center justify-center text-[10px] " + (checked ? "bg-foreground text-background border-foreground" : "border-muted-foreground")}>{checked ? "\u2713" : ""}</span>
+                        <span className="text-sm font-medium">{m.name}</span>
+                      </span>
+                      <span className="text-sm tabular-nums text-muted-foreground">{"+$" + m.price.toFixed(2)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <Button className="w-full" onClick={confirmOptions} disabled={pickerItem.variations.length > 0 && !pickerVariationId}>
+              {"Add to cart - $" + pickerUnitPrice(pickerItem).toFixed(2)}
+            </Button>
           </div>
         </div>
       )}

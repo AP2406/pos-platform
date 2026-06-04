@@ -20,6 +20,13 @@ export default async function PosPage() {
     .eq("is_active", true)
     .order("created_at", { ascending: true });
 
+  const { data: modsData } = await supabase
+    .from("catalog_item_modifiers")
+    .select("id, catalog_item_id, name, price")
+    .eq("business_id", business.id)
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
+
   const varsByItem: Record<string, { id: string; name: string; price: number }[]> = {};
   for (const v of varsData ?? []) {
     const itemId = v.catalog_item_id as string;
@@ -31,6 +38,17 @@ export default async function PosPage() {
     });
   }
 
+  const modsByItem: Record<string, { id: string; name: string; price: number }[]> = {};
+  for (const m of modsData ?? []) {
+    const itemId = m.catalog_item_id as string;
+    if (!modsByItem[itemId]) modsByItem[itemId] = [];
+    modsByItem[itemId].push({
+      id: m.id as string,
+      name: m.name as string,
+      price: Number(m.price),
+    });
+  }
+
   const items = (itemsData ?? []).map((i) => ({
     id: i.id as string,
     name: i.name as string,
@@ -38,6 +56,7 @@ export default async function PosPage() {
     category: (i.category as string | null) ?? null,
     taxable: (i.taxable as boolean | null) ?? true,
     variations: varsByItem[i.id as string] ?? [],
+    modifiers: modsByItem[i.id as string] ?? [],
   }));
 
   let taxRate = Number(business.default_tax_rate) || 0;
@@ -50,7 +69,7 @@ export default async function PosPage() {
     <div>
       {trainingMode && (
         <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-600 font-medium">
-          Training mode is on — these sales are practice and won&apos;t count toward your reports or cash drawer.
+          Training mode is on &mdash; these sales are practice and won&apos;t count toward your reports or cash drawer.
         </div>
       )}
       <div className="mb-6">
