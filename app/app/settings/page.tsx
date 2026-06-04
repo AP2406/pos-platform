@@ -8,6 +8,7 @@ import { LeadInboxCard } from "./lead-inbox-card";
 import { DriversSettingCard } from "./drivers-setting-card";
 import { NotificationsCard } from "./notifications-card";
 import { GoogleAdsCard } from "./google-ads-card";
+import { StaffCard } from "./staff-card";
 import { TaxRatesCard } from "./tax-rates-card";
 
 export default async function SettingsPage() {
@@ -48,6 +49,22 @@ export default async function SettingsPage() {
 
   const trainingMode =
     (business as { training_mode?: boolean }).training_mode === true;
+
+  let staffList: { id: string; name: string; role: string; is_active: boolean; has_pin: boolean }[] = [];
+  if (role === "owner" || role === "manager") {
+    const { data: staffData } = await supabase
+      .from("staff_members")
+      .select("id, name, role, is_active, pin_hash")
+      .eq("business_id", business.id)
+      .order("created_at", { ascending: true });
+    staffList = (staffData ?? []).map((s) => ({
+      id: s.id as string,
+      name: s.name as string,
+      role: s.role as string,
+      is_active: s.is_active as boolean,
+      has_pin: !!s.pin_hash,
+    }));
+  }
 
   const notifPrefs: Record<string, boolean> = {};
   if (user) {
@@ -96,6 +113,62 @@ export default async function SettingsPage() {
         <div className="bg-card border border-border rounded-lg p-6 mb-4">
           <SectionHeader>Training mode</SectionHeader>
           <TrainingModeForm initialEnabled={trainingMode} />
+        </div>
+      )}
+
+      {(role === "owner" || role === "manager") && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Staff and PINs</SectionHeader>
+          <StaffCard initialStaff={staffList} />
+        </div>
+      )}
+
+      {(role === "owner" || role === "manager") && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Staff and PINs</SectionHeader>
+          <StaffCard initialStaff={staffList} />
+        </div>
+      )}
+
+      {(role === "owner" || role === "manager") && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Staff and PINs</SectionHeader>
+          <StaffCard initialStaff={staffList} />
+        </div>
+      )}
+
+      {(role === "owner" || role === "manager") && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Staff and PINs</SectionHeader>
+          <StaffCard initialStaff={staffList} />
+        </div>
+      )}
+
+      {(role === "owner" || role === "manager") && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Staff and PINs</SectionHeader>
+          <StaffCard initialStaff={staffList} />
+        </div>
+      )}
+
+      {(role === "owner" || role === "manager") && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Staff and PINs</SectionHeader>
+          <StaffCard initialStaff={staffList} />
+        </div>
+      )}
+
+      {(role === "owner" || role === "manager") && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Staff and PINs</SectionHeader>
+          <StaffCard initialStaff={staffList} />
+        </div>
+      )}
+
+      {(role === "owner" || role === "manager") && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Staff and PINs</SectionHeader>
+          <StaffCard initialStaff={staffList} />
         </div>
       )}
 
