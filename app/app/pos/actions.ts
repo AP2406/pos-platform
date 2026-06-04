@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { z } from "zod";
 import { VOID_REASONS, DISCOUNT_REASONS, isValidReason } from "./reason-codes";
 
@@ -120,6 +121,28 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     .eq("status", "open")
     .maybeSingle();
   const drawerSessionId = openSession ? (openSession.id as string) : null;
+
+  // Active staff: the PIN-identified operator on this device, if any.
+  let activeStaffId: string | null = null;
+  let activeStaffName: string | null = null;
+  let activeStaffRole: string | null = null;
+  {
+    const cookieStore = await cookies();
+    const sid = cookieStore.get("surge_active_staff")?.value || null;
+    if (sid) {
+      const { data: st } = await supabase
+        .from("staff_members")
+        .select("id, name, role, is_active")
+        .eq("id", sid)
+        .eq("business_id", business.id)
+        .maybeSingle();
+      if (st && st.is_active !== false) {
+        activeStaffId = st.id as string;
+        activeStaffName = st.name as string;
+        activeStaffRole = st.role as string;
+      }
+    }
+  }
 
   const subtotal = parsed.data.items.reduce(
     (sum, i) => sum + i.unit_price * i.quantity,
@@ -312,6 +335,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       change: t.change,
     })),
     customer: customerId ? { id: customerId, name: customerName } : null,
+    staff: activeStaffId ? { id: activeStaffId, name: activeStaffName, role: activeStaffRole } : null,
     is_training: isTraining,
     completed_at: new Date().toISOString(),
   };
@@ -330,6 +354,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       payment_method: orderPaymentMethod,
       customer_id: customerId,
       drawer_session_id: drawerSessionId,
+      staff_id: activeStaffId,
       is_training: isTraining,
       idempotency_key: idemKey,
       snapshot: snapshot,
@@ -407,7 +432,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       order_id: order.id,
       reason_code: discountReasonCode,
       reason_note: discountReasonNote ? discountReasonNote.slice(0, 500) : null,
-      metadata: { type: discountType, value: discountValue, amount: discount },
+      metadata: { type: discountType, value: discountValue, amount: discount, staff_id: activeStaffId, staff_name: activeStaffName },
     });
     if (discAuditError) {
       console.error("createOrder discount audit:", discAuditError);

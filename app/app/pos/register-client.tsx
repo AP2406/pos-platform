@@ -13,6 +13,7 @@ import {
   type OpenTicketSummary,
 } from "./ticket-actions";
 import { DISCOUNT_REASONS } from "./reason-codes";
+import { setActiveStaff, clearActiveStaff, type ActiveStaff } from "./staff-session";
 
 type Variation = { id: string; name: string; price: number };
 type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; variations: Variation[]; modifiers: Variation[] };
@@ -179,7 +180,7 @@ function printReceipt(r: Receipt) {
   win.print();
 }
 
-export function RegisterClient({ items, taxRate, businessName }: { items: Item[]; taxRate: number; businessName: string }) {
+export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null }) {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [tip, setTip] = useState("");
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
@@ -207,6 +208,11 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   const [pending, startTransition] = useTransition();
   const splitIdRef = useRef(1);
   const idemKeyRef = useRef<string | null>(null);
+  const [staff, setStaff] = useState<ActiveStaff | null>(activeStaff);
+  const [staffPinOpen, setStaffPinOpen] = useState(false);
+  const [pinEntry, setPinEntry] = useState("");
+  const [staffError, setStaffError] = useState<string | null>(null);
+  const [staffBusy, setStaffBusy] = useState(false);
 
   const itemTaxableById: Record<string, boolean> = {};
   const itemTaxFracById: Record<string, number> = {};
@@ -369,6 +375,46 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   function nextIdemKey(): string {
     if (!idemKeyRef.current) idemKeyRef.current = crypto.randomUUID();
     return idemKeyRef.current;
+  }
+
+  function openStaffPin() {
+    setStaffError(null);
+    setPinEntry("");
+    setStaffPinOpen(true);
+  }
+
+  function pinPush(d: string) {
+    setStaffError(null);
+    setPinEntry((prev) => (prev.length >= 6 ? prev : prev + d));
+  }
+
+  function pinBackspace() {
+    setPinEntry((prev) => prev.slice(0, -1));
+  }
+
+  async function submitStaffPin() {
+    if (!/^[0-9]{4,6}$/.test(pinEntry)) {
+      setStaffError("Enter your 4 to 6 digit PIN.");
+      return;
+    }
+    setStaffBusy(true);
+    const res = await setActiveStaff(pinEntry);
+    setStaffBusy(false);
+    if ("error" in res) {
+      setStaffError(res.error);
+      setPinEntry("");
+      return;
+    }
+    setStaff(res.staff);
+    setStaffPinOpen(false);
+    setPinEntry("");
+  }
+
+  async function signOutStaff() {
+    setStaffBusy(true);
+    await clearActiveStaff();
+    setStaffBusy(false);
+    setStaff(null);
   }
 
   function pickCustomer(c: { id: string; name: string }) {
@@ -716,6 +762,39 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
 
   return (
     <>
+      {staffPinOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setStaffPinOpen(false)}>
+          <div className="bg-card border border-border rounded-lg p-4 w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium">Enter your PIN</h3>
+              <button type="button" onClick={() => setStaffPinOpen(false)} className="text-xs text-muted-foreground underline">
+                Cancel
+              </button>
+            </div>
+            <div className="mb-3 h-10 rounded-md border border-border flex items-center justify-center tracking-[0.4em] text-lg">
+              {pinEntry ? pinEntry.replace(/./g, "\u2022") : <span className="text-muted-foreground tracking-normal text-sm">PIN</span>}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+                <button key={d} type="button" onClick={() => pinPush(d)} className="h-12 rounded-md border border-border text-lg font-medium hover:bg-accent">
+                  {d}
+                </button>
+              ))}
+              <button type="button" onClick={pinBackspace} className="h-12 rounded-md border border-border text-sm hover:bg-accent">
+                Del
+              </button>
+              <button type="button" onClick={() => pinPush("0")} className="h-12 rounded-md border border-border text-lg font-medium hover:bg-accent">
+                0
+              </button>
+              <button type="button" onClick={submitStaffPin} disabled={staffBusy} className="h-12 rounded-md border border-foreground bg-accent text-sm font-medium hover:bg-accent/80 disabled:opacity-50">
+                {staffBusy ? "..." : "Enter"}
+              </button>
+            </div>
+            {staffError && <p className="text-sm text-red-600 mt-2">{staffError}</p>}
+          </div>
+        </div>
+      )}
+
       {pickerItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setPickerItem(null)}>
           <div className="bg-card border border-border rounded-lg p-4 w-full max-w-sm max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -1046,6 +1125,29 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
 
         <div className="lg:col-span-1">
           <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+            {hasStaff && (
+              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
+                <span className="truncate">
+                  <span className="text-muted-foreground">Ringing as </span>
+                  <span className="font-medium">{staff ? staff.name : "Not set"}</span>
+                </span>
+                {staff ? (
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={openStaffPin} className="text-xs text-muted-foreground underline hover:text-foreground">
+                      Switch
+                    </button>
+                    <button type="button" onClick={signOutStaff} disabled={staffBusy} className="text-xs text-muted-foreground underline hover:text-foreground">
+                      Sign out
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={openStaffPin} className="text-xs font-medium underline hover:text-foreground">
+                    Enter PIN
+                  </button>
+                )}
+              </div>
+            )}
+
             {openTickets.length > 0 && (
               <button
                 type="button"

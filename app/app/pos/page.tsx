@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { RegisterClient } from "./register-client";
+import { getActiveStaff } from "./staff-session";
 
 export default async function PosPage() {
   const { business } = await requireBusiness();
@@ -32,6 +33,14 @@ export default async function PosPage() {
     .select("id, rate")
     .eq("business_id", business.id)
     .eq("is_active", true);
+
+  const { data: staffRows } = await supabase
+    .from("staff_members")
+    .select("id")
+    .eq("business_id", business.id)
+    .eq("is_active", true);
+  const hasStaff = (staffRows ?? []).length > 0;
+  const activeStaff = await getActiveStaff();
 
   let defaultFrac = Number(business.default_tax_rate) || 0;
   if (defaultFrac > 1) defaultFrac = defaultFrac / 100;
@@ -97,7 +106,13 @@ export default async function PosPage() {
           Tap items to build a sale, then charge.
         </p>
       </div>
-      <RegisterClient items={items} taxRate={taxRate} businessName={business.name} />
+      <RegisterClient
+        items={items}
+        taxRate={taxRate}
+        businessName={business.name}
+        hasStaff={hasStaff}
+        activeStaff={activeStaff}
+      />
     </div>
   );
 }
