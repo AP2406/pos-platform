@@ -6,6 +6,18 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+type Closeout = {
+  starting_cash: number;
+  cash_sales: number;
+  card_sales: number;
+  other_sales: number;
+  refunds: number;
+  sale_count: number;
+  expected_cash: number;
+  counted_cash: number;
+  over_short: number;
+};
+
 type OpenSession = {
   id: string;
   opened_at: string;
@@ -13,6 +25,7 @@ type OpenSession = {
   cash: number;
   card: number;
   other: number;
+  refunds: number;
   expected: number;
   count: number;
 };
@@ -77,6 +90,15 @@ export default async function DrawerPage() {
       else other += t;
     }
 
+    const { data: refundData } = await supabase
+      .from("refunds")
+      .select("amount")
+      .eq("business_id", business.id)
+      .eq("drawer_session_id", sessionData.id);
+    let refundsTotal = 0;
+    for (const r of refundData ?? []) refundsTotal += Number(r.amount) || 0;
+    refundsTotal = round2(refundsTotal);
+
     const startingCash = Number(sessionData.starting_cash) || 0;
     open = {
       id: sessionData.id as string,
@@ -85,7 +107,8 @@ export default async function DrawerPage() {
       cash: round2(cash),
       card: round2(card),
       other: round2(other),
-      expected: round2(startingCash + cash),
+      refunds: refundsTotal,
+      expected: round2(startingCash + cash - refundsTotal),
       count,
     };
   }
@@ -93,7 +116,7 @@ export default async function DrawerPage() {
   const { data: closedData } = await supabase
     .from("drawer_sessions")
     .select(
-      "id, opened_at, closed_at, starting_cash, counted_cash, expected_cash, over_short"
+      "id, opened_at, closed_at, starting_cash, counted_cash, expected_cash, over_short, closeout"
     )
     .eq("business_id", business.id)
     .eq("status", "closed")
@@ -108,6 +131,7 @@ export default async function DrawerPage() {
     counted_cash: Number(s.counted_cash) || 0,
     expected_cash: Number(s.expected_cash) || 0,
     over_short: Number(s.over_short) || 0,
+    closeout: (s.closeout as Closeout | null) ?? null,
   }));
 
   return (

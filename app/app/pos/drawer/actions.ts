@@ -36,7 +36,8 @@ export async function openDrawerSession(
 
   if (error) {
     console.error("openDrawerSession:", error);
-    return { error: "Could not open the register. Please try again." };
+    // The partial unique index also rejects a double-open race.
+    return { error: "Could not open the register. It may already be open." };
   }
 
   revalidatePath("/app/pos/drawer");
@@ -44,7 +45,17 @@ export async function openDrawerSession(
 }
 
 type CloseResult =
-  | { ok: true; expected: number; counted: number; over_short: number }
+  | {
+      ok: true;
+      expected: number;
+      counted: number;
+      over_short: number;
+      cash_sales: number;
+      card_sales: number;
+      other_sales: number;
+      refunds: number;
+      sale_count: number;
+    }
   | { error: string };
 
 export async function closeDrawerSession(input: {
@@ -92,23 +103,54 @@ export async function closeDrawerSession(input: {
   const ordersWithPayments = new Set(payments.map((p) => p.order_id));
 
   let cashSales = 0;
+  let cardSales = 0;
+  let otherSales = 0;
   for (const p of payments) {
     if (p.method === "cash") cashSales += p.amount;
+    else if (p.method === "card") cardSales += p.amount;
+    else otherSales += p.amount;
   }
   for (const o of liveOrders) {
-    if (
-      !ordersWithPayments.has(o.id as string) &&
-      (o.payment_method as string) === "cash"
-    ) {
-      cashSales += Number(o.total) || 0;
-    }
+    if (ordersWithPayments.has(o.id as string)) continue;
+    const t = Number(o.total) || 0;
+    const m = (o.payment_method as string) || "cash";
+    if (m === "cash") cashSales += t;
+    else if (m === "card") cardSales += t;
+    else otherSales += t;
   }
   cashSales = Math.round(cashSales * 100) / 100;
+  cardSales = Math.round(cardSales * 100) / 100;
+  otherSales = Math.round(otherSales * 100) / 100;
+
+  // Refunds processed during this session take cash back out of the drawer.
+  // Until card refunds go live, every refund is treated as cash out.
+  const { data: refundData } = await supabase
+    .from("refunds")
+    .select("amount")
+    .eq("business_id", business.id)
+    .eq("drawer_session_id", session.id);
+  let refundsTotal = 0;
+  for (const r of refundData ?? []) refundsTotal += Number(r.amount) || 0;
+  refundsTotal = Math.round(refundsTotal * 100) / 100;
 
   const startingCash = Number(session.starting_cash) || 0;
-  const expected = Math.round((startingCash + cashSales) * 100) / 100;
+  const expected =
+    Math.round((startingCash + cashSales - refundsTotal) * 100) / 100;
   const counted = Math.round((Number(input.counted_cash) || 0) * 100) / 100;
   const overShort = Math.round((counted - expected) * 100) / 100;
+  const saleCount = liveOrders.length;
+
+  const closeout = {
+    starting_cash: startingCash,
+    cash_sales: cashSales,
+    card_sales: cardSales,
+    other_sales: otherSales,
+    refunds: refundsTotal,
+    sale_count: saleCount,
+    expected_cash: expected,
+    counted_cash: counted,
+    over_short: overShort,
+  };
 
   const {
     data: { user },
@@ -127,9 +169,11 @@ export async function closeDrawerSession(input: {
         input.note && input.note.trim()
           ? input.note.trim().slice(0, 500)
           : null,
+      closeout: closeout,
     })
     .eq("id", session.id)
-    .eq("business_id", business.id);
+    .eq("business_id", business.id)
+    .eq("status", "open");
 
   if (error) {
     console.error("closeDrawerSession:", error);
@@ -137,5 +181,15 @@ export async function closeDrawerSession(input: {
   }
 
   revalidatePath("/app/pos/drawer");
-  return { ok: true, expected, counted, over_short: overShort };
+  return {
+    ok: true,
+    expected,
+    counted,
+    over_short: overShort,
+    cash_sales: cashSales,
+    card_sales: cardSales,
+    other_sales: otherSales,
+    refunds: refundsTotal,
+    sale_count: saleCount,
+  };
 }

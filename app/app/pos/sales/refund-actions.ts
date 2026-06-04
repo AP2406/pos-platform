@@ -262,6 +262,16 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     refunded_at: new Date().toISOString(),
   };
 
+  // Cash leaves the drawer now, so attribute this refund to the open session
+  // (if any) for the end-of-day count.
+  const { data: openDrawer } = await supabase
+    .from("drawer_sessions")
+    .select("id")
+    .eq("business_id", business.id)
+    .eq("status", "open")
+    .maybeSingle();
+  const refundDrawerSessionId = openDrawer ? (openDrawer.id as string) : null;
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -275,6 +285,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     status: "recorded",
     restocked: restocked,
     snapshot: snapshot,
+    drawer_session_id: refundDrawerSessionId,
     created_by: user ? user.id : null,
   });
   if (refundError) {

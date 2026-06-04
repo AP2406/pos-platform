@@ -10,6 +10,18 @@ function money(n: number): string {
   return (n < 0 ? "-$" : "$") + Math.abs(n).toFixed(2);
 }
 
+type Closeout = {
+  starting_cash: number;
+  cash_sales: number;
+  card_sales: number;
+  other_sales: number;
+  refunds: number;
+  sale_count: number;
+  expected_cash: number;
+  counted_cash: number;
+  over_short: number;
+};
+
 type OpenSession = {
   id: string;
   opened_at: string;
@@ -17,6 +29,7 @@ type OpenSession = {
   cash: number;
   card: number;
   other: number;
+  refunds: number;
   expected: number;
   count: number;
 };
@@ -29,6 +42,18 @@ type ClosedSession = {
   counted_cash: number;
   expected_cash: number;
   over_short: number;
+  closeout: Closeout | null;
+};
+
+type CloseResult = {
+  expected: number;
+  counted: number;
+  over_short: number;
+  cash_sales: number;
+  card_sales: number;
+  other_sales: number;
+  refunds: number;
+  sale_count: number;
 };
 
 export function DrawerClient({
@@ -42,11 +67,7 @@ export function DrawerClient({
   const [countedCash, setCountedCash] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{
-    expected: number;
-    counted: number;
-    over_short: number;
-  } | null>(null);
+  const [result, setResult] = useState<CloseResult | null>(null);
   const [pending, startTransition] = useTransition();
 
   function fmt(iso: string | null): string {
@@ -86,6 +107,11 @@ export function DrawerClient({
         expected: res.expected,
         counted: res.counted,
         over_short: res.over_short,
+        cash_sales: res.cash_sales,
+        card_sales: res.card_sales,
+        other_sales: res.other_sales,
+        refunds: res.refunds,
+        sale_count: res.sale_count,
       });
       setCountedCash("");
       setNote("");
@@ -96,9 +122,34 @@ export function DrawerClient({
     <div className="space-y-4 max-w-2xl">
       {result && (
         <div className="bg-card border border-border rounded-lg p-6">
-          <h2 className="font-medium mb-3">Register closed</h2>
+          <h2 className="font-medium mb-1">Register closed</h2>
+          <p className="text-xs text-muted-foreground mb-3">
+            {result.sale_count + (result.sale_count === 1 ? " sale" : " sales")}
+          </p>
           <div className="space-y-1 text-sm">
             <div className="flex justify-between">
+              <span className="text-muted-foreground">Cash sales</span>
+              <span className="tabular-nums">{money(result.cash_sales)}</span>
+            </div>
+            {result.card_sales > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Card sales</span>
+                <span className="tabular-nums">{money(result.card_sales)}</span>
+              </div>
+            )}
+            {result.other_sales > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Other</span>
+                <span className="tabular-nums">{money(result.other_sales)}</span>
+              </div>
+            )}
+            {result.refunds > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Refunds (cash out)</span>
+                <span className="tabular-nums text-red-600">{"-" + money(result.refunds)}</span>
+              </div>
+            )}
+            <div className="flex justify-between pt-2 border-t border-border">
               <span className="text-muted-foreground">Expected in drawer</span>
               <span className="tabular-nums">{money(result.expected)}</span>
             </div>
@@ -143,6 +194,13 @@ export function DrawerClient({
               <div className="tabular-nums">{money(open.other)}</div>
             </div>
           </div>
+
+          {open.refunds > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Refunds (cash out)</span>
+              <span className="tabular-nums text-red-600">{"-" + money(open.refunds)}</span>
+            </div>
+          )}
 
           <div className="flex justify-between text-sm pt-3 border-t border-border">
             <span className="text-muted-foreground">
@@ -228,6 +286,16 @@ export function DrawerClient({
                   <div className="text-xs text-muted-foreground">
                     {fmt(s.closed_at)}
                   </div>
+                  {s.closeout && (
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {s.closeout.sale_count +
+                        (s.closeout.sale_count === 1 ? " sale" : " sales") +
+                        " \u00b7 cash " +
+                        money(s.closeout.cash_sales) +
+                        (s.closeout.card_sales > 0 ? " \u00b7 card " + money(s.closeout.card_sales) : "") +
+                        (s.closeout.refunds > 0 ? " \u00b7 refunds " + money(s.closeout.refunds) : "")}
+                    </div>
+                  )}
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-xs text-muted-foreground">
