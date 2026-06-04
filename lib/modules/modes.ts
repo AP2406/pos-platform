@@ -116,3 +116,21 @@ export const BUSINESS_MODES: BusinessMode[] = [
     },
   },
 ];
+
+// Friendly display label for a business: prefer its stored mode, otherwise a
+// humanized industry (so older businesses like the transportation one still
+// read nicely as "Transportation").
+export function modeLabel(
+  modeKey?: string | null,
+  industry?: string | null
+): string {
+  if (modeKey) {
+    const m = BUSINESS_MODES.find((x) => x.key === modeKey);
+    if (m) return m.label;
+  }
+  if (industry) {
+    const s = industry.replace(/_/g, " ");
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  return "Workspace";
+}

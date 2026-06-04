@@ -2,10 +2,19 @@ import { requireUser, getCurrentBusiness } from "@/lib/services/tenancy";
 import { redirect } from "next/navigation";
 import { OnboardingForm } from "./form";
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ add?: string }>;
+}) {
   await requireUser();
+  const sp = await searchParams;
+  const isAdding = sp?.add === "1";
+
   const ctx = await getCurrentBusiness();
-  if (ctx) redirect("/app");
+  // Only bounce to /app if they already have a business AND aren't deliberately
+  // adding another one.
+  if (ctx && !isAdding) redirect("/app");
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -13,7 +22,7 @@ export default async function OnboardingPage() {
         dangerouslySetInnerHTML={{
           __html:
             "@keyframes oaRise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}.oa-rise{animation:oaRise .7s cubic-bezier(0.16,1,0.3,1) both}@keyframes oaFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-28px)}}.oa-float{animation:oaFloat 9s ease-in-out infinite}",
-        }}  
+        }}
       />
 
       {/* Brand panel — desktop only */}
@@ -63,14 +72,14 @@ export default async function OnboardingPage() {
               className="oa-rise text-white/60 mt-4 text-sm leading-relaxed"
               style={{ animationDelay: "0.2s" }}
             >
-              Trips, leads, customers, payments — Surge keeps the day-to-day
+              Payments, orders, customers, staff &mdash; Surge keeps the day-to-day
               moving so you can focus on the work.
             </p>
             <div
               className="oa-rise flex flex-wrap gap-2 mt-6"
               style={{ animationDelay: "0.3s" }}
             >
-              {["Trips & dispatch", "Leads from email", "Payments & invoicing"].map(
+              {["Take payments", "Track orders", "Run multiple businesses"].map(
                 (f) => (
                   <span
                     key={f}
@@ -87,7 +96,7 @@ export default async function OnboardingPage() {
             className="oa-rise text-xs text-white/40"
             style={{ animationDelay: "0.4s" }}
           >
-            © Surge · surgetechpos.com
+            &copy; Surge &middot; surgetechpos.com
           </div>
         </div>
       </div>

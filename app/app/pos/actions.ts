@@ -29,6 +29,7 @@ const orderSchema = z.object({
   discount_reason_code: z.string().max(60).optional(),
   discount_reason_note: z.string().max(500).optional(),
   customer_id: z.string().uuid().optional().nullable(),
+  idempotency_key: z.string().uuid().optional(),
 });
 
 type PaymentInput = {
@@ -52,6 +53,7 @@ type OrderInput = {
   discount_reason_code?: string;
   discount_reason_note?: string;
   customer_id?: string | null;
+  idempotency_key?: string;
 };
 
 type Tender = {
@@ -74,6 +76,26 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   const { business, role } = await requireBusiness();
   const isTraining = (business as { training_mode?: boolean }).training_mode === true;
   const supabase = await createClient();
+
+  // Idempotency: if this exact checkout was already recorded, return that sale
+  // instead of creating a duplicate. This catches double-clicks and retries
+  // before we even touch a sale number.
+  const idemKey = parsed.data.idempotency_key ?? null;
+  if (idemKey) {
+    const { data: existing } = await supabase
+      .from("orders")
+      .select("id, sale_number")
+      .eq("business_id", business.id)
+      .eq("idempotency_key", idemKey)
+      .maybeSingle();
+    if (existing) {
+      return {
+        ok: true,
+        id: existing.id as string,
+        sale_number: Number(existing.sale_number),
+      };
+    }
+  }
 
   let customerId: string | null = parsed.data.customer_id ?? null;
   let customerName: string | null = null;
@@ -258,12 +280,30 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       customer_id: customerId,
       drawer_session_id: drawerSessionId,
       is_training: isTraining,
+      idempotency_key: idemKey,
       snapshot: snapshot,
     })
     .select("id")
     .single();
 
   if (orderError || !order) {
+    // If two requests with the same key raced, the unique index rejects the
+    // loser. Recover the sale the winner already created instead of erroring.
+    if (idemKey && orderError && (orderError as { code?: string }).code === "23505") {
+      const { data: dup } = await supabase
+        .from("orders")
+        .select("id, sale_number")
+        .eq("business_id", business.id)
+        .eq("idempotency_key", idemKey)
+        .maybeSingle();
+      if (dup) {
+        return {
+          ok: true,
+          id: dup.id as string,
+          sale_number: Number(dup.sale_number),
+        };
+      }
+    }
     console.error("createOrder:", orderError);
     return { error: "Could not record the sale. Please try again." };
   }

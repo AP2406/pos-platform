@@ -1,4 +1,4 @@
-import { requireBusiness } from "@/lib/services/tenancy";
+import { requireBusiness, listBusinesses } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "./_components/app-shell";
 import { AssistantWidget } from "./_components/assistant-widget";
@@ -11,6 +11,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const { business, role } = await requireBusiness();
+  const businesses = await listBusinesses();
 
   const businessConfig = {
     industry: business.industry,
@@ -33,8 +34,6 @@ export default async function AppLayout({
   }
   const finalNav = [...nav, ...extras];
 
-  // Finish-setup nudge: POS businesses that haven't dismissed onboarding and
-  // have no real sales yet. Never fires for the transportation vertical.
   let showOnboarding = false;
   const onboarding =
     (business as { onboarding?: { dismissed?: boolean } }).onboarding ?? {};
@@ -57,6 +56,8 @@ export default async function AppLayout({
         businessName={business.name}
         industry={business.industry}
         role={role}
+        businesses={businesses}
+        activeBusinessId={business.id}
         nav={finalNav}
         showOnboarding={showOnboarding}
       >
