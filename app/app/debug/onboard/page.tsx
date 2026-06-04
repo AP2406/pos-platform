@@ -10,8 +10,12 @@ type FieldState = {
   businessDescription: string;
   businessPhone: string;
   businessTaxId: string;
+  url: string;
   mcc: string;
   defaultStatementDescriptor: string;
+  incorporationDate: string;
+  annualCardVolume: string;
+  maxTransactionAmount: string;
   bizLine1: string;
   bizCity: string;
   bizRegion: string;
@@ -23,6 +27,7 @@ type FieldState = {
   ownerEmail: string;
   ownerPhone: string;
   ownerTaxId: string;
+  ownerDob: string;
   perLine1: string;
   perCity: string;
   perRegion: string;
@@ -38,12 +43,16 @@ const DEFAULTS: FieldState = {
   businessDescription: "Airport limousine and private car transfer service",
   businessPhone: "4160000000",
   businessTaxId: "123456789",
+  url: "https://pearsonlimo.example",
   mcc: "4121",
   defaultStatementDescriptor: "PEARSON LIMO",
+  incorporationDate: "2020-03-01",
+  annualCardVolume: "250000",
+  maxTransactionAmount: "2000",
   bizLine1: "100 King St W",
   bizCity: "Toronto",
   bizRegion: "ON",
-  bizPostal: "M5X1A9",
+  bizPostal: "M5X 1A9",
   bizCountry: "CAN",
   ownerFirstName: "Aathi",
   ownerLastName: "Panchalingam",
@@ -51,10 +60,11 @@ const DEFAULTS: FieldState = {
   ownerEmail: "owner@pearsonlimo.example",
   ownerPhone: "4160000000",
   ownerTaxId: "000000000",
+  ownerDob: "1990-06-15",
   perLine1: "100 King St W",
   perCity: "Toronto",
   perRegion: "ON",
-  perPostal: "M5X1A9",
+  perPostal: "M5X 1A9",
   perCountry: "CAN",
   principalPercentageOwnership: "100",
 };
@@ -62,6 +72,13 @@ const DEFAULTS: FieldState = {
 type OnboardResult =
   | { ok: true; identityId: string; merchantId: string; state: string }
   | { error: string; details?: unknown };
+
+function parseDate(s: string): { day: number; month: number; year: number } | undefined {
+  if (!s) return undefined;
+  const parts = s.split("-");
+  if (parts.length !== 3) return undefined;
+  return { year: Number(parts[0]), month: Number(parts[1]), day: Number(parts[2]) };
+}
 
 export default function FinixOnboardPage() {
   const [f, setF] = useState<FieldState>(DEFAULTS);
@@ -81,6 +98,7 @@ export default function FinixOnboardPage() {
         businessType: f.businessType as never,
         businessPhone: f.businessPhone,
         businessTaxId: f.businessTaxId || undefined,
+        url: f.url || undefined,
         businessAddress: {
           line1: f.bizLine1,
           city: f.bizCity,
@@ -91,12 +109,20 @@ export default function FinixOnboardPage() {
         businessDescription: f.businessDescription,
         mcc: f.mcc || undefined,
         defaultStatementDescriptor: f.defaultStatementDescriptor || undefined,
+        incorporationDate: parseDate(f.incorporationDate),
+        annualCardVolumeCents: f.annualCardVolume
+          ? Math.round(Number(f.annualCardVolume) * 100)
+          : undefined,
+        maxTransactionAmountCents: f.maxTransactionAmount
+          ? Math.round(Number(f.maxTransactionAmount) * 100)
+          : undefined,
         ownerFirstName: f.ownerFirstName,
         ownerLastName: f.ownerLastName,
         ownerTitle: f.ownerTitle || undefined,
         ownerEmail: f.ownerEmail,
         ownerPhone: f.ownerPhone,
         ownerTaxId: f.ownerTaxId || undefined,
+        ownerDob: parseDate(f.ownerDob),
         ownerPersonalAddress: {
           line1: f.perLine1,
           city: f.perCity,
@@ -141,6 +167,7 @@ export default function FinixOnboardPage() {
           </select>
         </label>
 
+        <Field label="Website URL" value={f.url} onChange={set("url")} />
         <Field label="MCC" value={f.mcc} onChange={set("mcc")} />
         <Field label="Business phone" value={f.businessPhone} onChange={set("businessPhone")} />
         <Field label="Business tax ID (test)" value={f.businessTaxId} onChange={set("businessTaxId")} />
@@ -157,12 +184,28 @@ export default function FinixOnboardPage() {
         </label>
       </div>
 
+      <h2 style={{ fontSize: 15, fontWeight: 600, marginTop: 24 }}>Required for sole proprietorship</h2>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 8 }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
+          <span style={{ color: "#555" }}>Incorporation / start date</span>
+          <input
+            type="date"
+            value={f.incorporationDate}
+            onChange={(e) => set("incorporationDate")(e.target.value)}
+            style={{ padding: "8px 10px", border: "1px solid #ccc", borderRadius: 8, fontSize: 14 }}
+          />
+        </label>
+        <div />
+        <Field label="Annual card volume (CAD)" value={f.annualCardVolume} onChange={set("annualCardVolume")} />
+        <Field label="Max transaction (CAD)" value={f.maxTransactionAmount} onChange={set("maxTransactionAmount")} />
+      </div>
+
       <h2 style={{ fontSize: 15, fontWeight: 600, marginTop: 24 }}>Business address</h2>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 8 }}>
         <Field label="Line 1" value={f.bizLine1} onChange={set("bizLine1")} />
         <Field label="City" value={f.bizCity} onChange={set("bizCity")} />
         <Field label="Region (e.g. ON)" value={f.bizRegion} onChange={set("bizRegion")} />
-        <Field label="Postal code" value={f.bizPostal} onChange={set("bizPostal")} />
+        <Field label="Postal code (M5X 1A9)" value={f.bizPostal} onChange={set("bizPostal")} />
         <Field label="Country (CAN)" value={f.bizCountry} onChange={set("bizCountry")} />
       </div>
 
@@ -170,6 +213,15 @@ export default function FinixOnboardPage() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 8 }}>
         <Field label="First name" value={f.ownerFirstName} onChange={set("ownerFirstName")} />
         <Field label="Last name" value={f.ownerLastName} onChange={set("ownerLastName")} />
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
+          <span style={{ color: "#555" }}>Date of birth</span>
+          <input
+            type="date"
+            value={f.ownerDob}
+            onChange={(e) => set("ownerDob")(e.target.value)}
+            style={{ padding: "8px 10px", border: "1px solid #ccc", borderRadius: 8, fontSize: 14 }}
+          />
+        </label>
         <Field label="Title" value={f.ownerTitle} onChange={set("ownerTitle")} />
         <Field label="Email" value={f.ownerEmail} onChange={set("ownerEmail")} />
         <Field label="Phone" value={f.ownerPhone} onChange={set("ownerPhone")} />
@@ -177,7 +229,7 @@ export default function FinixOnboardPage() {
         <Field label="Address line 1" value={f.perLine1} onChange={set("perLine1")} />
         <Field label="City" value={f.perCity} onChange={set("perCity")} />
         <Field label="Region" value={f.perRegion} onChange={set("perRegion")} />
-        <Field label="Postal code" value={f.perPostal} onChange={set("perPostal")} />
+        <Field label="Postal code (M5X 1A9)" value={f.perPostal} onChange={set("perPostal")} />
         <Field label="Country" value={f.perCountry} onChange={set("perCountry")} />
       </div>
 
