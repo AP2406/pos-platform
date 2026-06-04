@@ -178,3 +178,69 @@ export async function deleteVariation(
   revalidatePath("/app/catalog");
   return { ok: true };
 }
+const modifierSchema = z.object({
+  catalog_item_id: z.string().uuid(),
+  name: z.string().min(1, "Add-on name is required").max(80),
+  price: z.coerce.number().min(0).max(1000000),
+});
+
+export async function createModifier(
+  catalogItemId: string,
+  name: string,
+  price: number
+): Promise<{ ok: true; id: string } | { error: string }> {
+  const parsed = modifierSchema.safeParse({
+    catalog_item_id: catalogItemId,
+    name: name,
+    price: price,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data: item } = await supabase
+    .from("catalog_items")
+    .select("id")
+    .eq("id", parsed.data.catalog_item_id)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!item) return { error: "Item not found." };
+
+  const { data, error } = await supabase
+    .from("catalog_item_modifiers")
+    .insert({
+      business_id: business.id,
+      catalog_item_id: parsed.data.catalog_item_id,
+      name: parsed.data.name,
+      price: parsed.data.price,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    console.error("createModifier:", error);
+    return { error: "Could not add the add-on. Please try again." };
+  }
+  revalidatePath("/app/catalog");
+  return { ok: true, id: data.id as string };
+}
+
+export async function deleteModifier(
+  modifierId: string
+): Promise<{ ok: true } | { error: string }> {
+  if (!modifierId) return { error: "Missing add-on." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("catalog_item_modifiers")
+    .delete()
+    .eq("id", modifierId)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("deleteModifier:", error);
+    return { error: "Could not remove the add-on. Please try again." };
+  }
+  revalidatePath("/app/catalog");
+  return { ok: true };
+}

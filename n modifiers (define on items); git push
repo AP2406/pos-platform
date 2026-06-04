@@ -1,0 +1,40 @@
+[33ma9a3fa8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Remove redundant refund-actions duplicate
+[33ma2a0f70[m POS: send idempotency key on checkout
+[33macb00d7[m POS: idempotency guard on sale completion
+[33m455cf48[m Add Square-style business mode picker to onboarding
+[33m9513537[m booking: exact volume entry + ranges + new-business options
+[33mcb27343[m booking: internal profit + risk estimate per lead in email
+[33me8ed296[m pricing: add custom software / SaaS / CRM build offering
+[33m6caab79[m seo: add sitemap and robots
+[33mbc9952b[m seo: keyword-optimize homepage header, title and meta
+[33m2a8be91[m pos: jpg18 hero, 2-up gallery
+[33mec5f19a[m marketing: pricing page
+[33m771599d[m copy: drop Finix mentions, savings-led estimator and CTAs
+[33m0e86ca3[m hero: animated shimmer headline, rotating gradient ring, live dots, glows
+[33m68b29de[m marketing: section dividers, dot-grid texture, accent borders
+[33me0c41b3[m marketing: wire in real photos across homepage
+[33m945936b[m marketing: color, announcement banner, scroll reveals, reworked hero
+[33m122390c[m marketing: savings estimator hero + trust strip
+[33m66ac7a4[m marketing site: white theme
+[33mfcb45d2[m fix exports page anchor tag
+[33m8f8f74c[m fix exports page anchor tag
+[33m2ab89f1[m marketing site: homepage with cinematic hero and SEO
+[33m15a9835[m csv export: sales, items, customers
+[33m3a380d1[m restore refund button on sales rows, add refund status tags, limit void to paid sales
+[33m181faf1[m refund receipt: email refund receipt via existing Resend service
+[33m520da3f[m training mode: settings toggle, register banner, is_training stamping
+[33m5b51b42[m training mode: exclude training sales from reports, drawer, sales
+[33mc3e5891[m restore email service, route receipts through it
+[33mc3ff2b3[m restore email service, route receipts through it
+[33m7d0de36[m build with webpack to avoid turbopack build crash
+[33m76e1c3e[m receipt email via Resend with delivery status
+[33mbfe0624[m fix onboarding nudge import (co-located dismiss action)
+[33mfa6c135[m tax engine: item-level taxability (catalog toggle + proportional tax)
+[33mb2566da[m open tickets: hold + resume carts in register
+[33m49ca124[m deeper sales reports page (item/category/payment, range tabs)
+[33mef63f84[m add Activity log nav link (owner/manager, POS only)
+[33m6686ed2[m activity log page reading from audit_events
+[33m704aa10[m route refunds into audit_events trail
+[33ma40d4f5[m reason codes + audit log on voids and discounts
+[33m58129c8[m split tender: register checkout UI + tender breakdown on receipt
+[33md712f0c[m split tender: payments ledger + drawer reconciliation

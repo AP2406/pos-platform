@@ -19,6 +19,13 @@ export default async function CatalogPage() {
     .eq("is_active", true)
     .order("created_at", { ascending: true });
 
+  const { data: modsData } = await supabase
+    .from("catalog_item_modifiers")
+    .select("id, catalog_item_id, name, price")
+    .eq("business_id", business.id)
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
+
   const varsByItem: Record<string, { id: string; name: string; price: number }[]> = {};
   for (const v of varsData ?? []) {
     const itemId = v.catalog_item_id as string;
@@ -30,6 +37,17 @@ export default async function CatalogPage() {
     });
   }
 
+  const modsByItem: Record<string, { id: string; name: string; price: number }[]> = {};
+  for (const m of modsData ?? []) {
+    const itemId = m.catalog_item_id as string;
+    if (!modsByItem[itemId]) modsByItem[itemId] = [];
+    modsByItem[itemId].push({
+      id: m.id as string,
+      name: m.name as string,
+      price: Number(m.price),
+    });
+  }
+
   const items = (itemsData ?? []).map((i) => ({
     id: i.id as string,
     name: i.name as string,
@@ -38,6 +56,7 @@ export default async function CatalogPage() {
     is_active: i.is_active as boolean,
     taxable: (i.taxable as boolean | null) ?? true,
     variations: varsByItem[i.id as string] ?? [],
+    modifiers: modsByItem[i.id as string] ?? [],
   }));
 
   return (
