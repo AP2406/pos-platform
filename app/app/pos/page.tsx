@@ -8,7 +8,7 @@ export default async function PosPage() {
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, taxable")
+    .select("id, name, price, category, taxable, tax_rate_id")
     .eq("business_id", business.id)
     .eq("is_active", true)
     .order("name", { ascending: true });
@@ -26,6 +26,20 @@ export default async function PosPage() {
     .eq("business_id", business.id)
     .eq("is_active", true)
     .order("created_at", { ascending: true });
+
+  const { data: ratesData } = await supabase
+    .from("tax_rates")
+    .select("id, rate")
+    .eq("business_id", business.id)
+    .eq("is_active", true);
+
+  let defaultFrac = Number(business.default_tax_rate) || 0;
+  if (defaultFrac > 1) defaultFrac = defaultFrac / 100;
+
+  const rateFracById: Record<string, number> = {};
+  for (const r of ratesData ?? []) {
+    rateFracById[r.id as string] = (Number(r.rate) || 0) / 100;
+  }
 
   const varsByItem: Record<string, { id: string; name: string; price: number }[]> = {};
   for (const v of varsData ?? []) {
@@ -49,18 +63,23 @@ export default async function PosPage() {
     });
   }
 
-  const items = (itemsData ?? []).map((i) => ({
-    id: i.id as string,
-    name: i.name as string,
-    price: Number(i.price),
-    category: (i.category as string | null) ?? null,
-    taxable: (i.taxable as boolean | null) ?? true,
-    variations: varsByItem[i.id as string] ?? [],
-    modifiers: modsByItem[i.id as string] ?? [],
-  }));
+  const items = (itemsData ?? []).map((i) => {
+    const rid = (i.tax_rate_id as string | null) ?? null;
+    const taxFrac =
+      rid && rateFracById[rid] !== undefined ? rateFracById[rid] : defaultFrac;
+    return {
+      id: i.id as string,
+      name: i.name as string,
+      price: Number(i.price),
+      category: (i.category as string | null) ?? null,
+      taxable: (i.taxable as boolean | null) ?? true,
+      taxFrac: taxFrac,
+      variations: varsByItem[i.id as string] ?? [],
+      modifiers: modsByItem[i.id as string] ?? [],
+    };
+  });
 
-  let taxRate = Number(business.default_tax_rate) || 0;
-  if (taxRate > 1) taxRate = taxRate / 100;
+  const taxRate = defaultFrac;
 
   const trainingMode =
     (business as { training_mode?: boolean }).training_mode === true;

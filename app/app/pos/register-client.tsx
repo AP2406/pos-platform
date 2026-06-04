@@ -15,7 +15,7 @@ import {
 import { DISCOUNT_REASONS } from "./reason-codes";
 
 type Variation = { id: string; name: string; price: number };
-type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; variations: Variation[]; modifiers: Variation[] };
+type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; variations: Variation[]; modifiers: Variation[] };
 type CartLine = {
   catalog_item_id: string | null;
   variation_id: string | null;
@@ -23,6 +23,7 @@ type CartLine = {
   unit_price: number;
   quantity: number;
   taxable: boolean;
+  taxFrac: number;
 };
 type Customer = { id: string; name: string };
 type PaymentLine = {
@@ -208,7 +209,11 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   const idemKeyRef = useRef<string | null>(null);
 
   const itemTaxableById: Record<string, boolean> = {};
-  for (const it of items) itemTaxableById[it.id] = it.taxable;
+  const itemTaxFracById: Record<string, number> = {};
+  for (const it of items) {
+    itemTaxableById[it.id] = it.taxable;
+    itemTaxFracById[it.id] = it.taxFrac;
+  }
 
   useEffect(() => {
     if (customer) return;
@@ -247,7 +252,7 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
     setOpenTickets(t);
   }
 
-  function addLine(line: { catalog_item_id: string | null; variation_id: string | null; name: string; unit_price: number; taxable: boolean }) {
+  function addLine(line: { catalog_item_id: string | null; variation_id: string | null; name: string; unit_price: number; taxable: boolean; taxFrac: number }) {
     setReceipt(null);
     setCart((prev) => {
       const existing = prev.find(
@@ -274,6 +279,7 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
           unit_price: line.unit_price,
           quantity: 1,
           taxable: line.taxable,
+          taxFrac: line.taxFrac,
         },
       ];
     });
@@ -287,7 +293,7 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
       setPickerItem(item);
       return;
     }
-    addLine({ catalog_item_id: item.id, variation_id: null, name: item.name, unit_price: item.price, taxable: item.taxable });
+    addLine({ catalog_item_id: item.id, variation_id: null, name: item.name, unit_price: item.price, taxable: item.taxable, taxFrac: item.taxFrac });
   }
 
   function togglePickerMod(id: string) {
@@ -333,6 +339,7 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
       name: label,
       unit_price: unit,
       taxable: item.taxable,
+      taxFrac: item.taxFrac,
     });
     setPickerItem(null);
   }
@@ -386,7 +393,6 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
   }
 
   const subtotal = cart.reduce((sum, l) => sum + l.unit_price * l.quantity, 0);
-  const taxableSubtotal = cart.reduce((sum, l) => sum + (l.taxable ? l.unit_price * l.quantity : 0), 0);
 
   const discountInput = parseFloat(discountValue) || 0;
   let discount = discountMode === "percent" ? subtotal * (discountInput / 100) : discountInput;
@@ -396,8 +402,23 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
 
   const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
   const taxF = subtotal > 0 ? discountedSubtotal / subtotal : 0;
-  const taxableBase = Math.round(taxableSubtotal * taxF * 100) / 100;
-  const tax = Math.round(taxableBase * taxRate * 100) / 100;
+
+  // Per-item tax preview, bucketed by rate so rounding matches the server.
+  const taxBucketsPreview: Record<string, number> = {};
+  for (const l of cart) {
+    if (!l.taxable) continue;
+    if (l.taxFrac <= 0) continue;
+    const key = l.taxFrac.toFixed(6);
+    taxBucketsPreview[key] = (taxBucketsPreview[key] || 0) + l.unit_price * l.quantity;
+  }
+  let tax = 0;
+  for (const key of Object.keys(taxBucketsPreview)) {
+    const frac = parseFloat(key);
+    const discountedBase = Math.round(taxBucketsPreview[key] * taxF * 100) / 100;
+    tax += Math.round(discountedBase * frac * 100) / 100;
+  }
+  tax = Math.round(tax * 100) / 100;
+
   const tipNum = parseFloat(tip) || 0;
   const total = Math.round((discountedSubtotal + tax + tipNum) * 100) / 100;
 
@@ -463,6 +484,7 @@ export function RegisterClient({ items, taxRate, businessName }: { items: Item[]
           unit_price: Number(it.unit_price) || 0,
           quantity: Number(it.quantity) || 1,
           taxable: cid ? (itemTaxableById[cid] ?? true) : true,
+          taxFrac: cid ? (itemTaxFracById[cid] ?? taxRate) : taxRate,
         };
       })
     );
