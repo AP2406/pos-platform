@@ -8,6 +8,7 @@ import { LeadInboxCard } from "./lead-inbox-card";
 import { DriversSettingCard } from "./drivers-setting-card";
 import { NotificationsCard } from "./notifications-card";
 import { GoogleAdsCard } from "./google-ads-card";
+import { TaxRatesCard } from "./tax-rates-card";
 
 export default async function SettingsPage() {
   const { business, role } = await requireBusiness();
@@ -32,6 +33,18 @@ export default async function SettingsPage() {
 
   const rawTax = Number(business.default_tax_rate) || 0;
   const taxPercent = Math.round((rawTax > 1 ? rawTax : rawTax * 100) * 100) / 100;
+
+  const { data: taxRatesData } = await supabase
+    .from("tax_rates")
+    .select("id, name, rate")
+    .eq("business_id", business.id)
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
+  const taxRates = (taxRatesData ?? []).map((r) => ({
+    id: r.id as string,
+    name: r.name as string,
+    rate: Number(r.rate),
+  }));
 
   const trainingMode =
     (business as { training_mode?: boolean }).training_mode === true;
@@ -69,6 +82,13 @@ export default async function SettingsPage() {
             initialTaxPercent={taxPercent}
             initialCurrency={business.currency || "CAD"}
           />
+        </div>
+      )}
+
+      {role === "owner" && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <SectionHeader>Additional tax rates</SectionHeader>
+          <TaxRatesCard initialRates={taxRates} />
         </div>
       )}
 
