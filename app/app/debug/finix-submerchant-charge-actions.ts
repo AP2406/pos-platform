@@ -9,6 +9,17 @@ import {
   finix,
 } from "@/lib/services/finix";
 
+// ----- Surge platform pricing: what Surge earns per card sale -----
+// A flat percentage alone gets eaten by fixed per-transaction costs on small
+// tickets, so we add a flat per-sale component. Edit these two numbers to
+// change Surge's margin.
+const SURGE_FEE_PERCENT = 0.029; // 2.9%
+const SURGE_FEE_FLAT_CENTS = 30; // + $0.30 per sale
+
+function computePlatformFeeCents(amountCents: number): number {
+  return Math.round(amountCents * SURGE_FEE_PERCENT) + SURGE_FEE_FLAT_CENTS;
+}
+
 type ChargeInput = {
   amountDollars: number;
   cardNumber: string;
@@ -24,6 +35,7 @@ type FinixTransferResp = {
   state: string;
   amount: number;
   currency: string;
+  fee?: number;
   failure_code?: string;
   failure_message?: string;
 };
@@ -33,6 +45,8 @@ type ChargeOk = {
   transferId: string;
   state: string;
   amountCents: number;
+  requestedPlatformFeeCents: number;
+  finixFeeCents?: number;
   merchantId: string;
   paymentInstrumentId: string;
   buyerIdentityId: string;
@@ -70,6 +84,8 @@ export async function chargeIntoSubMerchant(
   if (amountCents < 100) {
     return { error: "Minimum charge is $1.00." };
   }
+
+  const platformFeeCents = computePlatformFeeCents(amountCents);
 
   const nameParts = input.cardholderName.trim().split(/\s+/);
   const firstName = nameParts[0] || "Test";
@@ -111,6 +127,7 @@ export async function chargeIntoSubMerchant(
     currency: "CAD",
     source: paymentInstrumentId,
     merchant: merchantId,
+    fee: platformFeeCents,
     idempotency_id: idempotencyId,
     tags: { source: "surge-submerchant-debug" },
   });
@@ -152,6 +169,8 @@ export async function chargeIntoSubMerchant(
     transferId: transfer.id,
     state: transfer.state,
     amountCents: transfer.amount,
+    requestedPlatformFeeCents: platformFeeCents,
+    finixFeeCents: transfer.fee,
     merchantId: merchantId,
     paymentInstrumentId: paymentInstrumentId,
     buyerIdentityId: buyerIdentityId,
