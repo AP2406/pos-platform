@@ -12,6 +12,8 @@ import { DriversSettingCard } from "./drivers-setting-card";
 import { NotificationsCard } from "./notifications-card";
 import { GoogleAdsCard } from "./google-ads-card";
 import { SettingsTabs } from "./settings-tabs";
+import { ReceiptSettingsForm } from "./receipt-settings-form";
+import type { ReceiptSettings } from "../pos/receipt-template";
 
 export default async function SettingsPage() {
   const { business, role } = await requireBusiness();
@@ -66,6 +68,17 @@ export default async function SettingsPage() {
       is_active: s.is_active as boolean,
       has_pin: !!s.pin_hash,
     }));
+  }
+
+  let receiptSettings: Partial<ReceiptSettings> | null = null;
+  if (role === "owner") {
+    const { data: rsRow } = await supabase
+      .from("businesses")
+      .select("receipt_settings")
+      .eq("id", business.id)
+      .maybeSingle();
+    receiptSettings =
+      (rsRow?.receipt_settings as Partial<ReceiptSettings> | null) ?? null;
   }
 
   const notifPrefs: Record<string, boolean> = {};
@@ -139,6 +152,22 @@ export default async function SettingsPage() {
             <TaxRatesCard initialRates={taxRates} />
           </div>
         </>
+      ),
+    });
+  }
+
+  if (role === "owner") {
+    sections.push({
+      key: "receipts",
+      label: "Receipts",
+      content: (
+        <div className="bg-card border border-border rounded-lg p-6">
+          <SectionHeader>Receipt design</SectionHeader>
+          <p className="text-sm text-muted-foreground mb-4">
+            Brand your printed receipts. Changes apply to every register for this business.
+          </p>
+          <ReceiptSettingsForm initial={receiptSettings} businessName={business.name} />
+        </div>
       ),
     });
   }
