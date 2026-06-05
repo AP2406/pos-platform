@@ -36,7 +36,7 @@ export function CardPaymentModal(props: Props) {
 
   const formRef = useRef<any>(null);
   const fraudRef = useRef<any>(null);
-  const attemptRef = useRef<number>(1);
+  const attemptRef = useRef<number>(Math.floor(Math.random() * 1000000000) + 1);
 
   // Load the Finix SDK once.
   useEffect(function () {

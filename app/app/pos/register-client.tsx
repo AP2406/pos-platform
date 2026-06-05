@@ -14,6 +14,8 @@ import {
 } from "./ticket-actions";
 import { DISCOUNT_REASONS } from "./reason-codes";
 import { setActiveStaff, clearActiveStaff, type ActiveStaff } from "./staff-session";
+import { CardPaymentModal } from "./card-payment-modal";
+import { getCardConfig } from "./finix-pos-actions";
 
 type Variation = { id: string; name: string; price: number };
 type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; variations: Variation[]; modifiers: Variation[] };
@@ -53,6 +55,32 @@ type Receipt = {
   paymentMethod: string;
   payments: PaymentLine[];
   at: string;
+};
+type CardCfg =
+  | { enabled: true; applicationId: string; environment: string; merchantId: string }
+  | { enabled: false; reason: string };
+type CardModalState = {
+  amount: number;
+  order: {
+    items: CartLine[];
+    tip?: number;
+    discount_type: "amount" | "percent";
+    discount_value: number;
+    discount_reason_code?: string;
+    discount_reason_note?: string;
+    customer_id: string | null;
+    idempotency_key: string;
+  };
+  receipt: {
+    items: CartLine[];
+    subtotal: number;
+    discount: number;
+    tax: number;
+    tip: number;
+    total: number;
+    customerName: string | null;
+  };
+  defaultName: string;
 };
 
 function round2(n: number): number {
@@ -213,6 +241,8 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [pinEntry, setPinEntry] = useState("");
   const [staffError, setStaffError] = useState<string | null>(null);
   const [staffBusy, setStaffBusy] = useState(false);
+  const [cardCfg, setCardCfg] = useState<CardCfg | null>(null);
+  const [cardModal, setCardModal] = useState<CardModalState | null>(null);
 
   const itemTaxableById: Record<string, boolean> = {};
   const itemTaxFracById: Record<string, number> = {};
@@ -247,6 +277,16 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     let active = true;
     listOpenTickets().then((t) => {
       if (active) setOpenTickets(t);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    getCardConfig().then((c) => {
+      if (active) setCardCfg(c);
     });
     return () => {
       active = false;
@@ -636,6 +676,42 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       setError("Choose a reason for the discount.");
       return;
     }
+
+    // Card with live charging available -> collect the card in the secure modal
+    // and charge before recording. Cash, other, and card-without-Finix (training
+    // mode or a business that isn't onboarded) fall through to the record path.
+    if (paymentMethod === "card" && cardCfg && cardCfg.enabled) {
+      if (total <= 0) {
+        setError("Total must be more than zero.");
+        return;
+      }
+      setCardModal({
+        amount: total,
+        order: {
+          items: cart,
+          tip: tipNum,
+          discount_type: discountMode,
+          discount_value: discountInput,
+          discount_reason_code: discount > 0 ? discountReason : undefined,
+          discount_reason_note:
+            discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
+          customer_id: customer ? customer.id : null,
+          idempotency_key: nextIdemKey(),
+        },
+        receipt: {
+          items: cart,
+          subtotal: subtotal,
+          discount: discount,
+          tax: tax,
+          tip: tipNum,
+          total: total,
+          customerName: customer ? customer.name : null,
+        },
+        defaultName: customer ? customer.name : "",
+      });
+      return;
+    }
+
     const attachedCustomer = customer;
     const snapItems = cart;
     const snapSubtotal = subtotal;
@@ -678,6 +754,28 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       });
       clearCart();
     });
+  }
+
+  function handleCardSuccess(res: { id: string; sale_number: number; transferId: string }) {
+    const m = cardModal;
+    if (!m) return;
+    setReceipt({
+      id: res.id,
+      saleNumber: res.sale_number,
+      businessName,
+      customerName: m.receipt.customerName,
+      items: m.receipt.items,
+      subtotal: m.receipt.subtotal,
+      discount: m.receipt.discount,
+      tax: m.receipt.tax,
+      tip: m.receipt.tip,
+      total: m.receipt.total,
+      paymentMethod: "card",
+      payments: [{ method: "card", amount: m.receipt.total, tendered: null, change: null }],
+      at: new Date().toLocaleString(),
+    });
+    setCardModal(null);
+    clearCart();
   }
 
   function handleCompleteSplit() {
@@ -1092,6 +1190,21 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         </div>
       )}
 
+      {cardModal && cardCfg && cardCfg.enabled && (
+        <CardPaymentModal
+          amount={cardModal.amount}
+          order={cardModal.order}
+          config={{
+            applicationId: cardCfg.applicationId,
+            environment: cardCfg.environment,
+            merchantId: cardCfg.merchantId,
+          }}
+          defaultName={cardModal.defaultName}
+          onClose={() => setCardModal(null)}
+          onSuccess={handleCardSuccess}
+        />
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
           <div className="bg-card border border-border rounded-lg p-4">
@@ -1440,6 +1553,11 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                       </button>
                     ))}
                   </div>
+                  {paymentMethod === "card" && cardCfg && cardCfg.enabled && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Card is charged securely on the next step.
+                    </p>
+                  )}
                   <button
                     type="button"
                     onClick={openSplit}
