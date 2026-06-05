@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { RegisterClient } from "./register-client";
 import { getActiveStaff } from "./staff-session";
+import type { ReceiptSettings } from "./receipt-template";
 
 export default async function PosPage() {
   const { business } = await requireBusiness();
@@ -41,6 +42,14 @@ export default async function PosPage() {
     .eq("is_active", true);
   const hasStaff = (staffRows ?? []).length > 0;
   const activeStaff = await getActiveStaff();
+
+  const { data: rsRow } = await supabase
+    .from("businesses")
+    .select("receipt_settings")
+    .eq("id", business.id)
+    .maybeSingle();
+  const receiptSettings =
+    (rsRow?.receipt_settings as Partial<ReceiptSettings> | null) ?? null;
 
   let defaultFrac = Number(business.default_tax_rate) || 0;
   if (defaultFrac > 1) defaultFrac = defaultFrac / 100;
@@ -112,6 +121,7 @@ export default async function PosPage() {
         businessName={business.name}
         hasStaff={hasStaff}
         activeStaff={activeStaff}
+        receiptSettings={receiptSettings}
       />
     </div>
   );

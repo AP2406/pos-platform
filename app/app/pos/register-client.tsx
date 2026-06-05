@@ -19,6 +19,7 @@ import { getCardConfig } from "./finix-pos-actions";
 import { TenderSheet } from "./tender-sheet";
 import { getPrinterConfig, printReceiptHtml } from "./qz-print";
 import { PrinterSetup } from "./printer-setup";
+import { buildReceiptHtml, type ReceiptSettings } from "./receipt-template";
 
 type Variation = { id: string; name: string; price: number };
 type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; variations: Variation[]; modifiers: Variation[] };
@@ -92,119 +93,11 @@ function methodLabel(m: string): string {
   return "Other";
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function printReceipt(r: Receipt, settings: Partial<ReceiptSettings> | null, widthMm: number) {
+  printReceiptHtml(buildReceiptHtml(r, settings, widthMm));
 }
 
-function printReceipt(r: Receipt) {
-  const rows = r.items
-    .map(function (l) {
-      return (
-        "<tr><td>" +
-        escapeHtml(l.name) +
-        " x" +
-        l.quantity +
-        '</td><td style="text-align:right">$' +
-        (l.unit_price * l.quantity).toFixed(2) +
-        "</td></tr>"
-      );
-    })
-    .join("");
-
-  const discountRow =
-    r.discount > 0
-      ? '<tr><td>Discount</td><td style="text-align:right">-$' +
-        r.discount.toFixed(2) +
-        "</td></tr>"
-      : "";
-
-  const payRows = r.payments
-    .map(function (p) {
-      var line =
-        "<tr><td>" +
-        escapeHtml(methodLabel(p.method)) +
-        '</td><td style="text-align:right">$' +
-        p.amount.toFixed(2) +
-        "</td></tr>";
-      if (p.method === "cash" && p.change !== null && p.change > 0) {
-        line +=
-          '<tr><td style="font-size:10px">Cash given</td><td style="text-align:right;font-size:10px">$' +
-          (p.tendered || 0).toFixed(2) +
-          "</td></tr>" +
-          '<tr><td style="font-size:10px">Change</td><td style="text-align:right;font-size:10px">$' +
-          p.change.toFixed(2) +
-          "</td></tr>";
-      }
-      return line;
-    })
-    .join("");
-
-  const customerLine = r.customerName
-    ? '<div class="center" style="font-size:11px">Customer: ' +
-      escapeHtml(r.customerName) +
-      "</div>"
-    : "";
-
-  const html =
-    "<html><head><title>Receipt</title>" +
-    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-    "<style>" +
-    "*{box-sizing:border-box}" +
-    "html,body{margin:0;padding:0;background:#fff}" +
-    "body{font-family:'Courier New',monospace;font-size:11px;line-height:1.3;color:#000;width:54mm;margin:0 auto;padding:4px 2mm 12mm}" +
-    "h2{text-align:center;font-size:15px;margin:2px 0 4px}" +
-    "table{width:100%;border-collapse:collapse}" +
-    "td{padding:1px 0;vertical-align:top;word-break:break-word}" +
-    ".line{border-top:1px dashed #000;margin:5px 0}" +
-    ".tot td{font-weight:bold;font-size:13px}" +
-    ".center{text-align:center}" +
-    "@media print{@page{size:60mm auto;margin:0}html,body{width:54mm}}" +
-    "</style></head><body>" +
-    "<h2>" +
-    escapeHtml(r.businessName) +
-    "</h2>" +
-    '<div class="center" style="font-size:13px;font-weight:bold;margin:2px 0">Sale #' +
-    r.saleNumber +
-    "</div>" +
-    '<div class="center">' +
-    escapeHtml(r.at) +
-    "</div>" +
-    '<div class="center" style="font-size:10px">Ref: ' +
-    escapeHtml(r.id.slice(0, 8)) +
-    "</div>" +
-    customerLine +
-    '<div class="line"></div>' +
-    "<table>" +
-    rows +
-    "</table>" +
-    '<div class="line"></div>' +
-    "<table>" +
-    '<tr><td>Subtotal</td><td style="text-align:right">$' +
-    r.subtotal.toFixed(2) +
-    "</td></tr>" +
-    discountRow +
-    '<tr><td>Tax</td><td style="text-align:right">$' +
-    r.tax.toFixed(2) +
-    "</td></tr>" +
-    '<tr><td>Tip</td><td style="text-align:right">$' +
-    r.tip.toFixed(2) +
-    "</td></tr>" +
-    '<tr class="tot"><td>Total</td><td style="text-align:right">$' +
-    r.total.toFixed(2) +
-    "</td></tr>" +
-    "</table>" +
-    '<div class="line"></div>' +
-    '<div class="center" style="font-size:11px;margin-bottom:2px">Payment</div>' +
-    "<table>" +
-    payRows +
-    "</table>" +
-    '<div class="center" style="margin-top:8px">Thank you!</div>' +
-    "</body></html>";
-
-  printReceiptHtml(html);
-}
-
-export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null }) {
+export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff, receiptSettings }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null }) {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [tip, setTip] = useState("");
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
@@ -527,6 +420,11 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     };
   }
 
+  function doPrint(r: Receipt) {
+    const cfg = getPrinterConfig();
+    printReceipt(r, receiptSettings, cfg ? cfg.widthMm : 54);
+  }
+
   function finishSale(res: { id: string; sale_number: number }, pm: string, payments: PaymentLine[], snap: Snap) {
     const rec: Receipt = {
       id: res.id,
@@ -547,7 +445,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setTenderOpen(false);
     clearCart();
     const cfg = getPrinterConfig();
-    if (cfg && cfg.autoPrint) printReceipt(rec);
+    if (cfg && cfg.autoPrint) doPrint(rec);
   }
 
   function commonOrderFields() {
@@ -688,7 +586,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setTenderOpen(false);
     clearCart();
     const cfg = getPrinterConfig();
-    if (cfg && cfg.autoPrint) printReceipt(rec);
+    if (cfg && cfg.autoPrint) doPrint(rec);
   }
 
   function openHold() {
@@ -999,7 +897,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
               </div>
             </div>
             <div className="flex gap-2">
-              <Button className="flex-1" onClick={() => printReceipt(receipt)}>
+              <Button className="flex-1" onClick={() => doPrint(receipt)}>
                 Print receipt
               </Button>
               <Button variant="outline" className="flex-1" onClick={() => setReceipt(null)}>
