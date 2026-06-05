@@ -97,9 +97,6 @@ function escapeHtml(s: string): string {
 }
 
 function printReceipt(r: Receipt) {
- const win = window.open("", "_blank", "width=380,height=640");
-  if (!win) return;
-
   const rows = r.items
     .map(function (l) {
       return (
@@ -242,6 +239,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("All");
   const [printerSetupOpen, setPrinterSetupOpen] = useState(false);
+
   const itemTaxableById: Record<string, boolean> = {};
   const itemTaxFracById: Record<string, number> = {};
   for (const it of items) {
