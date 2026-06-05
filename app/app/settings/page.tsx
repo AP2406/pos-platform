@@ -14,6 +14,7 @@ import { GoogleAdsCard } from "./google-ads-card";
 import { SettingsTabs } from "./settings-tabs";
 import { ReceiptSettingsForm } from "./receipt-settings-form";
 import type { ReceiptSettings } from "../pos/receipt-template";
+import { PrinterSettings } from "../pos/printer-setup";
 
 export default async function SettingsPage() {
   const { business, role } = await requireBusiness();
@@ -171,6 +172,20 @@ export default async function SettingsPage() {
       ),
     });
   }
+
+  sections.push({
+    key: "printer",
+    label: "Printer",
+    content: (
+      <div className="bg-card border border-border rounded-lg p-6">
+        <SectionHeader>Receipt printer</SectionHeader>
+        <p className="text-sm text-muted-foreground mb-4">
+          Connect this device to a receipt printer. This setting is saved on this computer and stays connected until you disconnect it.
+        </p>
+        <PrinterSettings businessName={business.name} />
+      </div>
+    ),
+  });
 
   if (role === "owner" || role === "manager") {
     sections.push({

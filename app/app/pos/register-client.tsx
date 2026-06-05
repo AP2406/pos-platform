@@ -18,7 +18,6 @@ import { CardPaymentModal } from "./card-payment-modal";
 import { getCardConfig } from "./finix-pos-actions";
 import { TenderSheet } from "./tender-sheet";
 import { getPrinterConfig, printReceiptHtml } from "./qz-print";
-import { PrinterSetup } from "./printer-setup";
 import { buildReceiptHtml, type ReceiptSettings } from "./receipt-template";
 
 type Variation = { id: string; name: string; price: number };
@@ -131,7 +130,6 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [tenderOpen, setTenderOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("All");
-  const [printerSetupOpen, setPrinterSetupOpen] = useState(false);
 
   const itemTaxableById: Record<string, boolean> = {};
   const itemTaxFracById: Record<string, number> = {};
@@ -848,11 +846,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         onCardRecord={recordCardNoCharge}
       />
 
-      <PrinterSetup
-        open={printerSetupOpen}
-        onClose={() => setPrinterSetupOpen(false)}
-        businessName={businessName}
-      />
+     
 
       {receipt && cart.length === 0 ? (
         <div className="h-full overflow-y-auto flex items-start justify-center p-4">
@@ -934,10 +928,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                       <span className="px-1.5 rounded-full bg-accent tabular-nums">{openTickets.length}</span>
                     </button>
                   )}
-                  <button type="button" onClick={() => setPrinterSetupOpen(true)} aria-label="Printer setup" title="Printer setup" className="flex items-center gap-1.5 text-xs rounded-md border border-border px-2.5 py-1.5 hover:bg-accent">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z" /></svg>
-                    Printer
-                  </button>
+               
                 </div>
               </div>
 

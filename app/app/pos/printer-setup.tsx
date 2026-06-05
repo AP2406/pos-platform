@@ -1,21 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   qzConnect,
   qzListPrinters,
   qzPrintHtml,
+  subscribePrinterStatus,
+  recheckStatus,
   getPrinterConfig,
   savePrinterConfig,
   clearPrinterConfig,
+  type PrinterStatus,
+  type StatusLevel,
 } from "./qz-print";
-
-type Props = {
-  open: boolean;
-  onClose: () => void;
-  businessName: string;
-};
 
 const WIDTHS: { mm: number; label: string }[] = [
   { mm: 48, label: "58mm paper" },
@@ -29,15 +27,12 @@ function sampleHtml(businessName: string, widthMm: number): string {
     "<html><head><title>Test</title>" +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
     "<style>" +
-    "*{box-sizing:border-box}" +
-    "html,body{margin:0;padding:0;background:#fff}" +
+    "*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}" +
     "body{font-family:'Courier New',monospace;font-size:11px;line-height:1.3;color:#000;width:" +
     widthMm +
     "mm;margin:0 auto;padding:4px 2mm 12mm}" +
-    "h2{text-align:center;font-size:15px;margin:2px 0 4px}" +
-    ".center{text-align:center}" +
+    "h2{text-align:center;font-size:15px;margin:2px 0 4px}.center{text-align:center}" +
     ".line{border-top:1px dashed #000;margin:5px 0}" +
-    "table{width:100%;border-collapse:collapse}td{padding:1px 0}" +
     "@media print{@page{margin:0}html,body{width:" +
     widthMm +
     "mm}}" +
@@ -47,78 +42,86 @@ function sampleHtml(businessName: string, widthMm: number): string {
     "</h2>" +
     '<div class="center">Printer test</div>' +
     '<div class="line"></div>' +
-    "<table>" +
-    '<tr><td>Test item</td><td style="text-align:right">$1.00</td></tr>' +
-    '<tr><td>Another item</td><td style="text-align:right">$2.50</td></tr>' +
-    "</table>" +
+    '<div class="center">If you can read this, your<br/>receipt printer is working.</div>' +
     '<div class="line"></div>' +
-    '<table><tr><td><b>Total</b></td><td style="text-align:right"><b>$3.50</b></td></tr></table>' +
-    '<div class="center" style="margin-top:8px">If you can read this, you are all set!</div>' +
+    '<div class="center">' +
+    new Date().toLocaleString() +
+    "</div>" +
     "</body></html>"
   );
 }
 
-export function PrinterSetup(props: Props) {
-  const [status, setStatus] = useState<"checking" | "offline" | "online">("checking");
+const LEVEL_STYLES: Record<StatusLevel, string> = {
+  ok: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
+  warning: "bg-amber-500/15 text-amber-600 border-amber-500/30",
+  error: "bg-red-500/15 text-red-600 border-red-500/30",
+  offline: "bg-red-500/15 text-red-600 border-red-500/30",
+  checking: "bg-muted text-muted-foreground border-border",
+};
+
+export function PrinterSettings({ businessName }: { businessName: string }) {
+  const [conn, setConn] = useState<"checking" | "offline" | "online">("checking");
   const [printers, setPrinters] = useState<string[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [widthMm, setWidthMm] = useState<number>(54);
-  const [autoPrint, setAutoPrint] = useState<boolean>(false);
-  const [busy, setBusy] = useState<boolean>(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [autoPrint, setAutoPrint] = useState<boolean>(true);
   const [saved, setSaved] = useState<boolean>(false);
+  const [status, setStatus] = useState<PrinterStatus | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const didInit = useRef(false);
 
-  useEffect(
-    function () {
-      if (!props.open) return;
-      const cfg = getPrinterConfig();
-      if (cfg) {
-        setSelected(cfg.printerName);
-        setWidthMm(cfg.widthMm || 54);
-        setAutoPrint(cfg.autoPrint);
-      }
-      check();
-    },
-    [props.open]
-  );
+  useEffect(() => {
+    if (didInit.current) return;
+    didInit.current = true;
+    const cfg = getPrinterConfig();
+    if (cfg) {
+      setSelected(cfg.printerName);
+      setWidthMm(cfg.widthMm || 54);
+      setAutoPrint(cfg.autoPrint);
+      setSaved(true);
+    }
+    checkConn(cfg ? cfg.printerName : "");
+  }, []);
 
-  async function check() {
-    setStatus("checking");
-    setMsg(null);
+  async function checkConn(preferred: string) {
+    setConn("checking");
     const ok = await qzConnect();
     if (!ok) {
-      setStatus("offline");
+      setConn("offline");
       return;
     }
+    setConn("online");
     const list = await qzListPrinters();
     setPrinters(list);
-    setStatus("online");
-    const cfg = getPrinterConfig();
-    if (cfg && list.indexOf(cfg.printerName) !== -1) {
-      setSelected(cfg.printerName);
-    } else if (!selected) {
-      const star = list.find(function (n) {
-        return n.toLowerCase().indexOf("star") !== -1 || n.toLowerCase().indexOf("tsp") !== -1;
+    if (!preferred) {
+      const star = list.find(function (p) {
+        return /star|tsp/i.test(p);
       });
       if (star) setSelected(star);
+      else if (list.length > 0) setSelected((s) => (s ? s : list[0]));
     }
   }
 
-  async function testPrint() {
-    if (!selected) {
-      setMsg("Choose a printer first.");
+  useEffect(() => {
+    if (conn !== "online" || !selected || !saved) {
+      setStatus(null);
       return;
     }
-    setBusy(true);
-    setMsg(null);
-    try {
-      await qzPrintHtml(selected, sampleHtml(props.businessName, widthMm), widthMm);
-      setMsg("Test sent. Check the printer.");
-    } catch (e) {
-      setMsg("Could not print: " + String(e));
-    }
-    setBusy(false);
-  }
+    let active = true;
+    let unsub: (() => void) | null = null;
+    setStatus({ level: "checking", code: "CHECKING", message: "Checking printer\u2026" });
+    subscribePrinterStatus(selected, function (s) {
+      if (active) setStatus(s);
+    }).then(function (u) {
+      if (active) unsub = u;
+      else u();
+    });
+    return function () {
+      active = false;
+      if (unsub) unsub();
+    };
+  }, [conn, selected, saved]);
 
   function save() {
     if (!selected) {
@@ -127,134 +130,136 @@ export function PrinterSetup(props: Props) {
     }
     savePrinterConfig({ printerName: selected, widthMm: widthMm, autoPrint: autoPrint });
     setSaved(true);
-    setMsg("Saved. Receipts will print to " + selected + ".");
+    setMsg("Saved. This printer stays connected until you disconnect it.");
   }
 
   function disconnect() {
     clearPrinterConfig();
-    setSelected("");
-    setAutoPrint(false);
     setSaved(false);
-    setMsg("Cleared. Receipts will use the browser print dialog.");
+    setStatus(null);
+    setMsg("Printer disconnected. Receipts will use the browser print dialog until you connect one again.");
   }
 
-  if (!props.open) return null;
+  async function test() {
+    if (!selected) return;
+    setTesting(true);
+    setMsg(null);
+    try {
+      await qzPrintHtml(selected, sampleHtml(businessName, widthMm), widthMm);
+      setMsg("Test sent to " + selected + ".");
+    } catch (e) {
+      setMsg("Couldn't print the test. Check the status below.");
+    }
+    setTesting(false);
+  }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={props.onClose}>
-      <div className="bg-card border border-border rounded-lg p-5 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-medium">Receipt printer setup</h3>
-          <button type="button" onClick={props.onClose} className="text-xs text-muted-foreground underline">
-            Close
-          </button>
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span
+            className={
+              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium " +
+              (conn === "online"
+                ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30"
+                : conn === "offline"
+                ? "bg-red-500/15 text-red-600 border-red-500/30"
+                : "bg-muted text-muted-foreground border-border")
+            }
+          >
+            <span className={"w-1.5 h-1.5 rounded-full " + (conn === "online" ? "bg-emerald-500" : conn === "offline" ? "bg-red-500" : "bg-muted-foreground")} />
+            {conn === "online" ? "QZ Tray connected" : conn === "offline" ? "QZ Tray not running" : "Checking\u2026"}
+          </span>
         </div>
+        <button type="button" onClick={() => checkConn(selected)} className="text-xs text-muted-foreground underline hover:text-foreground">
+          Recheck
+        </button>
+      </div>
 
-        {status === "checking" && (
-          <p className="text-sm text-muted-foreground py-6 text-center">Looking for QZ Tray...</p>
-        )}
+      {conn === "offline" && (
+        <div className="rounded-md border border-border bg-muted/40 p-3 text-sm space-y-2">
+          <p className="font-medium">QZ Tray isn&apos;t running</p>
+          <p className="text-muted-foreground">
+            Silent receipt printing needs the free QZ Tray app running on this computer. Install it, make sure its icon is showing near the clock, then Recheck. If it&apos;s installed but still not found, turn off any VPN or shield and try again.
+          </p>
+          <a href="https://qz.io/download" target="_blank" rel="noreferrer" className="inline-block text-sm font-medium underline">
+            Download QZ Tray
+          </a>
+        </div>
+      )}
 
-        {status === "offline" && (
-          <div className="space-y-3">
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-              QZ Tray isn&apos;t running on this computer. It&apos;s a small free app that lets the
-              browser print straight to your receipt printer with no pop-up.
-            </div>
-            <ol className="text-sm space-y-2 list-decimal pl-5">
-              <li>
-                Install your <span className="font-medium">Star TSP100 driver</span> so the printer shows up in Windows
-                (skip if it&apos;s already installed).
-              </li>
-              <li>
-                Download and install QZ Tray from{" "}
-                <a href="https://qz.io/download" target="_blank" rel="noreferrer" className="text-blue-600 underline">
-                  qz.io/download
-                </a>
-                , then make sure it&apos;s running (look for its icon near the clock).
-              </li>
-              <li>Come back here and click Check again. The first time you print, QZ Tray asks you to Allow this site &mdash; tick &quot;remember&quot; and Allow.</li>
-            </ol>
-            <Button className="w-full" onClick={check}>
-              Check again
-            </Button>
-          </div>
-        )}
-
-        {status === "online" && (
-          <div className="space-y-4">
-            <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm">
-              QZ Tray is connected.
-            </div>
-
-            <div>
-              <label className="text-xs font-medium">Printer</label>
-              {printers.length === 0 ? (
-                <p className="text-sm text-muted-foreground mt-1">
-                  No printers found. Make sure the Star driver is installed and the printer is on, then{" "}
-                  <button type="button" onClick={check} className="text-blue-600 underline">
-                    refresh
-                  </button>
-                  .
-                </p>
-              ) : (
-                <select
-                  value={selected}
-                  onChange={(e) => setSelected(e.target.value)}
-                  className="w-full h-10 rounded-md border border-border bg-transparent text-foreground px-2 text-sm mt-1"
-                >
-                  <option value="">Select a printer...</option>
-                  {printers.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-
-            <div>
-              <label className="text-xs font-medium">Paper width</label>
-              <div className="grid grid-cols-3 gap-2 mt-1">
-                {WIDTHS.map((w) => {
-                  const active = widthMm === w.mm;
-                  return (
-                    <button
-                      key={w.mm}
-                      type="button"
-                      onClick={() => setWidthMm(w.mm)}
-                      className={"py-2 rounded-md border text-sm transition-colors " + (active ? "border-foreground bg-accent font-medium" : "border-border hover:border-foreground/40")}
-                    >
-                      {w.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={autoPrint} onChange={(e) => setAutoPrint(e.target.checked)} className="w-4 h-4" />
-              Print receipts automatically when a sale completes
-            </label>
-
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={testPrint} disabled={busy || !selected}>
-                {busy ? "Sending..." : "Test print"}
-              </Button>
-              <Button className="flex-1" onClick={save} disabled={!selected}>
-                Save
-              </Button>
-            </div>
-
-            {getPrinterConfig() && (
-              <button type="button" onClick={disconnect} className="w-full text-xs text-muted-foreground underline hover:text-foreground">
-                Stop using this printer
-              </button>
+      {conn === "online" && (
+        <>
+          <div className="space-y-2">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground">Receipt printer</label>
+            {printers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No printers found in Windows. Add your printer in Windows first, then Recheck.</p>
+            ) : (
+              <select value={selected} onChange={(e) => setSelected(e.target.value)} className="w-full h-10 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
+                <option value="">Select a printer...</option>
+                {printers.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
             )}
           </div>
-        )}
 
-        {msg && <p className={"text-sm mt-3 " + (saved ? "text-emerald-600" : "text-muted-foreground")}>{msg}</p>}
-      </div>
+          <div className="space-y-2">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground">Paper width</label>
+            <div className="flex gap-2">
+              {WIDTHS.map((w) => {
+                const active = widthMm === w.mm;
+                return (
+                  <button key={w.mm} type="button" onClick={() => setWidthMm(w.mm)} className={"flex-1 p-2.5 rounded-md border text-sm transition-colors " + (active ? "border-foreground bg-accent font-medium" : "border-border hover:border-foreground/40")}>
+                    {w.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={autoPrint} onChange={(e) => setAutoPrint(e.target.checked)} className="w-4 h-4" />
+            Print receipt automatically after each sale
+          </label>
+
+          {saved && status && (
+            <div className={"rounded-md border p-3 " + LEVEL_STYLES[status.level]}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium">
+                  {status.level === "ok" ? "Printer ready" : status.level === "checking" ? "Checking\u2026" : status.level === "offline" ? "Printer offline" : status.level === "warning" ? "Heads up" : "Printer problem"}
+                </div>
+                <button type="button" onClick={() => recheckStatus()} className="text-xs underline opacity-80 hover:opacity-100">
+                  Recheck
+                </button>
+              </div>
+              <div className="text-sm mt-0.5">{status.message}</div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <Button onClick={save} disabled={!selected}>
+              {saved ? "Update printer" : "Connect printer"}
+            </Button>
+            <Button variant="outline" onClick={test} disabled={!selected || testing}>
+              {testing ? "Printing..." : "Test print"}
+            </Button>
+            {saved && (
+              <Button variant="outline" onClick={disconnect} className="text-red-600">
+                Disconnect
+              </Button>
+            )}
+          </div>
+        </>
+      )}
+
+      {msg && <p className="text-sm text-muted-foreground">{msg}</p>}
+
+      <p className="text-xs text-muted-foreground border-t border-border pt-3">
+        Status detail depends on what your printer reports to Windows. Most thermal printers report offline and out-of-paper reliably; jams and an open cover are reported by some drivers but not all.
+      </p>
     </div>
   );
 }
