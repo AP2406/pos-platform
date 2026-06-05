@@ -5,13 +5,18 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { isFinixConfigured } from "@/lib/services/finix";
 import {
   createMerchantIdentity,
+  createMerchantBankAccount,
   provisionMerchant,
 } from "@/lib/services/finix-onboarding";
-import type { CreateMerchantIdentityInput } from "@/lib/services/finix-onboarding";
+import type {
+  CreateMerchantIdentityInput,
+  MerchantBankAccountFields,
+} from "@/lib/services/finix-onboarding";
 
 type OnboardOk = {
   ok: true;
   identityId: string;
+  bankInstrumentId: string;
   merchantId: string;
   state: string;
 };
@@ -19,7 +24,8 @@ type OnboardOk = {
 type OnboardError = { error: string; details?: unknown };
 
 export async function onboardCurrentBusiness(
-  input: CreateMerchantIdentityInput
+  input: CreateMerchantIdentityInput,
+  bank: MerchantBankAccountFields
 ): Promise<OnboardOk | OnboardError> {
   const { business } = await requireBusiness();
 
@@ -35,6 +41,15 @@ export async function onboardCurrentBusiness(
     };
   }
   const identityId = identityResult.data.id;
+
+  const bankResult = await createMerchantBankAccount(identityId, bank);
+  if ("error" in bankResult) {
+    return {
+      error: "Bank account creation failed: " + bankResult.error,
+      details: bankResult.details,
+    };
+  }
+  const bankInstrumentId = bankResult.data.id;
 
   const merchantResult = await provisionMerchant(identityId, {
     business_id: business.id,
@@ -69,6 +84,7 @@ export async function onboardCurrentBusiness(
   return {
     ok: true,
     identityId: identityId,
+    bankInstrumentId: bankInstrumentId,
     merchantId: merchant.id,
     state: state,
   };

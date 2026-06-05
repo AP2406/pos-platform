@@ -34,6 +34,11 @@ type FieldState = {
   perPostal: string;
   perCountry: string;
   principalPercentageOwnership: string;
+  bankName: string;
+  bankAccountType: string;
+  bankInstitutionNumber: string;
+  bankTransitNumber: string;
+  bankAccountNumber: string;
 };
 
 const DEFAULTS: FieldState = {
@@ -67,10 +72,15 @@ const DEFAULTS: FieldState = {
   perPostal: "M5X 1A9",
   perCountry: "CAN",
   principalPercentageOwnership: "100",
+  bankName: "Aathi Panchalingam",
+  bankAccountType: "PERSONAL_CHECKING",
+  bankInstitutionNumber: "123",
+  bankTransitNumber: "12345",
+  bankAccountNumber: "123123123",
 };
 
 type OnboardResult =
-  | { ok: true; identityId: string; merchantId: string; state: string }
+  | { ok: true; identityId: string; bankInstrumentId: string; merchantId: string; state: string }
   | { error: string; details?: unknown };
 
 function parseDate(s: string): { day: number; month: number; year: number } | undefined {
@@ -92,48 +102,59 @@ export default function FinixOnboardPage() {
     setLoading(true);
     setResult(null);
     try {
-      const res = await onboardCurrentBusiness({
-        businessName: f.businessName,
-        doingBusinessAs: f.doingBusinessAs || undefined,
-        businessType: f.businessType as never,
-        businessPhone: f.businessPhone,
-        businessTaxId: f.businessTaxId || undefined,
-        url: f.url || undefined,
-        businessAddress: {
-          line1: f.bizLine1,
-          city: f.bizCity,
-          region: f.bizRegion,
-          postal_code: f.bizPostal,
-          country: f.bizCountry,
+      const res = await onboardCurrentBusiness(
+        {
+          businessName: f.businessName,
+          doingBusinessAs: f.doingBusinessAs || undefined,
+          businessType: f.businessType as never,
+          businessPhone: f.businessPhone,
+          businessTaxId: f.businessTaxId || undefined,
+          url: f.url || undefined,
+          businessAddress: {
+            line1: f.bizLine1,
+            city: f.bizCity,
+            region: f.bizRegion,
+            postal_code: f.bizPostal,
+            country: f.bizCountry,
+          },
+          businessDescription: f.businessDescription,
+          mcc: f.mcc || undefined,
+          defaultStatementDescriptor: f.defaultStatementDescriptor || undefined,
+          incorporationDate: parseDate(f.incorporationDate),
+          annualCardVolumeCents: f.annualCardVolume
+            ? Math.round(Number(f.annualCardVolume) * 100)
+            : undefined,
+          maxTransactionAmountCents: f.maxTransactionAmount
+            ? Math.round(Number(f.maxTransactionAmount) * 100)
+            : undefined,
+          ownerFirstName: f.ownerFirstName,
+          ownerLastName: f.ownerLastName,
+          ownerTitle: f.ownerTitle || undefined,
+          ownerEmail: f.ownerEmail,
+          ownerPhone: f.ownerPhone,
+          ownerTaxId: f.ownerTaxId || undefined,
+          ownerDob: parseDate(f.ownerDob),
+          ownerPersonalAddress: {
+            line1: f.perLine1,
+            city: f.perCity,
+            region: f.perRegion,
+            postal_code: f.perPostal,
+            country: f.perCountry,
+          },
+          principalPercentageOwnership: f.principalPercentageOwnership
+            ? Number(f.principalPercentageOwnership)
+            : undefined,
         },
-        businessDescription: f.businessDescription,
-        mcc: f.mcc || undefined,
-        defaultStatementDescriptor: f.defaultStatementDescriptor || undefined,
-        incorporationDate: parseDate(f.incorporationDate),
-        annualCardVolumeCents: f.annualCardVolume
-          ? Math.round(Number(f.annualCardVolume) * 100)
-          : undefined,
-        maxTransactionAmountCents: f.maxTransactionAmount
-          ? Math.round(Number(f.maxTransactionAmount) * 100)
-          : undefined,
-        ownerFirstName: f.ownerFirstName,
-        ownerLastName: f.ownerLastName,
-        ownerTitle: f.ownerTitle || undefined,
-        ownerEmail: f.ownerEmail,
-        ownerPhone: f.ownerPhone,
-        ownerTaxId: f.ownerTaxId || undefined,
-        ownerDob: parseDate(f.ownerDob),
-        ownerPersonalAddress: {
-          line1: f.perLine1,
-          city: f.perCity,
-          region: f.perRegion,
-          postal_code: f.perPostal,
-          country: f.perCountry,
-        },
-        principalPercentageOwnership: f.principalPercentageOwnership
-          ? Number(f.principalPercentageOwnership)
-          : undefined,
-      });
+        {
+          name: f.bankName,
+          accountNumber: f.bankAccountNumber,
+          accountType: f.bankAccountType,
+          institutionNumber: f.bankInstitutionNumber,
+          transitNumber: f.bankTransitNumber,
+          country: "CAN",
+          currency: "CAD",
+        }
+      );
       setResult(res);
     } catch (e) {
       setResult({ error: "Request threw: " + String(e) });
@@ -145,8 +166,9 @@ export default function FinixOnboardPage() {
     <div style={{ padding: 24, maxWidth: 760 }}>
       <h1 style={{ fontSize: 20, fontWeight: 600 }}>Finix sub-merchant onboarding</h1>
       <p style={{ color: "#666", fontSize: 14, marginTop: 4 }}>
-        Creates a seller Identity and provisions a Merchant (DUMMY_V1 sandbox),
-        then saves the Finix IDs onto the current business.
+        Creates a seller Identity, attaches a settlement bank account, and
+        provisions a Merchant (DUMMY_V1 sandbox), then saves the Finix IDs onto
+        the current business.
       </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 20 }}>
@@ -231,6 +253,27 @@ export default function FinixOnboardPage() {
         <Field label="Region" value={f.perRegion} onChange={set("perRegion")} />
         <Field label="Postal code (M5X 1A9)" value={f.perPostal} onChange={set("perPostal")} />
         <Field label="Country" value={f.perCountry} onChange={set("perCountry")} />
+      </div>
+
+      <h2 style={{ fontSize: 15, fontWeight: 600, marginTop: 24 }}>Settlement bank account</h2>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 8 }}>
+        <Field label="Account holder name" value={f.bankName} onChange={set("bankName")} />
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
+          <span style={{ color: "#555" }}>Account type</span>
+          <select
+            value={f.bankAccountType}
+            onChange={(e) => set("bankAccountType")(e.target.value)}
+            style={{ padding: "8px 10px", border: "1px solid #ccc", borderRadius: 8, fontSize: 14 }}
+          >
+            <option value="PERSONAL_CHECKING">Personal checking</option>
+            <option value="BUSINESS_CHECKING">Business checking</option>
+            <option value="PERSONAL_SAVINGS">Personal savings</option>
+            <option value="BUSINESS_SAVINGS">Business savings</option>
+          </select>
+        </label>
+        <Field label="Institution number (3 digits)" value={f.bankInstitutionNumber} onChange={set("bankInstitutionNumber")} />
+        <Field label="Transit number (5 digits)" value={f.bankTransitNumber} onChange={set("bankTransitNumber")} />
+        <Field label="Account number" value={f.bankAccountNumber} onChange={set("bankAccountNumber")} />
       </div>
 
       <button

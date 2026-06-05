@@ -98,12 +98,45 @@ function buildEntity(input: CreateMerchantIdentityInput): Record<string, unknown
 }
 
 export async function createMerchantIdentity(input: CreateMerchantIdentityInput) {
-  // identity_roles is belt-and-suspenders; business_type alone also flags a seller.
-  // If Finix ever rejects the role enum, remove identity_roles.
   return finix.post<FinixMerchantIdentity>("/identities", {
     entity: buildEntity(input),
     identity_roles: ["SELLER"],
     tags: input.tags,
+  });
+}
+
+export type MerchantBankAccountFields = {
+  name: string;
+  accountNumber: string;
+  accountType: string;
+  institutionNumber: string;
+  transitNumber: string;
+  country: string;
+  currency: string;
+};
+
+export type FinixBankAccount = {
+  id: string;
+  identity: string;
+  instrument_type: string;
+  masked_account_number?: string;
+  created_at: string;
+};
+
+export async function createMerchantBankAccount(
+  identityId: string,
+  fields: MerchantBankAccountFields
+) {
+  return finix.post<FinixBankAccount>("/payment_instruments", {
+    type: "BANK_ACCOUNT",
+    identity: identityId,
+    name: fields.name,
+    account_number: fields.accountNumber,
+    account_type: fields.accountType,
+    institution_number: fields.institutionNumber,
+    transit_number: fields.transitNumber,
+    country: fields.country,
+    currency: fields.currency,
   });
 }
 
