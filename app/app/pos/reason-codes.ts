@@ -44,3 +44,11 @@ export function reasonLabelForAction(action: string, code: string): string {
   return code;
 }
 
+export const TAX_EXEMPT_REASONS = [
+  { code: "resale", label: "Resale / wholesale" },
+  { code: "exempt_org", label: "Tax-exempt organization" },
+  { code: "status_card", label: "Status card holder" },
+  { code: "out_of_jurisdiction", label: "Out of jurisdiction" },
+  { code: "other", label: "Other" },
+];
+

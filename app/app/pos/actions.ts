@@ -5,7 +5,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { VOID_REASONS, DISCOUNT_REASONS, isValidReason } from "./reason-codes";
+import { VOID_REASONS, DISCOUNT_REASONS, TAX_EXEMPT_REASONS, isValidReason } from "./reason-codes";
 
 const lineSchema = z.object({
   catalog_item_id: z.string().uuid().optional().nullable(),
@@ -29,6 +29,9 @@ const orderSchema = z.object({
   discount_value: z.coerce.number().min(0).max(1000000).optional(),
   discount_reason_code: z.string().max(60).optional(),
   discount_reason_note: z.string().max(500).optional(),
+  tax_exempt: z.coerce.boolean().optional(),
+  tax_exempt_reason_code: z.string().max(60).optional(),
+  tax_exempt_reason_note: z.string().max(500).optional(),
   customer_id: z.string().uuid().optional().nullable(),
   idempotency_key: z.string().uuid().optional(),
 });
@@ -53,6 +56,9 @@ type OrderInput = {
   discount_value?: number;
   discount_reason_code?: string;
   discount_reason_note?: string;
+  tax_exempt?: boolean;
+  tax_exempt_reason_code?: string;
+  tax_exempt_reason_note?: string;
   customer_id?: string | null;
   idempotency_key?: string;
 };
@@ -68,7 +74,6 @@ type CreateOrderResult =
   | { ok: true; id: string; sale_number: number }
   | { error: string };
 
-// Resolve the PIN-identified operator on this device (if any).
 async function getActiveStaffRow(
   supabase: Awaited<ReturnType<typeof createClient>>,
   businessId: string
@@ -86,7 +91,6 @@ async function getActiveStaffRow(
   return { id: data.id as string, name: data.name as string, role: data.role as string };
 }
 
-// Verify a PIN belongs to an active manager. Returns the manager or null.
 async function getManagerByPin(
   supabase: Awaited<ReturnType<typeof createClient>>,
   businessId: string,
@@ -112,9 +116,6 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   const isTraining = (business as { training_mode?: boolean }).training_mode === true;
   const supabase = await createClient();
 
-  // Idempotency: if this exact checkout was already recorded, return that sale
-  // instead of creating a duplicate. This catches double-clicks and retries
-  // before we even touch a sale number.
   const idemKey = parsed.data.idempotency_key ?? null;
   if (idemKey) {
     const { data: existing } = await supabase
@@ -134,15 +135,19 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
 
   let customerId: string | null = parsed.data.customer_id ?? null;
   let customerName: string | null = null;
+  let customerExempt = false;
+  let customerExemptNumber: string | null = null;
   if (customerId) {
     const { data: cust } = await supabase
       .from("customers")
-      .select("id, name")
+      .select("id, name, tax_exempt, tax_exempt_number")
       .eq("id", customerId)
       .eq("business_id", business.id)
       .maybeSingle();
     if (cust) {
       customerName = (cust.name as string | null) ?? null;
+      customerExempt = (cust.tax_exempt as boolean | null) === true;
+      customerExemptNumber = (cust.tax_exempt_number as string | null) ?? null;
     } else {
       customerId = null;
     }
@@ -156,7 +161,6 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     .maybeSingle();
   const drawerSessionId = openSession ? (openSession.id as string) : null;
 
-  // Active staff: the PIN-identified operator on this device, if any.
   let activeStaffId: string | null = null;
   let activeStaffName: string | null = null;
   let activeStaffRole: string | null = null;
@@ -206,8 +210,6 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
 
   const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
 
-  // Per-item tax. Each catalog item uses the business default rate, a named
-  // rate, or is tax-exempt. Custom lines (no catalog item) use the default rate.
   let rate = Number(business.default_tax_rate) || 0;
   if (rate > 1) rate = rate / 100;
 
@@ -287,6 +289,33 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   tax = Math.round(tax * 100) / 100;
   taxableBase = Math.round(taxableBase * 100) / 100;
 
+  // Tax exemption: a manual per-sale exemption (cashier) or a customer flagged
+  // tax-exempt zeroes the tax. The taxable base is still recorded for the books.
+  const manualExempt = parsed.data.tax_exempt === true;
+  const exemptCode = (parsed.data.tax_exempt_reason_code || "").trim();
+  const exemptNote = (parsed.data.tax_exempt_reason_note || "").trim();
+  if (manualExempt) {
+    if (!isValidReason(TAX_EXEMPT_REASONS, exemptCode)) {
+      return { error: "Choose a reason for the tax exemption." };
+    }
+    if (exemptCode === "other" && !exemptNote) {
+      return { error: "Add a note explaining the tax exemption." };
+    }
+  }
+  const isExempt = manualExempt || customerExempt;
+  let taxExemptInfo:
+    | { source: "manual" | "customer"; reason_code: string | null; reason_note: string | null; number: string | null }
+    | null = null;
+  if (isExempt) {
+    if (manualExempt) {
+      taxExemptInfo = { source: "manual", reason_code: exemptCode, reason_note: exemptNote || null, number: null };
+    } else {
+      taxExemptInfo = { source: "customer", reason_code: "customer", reason_note: null, number: customerExemptNumber };
+    }
+    for (const b of taxBreakdown) b.amount = 0;
+    tax = 0;
+  }
+
   const tip = parsed.data.tip ?? 0;
   const total = Math.round((discountedSubtotal + tax + tip) * 100) / 100;
   const paymentMethod = parsed.data.payment_method ?? "cash";
@@ -358,7 +387,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       reason_code: discount > 0 ? discountReasonCode : null,
       reason_note: discount > 0 && discountReasonNote ? discountReasonNote : null,
     },
-    tax: { rate: rate, amount: tax, taxable_base: taxableBase, breakdown: taxBreakdown },
+    tax: { rate: rate, amount: tax, taxable_base: taxableBase, breakdown: taxBreakdown, exempt: taxExemptInfo },
     tip: tip,
     total: total,
     payment_method: orderPaymentMethod,
@@ -385,6 +414,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       tax,
       tip,
       total,
+      tax_exempt: isExempt,
       payment_method: orderPaymentMethod,
       customer_id: customerId,
       drawer_session_id: drawerSessionId,
@@ -397,8 +427,6 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     .single();
 
   if (orderError || !order) {
-    // If two requests with the same key raced, the unique index rejects the
-    // loser. Recover the sale the winner already created instead of erroring.
     if (idemKey && orderError && (orderError as { code?: string }).code === "23505") {
       const { data: dup } = await supabase
         .from("orders")
@@ -451,9 +479,6 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     return { error: "Could not record payment. Please try again." };
   }
 
-  // Log the discount as a sensitive action. Practice sales are skipped so the
-  // activity log stays clean. The sale is already committed, so a failed audit
-  // write is logged, not surfaced.
   if (discount > 0 && !isTraining) {
     const {
       data: { user: discUser },
@@ -473,9 +498,25 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     }
   }
 
-  // Decrement stock for tracked items. Practice (training) sales must not touch
-  // real inventory. A completed sale must never fail because of inventory
-  // bookkeeping, so problems here are logged, not surfaced.
+  if (manualExempt && !isTraining) {
+    const {
+      data: { user: exUser },
+    } = await supabase.auth.getUser();
+    const { error: exAuditError } = await supabase.from("audit_events").insert({
+      business_id: business.id,
+      actor_id: exUser ? exUser.id : null,
+      actor_role: role,
+      action: "tax_exempt",
+      order_id: order.id,
+      reason_code: exemptCode,
+      reason_note: exemptNote ? exemptNote.slice(0, 500) : null,
+      metadata: { staff_id: activeStaffId, staff_name: activeStaffName, taxable_base: taxableBase },
+    });
+    if (exAuditError) {
+      console.error("createOrder tax exempt audit:", exAuditError);
+    }
+  }
+
   if (!isTraining) {
     try {
       const itemIds = Array.from(
@@ -552,7 +593,6 @@ export async function voidOrder(
 
   const supabase = await createClient();
 
-  // If a staff/trainee is the active operator, a manager must approve.
   const active = await getActiveStaffRow(supabase, business.id);
   let approver: { id: string; name: string } | null = null;
   if (active && (active.role === "staff" || active.role === "trainee")) {
@@ -601,13 +641,13 @@ export async function voidOrder(
 
 export async function searchCustomers(
   query: string
-): Promise<{ id: string; name: string; phone: string | null }[]> {
+): Promise<{ id: string; name: string; phone: string | null; tax_exempt: boolean }[]> {
   const { business } = await requireBusiness();
   const supabase = await createClient();
 
   let q = supabase
     .from("customers")
-    .select("id, name, phone")
+    .select("id, name, phone, tax_exempt")
     .eq("business_id", business.id)
     .order("name", { ascending: true })
     .limit(10);
@@ -624,6 +664,7 @@ export async function searchCustomers(
     id: c.id as string,
     name: c.name as string,
     phone: (c.phone as string | null) ?? null,
+    tax_exempt: (c.tax_exempt as boolean | null) === true,
   }));
 }
 
