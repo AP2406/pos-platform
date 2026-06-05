@@ -13,6 +13,9 @@ type OrderSnapshot = {
   discount_value?: number;
   discount_reason_code?: string;
   discount_reason_note?: string;
+  tax_exempt?: boolean;
+  tax_exempt_reason_code?: string;
+  tax_exempt_reason_note?: string;
   customer_id?: string | null;
   idempotency_key: string;
 };
@@ -38,7 +41,6 @@ export function CardPaymentModal(props: Props) {
   const fraudRef = useRef<any>(null);
   const attemptRef = useRef<number>(Math.floor(Math.random() * 1000000000) + 1);
 
-  // Load the Finix SDK once.
   useEffect(function () {
     const w = window as any;
     if (w.Finix) {
@@ -65,7 +67,6 @@ export function CardPaymentModal(props: Props) {
     document.body.appendChild(script);
   }, []);
 
-  // Build the hosted card fields once the SDK is ready.
   useEffect(
     function () {
       const w = window as any;
@@ -134,6 +135,9 @@ export function CardPaymentModal(props: Props) {
           discount_value: props.order.discount_value,
           discount_reason_code: props.order.discount_reason_code,
           discount_reason_note: props.order.discount_reason_note,
+          tax_exempt: props.order.tax_exempt,
+          tax_exempt_reason_code: props.order.tax_exempt_reason_code,
+          tax_exempt_reason_note: props.order.tax_exempt_reason_note,
           customer_id: props.order.customer_id ?? null,
           idempotency_key: props.order.idempotency_key,
           expected_total: props.amount,
@@ -151,14 +155,11 @@ export function CardPaymentModal(props: Props) {
               return;
             }
             if ("declined" in res) {
-              // Definitive decline - money did not move. Bump the attempt so a
-              // retry starts a fresh charge instead of replaying the decline.
               attemptRef.current = attemptRef.current + 1;
               setMessage(res.message);
               setLoading(false);
               return;
             }
-            // Ambiguous error - keep the same attempt id so a retry de-dupes.
             setMessage(res.error);
             setLoading(false);
           })

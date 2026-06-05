@@ -12,7 +12,7 @@ import {
   discardTicket,
   type OpenTicketSummary,
 } from "./ticket-actions";
-import { DISCOUNT_REASONS } from "./reason-codes";
+import { DISCOUNT_REASONS, TAX_EXEMPT_REASONS } from "./reason-codes";
 import { setActiveStaff, clearActiveStaff, type ActiveStaff } from "./staff-session";
 import { CardPaymentModal } from "./card-payment-modal";
 import { getCardConfig } from "./finix-pos-actions";
@@ -31,7 +31,7 @@ type CartLine = {
   taxable: boolean;
   taxFrac: number;
 };
-type Customer = { id: string; name: string };
+type Customer = { id: string; name: string; taxExempt?: boolean };
 type Tender = { method: "cash" | "card" | "other"; amount: number; tendered: number | null; change: number | null };
 type PaymentLine = { method: string; amount: number; tendered: number | null; change: number | null };
 type Receipt = {
@@ -61,6 +61,9 @@ type CardModalState = {
     discount_value: number;
     discount_reason_code?: string;
     discount_reason_note?: string;
+    tax_exempt?: boolean;
+    tax_exempt_reason_code?: string;
+    tax_exempt_reason_note?: string;
     customer_id: string | null;
     idempotency_key: string;
   };
@@ -103,9 +106,12 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [discountValue, setDiscountValue] = useState("");
   const [discountReason, setDiscountReason] = useState("");
   const [discountReasonNote, setDiscountReasonNote] = useState("");
+  const [taxExempt, setTaxExempt] = useState(false);
+  const [taxExemptReason, setTaxExemptReason] = useState("");
+  const [taxExemptNote, setTaxExemptNote] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [customerQuery, setCustomerQuery] = useState("");
-  const [customerResults, setCustomerResults] = useState<{ id: string; name: string; phone: string | null }[]>([]);
+  const [customerResults, setCustomerResults] = useState<{ id: string; name: string; phone: string | null; tax_exempt: boolean }[]>([]);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [pickerItem, setPickerItem] = useState<Item | null>(null);
@@ -299,6 +305,9 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setDiscountValue("");
     setDiscountReason("");
     setDiscountReasonNote("");
+    setTaxExempt(false);
+    setTaxExemptReason("");
+    setTaxExemptNote("");
     setCustomer(null);
     setCustomerQuery("");
     setCustomerResults([]);
@@ -350,8 +359,8 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setStaff(null);
   }
 
-  function pickCustomer(c: { id: string; name: string }) {
-    setCustomer({ id: c.id, name: c.name });
+  function pickCustomer(c: { id: string; name: string; tax_exempt?: boolean }) {
+    setCustomer({ id: c.id, name: c.name, taxExempt: c.tax_exempt === true });
     setCustomerQuery("");
     setCustomerResults([]);
   }
@@ -397,12 +406,20 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   }
   tax = Math.round(tax * 100) / 100;
 
+  const customerExempt = customer ? customer.taxExempt === true : false;
+  const effectiveExempt = taxExempt || customerExempt;
+  if (effectiveExempt) tax = 0;
+
   const tipNum = parseFloat(tip) || 0;
   const total = Math.round((discountedSubtotal + tax + tipNum) * 100) / 100;
 
   const discountReasonOk =
     discount <= 0 ||
     (discountReason !== "" && (discountReason !== "other" || discountReasonNote.trim().length > 0));
+
+  const taxExemptOk =
+    !taxExempt ||
+    (taxExemptReason !== "" && (taxExemptReason !== "other" || taxExemptNote.trim().length > 0));
 
   const cardEnabled = !!(cardCfg && cardCfg.enabled);
 
@@ -456,6 +473,10 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       discount_reason_code: discount > 0 ? discountReason : undefined,
       discount_reason_note:
         discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
+      tax_exempt: taxExempt || undefined,
+      tax_exempt_reason_code: taxExempt ? taxExemptReason : undefined,
+      tax_exempt_reason_note:
+        taxExempt && taxExemptReason === "other" ? taxExemptNote.trim() : undefined,
       customer_id: customer ? customer.id : null,
     };
   }
@@ -472,6 +493,10 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     }
     if (discount > 0 && !discountReasonOk) {
       setError("Choose a reason for the discount.");
+      return;
+    }
+    if (taxExempt && !taxExemptOk) {
+      setError("Choose a reason for the tax exemption.");
       return;
     }
     setTenderOpen(true);
@@ -545,6 +570,10 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         discount_reason_code: discount > 0 ? discountReason : undefined,
         discount_reason_note:
           discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
+        tax_exempt: taxExempt || undefined,
+        tax_exempt_reason_code: taxExempt ? taxExemptReason : undefined,
+        tax_exempt_reason_note:
+          taxExempt && taxExemptReason === "other" ? taxExemptNote.trim() : undefined,
         customer_id: customer ? customer.id : null,
         idempotency_key: nextIdemKey(),
       },
@@ -846,8 +875,6 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         onCardRecord={recordCardNoCharge}
       />
 
-     
-
       {receipt && cart.length === 0 ? (
         <div className="h-full overflow-y-auto flex items-start justify-center p-4">
           <div className="w-full max-w-sm bg-card border border-border rounded-lg p-5 mt-6 space-y-3">
@@ -928,7 +955,6 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                       <span className="px-1.5 rounded-full bg-accent tabular-nums">{openTickets.length}</span>
                     </button>
                   )}
-               
                 </div>
               </div>
 
@@ -1037,6 +1063,35 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                     <Input type="number" min="0" step="0.01" value={tip} onChange={(e) => setTip(e.target.value)} placeholder="0.00" className="w-24 h-8 text-right" />
                   </div>
 
+                  <div className="space-y-1">
+                    {customerExempt ? (
+                      <div className="flex items-center gap-2 text-sm text-emerald-600">
+                        <span className="w-4 h-4 rounded border border-emerald-600 flex items-center justify-center text-[10px]">{"\u2713"}</span>
+                        Tax exempt (customer)
+                      </div>
+                    ) : (
+                      <>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input type="checkbox" checked={taxExempt} onChange={(e) => setTaxExempt(e.target.checked)} className="w-4 h-4" />
+                          Tax exempt
+                        </label>
+                        {taxExempt && (
+                          <div className="space-y-1">
+                            <select value={taxExemptReason} onChange={(e) => setTaxExemptReason(e.target.value)} className="w-full h-8 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
+                              <option value="">Select a reason...</option>
+                              {TAX_EXEMPT_REASONS.map((r) => (
+                                <option key={r.code} value={r.code}>{r.label}</option>
+                              ))}
+                            </select>
+                            {taxExemptReason === "other" && (
+                              <Input value={taxExemptNote} onChange={(e) => setTaxExemptNote(e.target.value)} placeholder="Reason note" className="h-8" />
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
                   <div className="space-y-2">
                     <Label className="text-xs">Customer (optional)</Label>
                     {customer ? (
@@ -1085,7 +1140,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                 </div>
               )}
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Tax</span>
+                <span className="text-muted-foreground">{effectiveExempt ? "Tax (exempt)" : "Tax"}</span>
                 <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
               </div>
               {tipNum > 0 && (
@@ -1101,7 +1156,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
 
               {error && <p className="text-sm text-red-600 pt-1">{error}</p>}
 
-              <Button className="w-full h-14 text-base mt-2" onClick={openTender} disabled={pending || cart.length === 0 || (discount > 0 && !discountReasonOk)}>
+              <Button className="w-full h-14 text-base mt-2" onClick={openTender} disabled={pending || cart.length === 0 || (discount > 0 && !discountReasonOk) || (taxExempt && !taxExemptOk)}>
                 {"Charge" + (total > 0 ? " $" + total.toFixed(2) : "")}
               </Button>
             </div>
