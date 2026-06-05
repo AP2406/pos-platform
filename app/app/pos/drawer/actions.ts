@@ -20,7 +20,7 @@ export async function openDrawerSession(
     .eq("status", "open")
     .maybeSingle();
   if (existing) {
-    return { error: "A register session is already open. Close it first." };
+    return { error: "The day is already started. End it first." };
   }
 
   const {
@@ -37,10 +37,11 @@ export async function openDrawerSession(
   if (error) {
     console.error("openDrawerSession:", error);
     // The partial unique index also rejects a double-open race.
-    return { error: "Could not open the register. It may already be open." };
+    return { error: "Could not start the day. It may already be started." };
   }
 
   revalidatePath("/app/pos/drawer");
+  revalidatePath("/app/pos");
   return { ok: true };
 }
 
@@ -72,7 +73,7 @@ export async function closeDrawerSession(input: {
     .eq("status", "open")
     .maybeSingle();
   if (!session) {
-    return { error: "There is no open register session to close." };
+    return { error: "There is no open day to end." };
   }
 
   const { data: sessionOrders } = await supabase
@@ -122,7 +123,7 @@ export async function closeDrawerSession(input: {
   cardSales = Math.round(cardSales * 100) / 100;
   otherSales = Math.round(otherSales * 100) / 100;
 
-  // Refunds processed during this session take cash back out of the drawer.
+  // Refunds processed during this session take cash back out of the till.
   // Until card refunds go live, every refund is treated as cash out.
   const { data: refundData } = await supabase
     .from("refunds")
@@ -177,10 +178,11 @@ export async function closeDrawerSession(input: {
 
   if (error) {
     console.error("closeDrawerSession:", error);
-    return { error: "Could not close the register. Please try again." };
+    return { error: "Could not end the day. Please try again." };
   }
 
   revalidatePath("/app/pos/drawer");
+  revalidatePath("/app/pos");
   return {
     ok: true,
     expected,

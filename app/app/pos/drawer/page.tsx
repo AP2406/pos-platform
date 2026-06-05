@@ -137,10 +137,10 @@ export default async function DrawerPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Cash drawer</h1>
+        <h1 className="text-2xl font-semibold">Start &amp; end day</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Open a drawer to start the day, then close it to count cash and see
-          over/short.
+          Start the day with your opening cash, then end it to count the till
+          and see over/short.
         </p>
       </div>
       <DrawerClient open={open} closed={closed} />

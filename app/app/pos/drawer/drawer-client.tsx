@@ -122,7 +122,7 @@ export function DrawerClient({
     <div className="space-y-4 max-w-2xl">
       {result && (
         <div className="bg-card border border-border rounded-lg p-6">
-          <h2 className="font-medium mb-1">Register closed</h2>
+          <h2 className="font-medium mb-1">Day ended</h2>
           <p className="text-xs text-muted-foreground mb-3">
             {result.sale_count + (result.sale_count === 1 ? " sale" : " sales")}
           </p>
@@ -150,7 +150,7 @@ export function DrawerClient({
               </div>
             )}
             <div className="flex justify-between pt-2 border-t border-border">
-              <span className="text-muted-foreground">Expected in drawer</span>
+              <span className="text-muted-foreground">Expected in till</span>
               <span className="tabular-nums">{money(result.expected)}</span>
             </div>
             <div className="flex justify-between">
@@ -170,9 +170,9 @@ export function DrawerClient({
       {open ? (
         <div className="bg-card border border-border rounded-lg p-6 space-y-4">
           <div className="flex items-baseline justify-between">
-            <h2 className="font-medium">Register open</h2>
+            <h2 className="font-medium">Day in progress</h2>
             <span className="text-xs text-muted-foreground">
-              {"Opened " + fmt(open.opened_at)}
+              {"Started " + fmt(open.opened_at)}
             </span>
           </div>
 
@@ -204,7 +204,7 @@ export function DrawerClient({
 
           <div className="flex justify-between text-sm pt-3 border-t border-border">
             <span className="text-muted-foreground">
-              {"Expected cash in drawer (" +
+              {"Expected cash in till (" +
                 open.count +
                 (open.count === 1 ? " sale)" : " sales)")}
             </span>
@@ -215,7 +215,7 @@ export function DrawerClient({
 
           <div className="pt-2 space-y-2">
             <Label htmlFor="counted" className="text-xs">
-              Count the cash drawer
+              Count the till
             </Label>
             <Input
               id="counted"
@@ -232,16 +232,16 @@ export function DrawerClient({
               placeholder="Note (optional)"
             />
             <Button onClick={handleClose} disabled={pending}>
-              {pending ? "Closing..." : "Close register"}
+              {pending ? "Ending..." : "End day"}
             </Button>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
       ) : (
         <div className="bg-card border border-border rounded-lg p-6 space-y-3">
-          <h2 className="font-medium">Open register</h2>
+          <h2 className="font-medium">Start the day</h2>
           <p className="text-sm text-muted-foreground">
-            Enter the cash you are starting the drawer with.
+            Enter the cash you&apos;re starting the till with.
           </p>
           <div className="space-y-2">
             <Label htmlFor="starting" className="text-xs">
@@ -257,7 +257,7 @@ export function DrawerClient({
               placeholder="0.00"
             />
             <Button onClick={handleOpen} disabled={pending}>
-              {pending ? "Opening..." : "Open register"}
+              {pending ? "Starting..." : "Start day"}
             </Button>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -266,11 +266,11 @@ export function DrawerClient({
 
       <div>
         <h2 className="text-sm font-medium text-muted-foreground mb-2">
-          Recent closeouts
+          Recent days
         </h2>
         {closed.length === 0 ? (
           <div className="bg-card border border-border rounded-lg p-6">
-            <p className="text-sm text-muted-foreground">No closeouts yet.</p>
+            <p className="text-sm text-muted-foreground">No days recorded yet.</p>
           </div>
         ) : (
           <div className="bg-card border border-border rounded-lg divide-y divide-border">

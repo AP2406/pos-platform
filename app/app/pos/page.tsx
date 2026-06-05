@@ -116,16 +116,16 @@ export default async function PosPage() {
       {trainingMode && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-sm text-blue-600 font-medium">
           <span className="inline-block w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-          Training mode is on &mdash; these sales are practice and won&apos;t count toward your reports or cash drawer.
+          Training mode is on &mdash; these sales are practice and won&apos;t count toward your reports or the till.
         </div>
       )}
 
       {!trainingMode && !drawerOpen && (
         <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-700 dark:text-amber-500 font-medium">
           <span className="inline-block w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-          No register session is open &mdash; cash sales won&apos;t be counted in an end-of-day drawer total.
+          You haven&apos;t started the day &mdash; cash sales won&apos;t be counted in an end-of-day till total.
           <Link href="/app/pos/drawer" className="underline underline-offset-2 hover:opacity-80">
-            Open the drawer
+            Start the day
           </Link>
         </div>
       )}
