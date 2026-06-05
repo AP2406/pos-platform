@@ -152,14 +152,14 @@ function printReceipt(r: Receipt) {
     "<style>" +
     "*{box-sizing:border-box}" +
     "html,body{margin:0;padding:0;background:#fff}" +
-    "body{font-family:'Courier New',monospace;font-size:12px;line-height:1.35;color:#000;width:72mm;margin:0 auto;padding:4px 3mm 14mm}" +
+    "body{font-family:'Courier New',monospace;font-size:11px;line-height:1.3;color:#000;width:54mm;margin:0 auto;padding:4px 2mm 12mm}" +
     "h2{text-align:center;font-size:15px;margin:2px 0 4px}" +
     "table{width:100%;border-collapse:collapse}" +
     "td{padding:1px 0;vertical-align:top;word-break:break-word}" +
     ".line{border-top:1px dashed #000;margin:5px 0}" +
     ".tot td{font-weight:bold;font-size:13px}" +
     ".center{text-align:center}" +
-    "@media print{@page{size:72mm auto;margin:0}html,body{width:72mm}}" +
+    "@media print{@page{size:60mm auto;margin:0}html,body{width:54mm}}" +
     "</style></head><body>" +
     "<h2>" +
     escapeHtml(r.businessName) +
