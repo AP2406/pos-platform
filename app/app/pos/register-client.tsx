@@ -95,7 +95,7 @@ function escapeHtml(s: string): string {
 }
 
 function printReceipt(r: Receipt) {
-  const win = window.open("", "_blank", "width=340,height=640");
+  const win = window.open("", "_blank", "width=380,height=640");
   if (!win) return;
 
   const rows = r.items
@@ -147,15 +147,19 @@ function printReceipt(r: Receipt) {
     : "";
 
   const html =
-    "<html><head><title>Receipt</title><style>" +
-    "body{font-family:monospace;font-size:12px;width:280px;margin:0 auto;padding:8px;color:#000}" +
-    "h2{text-align:center;font-size:14px;margin:4px 0}" +
+    "<html><head><title>Receipt</title>" +
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    "<style>" +
+    "*{box-sizing:border-box}" +
+    "html,body{margin:0;padding:0;background:#fff}" +
+    "body{font-family:'Courier New',monospace;font-size:12px;line-height:1.35;color:#000;width:72mm;margin:0 auto;padding:4px 3mm 14mm}" +
+    "h2{text-align:center;font-size:15px;margin:2px 0 4px}" +
     "table{width:100%;border-collapse:collapse}" +
-    "td{padding:2px 0;vertical-align:top}" +
-    ".line{border-top:1px dashed #000;margin:6px 0}" +
-    ".tot td{font-weight:bold}" +
+    "td{padding:1px 0;vertical-align:top;word-break:break-word}" +
+    ".line{border-top:1px dashed #000;margin:5px 0}" +
+    ".tot td{font-weight:bold;font-size:13px}" +
     ".center{text-align:center}" +
-    "@media print{@page{margin:4mm}}" +
+    "@media print{@page{size:72mm auto;margin:0}html,body{width:72mm}}" +
     "</style></head><body>" +
     "<h2>" +
     escapeHtml(r.businessName) +
@@ -201,7 +205,12 @@ function printReceipt(r: Receipt) {
   win.document.write(html);
   win.document.close();
   win.focus();
-  win.print();
+  win.onafterprint = function () {
+    win.close();
+  };
+  setTimeout(function () {
+    win.print();
+  }, 300);
 }
 
 export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null }) {
