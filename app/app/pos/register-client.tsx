@@ -17,6 +17,8 @@ import { setActiveStaff, clearActiveStaff, type ActiveStaff } from "./staff-sess
 import { CardPaymentModal } from "./card-payment-modal";
 import { getCardConfig } from "./finix-pos-actions";
 import { TenderSheet } from "./tender-sheet";
+import { getPrinterConfig, printReceiptHtml } from "./qz-print";
+import { PrinterSetup } from "./printer-setup";
 
 type Variation = { id: string; name: string; price: number };
 type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; variations: Variation[]; modifiers: Variation[] };
@@ -95,7 +97,7 @@ function escapeHtml(s: string): string {
 }
 
 function printReceipt(r: Receipt) {
-  const win = window.open("", "_blank", "width=380,height=640");
+ const win = window.open("", "_blank", "width=380,height=640");
   if (!win) return;
 
   const rows = r.items
@@ -202,15 +204,7 @@ function printReceipt(r: Receipt) {
     '<div class="center" style="margin-top:8px">Thank you!</div>' +
     "</body></html>";
 
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  win.onafterprint = function () {
-    win.close();
-  };
-  setTimeout(function () {
-    win.print();
-  }, 300);
+  printReceiptHtml(html);
 }
 
 export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null }) {
@@ -247,7 +241,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [tenderOpen, setTenderOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("All");
-
+  const [printerSetupOpen, setPrinterSetupOpen] = useState(false);
   const itemTaxableById: Record<string, boolean> = {};
   const itemTaxFracById: Record<string, number> = {};
   for (const it of items) {
@@ -536,7 +530,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   }
 
   function finishSale(res: { id: string; sale_number: number }, pm: string, payments: PaymentLine[], snap: Snap) {
-    setReceipt({
+    const rec: Receipt = {
       id: res.id,
       saleNumber: res.sale_number,
       businessName,
@@ -550,9 +544,12 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       paymentMethod: pm,
       payments: payments,
       at: new Date().toLocaleString(),
-    });
+    };
+    setReceipt(rec);
     setTenderOpen(false);
     clearCart();
+    const cfg = getPrinterConfig();
+    if (cfg && cfg.autoPrint) printReceipt(rec);
   }
 
   function commonOrderFields() {
@@ -673,7 +670,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   function handleCardSuccess(res: { id: string; sale_number: number; transferId: string }) {
     const m = cardModal;
     if (!m) return;
-    setReceipt({
+    const rec: Receipt = {
       id: res.id,
       saleNumber: res.sale_number,
       businessName,
@@ -687,10 +684,13 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       paymentMethod: "card",
       payments: [{ method: "card", amount: m.receipt.total, tendered: null, change: null }],
       at: new Date().toLocaleString(),
-    });
+    };
+    setReceipt(rec);
     setCardModal(null);
     setTenderOpen(false);
     clearCart();
+    const cfg = getPrinterConfig();
+    if (cfg && cfg.autoPrint) printReceipt(rec);
   }
 
   function openHold() {
@@ -952,6 +952,12 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         onCardRecord={recordCardNoCharge}
       />
 
+      <PrinterSetup
+        open={printerSetupOpen}
+        onClose={() => setPrinterSetupOpen(false)}
+        businessName={businessName}
+      />
+
       {receipt && cart.length === 0 ? (
         <div className="h-full overflow-y-auto flex items-start justify-center p-4">
           <div className="w-full max-w-sm bg-card border border-border rounded-lg p-5 mt-6 space-y-3">
@@ -1032,6 +1038,10 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                       <span className="px-1.5 rounded-full bg-accent tabular-nums">{openTickets.length}</span>
                     </button>
                   )}
+                  <button type="button" onClick={() => setPrinterSetupOpen(true)} aria-label="Printer setup" title="Printer setup" className="flex items-center gap-1.5 text-xs rounded-md border border-border px-2.5 py-1.5 hover:bg-accent">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z" /></svg>
+                    Printer
+                  </button>
                 </div>
               </div>
 
