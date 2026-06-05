@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { RegisterClient } from "./register-client";
@@ -50,6 +51,14 @@ export default async function PosPage() {
     .maybeSingle();
   const receiptSettings =
     (rsRow?.receipt_settings as Partial<ReceiptSettings> | null) ?? null;
+
+  const { data: openDrawer } = await supabase
+    .from("drawer_sessions")
+    .select("id")
+    .eq("business_id", business.id)
+    .eq("status", "open")
+    .maybeSingle();
+  const drawerOpen = !!openDrawer;
 
   let defaultFrac = Number(business.default_tax_rate) || 0;
   if (defaultFrac > 1) defaultFrac = defaultFrac / 100;
@@ -105,10 +114,22 @@ export default async function PosPage() {
   return (
     <div>
       {trainingMode && (
-        <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-600 font-medium">
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-sm text-blue-600 font-medium">
+          <span className="inline-block w-2 h-2 rounded-full bg-blue-500 shrink-0" />
           Training mode is on &mdash; these sales are practice and won&apos;t count toward your reports or cash drawer.
         </div>
       )}
+
+      {!trainingMode && !drawerOpen && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-700 dark:text-amber-500 font-medium">
+          <span className="inline-block w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+          No register session is open &mdash; cash sales won&apos;t be counted in an end-of-day drawer total.
+          <Link href="/app/pos/drawer" className="underline underline-offset-2 hover:opacity-80">
+            Open the drawer
+          </Link>
+        </div>
+      )}
+
       <div className="mb-6">
         <h1 className="text-2xl font-semibold">Register</h1>
         <p className="text-muted-foreground text-sm mt-1">
