@@ -24,6 +24,7 @@ type Props = {
 
 export default function TokenizedChargeForm(props: Props) {
   const [sdkReady, setSdkReady] = useState<boolean>(false);
+  const [initError, setInitError] = useState<string | null>(null);
   const [amount, setAmount] = useState<string>("12.50");
   const [cardholder, setCardholder] = useState<string>("Test Customer");
   const [email, setEmail] = useState<string>("customer@example.com");
@@ -53,6 +54,9 @@ export default function TokenizedChargeForm(props: Props) {
     script.onload = function () {
       setSdkReady(true);
     };
+    script.onerror = function () {
+      setInitError("Could not load finix.js from js.finix.com. A VPN, Brave Shields, or an ad/tracker blocker is likely blocking it. Try disabling shields for this site or testing in a plain Chrome window.");
+    };
     document.body.appendChild(script);
   }, []);
 
@@ -62,17 +66,28 @@ export default function TokenizedChargeForm(props: Props) {
       if (!sdkReady || !w.Finix || !props.merchantId) return;
       if (formRef.current) return;
 
-      formRef.current = w.Finix.PaymentForm(
-        "finix-card-form",
-        props.environment,
-        props.applicationId,
-        { onUpdate: function () {} }
-      );
-
       try {
-        fraudRef.current = w.Finix.Auth(props.environment, props.merchantId);
+        if (typeof w.Finix.PaymentForm !== "function") {
+          setInitError("The Finix SDK loaded but PaymentForm is not available on it.");
+          return;
+        }
+
+        formRef.current = w.Finix.PaymentForm(
+          "finix-card-form",
+          props.environment,
+          props.applicationId,
+          { onUpdate: function () {} }
+        );
+
+        try {
+          if (typeof w.Finix.Auth === "function") {
+            fraudRef.current = w.Finix.Auth(props.environment, props.merchantId);
+          }
+        } catch (e2) {
+          fraudRef.current = null;
+        }
       } catch (e) {
-        fraudRef.current = null;
+        setInitError("Card field setup failed: " + String(e));
       }
     },
     [sdkReady, props.merchantId, props.environment, props.applicationId]
@@ -95,39 +110,44 @@ export default function TokenizedChargeForm(props: Props) {
     setLoading(true);
     setResult(null);
 
-    formRef.current.submit(function (error: any, response: any) {
-      if (error) {
-        setResult({ error: "Card tokenization failed in the browser.", details: error });
-        setLoading(false);
-        return;
-      }
-
-      const tokenData = (response && response.data) || {};
-      const token = tokenData.id;
-      if (!token) {
-        setResult({ error: "No token returned from the browser form." });
-        setLoading(false);
-        return;
-      }
-
-      const fraudSessionId = readFraudSession();
-
-      chargeTokenizedCard({
-        amountDollars: Number(amount),
-        token: token,
-        fraudSessionId: fraudSessionId,
-        cardholderName: cardholder,
-        buyerEmail: email || undefined,
-      })
-        .then(function (res) {
-          setResult(res);
+    try {
+      formRef.current.submit(function (error: any, response: any) {
+        if (error) {
+          setResult({ error: "Card tokenization failed in the browser.", details: error });
           setLoading(false);
+          return;
+        }
+
+        const tokenData = (response && response.data) || {};
+        const token = tokenData.id;
+        if (!token) {
+          setResult({ error: "No token returned from the browser form." });
+          setLoading(false);
+          return;
+        }
+
+        const fraudSessionId = readFraudSession();
+
+        chargeTokenizedCard({
+          amountDollars: Number(amount),
+          token: token,
+          fraudSessionId: fraudSessionId,
+          cardholderName: cardholder,
+          buyerEmail: email || undefined,
         })
-        .catch(function (e) {
-          setResult({ error: "Request threw: " + String(e) });
-          setLoading(false);
-        });
-    });
+          .then(function (res) {
+            setResult(res);
+            setLoading(false);
+          })
+          .catch(function (e) {
+            setResult({ error: "Request threw: " + String(e) });
+            setLoading(false);
+          });
+      });
+    } catch (e) {
+      setResult({ error: "Submit threw: " + String(e) });
+      setLoading(false);
+    }
   }
 
   const inputStyle = {
@@ -144,6 +164,12 @@ export default function TokenizedChargeForm(props: Props) {
         The card fields below are hosted by Finix in an iframe - the raw card
         number never reaches the Surge server. Only a one-time token does.
       </p>
+
+      {initError ? (
+        <div style={{ marginTop: 16, padding: 12, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, fontSize: 13, color: "#991b1b" }}>
+          {initError}
+        </div>
+      ) : null}
 
       {!props.merchantId ? (
         <div style={{ marginTop: 16, padding: 12, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, fontSize: 13 }}>
@@ -172,7 +198,7 @@ export default function TokenizedChargeForm(props: Props) {
           id="finix-card-form"
           style={{ marginTop: 6, padding: 12, border: "1px solid #ccc", borderRadius: 8, minHeight: 90 }}
         />
-        {!sdkReady ? (
+        {!sdkReady && !initError ? (
           <p style={{ color: "#888", fontSize: 12, marginTop: 6 }}>Loading secure card fields...</p>
         ) : null}
       </div>
