@@ -16,6 +16,7 @@ import { DISCOUNT_REASONS } from "./reason-codes";
 import { setActiveStaff, clearActiveStaff, type ActiveStaff } from "./staff-session";
 import { CardPaymentModal } from "./card-payment-modal";
 import { getCardConfig } from "./finix-pos-actions";
+import { TenderSheet } from "./tender-sheet";
 
 type Variation = { id: string; name: string; price: number };
 type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; variations: Variation[]; modifiers: Variation[] };
@@ -29,18 +30,8 @@ type CartLine = {
   taxFrac: number;
 };
 type Customer = { id: string; name: string };
-type PaymentLine = {
-  method: string;
-  amount: number;
-  tendered: number | null;
-  change: number | null;
-};
-type SplitLine = {
-  id: number;
-  method: "cash" | "card" | "other";
-  amount: string;
-  cashGiven: string;
-};
+type Tender = { method: "cash" | "card" | "other"; amount: number; tendered: number | null; change: number | null };
+type PaymentLine = { method: string; amount: number; tendered: number | null; change: number | null };
 type Receipt = {
   id: string;
   saleNumber: number;
@@ -82,10 +73,15 @@ type CardModalState = {
   };
   defaultName: string;
 };
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
+type Snap = {
+  items: CartLine[];
+  subtotal: number;
+  discount: number;
+  tax: number;
+  tip: number;
+  total: number;
+  customerName: string | null;
+};
 
 function methodLabel(m: string): string {
   if (m === "cash") return "Cash";
@@ -215,7 +211,6 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [discountValue, setDiscountValue] = useState("");
   const [discountReason, setDiscountReason] = useState("");
   const [discountReasonNote, setDiscountReasonNote] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "other">("cash");
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<{ id: string; name: string; phone: string | null }[]>([]);
@@ -224,8 +219,6 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [pickerItem, setPickerItem] = useState<Item | null>(null);
   const [pickerVariationId, setPickerVariationId] = useState<string | null>(null);
   const [pickerMods, setPickerMods] = useState<string[]>([]);
-  const [splitOpen, setSplitOpen] = useState(false);
-  const [splitLines, setSplitLines] = useState<SplitLine[]>([]);
   const [openTickets, setOpenTickets] = useState<OpenTicketSummary[]>([]);
   const [ticketsOpen, setTicketsOpen] = useState(false);
   const [holdOpen, setHoldOpen] = useState(false);
@@ -234,7 +227,6 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [pending, startTransition] = useTransition();
-  const splitIdRef = useRef(1);
   const idemKeyRef = useRef<string | null>(null);
   const [staff, setStaff] = useState<ActiveStaff | null>(activeStaff);
   const [staffPinOpen, setStaffPinOpen] = useState(false);
@@ -243,6 +235,9 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [staffBusy, setStaffBusy] = useState(false);
   const [cardCfg, setCardCfg] = useState<CardCfg | null>(null);
   const [cardModal, setCardModal] = useState<CardModalState | null>(null);
+  const [tenderOpen, setTenderOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [activeCat, setActiveCat] = useState("All");
 
   const itemTaxableById: Record<string, boolean> = {};
   const itemTaxFracById: Record<string, number> = {};
@@ -250,6 +245,14 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     itemTaxableById[it.id] = it.taxable;
     itemTaxFracById[it.id] = it.taxFrac;
   }
+
+  const categories = Array.from(new Set(items.map((i) => i.category).filter((c): c is string => !!c)));
+  const visibleItems = items.filter((i) => {
+    if (activeCat !== "All" && (i.category || "") !== activeCat) return false;
+    const t = search.trim().toLowerCase();
+    if (t && !i.name.toLowerCase().includes(t)) return false;
+    return true;
+  });
 
   useEffect(() => {
     if (customer) return;
@@ -410,8 +413,6 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     idemKeyRef.current = null;
   }
 
-  // One idempotency key per checkout attempt. It survives a failed/retried
-  // submit (so a retry can't double-charge) and resets when the cart clears.
   function nextIdemKey(): string {
     if (!idemKeyRef.current) idemKeyRef.current = crypto.randomUUID();
     return idemKeyRef.current;
@@ -489,7 +490,6 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
   const taxF = subtotal > 0 ? discountedSubtotal / subtotal : 0;
 
-  // Per-item tax preview, bucketed by rate so rounding matches the server.
   const taxBucketsPreview: Record<string, number> = {};
   for (const l of cart) {
     if (!l.taxable) continue;
@@ -512,7 +512,178 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     discount <= 0 ||
     (discountReason !== "" && (discountReason !== "other" || discountReasonNote.trim().length > 0));
 
-  // ---- Open tickets ----
+  const cardEnabled = !!(cardCfg && cardCfg.enabled);
+
+  function snapshot(): Snap {
+    return {
+      items: cart,
+      subtotal: subtotal,
+      discount: discount,
+      tax: tax,
+      tip: tipNum,
+      total: total,
+      customerName: customer ? customer.name : null,
+    };
+  }
+
+  function finishSale(res: { id: string; sale_number: number }, pm: string, payments: PaymentLine[], snap: Snap) {
+    setReceipt({
+      id: res.id,
+      saleNumber: res.sale_number,
+      businessName,
+      customerName: snap.customerName,
+      items: snap.items,
+      subtotal: snap.subtotal,
+      discount: snap.discount,
+      tax: snap.tax,
+      tip: snap.tip,
+      total: snap.total,
+      paymentMethod: pm,
+      payments: payments,
+      at: new Date().toLocaleString(),
+    });
+    setTenderOpen(false);
+    clearCart();
+  }
+
+  function commonOrderFields() {
+    return {
+      items: cart,
+      tip: tipNum,
+      idempotency_key: nextIdemKey(),
+      discount_type: discountMode,
+      discount_value: discountInput,
+      discount_reason_code: discount > 0 ? discountReason : undefined,
+      discount_reason_note:
+        discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
+      customer_id: customer ? customer.id : null,
+    };
+  }
+
+  function openTender() {
+    setError(null);
+    if (cart.length === 0) {
+      setError("Add at least one item.");
+      return;
+    }
+    if (total <= 0) {
+      setError("Total must be more than zero.");
+      return;
+    }
+    if (discount > 0 && !discountReasonOk) {
+      setError("Choose a reason for the discount.");
+      return;
+    }
+    setTenderOpen(true);
+  }
+
+  function recordCash(tenderedDollars: number) {
+    setError(null);
+    if (cart.length === 0) return;
+    const snap = snapshot();
+    const tendered = Math.round(tenderedDollars * 100) / 100;
+    const change = Math.round((tendered - snap.total) * 100) / 100;
+    startTransition(async () => {
+      const res = await createOrder({
+        ...commonOrderFields(),
+        payments: [{ method: "cash", amount: snap.total, tendered: tendered }],
+      });
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      finishSale(res, "cash", [{ method: "cash", amount: snap.total, tendered: tendered, change: change > 0 ? change : 0 }], snap);
+    });
+  }
+
+  function recordSplit(tenders: Tender[]) {
+    setError(null);
+    if (cart.length === 0) return;
+    const snap = snapshot();
+    const pm = tenders.length > 1 ? "split" : tenders[0].method;
+    startTransition(async () => {
+      const res = await createOrder({
+        ...commonOrderFields(),
+        payments: tenders.map((p) => ({ method: p.method, amount: p.amount, tendered: p.tendered })),
+      });
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      finishSale(res, pm, tenders, snap);
+    });
+  }
+
+  function recordCardNoCharge() {
+    setError(null);
+    if (cart.length === 0) return;
+    const snap = snapshot();
+    startTransition(async () => {
+      const res = await createOrder({
+        ...commonOrderFields(),
+        payment_method: "card",
+      });
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      finishSale(res, "card", [{ method: "card", amount: snap.total, tendered: null, change: null }], snap);
+    });
+  }
+
+  function recordCardManual() {
+    setError(null);
+    if (cart.length === 0) return;
+    setTenderOpen(false);
+    setCardModal({
+      amount: total,
+      order: {
+        items: cart,
+        tip: tipNum,
+        discount_type: discountMode,
+        discount_value: discountInput,
+        discount_reason_code: discount > 0 ? discountReason : undefined,
+        discount_reason_note:
+          discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
+        customer_id: customer ? customer.id : null,
+        idempotency_key: nextIdemKey(),
+      },
+      receipt: {
+        items: cart,
+        subtotal: subtotal,
+        discount: discount,
+        tax: tax,
+        tip: tipNum,
+        total: total,
+        customerName: customer ? customer.name : null,
+      },
+      defaultName: customer ? customer.name : "",
+    });
+  }
+
+  function handleCardSuccess(res: { id: string; sale_number: number; transferId: string }) {
+    const m = cardModal;
+    if (!m) return;
+    setReceipt({
+      id: res.id,
+      saleNumber: res.sale_number,
+      businessName,
+      customerName: m.receipt.customerName,
+      items: m.receipt.items,
+      subtotal: m.receipt.subtotal,
+      discount: m.receipt.discount,
+      tax: m.receipt.tax,
+      tip: m.receipt.tip,
+      total: m.receipt.total,
+      paymentMethod: "card",
+      payments: [{ method: "card", amount: m.receipt.total, tendered: null, change: null }],
+      at: new Date().toLocaleString(),
+    });
+    setCardModal(null);
+    setTenderOpen(false);
+    clearCart();
+  }
+
   function openHold() {
     setError(null);
     if (cart.length === 0) return;
@@ -595,273 +766,10 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     await refreshTickets();
   }
 
-  // ---- Split tender helpers ----
-  function newSplitLine(method: "cash" | "card" | "other"): SplitLine {
-    const id = splitIdRef.current;
-    splitIdRef.current = id + 1;
-    return { id: id, method: method, amount: "", cashGiven: "" };
-  }
-
-  function openSplit() {
-    setError(null);
-    if (cart.length === 0) {
-      setError("Add at least one item.");
-      return;
-    }
-    if (total <= 0) {
-      setError("Total must be more than zero.");
-      return;
-    }
-    if (discount > 0 && !discountReasonOk) {
-      setError("Choose a reason for the discount.");
-      return;
-    }
-    setSplitLines([newSplitLine("cash"), newSplitLine("card")]);
-    setSplitOpen(true);
-  }
-
-  function closeSplit() {
-    setSplitOpen(false);
-    setSplitLines([]);
-  }
-
-  function updateSplitLine(id: number, patch: Partial<SplitLine>) {
-    setSplitLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-  }
-
-  function removeSplitLine(id: number) {
-    setSplitLines((prev) => (prev.length <= 1 ? prev : prev.filter((l) => l.id !== id)));
-  }
-
-  function addSplitLine(method: "cash" | "card" | "other") {
-    setSplitLines((prev) => [...prev, newSplitLine(method)]);
-  }
-
-  function setRest(id: number) {
-    setSplitLines((prev) => {
-      const otherCents = prev
-        .filter((l) => l.id !== id)
-        .reduce((s, l) => s + Math.round((parseFloat(l.amount) || 0) * 100), 0);
-      let restCents = Math.round(total * 100) - otherCents;
-      if (restCents < 0) restCents = 0;
-      const rest = (restCents / 100).toFixed(2);
-      return prev.map((l) => (l.id === id ? { ...l, amount: rest } : l));
-    });
-  }
-
-  const splitSumCents = splitLines.reduce(
-    (s, l) => s + Math.round((parseFloat(l.amount) || 0) * 100),
-    0
-  );
-  const splitRemainingCents = Math.round(total * 100) - splitSumCents;
-  const splitRemaining = splitRemainingCents / 100;
-  const splitCanComplete = total > 0 && splitRemainingCents === 0 && splitSumCents > 0;
-
-  function lineChange(l: SplitLine): number | null {
-    if (l.method !== "cash") return null;
-    const given = l.cashGiven.trim() ? Math.round((parseFloat(l.cashGiven) || 0) * 100) / 100 : null;
-    if (given === null) return null;
-    const amt = Math.round((parseFloat(l.amount) || 0) * 100) / 100;
-    const change = Math.round((given - amt) * 100) / 100;
-    return change > 0 ? change : 0;
-  }
-
-  function handleComplete() {
-    setError(null);
-    if (cart.length === 0) {
-      setError("Add at least one item.");
-      return;
-    }
-    if (discount > 0 && !discountReasonOk) {
-      setError("Choose a reason for the discount.");
-      return;
-    }
-
-    // Card with live charging available -> collect the card in the secure modal
-    // and charge before recording. Cash, other, and card-without-Finix (training
-    // mode or a business that isn't onboarded) fall through to the record path.
-    if (paymentMethod === "card" && cardCfg && cardCfg.enabled) {
-      if (total <= 0) {
-        setError("Total must be more than zero.");
-        return;
-      }
-      setCardModal({
-        amount: total,
-        order: {
-          items: cart,
-          tip: tipNum,
-          discount_type: discountMode,
-          discount_value: discountInput,
-          discount_reason_code: discount > 0 ? discountReason : undefined,
-          discount_reason_note:
-            discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
-          customer_id: customer ? customer.id : null,
-          idempotency_key: nextIdemKey(),
-        },
-        receipt: {
-          items: cart,
-          subtotal: subtotal,
-          discount: discount,
-          tax: tax,
-          tip: tipNum,
-          total: total,
-          customerName: customer ? customer.name : null,
-        },
-        defaultName: customer ? customer.name : "",
-      });
-      return;
-    }
-
-    const attachedCustomer = customer;
-    const snapItems = cart;
-    const snapSubtotal = subtotal;
-    const snapDiscount = discount;
-    const snapTax = tax;
-    const snapTip = tipNum;
-    const snapTotal = total;
-    const method = paymentMethod;
-    startTransition(async () => {
-      const res = await createOrder({
-        items: cart,
-        tip: tipNum,
-        payment_method: method,
-        idempotency_key: nextIdemKey(),
-        discount_type: discountMode,
-        discount_value: discountInput,
-        discount_reason_code: discount > 0 ? discountReason : undefined,
-        discount_reason_note:
-          discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
-        customer_id: attachedCustomer ? attachedCustomer.id : null,
-      });
-      if ("error" in res) {
-        setError(res.error);
-        return;
-      }
-      setReceipt({
-        id: res.id,
-        saleNumber: res.sale_number,
-        businessName,
-        customerName: attachedCustomer ? attachedCustomer.name : null,
-        items: snapItems,
-        subtotal: snapSubtotal,
-        discount: snapDiscount,
-        tax: snapTax,
-        tip: snapTip,
-        total: snapTotal,
-        paymentMethod: method,
-        payments: [{ method: method, amount: snapTotal, tendered: null, change: null }],
-        at: new Date().toLocaleString(),
-      });
-      clearCart();
-    });
-  }
-
-  function handleCardSuccess(res: { id: string; sale_number: number; transferId: string }) {
-    const m = cardModal;
-    if (!m) return;
-    setReceipt({
-      id: res.id,
-      saleNumber: res.sale_number,
-      businessName,
-      customerName: m.receipt.customerName,
-      items: m.receipt.items,
-      subtotal: m.receipt.subtotal,
-      discount: m.receipt.discount,
-      tax: m.receipt.tax,
-      tip: m.receipt.tip,
-      total: m.receipt.total,
-      paymentMethod: "card",
-      payments: [{ method: "card", amount: m.receipt.total, tendered: null, change: null }],
-      at: new Date().toLocaleString(),
-    });
-    setCardModal(null);
-    clearCart();
-  }
-
-  function handleCompleteSplit() {
-    setError(null);
-    if (cart.length === 0) {
-      setError("Add at least one item.");
-      return;
-    }
-    if (total <= 0) {
-      setError("Total must be more than zero.");
-      return;
-    }
-    if (discount > 0 && !discountReasonOk) {
-      setError("Choose a reason for the discount.");
-      return;
-    }
-    const built = splitLines
-      .map((l) => {
-        const amt = Math.round((parseFloat(l.amount) || 0) * 100) / 100;
-        const givenRaw = l.cashGiven.trim()
-          ? Math.round((parseFloat(l.cashGiven) || 0) * 100) / 100
-          : null;
-        const tendered = l.method === "cash" ? givenRaw : null;
-        const change =
-          l.method === "cash" && tendered !== null
-            ? Math.round((tendered - amt) * 100) / 100
-            : null;
-        return { method: l.method, amount: amt, tendered: tendered, change: change };
-      })
-      .filter((p) => p.amount > 0);
-
-    const sumCents = built.reduce((s, p) => s + Math.round(p.amount * 100), 0);
-    if (sumCents !== Math.round(total * 100)) {
-      setError("Split amounts must add up to the total.");
-      return;
-    }
-
-    const attachedCustomer = customer;
-    const snapItems = cart;
-    const snapSubtotal = subtotal;
-    const snapDiscount = discount;
-    const snapTax = tax;
-    const snapTip = tipNum;
-    const snapTotal = total;
-    startTransition(async () => {
-      const res = await createOrder({
-        items: cart,
-        tip: tipNum,
-        payments: built.map((p) => ({ method: p.method, amount: p.amount, tendered: p.tendered })),
-        idempotency_key: nextIdemKey(),
-        discount_type: discountMode,
-        discount_value: discountInput,
-        discount_reason_code: discount > 0 ? discountReason : undefined,
-        discount_reason_note:
-          discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
-        customer_id: attachedCustomer ? attachedCustomer.id : null,
-      });
-      if ("error" in res) {
-        setError(res.error);
-        return;
-      }
-      setReceipt({
-        id: res.id,
-        saleNumber: res.sale_number,
-        businessName,
-        customerName: attachedCustomer ? attachedCustomer.name : null,
-        items: snapItems,
-        subtotal: snapSubtotal,
-        discount: snapDiscount,
-        tax: snapTax,
-        tip: snapTip,
-        total: snapTotal,
-        paymentMethod: "split",
-        payments: built,
-        at: new Date().toLocaleString(),
-      });
-      setSplitOpen(false);
-      setSplitLines([]);
-      clearCart();
-    });
-  }
-
   return (
     <>
       {staffPinOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setStaffPinOpen(false)}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setStaffPinOpen(false)}>
           <div className="bg-card border border-border rounded-lg p-4 w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-medium">Enter your PIN</h3>
@@ -894,7 +802,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       )}
 
       {pickerItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setPickerItem(null)}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setPickerItem(null)}>
           <div className="bg-card border border-border rounded-lg p-4 w-full max-w-sm max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-medium">{pickerItem.name}</h3>
@@ -944,21 +852,11 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       )}
 
       {holdOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setHoldOpen(false)}
-        >
-          <div
-            className="bg-card border border-border rounded-lg p-4 w-full max-w-sm"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setHoldOpen(false)}>
+          <div className="bg-card border border-border rounded-lg p-4 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-medium">Hold ticket</h3>
-              <button
-                type="button"
-                onClick={() => setHoldOpen(false)}
-                className="text-xs text-muted-foreground underline"
-              >
+              <button type="button" onClick={() => setHoldOpen(false)} className="text-xs text-muted-foreground underline">
                 Cancel
               </button>
             </div>
@@ -966,12 +864,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
               Save this sale to resume later. The register will clear.
             </p>
             <Label className="text-xs">Label (optional)</Label>
-            <Input
-              value={holdLabel}
-              onChange={(e) => setHoldLabel(e.target.value)}
-              placeholder='e.g. "Table 5" or a name'
-              className="h-9 mt-1"
-            />
+            <Input value={holdLabel} onChange={(e) => setHoldLabel(e.target.value)} placeholder='e.g. "Table 5" or a name' className="h-9 mt-1" />
             {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
             <div className="flex gap-2 mt-3">
               <Button className="flex-1" onClick={doHold} disabled={ticketBusy}>
@@ -986,21 +879,11 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       )}
 
       {ticketsOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setTicketsOpen(false)}
-        >
-          <div
-            className="bg-card border border-border rounded-lg p-4 w-full max-w-sm max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setTicketsOpen(false)}>
+          <div className="bg-card border border-border rounded-lg p-4 w-full max-w-sm max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-medium">Open tickets</h3>
-              <button
-                type="button"
-                onClick={() => setTicketsOpen(false)}
-                className="text-xs text-muted-foreground underline"
-              >
+              <button type="button" onClick={() => setTicketsOpen(false)} className="text-xs text-muted-foreground underline">
                 Close
               </button>
             </div>
@@ -1011,32 +894,17 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                 {openTickets.map((t) => (
                   <div key={t.id} className="rounded-md border border-border p-3">
                     <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">
-                        {t.label ? t.label : "Ticket"}
-                      </div>
+                      <div className="text-sm font-medium truncate">{t.label ? t.label : "Ticket"}</div>
                       <div className="text-xs text-muted-foreground">
-                        {t.item_count +
-                          (t.item_count === 1 ? " item" : " items") +
-                          "  " +
-                          "\u00b7" +
-                          "  " +
-                          "$" +
-                          t.subtotal.toFixed(2)}
+                        {t.item_count + (t.item_count === 1 ? " item" : " items") + "  " + "\u00b7" + "  " + "$" + t.subtotal.toFixed(2)}
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(t.created_at).toLocaleString()}
-                      </div>
+                      <div className="text-xs text-muted-foreground">{new Date(t.created_at).toLocaleString()}</div>
                     </div>
                     <div className="flex gap-2 mt-2">
                       <Button className="flex-1" onClick={() => doResume(t.id)} disabled={ticketBusy}>
                         Resume
                       </Button>
-                      <Button
-                        variant="outline"
-                        className="flex-1"
-                        onClick={() => doDiscard(t.id)}
-                        disabled={ticketBusy}
-                      >
+                      <Button variant="outline" className="flex-1" onClick={() => doDiscard(t.id)} disabled={ticketBusy}>
                         Discard
                       </Button>
                     </div>
@@ -1044,148 +912,6 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                 ))}
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {splitOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={closeSplit}
-        >
-          <div
-            className="bg-card border border-border rounded-lg p-4 w-full max-w-sm max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="font-medium">Split payment</h3>
-              <button
-                type="button"
-                onClick={closeSplit}
-                className="text-xs text-muted-foreground underline"
-              >
-                Cancel
-              </button>
-            </div>
-            <div className="text-sm text-muted-foreground mb-3">
-              {"Total $" + total.toFixed(2)}
-            </div>
-
-            <div className="space-y-2">
-              {splitLines.map((l) => {
-                const change = lineChange(l);
-                return (
-                  <div key={l.id} className="rounded-md border border-border p-2 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex rounded-md border border-border overflow-hidden text-xs">
-                        {(["cash", "card", "other"] as const).map((m) => (
-                          <button
-                            key={m}
-                            type="button"
-                            onClick={() => updateSplitLine(l.id, { method: m })}
-                            className={"px-2 py-1 " + (l.method === m ? "bg-accent font-medium" : "hover:bg-accent/50")}
-                          >
-                            {methodLabel(m)}
-                          </button>
-                        ))}
-                      </div>
-                      {splitLines.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeSplitLine(l.id)}
-                          className="text-xs text-muted-foreground underline hover:text-foreground"
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={l.amount}
-                        onChange={(e) => updateSplitLine(l.id, { amount: e.target.value })}
-                        placeholder="0.00"
-                        className="flex-1 h-8 text-right"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setRest(l.id)}
-                        className="px-2 py-1 text-xs rounded-md border border-border hover:bg-accent whitespace-nowrap"
-                      >
-                        Rest
-                      </button>
-                    </div>
-                    {l.method === "cash" && (
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">Cash given</span>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={l.cashGiven}
-                          onChange={(e) => updateSplitLine(l.id, { cashGiven: e.target.value })}
-                          placeholder="optional"
-                          className="w-28 h-8 text-right"
-                        />
-                      </div>
-                    )}
-                    {change !== null && change > 0 && (
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">Change</span>
-                        <span className="tabular-nums">{"$" + change.toFixed(2)}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex gap-2 mt-2">
-              <button
-                type="button"
-                onClick={() => addSplitLine("cash")}
-                className="flex-1 px-2 py-1 text-xs rounded-md border border-border hover:bg-accent"
-              >
-                + Cash
-              </button>
-              <button
-                type="button"
-                onClick={() => addSplitLine("card")}
-                className="flex-1 px-2 py-1 text-xs rounded-md border border-border hover:bg-accent"
-              >
-                + Card
-              </button>
-              <button
-                type="button"
-                onClick={() => addSplitLine("other")}
-                className="flex-1 px-2 py-1 text-xs rounded-md border border-border hover:bg-accent"
-              >
-                + Other
-              </button>
-            </div>
-
-            <div className="flex justify-between text-sm mt-3 pt-2 border-t border-border">
-              <span className="text-muted-foreground">Allocated</span>
-              <span className="tabular-nums">{"$" + (splitSumCents / 100).toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm font-medium">
-              <span>{splitRemainingCents < 0 ? "Over by" : "Remaining"}</span>
-              <span className={"tabular-nums " + (splitRemainingCents === 0 ? "text-emerald-500" : "text-red-500")}>
-                {"$" + Math.abs(splitRemaining).toFixed(2)}
-              </span>
-            </div>
-
-            {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
-
-            <Button
-              className="w-full mt-3"
-              onClick={handleCompleteSplit}
-              disabled={pending || !splitCanComplete}
-            >
-              {pending ? "Recording..." : "Complete split sale - $" + total.toFixed(2)}
-            </Button>
           </div>
         </div>
       )}
@@ -1205,383 +931,277 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         />
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <div className="bg-card border border-border rounded-lg p-4">
-            {items.length === 0 ? (
-              <p className="text-sm text-muted-foreground p-4">
-                No items yet. Add some in the Catalog first.
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {items.map((item) => {
-                  const hasVars = item.variations.length > 0;
-                  const priceLabel = hasVars
-                    ? "From $" + Math.min(...item.variations.map((v) => v.price)).toFixed(2)
-                    : "$" + item.price.toFixed(2);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => addItem(item)}
-                      className="text-left p-3 rounded-md border border-border hover:border-foreground/40 hover:bg-accent/50 transition-colors"
-                    >
-                      <div className="font-medium text-sm">{item.name}</div>
-                      <div className="text-xs text-muted-foreground">{priceLabel}</div>
-                    </button>
-                  );
-                })}
+      <TenderSheet
+        open={tenderOpen}
+        onClose={() => setTenderOpen(false)}
+        total={total}
+        pending={pending}
+        cardEnabled={cardEnabled}
+        onCash={recordCash}
+        onSplit={recordSplit}
+        onCardManual={recordCardManual}
+        onCardRecord={recordCardNoCharge}
+      />
+
+      {receipt && cart.length === 0 ? (
+        <div className="h-full overflow-y-auto flex items-start justify-center p-4">
+          <div className="w-full max-w-sm bg-card border border-border rounded-lg p-5 mt-6 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="w-9 h-9 rounded-full bg-emerald-500/15 text-emerald-600 flex items-center justify-center">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M5 12l5 5L20 7" /></svg>
+              </span>
+              <div>
+                <h2 className="font-medium leading-tight">Sale complete</h2>
+                <div className="text-xs text-muted-foreground">{"Sale #" + receipt.saleNumber}</div>
               </div>
-            )}
+            </div>
+            {receipt.customerName && <div className="text-xs text-muted-foreground">{"Customer: " + receipt.customerName}</div>}
+            <div className="text-sm space-y-1">
+              {receipt.items.map((l, i) => (
+                <div key={i} className="flex justify-between">
+                  <span className="truncate">{l.name} x{l.quantity}</span>
+                  <span className="tabular-nums">{"$" + (l.unit_price * l.quantity).toFixed(2)}</span>
+                </div>
+              ))}
+              {receipt.discount > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Discount</span>
+                  <span className="tabular-nums text-red-600">{"-$" + receipt.discount.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-semibold pt-2 border-t border-border">
+                <span>Total</span>
+                <span className="tabular-nums">{"$" + receipt.total.toFixed(2)}</span>
+              </div>
+              <div className="pt-2 border-t border-border space-y-1">
+                {receipt.payments.map((p, i) => (
+                  <div key={i} className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      {methodLabel(p.method)}
+                      {p.method === "cash" && p.change !== null && p.change > 0 ? " (change $" + p.change.toFixed(2) + ")" : ""}
+                    </span>
+                    <span className="tabular-nums">{"$" + p.amount.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={() => printReceipt(receipt)}>
+                Print receipt
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => setReceipt(null)}>
+                New sale
+              </Button>
+            </div>
           </div>
         </div>
-
-        <div className="lg:col-span-1">
-          <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-            {hasStaff && (
-              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
-                <span className="truncate">
-                  <span className="text-muted-foreground">Ringing as </span>
-                  <span className="font-medium">{staff ? staff.name : "Not set"}</span>
-                </span>
-                {staff ? (
-                  <div className="flex items-center gap-3">
-                    <button type="button" onClick={openStaffPin} className="text-xs text-muted-foreground underline hover:text-foreground">
-                      Switch
-                    </button>
-                    <button type="button" onClick={signOutStaff} disabled={staffBusy} className="text-xs text-muted-foreground underline hover:text-foreground">
-                      Sign out
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={openStaffPin} className="text-xs font-medium underline hover:text-foreground">
-                    Enter PIN
-                  </button>
-                )}
-              </div>
-            )}
-
-            {openTickets.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setTicketsOpen(true)}
-                className="w-full flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm hover:bg-accent"
-              >
-                <span className="font-medium">Open tickets</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-accent tabular-nums">
-                  {openTickets.length}
-                </span>
-              </button>
-            )}
-
-            {cart.length === 0 && receipt ? (
-              <div className="space-y-3">
-                <h2 className="font-medium">Sale complete</h2>
-                <div className="text-xs text-muted-foreground">
-                  {"Sale #" + receipt.saleNumber}
+      ) : (
+        <div className="h-full flex flex-col md:flex-row">
+          <div className="flex-1 min-h-0 flex flex-col border-b md:border-b-0 md:border-r border-border">
+            <div className="shrink-0 px-3 pt-3 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-base font-semibold truncate">{businessName}</div>
+                  {hasStaff && (
+                    <div className="text-xs text-muted-foreground">{staff ? "Ringing as " + staff.name : "No cashier set"}</div>
+                  )}
                 </div>
-                {receipt.customerName && (
-                  <div className="text-xs text-muted-foreground">
-                    {"Customer: " + receipt.customerName}
-                  </div>
-                )}
-                <div className="text-sm space-y-1">
-                  {receipt.items.map((l, i) => (
-                    <div key={i} className="flex justify-between">
-                      <span className="truncate">
-                        {l.name} x{l.quantity}
-                      </span>
-                      <span className="tabular-nums">
-                        {"$" + (l.unit_price * l.quantity).toFixed(2)}
-                      </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  {hasStaff && (
+                    staff ? (
+                      <>
+                        <button type="button" onClick={openStaffPin} className="text-xs text-muted-foreground underline hover:text-foreground">Switch</button>
+                        <button type="button" onClick={signOutStaff} disabled={staffBusy} className="text-xs text-muted-foreground underline hover:text-foreground">Sign out</button>
+                      </>
+                    ) : (
+                      <button type="button" onClick={openStaffPin} className="text-xs font-medium underline">Enter PIN</button>
+                    )
+                  )}
+                  {openTickets.length > 0 && (
+                    <button type="button" onClick={() => setTicketsOpen(true)} className="flex items-center gap-1.5 text-xs rounded-md border border-border px-2.5 py-1.5 hover:bg-accent">
+                      Tickets
+                      <span className="px-1.5 rounded-full bg-accent tabular-nums">{openTickets.length}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {categories.length > 0 && (
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                  {["All", ...categories].map((c) => {
+                    const active = activeCat === c;
+                    return (
+                      <button key={c} type="button" onClick={() => setActiveCat(c)} className={"shrink-0 text-sm px-3 py-1.5 rounded-full border transition-colors " + (active ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:border-foreground/40")}>
+                        {c}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search items" className="h-10" />
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto p-3">
+              {visibleItems.length === 0 ? (
+                <p className="text-sm text-muted-foreground p-4">No items match. Add some in the Catalog, or clear the search.</p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {visibleItems.map((item) => {
+                    const hasVars = item.variations.length > 0;
+                    const priceLabel = hasVars
+                      ? "From $" + Math.min(...item.variations.map((v) => v.price)).toFixed(2)
+                      : "$" + item.price.toFixed(2);
+                    return (
+                      <button key={item.id} type="button" onClick={() => addItem(item)} className="text-left p-3 min-h-[76px] rounded-lg border border-border hover:border-foreground/40 hover:bg-accent/50 active:scale-[0.98] transition-all flex flex-col justify-between">
+                        <div className="font-medium text-sm leading-snug">{item.name}</div>
+                        <div className="text-xs text-muted-foreground mt-1">{priceLabel}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 md:flex-none md:w-[400px] flex flex-col bg-card/40">
+            <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-border">
+              <h2 className="font-medium">Current sale</h2>
+              {cart.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={openHold} className="text-xs text-muted-foreground underline hover:text-foreground">Hold</button>
+                  <button type="button" onClick={clearCart} className="text-xs text-muted-foreground underline hover:text-foreground">Clear</button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3">
+              {cart.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Tap items to add them to the sale.</p>
+              ) : (
+                <div className="space-y-2">
+                  {cart.map((line, index) => (
+                    <div key={index} className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate">{line.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {"$" + line.unit_price.toFixed(2) + (line.taxable ? "" : "  " + "\u00b7" + "  Tax-free")}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => changeQty(index, -1)} className="w-8 h-8 rounded-md border border-border hover:bg-accent">-</button>
+                        <span className="w-6 text-center text-sm tabular-nums">{line.quantity}</span>
+                        <button type="button" onClick={() => changeQty(index, 1)} className="w-8 h-8 rounded-md border border-border hover:bg-accent">+</button>
+                      </div>
                     </div>
                   ))}
-                  {receipt.discount > 0 && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Discount</span>
-                      <span className="tabular-nums text-red-600">
-                        {"-$" + receipt.discount.toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-semibold pt-2 border-t border-border">
-                    <span>Total</span>
-                    <span className="tabular-nums">{"$" + receipt.total.toFixed(2)}</span>
-                  </div>
-                  <div className="pt-2 border-t border-border space-y-1">
-                    {receipt.payments.map((p, i) => (
-                      <div key={i} className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">
-                          {methodLabel(p.method)}
-                          {p.method === "cash" && p.change !== null && p.change > 0
-                            ? " (change $" + p.change.toFixed(2) + ")"
-                            : ""}
-                        </span>
-                        <span className="tabular-nums">{"$" + p.amount.toFixed(2)}</span>
-                      </div>
-                    ))}
-                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button className="flex-1" onClick={() => printReceipt(receipt)}>
-                    Print receipt
-                  </Button>
-                  <Button variant="outline" className="flex-1" onClick={() => setReceipt(null)}>
-                    New sale
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <h2 className="font-medium">Current sale</h2>
-                  {cart.length > 0 && (
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={openHold}
-                        className="text-xs text-muted-foreground underline hover:text-foreground"
-                      >
-                        Hold
-                      </button>
-                      <button
-                        type="button"
-                        onClick={clearCart}
-                        className="text-xs text-muted-foreground underline hover:text-foreground"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  )}
-                </div>
+              )}
 
-                {cart.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No items yet.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {cart.map((line, index) => (
-                      <div key={index} className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium truncate">{line.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {"$" + line.unit_price.toFixed(2) + (line.taxable ? "" : "  " + "\u00b7" + "  Tax-free")}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => changeQty(index, -1)}
-                            className="w-7 h-7 rounded-md border border-border hover:bg-accent"
-                          >
-                            -
-                          </button>
-                          <span className="w-6 text-center text-sm tabular-nums">{line.quantity}</span>
-                          <button
-                            type="button"
-                            onClick={() => changeQty(index, 1)}
-                            className="w-7 h-7 rounded-md border border-border hover:bg-accent"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="pt-3 border-t border-border space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Subtotal</span>
-                    <span className="tabular-nums">{"$" + subtotal.toFixed(2)}</span>
-                  </div>
-
+              {cart.length > 0 && (
+                <div className="space-y-3 pt-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-muted-foreground">Discount</span>
+                    <span className="text-sm text-muted-foreground">Discount</span>
                     <div className="flex items-center gap-1">
                       <div className="flex rounded-md border border-border overflow-hidden text-xs">
-                        <button
-                          type="button"
-                          onClick={() => setDiscountMode("amount")}
-                          className={"px-2 py-1 " + (discountMode === "amount" ? "bg-accent font-medium" : "hover:bg-accent/50")}
-                        >
-                          $
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDiscountMode("percent")}
-                          className={"px-2 py-1 border-l border-border " + (discountMode === "percent" ? "bg-accent font-medium" : "hover:bg-accent/50")}
-                        >
-                          %
-                        </button>
+                        <button type="button" onClick={() => setDiscountMode("amount")} className={"px-2 py-1 " + (discountMode === "amount" ? "bg-accent font-medium" : "hover:bg-accent/50")}>$</button>
+                        <button type="button" onClick={() => setDiscountMode("percent")} className={"px-2 py-1 border-l border-border " + (discountMode === "percent" ? "bg-accent font-medium" : "hover:bg-accent/50")}>%</button>
                       </div>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={discountValue}
-                        onChange={(e) => setDiscountValue(e.target.value)}
-                        placeholder="0"
-                        className="w-20 h-8 text-right"
-                      />
+                      <Input type="number" min="0" step="0.01" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} placeholder="0" className="w-20 h-8 text-right" />
                     </div>
                   </div>
 
                   {discount > 0 && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Discount applied</span>
-                      <span className="tabular-nums text-red-600">{"-$" + discount.toFixed(2)}</span>
-                    </div>
-                  )}
-
-                  {discount > 0 && (
-                    <div className="space-y-1 pt-1">
+                    <div className="space-y-1">
                       <Label className="text-xs">Discount reason</Label>
-                      <select
-                        value={discountReason}
-                        onChange={(e) => setDiscountReason(e.target.value)}
-                        className="w-full h-8 rounded-md border border-border bg-transparent text-foreground px-2 text-sm"
-                      >
+                      <select value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} className="w-full h-8 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
                         <option value="">Select a reason...</option>
                         {DISCOUNT_REASONS.map((r) => (
-                          <option key={r.code} value={r.code}>
-                            {r.label}
-                          </option>
+                          <option key={r.code} value={r.code}>{r.label}</option>
                         ))}
                       </select>
                       {discountReason === "other" && (
-                        <Input
-                          value={discountReasonNote}
-                          onChange={(e) => setDiscountReasonNote(e.target.value)}
-                          placeholder="Reason note"
-                          className="h-8"
-                        />
+                        <Input value={discountReasonNote} onChange={(e) => setDiscountReasonNote(e.target.value)} placeholder="Reason note" className="h-8" />
                       )}
                     </div>
                   )}
 
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Tax</span>
-                    <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
-                  </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Tip</span>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={tip}
-                      onChange={(e) => setTip(e.target.value)}
-                      placeholder="0.00"
-                      className="w-24 h-8 text-right"
-                    />
+                    <span className="text-sm text-muted-foreground">Tip</span>
+                    <Input type="number" min="0" step="0.01" value={tip} onChange={(e) => setTip(e.target.value)} placeholder="0.00" className="w-24 h-8 text-right" />
                   </div>
-                  <div className="flex justify-between font-semibold pt-1">
-                    <span>Total</span>
-                    <span className="tabular-nums">{"$" + total.toFixed(2)}</span>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs">Customer (optional)</Label>
+                    {customer ? (
+                      <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                        <span className="text-sm font-medium truncate">{customer.name}</span>
+                        <button type="button" onClick={() => setCustomer(null)} className="text-xs text-muted-foreground underline hover:text-foreground">Remove</button>
+                      </div>
+                    ) : (
+                      <div>
+                        <Input value={customerQuery} onChange={(e) => setCustomerQuery(e.target.value)} placeholder="Search or add a customer" className="h-9" />
+                        {customerQuery.trim() && (
+                          <div className="mt-1 rounded-md border border-border divide-y divide-border overflow-hidden">
+                            {searchingCustomers ? (
+                              <div className="px-3 py-2 text-xs text-muted-foreground">Searching...</div>
+                            ) : customerResults.length > 0 ? (
+                              customerResults.map((c) => (
+                                <button key={c.id} type="button" onClick={() => pickCustomer(c)} className="w-full text-left px-3 py-2 text-sm hover:bg-accent">
+                                  {c.name}
+                                  {c.phone ? <span className="text-xs text-muted-foreground">{"  " + "\u00b7" + "  " + c.phone}</span> : null}
+                                </button>
+                              ))
+                            ) : (
+                              <div className="px-3 py-2 text-xs text-muted-foreground">No matches.</div>
+                            )}
+                            <button type="button" onClick={handleCreateCustomer} disabled={addingCustomer} className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-accent">
+                              {addingCustomer ? "Adding..." : 'Add new customer "' + customerQuery.trim() + '"'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
+              )}
+            </div>
 
-                <div className="space-y-2 pt-2">
-                  <Label className="text-xs">Customer (optional)</Label>
-                  {customer ? (
-                    <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                      <span className="text-sm font-medium truncate">{customer.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => setCustomer(null)}
-                        className="text-xs text-muted-foreground underline hover:text-foreground"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ) : (
-                    <div>
-                      <Input
-                        value={customerQuery}
-                        onChange={(e) => setCustomerQuery(e.target.value)}
-                        placeholder="Search or add a customer"
-                        className="h-9"
-                      />
-                      {customerQuery.trim() && (
-                        <div className="mt-1 rounded-md border border-border divide-y divide-border overflow-hidden">
-                          {searchingCustomers ? (
-                            <div className="px-3 py-2 text-xs text-muted-foreground">Searching...</div>
-                          ) : customerResults.length > 0 ? (
-                            customerResults.map((c) => (
-                              <button
-                                key={c.id}
-                                type="button"
-                                onClick={() => pickCustomer(c)}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-accent"
-                              >
-                                {c.name}
-                                {c.phone ? (
-                                  <span className="text-xs text-muted-foreground">
-                                    {"  " + "\u00b7" + "  " + c.phone}
-                                  </span>
-                                ) : null}
-                              </button>
-                            ))
-                          ) : (
-                            <div className="px-3 py-2 text-xs text-muted-foreground">No matches.</div>
-                          )}
-                          <button
-                            type="button"
-                            onClick={handleCreateCustomer}
-                            disabled={addingCustomer}
-                            className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-accent"
-                          >
-                            {addingCustomer ? "Adding..." : 'Add new customer "' + customerQuery.trim() + '"'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+            <div className="shrink-0 border-t border-border p-4 space-y-1">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="tabular-nums">{"$" + subtotal.toFixed(2)}</span>
+              </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Discount</span>
+                  <span className="tabular-nums text-red-600">{"-$" + discount.toFixed(2)}</span>
                 </div>
-
-                <div className="space-y-2 pt-2">
-                  <Label className="text-xs">Payment</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(["cash", "card", "other"] as const).map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => setPaymentMethod(m)}
-                        className={"px-2 py-2 text-sm rounded-md border transition-colors " + (paymentMethod === m ? "border-foreground bg-accent font-medium" : "border-border hover:border-foreground/40")}
-                      >
-                        {m.charAt(0).toUpperCase() + m.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                  {paymentMethod === "card" && cardCfg && cardCfg.enabled && (
-                    <p className="text-[11px] text-muted-foreground">
-                      Card is charged securely on the next step.
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={openSplit}
-                    disabled={cart.length === 0}
-                    className="w-full px-2 py-2 text-sm rounded-md border border-border hover:border-foreground/40 transition-colors disabled:opacity-50"
-                  >
-                    Split payment...
-                  </button>
+              )}
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Tax</span>
+                <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
+              </div>
+              {tipNum > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Tip</span>
+                  <span className="tabular-nums">{"$" + tipNum.toFixed(2)}</span>
                 </div>
+              )}
+              <div className="flex justify-between font-semibold text-base pt-1">
+                <span>Total</span>
+                <span className="tabular-nums">{"$" + total.toFixed(2)}</span>
+              </div>
 
-                {error && <p className="text-sm text-red-600">{error}</p>}
+              {error && <p className="text-sm text-red-600 pt-1">{error}</p>}
 
-                <Button
-                  className="w-full"
-                  onClick={handleComplete}
-                  disabled={pending || cart.length === 0 || (discount > 0 && !discountReasonOk)}
-                >
-                  {pending ? "Recording..." : "Complete sale" + (total > 0 ? " - $" + total.toFixed(2) : "")}
-                </Button>
-              </>
-            )}
+              <Button className="w-full h-14 text-base mt-2" onClick={openTender} disabled={pending || cart.length === 0 || (discount > 0 && !discountReasonOk)}>
+                {"Charge" + (total > 0 ? " $" + total.toFixed(2) : "")}
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

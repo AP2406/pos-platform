@@ -144,6 +144,10 @@ export function AppShell({
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
+  // The register is a full-screen till: no static sidebar, menu button at every
+  // size, and the content fills the screen instead of the centered page wrapper.
+  const isTill = pathname === "/app/pos";
+
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
@@ -157,13 +161,20 @@ export function AppShell({
 
   const asideClasses =
     "w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col shrink-0 " +
-    "fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-out md:static md:z-auto md:translate-x-0 " +
+    "fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-out " +
+    (isTill ? "" : "md:static md:z-auto md:translate-x-0 ") +
     (open ? "translate-x-0" : "-translate-x-full");
+
+  const headerClasses =
+    "fixed top-0 inset-x-0 z-30 h-14 flex items-center gap-3 px-4 bg-sidebar text-sidebar-foreground border-b border-sidebar-border " +
+    (isTill ? "" : "md:hidden");
+
+  const backdropClasses =
+    "fixed inset-0 z-40 bg-black/60 backdrop-blur-sm " + (isTill ? "" : "md:hidden");
 
   return (
     <div className="min-h-screen flex bg-background">
-      {/* Mobile top bar */}
-      <header className="md:hidden fixed top-0 inset-x-0 z-30 h-14 flex items-center gap-3 px-4 bg-sidebar text-sidebar-foreground border-b border-sidebar-border">
+      <header className={headerClasses}>
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -174,26 +185,29 @@ export function AppShell({
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div className="flex items-center gap-2">
-          <span className="w-6 h-6 rounded-md bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="w-6 h-6 rounded-md bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center shrink-0">
             <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
               <path d="M13 2L3 14h7v8l10-12h-7z" />
             </svg>
           </span>
           <span className="font-semibold text-sm tracking-tight">Surge</span>
+          {isTill && (
+            <span className="text-sm text-sidebar-foreground/70 truncate hidden sm:inline">
+              {"\u00B7"} {businessName}
+            </span>
+          )}
         </div>
       </header>
 
-      {/* Backdrop */}
       {open && (
         <div
           onClick={() => setOpen(false)}
-          className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          className={backdropClasses}
           aria-hidden="true"
         />
       )}
 
-      {/* Sidebar / drawer */}
       <aside className={asideClasses}>
         <div className="px-4 pt-5 pb-4 border-b border-sidebar-border">
           <div className="flex items-center justify-between mb-5">
@@ -209,7 +223,7 @@ export function AppShell({
               type="button"
               onClick={() => setOpen(false)}
               aria-label="Close menu"
-              className="md:hidden p-1 rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent transition-colors"
+              className={"p-1 rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent transition-colors " + (isTill ? "" : "md:hidden")}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-5 h-5">
                 <path d="M6 6l12 12M6 18L18 6" />
@@ -236,12 +250,15 @@ export function AppShell({
         </div>
       </aside>
 
-      {/* Main */}
-      <main className="flex-1 overflow-auto">
-        <div className="max-w-7xl mx-auto px-5 md:px-8 pt-20 md:pt-8 pb-10">
-          {showOnboarding && <OnboardingNudge />}
-          <PageTransition>{children}</PageTransition>
-        </div>
+      <main className="flex-1 overflow-auto min-w-0">
+        {isTill ? (
+          <div className="h-[100dvh] pt-14 overflow-hidden">{children}</div>
+        ) : (
+          <div className="max-w-7xl mx-auto px-5 md:px-8 pt-20 md:pt-8 pb-10">
+            {showOnboarding && <OnboardingNudge />}
+            <PageTransition>{children}</PageTransition>
+          </div>
+        )}
       </main>
     </div>
   );
