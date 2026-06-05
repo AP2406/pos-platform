@@ -49,7 +49,7 @@ export default function TokenizedChargeForm(props: Props) {
     }
     const script = document.createElement("script");
     script.id = "finix-sdk";
-    script.src = "https://js.finix.com/v/1/finix.js";
+    script.src = "https://js.finix.com/v/2/finix.js";
     script.async = true;
     script.onload = function () {
       setSdkReady(true);
