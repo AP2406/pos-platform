@@ -4,6 +4,29 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { isFinixConfigured, createBuyerIdentity, finix } from "@/lib/services/finix";
 
+type TokenizedChargeConfig = {
+  applicationId: string;
+  environment: string;
+  merchantId: string | null;
+};
+
+export async function getTokenizedChargeConfig(): Promise<TokenizedChargeConfig> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data: biz } = await supabase
+    .from("businesses")
+    .select("finix_merchant_id")
+    .eq("id", business.id)
+    .single();
+
+  return {
+    applicationId: process.env.FINIX_APPLICATION_ID || "",
+    environment: process.env.FINIX_ENVIRONMENT === "live" ? "live" : "sandbox",
+    merchantId: biz && biz.finix_merchant_id ? (biz.finix_merchant_id as string) : null,
+  };
+}
+
 type TokenizedChargeInput = {
   amountDollars: number;
   token: string;
@@ -84,8 +107,6 @@ export async function chargeTokenizedCard(
   }
   const buyerIdentityId = identityResult.data.id;
 
-  // Convert the browser token (TK...) into a Payment Instrument.
-  // The raw card never touched this server - only the token did.
   const piResult = await finix.post<FinixPaymentInstrumentResp>("/payment_instruments", {
     type: "TOKEN",
     token: input.token,

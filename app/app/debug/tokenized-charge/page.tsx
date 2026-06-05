@@ -1,28 +1,41 @@
-import { requireBusiness } from "@/lib/services/tenancy";
-import { createClient } from "@/lib/supabase/server";
+"use client";
+
+import { useEffect, useState } from "react";
 import TokenizedChargeForm from "./form";
+import { getTokenizedChargeConfig } from "./actions";
 
-export const dynamic = "force-dynamic";
+type Config = {
+  applicationId: string;
+  environment: string;
+  merchantId: string | null;
+};
 
-export default async function TokenizedChargePage() {
-  const { business } = await requireBusiness();
-  const supabase = await createClient();
+export default function TokenizedChargePage() {
+  const [config, setConfig] = useState<Config | null>(null);
+  const [err, setErr] = useState<string | null>(null);
 
-  const { data: biz } = await supabase
-    .from("businesses")
-    .select("finix_merchant_id")
-    .eq("id", business.id)
-    .single();
+  useEffect(function () {
+    getTokenizedChargeConfig()
+      .then(function (c) {
+        setConfig(c);
+      })
+      .catch(function (e) {
+        setErr("Could not load config: " + String(e));
+      });
+  }, []);
 
-  const applicationId = process.env.FINIX_APPLICATION_ID || "";
-  const environment = process.env.FINIX_ENVIRONMENT === "live" ? "live" : "sandbox";
-  const merchantId = biz && biz.finix_merchant_id ? (biz.finix_merchant_id as string) : null;
+  if (err) {
+    return <div style={{ padding: 24, color: "#b91c1c", fontSize: 14 }}>{err}</div>;
+  }
+  if (!config) {
+    return <div style={{ padding: 24, color: "#666", fontSize: 14 }}>Loading...</div>;
+  }
 
   return (
     <TokenizedChargeForm
-      applicationId={applicationId}
-      environment={environment}
-      merchantId={merchantId}
+      applicationId={config.applicationId}
+      environment={config.environment}
+      merchantId={config.merchantId}
     />
   );
 }
