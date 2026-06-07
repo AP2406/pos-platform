@@ -93,6 +93,36 @@ export const finix = {
   delete: <T>(path: string) => finixRequest<T>("DELETE", path),
 };
 
+// ---------- Payment Instrument types & helpers ----------
+// NOTE: createPaymentInstrument takes a RAW card number and is only used by the
+// /app/debug charge harness. The production register path tokenizes the card in
+// the browser and never sends a raw PAN to the server. Remove this helper once
+// the debug harness is retired.
+
+export type CreatePaymentInstrumentInput = {
+  identity: string; // Finix Identity ID (buyer)
+  type: "PAYMENT_CARD";
+  name: string; // cardholder name
+  number: string;
+  expiration_month: number;
+  expiration_year: number;
+  security_code: string;
+};
+
+export type FinixPaymentInstrument = {
+  id: string;
+  fingerprint?: string;
+  card_brand?: string;
+  last_four?: string;
+  expiration_month?: number;
+  expiration_year?: number;
+  created_at: string;
+};
+
+export async function createPaymentInstrument(input: CreatePaymentInstrumentInput) {
+  return finix.post<FinixPaymentInstrument>("/payment_instruments", input);
+}
+
 // ---------- Buyer Identity helpers ----------
 
 export type CreateBuyerIdentityInput = {
@@ -112,6 +142,36 @@ export type FinixIdentityResponse = {
 
 export async function createBuyerIdentity(input: CreateBuyerIdentityInput) {
   return finix.post<FinixIdentityResponse>("/identities", input);
+}
+
+// ---------- Transfer (charge) types & helpers ----------
+// NOTE: createTransfer uses the legacy "merchant_identity" field and is only
+// used by the /app/debug harness. The production register path posts to
+// /transfers directly with the documented "merchant" field. Retire with debug.
+
+export type CreateTransferInput = {
+  amount: number; // in cents
+  currency: string; // "USD" or "CAD"
+  source: string; // Payment Instrument ID
+  merchant_identity: string; // Merchant Identity ID that receives the funds
+  tags?: Record<string, string>;
+  idempotency_id?: string;
+};
+
+export type FinixTransfer = {
+  id: string;
+  amount: number;
+  currency: string;
+  state: "PENDING" | "SUCCEEDED" | "FAILED" | "CANCELED";
+  failure_code?: string;
+  failure_message?: string;
+  source: string;
+  merchant_identity: string;
+  created_at: string;
+};
+
+export async function createTransfer(input: CreateTransferInput) {
+  return finix.post<FinixTransfer>("/transfers", input);
 }
 
 // ---------- Refund types & helpers ----------
@@ -142,6 +202,9 @@ export async function refundTransfer(transferId: string, input: CreateRefundInpu
 }
 
 // ---------- Webhook signature verification ----------
+// NOTE: This helper assumes a Stripe-style signature and is NOT how Finix signs
+// webhooks. The real verification (the Finix-Signature header) lives in the
+// webhook route. This helper is unused and can be removed.
 
 import { createHmac, timingSafeEqual } from "crypto";
 
