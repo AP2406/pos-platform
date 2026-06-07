@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createOrder, searchCustomers, quickCreateCustomer } from "./actions";
+import { verifyManagerPin } from "./approval-actions";
 import {
   holdTicket,
   listOpenTickets,
@@ -136,6 +137,11 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [tenderOpen, setTenderOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("All");
+  const [mgrOpen, setMgrOpen] = useState(false);
+  const [mgrPin, setMgrPin] = useState("");
+  const [mgrErr, setMgrErr] = useState<string | null>(null);
+  const [mgrBusy, setMgrBusy] = useState(false);
+  const [approved, setApproved] = useState(false);
 
   const itemTaxableById: Record<string, boolean> = {};
   const itemTaxFracById: Record<string, number> = {};
@@ -311,6 +317,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setCustomer(null);
     setCustomerQuery("");
     setCustomerResults([]);
+    setApproved(false);
     idemKeyRef.current = null;
   }
 
@@ -357,6 +364,34 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     await clearActiveStaff();
     setStaffBusy(false);
     setStaff(null);
+  }
+
+  function mgrPush(d: string) {
+    setMgrErr(null);
+    setMgrPin((prev) => (prev.length >= 6 ? prev : prev + d));
+  }
+
+  function mgrBackspace() {
+    setMgrPin((prev) => prev.slice(0, -1));
+  }
+
+  async function submitMgrPin() {
+    if (!/^[0-9]{4,6}$/.test(mgrPin)) {
+      setMgrErr("Enter a 4 to 6 digit PIN.");
+      return;
+    }
+    setMgrBusy(true);
+    const res = await verifyManagerPin(mgrPin);
+    setMgrBusy(false);
+    if ("error" in res) {
+      setMgrErr(res.error);
+      setMgrPin("");
+      return;
+    }
+    setApproved(true);
+    setMgrOpen(false);
+    setMgrPin("");
+    setTenderOpen(true);
   }
 
   function pickCustomer(c: { id: string; name: string; tax_exempt?: boolean }) {
@@ -422,6 +457,10 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     (taxExemptReason !== "" && (taxExemptReason !== "other" || taxExemptNote.trim().length > 0));
 
   const cardEnabled = !!(cardCfg && cardCfg.enabled);
+
+  const cashierRole = staff ? (staff as { role?: string }).role : null;
+  const needsManagerApproval =
+    hasStaff && !!staff && (discount > 0 || taxExempt) && cashierRole !== "manager";
 
   function snapshot(): Snap {
     return {
@@ -497,6 +536,12 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     }
     if (taxExempt && !taxExemptOk) {
       setError("Choose a reason for the tax exemption.");
+      return;
+    }
+    if (needsManagerApproval && !approved) {
+      setMgrErr(null);
+      setMgrPin("");
+      setMgrOpen(true);
       return;
     }
     setTenderOpen(true);
@@ -683,6 +728,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setDiscountReason(c.discount_reason ?? "");
     setDiscountReasonNote(c.discount_reason_note ?? "");
     setCustomer(c.customer ? { id: c.customer.id, name: c.customer.name } : null);
+    setApproved(false);
     setReceipt(null);
     setTicketsOpen(false);
     await refreshTickets();
@@ -729,6 +775,40 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
               </button>
             </div>
             {staffError && <p className="text-sm text-red-600 mt-2">{staffError}</p>}
+          </div>
+        </div>
+      )}
+
+      {mgrOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setMgrOpen(false)}>
+          <div className="bg-card border border-border rounded-lg p-4 w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium">Manager approval</h3>
+              <button type="button" onClick={() => setMgrOpen(false)} className="text-xs text-muted-foreground underline">
+                Cancel
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">A discount or tax exemption needs a manager{"\u2019"}s PIN to continue.</p>
+            <div className="mb-3 h-10 rounded-md border border-border flex items-center justify-center tracking-[0.4em] text-lg">
+              {mgrPin ? mgrPin.replace(/./g, "\u2022") : <span className="text-muted-foreground tracking-normal text-sm">PIN</span>}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+                <button key={d} type="button" onClick={() => mgrPush(d)} className="h-12 rounded-md border border-border text-lg font-medium hover:bg-accent">
+                  {d}
+                </button>
+              ))}
+              <button type="button" onClick={mgrBackspace} className="h-12 rounded-md border border-border text-sm hover:bg-accent">
+                Del
+              </button>
+              <button type="button" onClick={() => mgrPush("0")} className="h-12 rounded-md border border-border text-lg font-medium hover:bg-accent">
+                0
+              </button>
+              <button type="button" onClick={submitMgrPin} disabled={mgrBusy} className="h-12 rounded-md border border-foreground bg-accent text-sm font-medium hover:bg-accent/80 disabled:opacity-50">
+                {mgrBusy ? "..." : "Approve"}
+              </button>
+            </div>
+            {mgrErr && <p className="text-sm text-red-600 mt-2">{mgrErr}</p>}
           </div>
         </div>
       )}
