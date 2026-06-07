@@ -84,7 +84,7 @@ export async function getCardConfig(): Promise<CardConfig> {
   return {
     enabled: true,
     applicationId: process.env.FINIX_APPLICATION_ID || "",
-    environment: process.env.FINIX_ENVIRONMENT === "live" ? "live" : "sandbox",
+    environment: process.env.FINIX_ENVIRONMENT === "live" ? "prod" : "sandbox",
     merchantId: biz.finix_merchant_id as string,
   };
 }
@@ -218,20 +218,35 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
     return { declined: true, message: msg };
   }
 
-  const rec = await createOrder({
-    items: input.items,
-    tip: input.tip,
-    payment_method: "card",
-    idempotency_key: input.idempotency_key,
-    discount_type: input.discount_type,
-    discount_value: input.discount_value,
-    discount_reason_code: input.discount_reason_code,
-    discount_reason_note: input.discount_reason_note,
-    tax_exempt: input.tax_exempt,
-    tax_exempt_reason_code: input.tax_exempt_reason_code,
-    tax_exempt_reason_note: input.tax_exempt_reason_note,
-    customer_id: input.customer_id ?? null,
-  });
+  // Charge succeeded. Record the sale. If recording fails for ANY reason
+  // (returned error OR thrown exception), reverse the charge so we never
+  // keep money without a matching sale.
+  let rec: Awaited<ReturnType<typeof createOrder>>;
+  try {
+    rec = await createOrder({
+      items: input.items,
+      tip: input.tip,
+      payment_method: "card",
+      idempotency_key: input.idempotency_key,
+      discount_type: input.discount_type,
+      discount_value: input.discount_value,
+      discount_reason_code: input.discount_reason_code,
+      discount_reason_note: input.discount_reason_note,
+      tax_exempt: input.tax_exempt,
+      tax_exempt_reason_code: input.tax_exempt_reason_code,
+      tax_exempt_reason_note: input.tax_exempt_reason_note,
+      customer_id: input.customer_id ?? null,
+    });
+  } catch (e) {
+    console.error("createCardOrder: createOrder threw after successful charge " + transfer.id, e);
+    await refundTransfer(transfer.id, {
+      refundAmount: transfer.amount,
+      idempotency_id: "surge-refund-" + transfer.id,
+      tags: { reason: "order_record_exception" },
+    });
+    await recordFinixPayment(null);
+    return { error: "The card was charged but the sale couldn't be saved, so the charge was reversed. Please try again." };
+  }
 
   if ("error" in rec) {
     await refundTransfer(transfer.id, {

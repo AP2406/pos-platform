@@ -13,10 +13,8 @@ function getCredentials(): { username: string; password: string } | null {
 function authHeader(): string {
   const creds = getCredentials();
   if (!creds) throw new Error("Finix credentials missing");
-  const encoded = Buffer.from(`${creds.username}:${creds.password}`).toString(
-    "base64"
-  );
-  return `Basic ${encoded}`;
+  const encoded = Buffer.from(creds.username + ":" + creds.password).toString("base64");
+  return "Basic " + encoded;
 }
 
 export function isFinixConfigured(): boolean {
@@ -48,7 +46,7 @@ async function finixRequest<T>(
     return { error: "Finix is not configured. Check environment variables." };
   }
 
-  const url = `${FINIX_API_BASE}${path}`;
+  const url = FINIX_API_BASE + path;
 
   try {
     const response = await fetch(url, {
@@ -72,9 +70,9 @@ async function finixRequest<T>(
     }
 
     if (!response.ok) {
-      console.error(`Finix ${method} ${path} failed:`, response.status, data);
+      console.error("Finix " + method + " " + path + " failed:", response.status, data);
       return {
-        error: `Finix API error (${response.status})`,
+        error: "Finix API error (" + response.status + ")",
         status: response.status,
         details: data,
       };
@@ -82,7 +80,7 @@ async function finixRequest<T>(
 
     return { ok: true, data: data as T };
   } catch (err) {
-    console.error(`Finix ${method} ${path} exception:`, err);
+    console.error("Finix " + method + " " + path + " exception:", err);
     return { error: "Finix request failed. Check network or credentials." };
   }
 }
@@ -91,37 +89,9 @@ export const finix = {
   get: <T>(path: string) => finixRequest<T>("GET", path),
   post: <T>(path: string, body: unknown) => finixRequest<T>("POST", path, body),
   put: <T>(path: string, body: unknown) => finixRequest<T>("PUT", path, body),
-  patch: <T>(path: string, body: unknown) =>
-    finixRequest<T>("PATCH", path, body),
+  patch: <T>(path: string, body: unknown) => finixRequest<T>("PATCH", path, body),
   delete: <T>(path: string) => finixRequest<T>("DELETE", path),
 };
-// ---------- Payment Instrument types & helpers ----------
-
-export type CreatePaymentInstrumentInput = {
-  identity: string; // Finix Identity ID (buyer)
-  type: "PAYMENT_CARD";
-  name: string; // cardholder name
-  number: string;
-  expiration_month: number;
-  expiration_year: number;
-  security_code: string;
-};
-
-export type FinixPaymentInstrument = {
-  id: string;
-  fingerprint?: string;
-  card_brand?: string;
-  last_four?: string;
-  expiration_month?: number;
-  expiration_year?: number;
-  created_at: string;
-};
-
-export async function createPaymentInstrument(
-  input: CreatePaymentInstrumentInput
-) {
-  return finix.post<FinixPaymentInstrument>("/payment_instruments", input);
-}
 
 // ---------- Buyer Identity helpers ----------
 
@@ -144,28 +114,6 @@ export async function createBuyerIdentity(input: CreateBuyerIdentityInput) {
   return finix.post<FinixIdentityResponse>("/identities", input);
 }
 
-// ---------- Transfer (charge) types & helpers ----------
-
-export type CreateTransferInput = {
-  amount: number; // in cents
-  currency: string; // "USD" or "CAD"
-  source: string; // Payment Instrument ID
-  merchant_identity: string; // Merchant Identity ID that receives the funds
-  tags?: Record<string, string>;
-  idempotency_id?: string;
-};
-
-export type FinixTransfer = {
-  id: string;
-  amount: number;
-  currency: string;
-  state: "PENDING" | "SUCCEEDED" | "FAILED" | "CANCELED";
-  failure_code?: string;
-  failure_message?: string;
-  source: string;
-  merchant_identity: string;
-  created_at: string;
-};
 // ---------- Refund types & helpers ----------
 
 export type CreateRefundInput = {
@@ -185,11 +133,8 @@ export type FinixRefund = {
   created_at: string;
 };
 
-export async function refundTransfer(
-  transferId: string,
-  input: CreateRefundInput
-) {
-  return finix.post<FinixRefund>(`/transfers/${transferId}/reversals`, {
+export async function refundTransfer(transferId: string, input: CreateRefundInput) {
+  return finix.post<FinixRefund>("/transfers/" + transferId + "/reversals", {
     refund_amount: input.refundAmount,
     tags: input.tags,
     idempotency_id: input.idempotency_id,
@@ -231,10 +176,8 @@ export function verifyFinixWebhook(
     return { valid: false, reason: "Timestamp too old (replay protection)" };
   }
 
-  const signedPayload = `${timestamp}.${payload}`;
-  const expected = createHmac("sha256", secret)
-    .update(signedPayload)
-    .digest("hex");
+  const signedPayload = timestamp + "." + payload;
+  const expected = createHmac("sha256", secret).update(signedPayload).digest("hex");
 
   try {
     const expectedBuf = Buffer.from(expected, "hex");
@@ -250,7 +193,4 @@ export function verifyFinixWebhook(
   }
 
   return { valid: true };
-}
-export async function createTransfer(input: CreateTransferInput) {
-  return finix.post<FinixTransfer>("/transfers", input);
 }
