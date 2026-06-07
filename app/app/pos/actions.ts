@@ -289,8 +289,6 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   tax = Math.round(tax * 100) / 100;
   taxableBase = Math.round(taxableBase * 100) / 100;
 
-  // Tax exemption: a manual per-sale exemption (cashier) or a customer flagged
-  // tax-exempt zeroes the tax. The taxable base is still recorded for the books.
   const manualExempt = parsed.data.tax_exempt === true;
   const exemptCode = (parsed.data.tax_exempt_reason_code || "").trim();
   const exemptNote = (parsed.data.tax_exempt_reason_note || "").trim();
@@ -362,18 +360,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   const orderPaymentMethod =
     distinctMethods.length > 1 ? "split" : distinctMethods[0];
 
-  const { data: numData, error: numError } = await supabase.rpc(
-    "next_sale_number",
-    { p_business_id: business.id }
-  );
-  if (numError || numData === null || numData === undefined) {
-    console.error("next_sale_number:", numError);
-    return { error: "Could not generate a sale number. Please try again." };
-  }
-  const saleNumber = Number(numData);
-
   const snapshot = {
-    sale_number: saleNumber,
     items: parsed.data.items.map((i) => ({
       name: i.name,
       unit_price: i.unit_price,
@@ -403,170 +390,115 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     completed_at: new Date().toISOString(),
   };
 
-  const { data: order, error: orderError } = await supabase
-    .from("orders")
-    .insert({
-      business_id: business.id,
-      status: "paid",
-      sale_number: saleNumber,
-      subtotal,
-      discount,
-      tax,
-      tip,
-      total,
-      tax_exempt: isExempt,
-      payment_method: orderPaymentMethod,
-      customer_id: customerId,
-      drawer_session_id: drawerSessionId,
-      staff_id: activeStaffId,
-      is_training: isTraining,
-      idempotency_key: idemKey,
-      snapshot: snapshot,
-    })
-    .select("id")
-    .single();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const authUserId = user ? user.id : null;
 
-  if (orderError || !order) {
-    if (idemKey && orderError && (orderError as { code?: string }).code === "23505") {
-      const { data: dup } = await supabase
-        .from("orders")
-        .select("id, sale_number")
-        .eq("business_id", business.id)
-        .eq("idempotency_key", idemKey)
-        .maybeSingle();
-      if (dup) {
-        return {
-          ok: true,
-          id: dup.id as string,
-          sale_number: Number(dup.sale_number),
-        };
-      }
-    }
-    console.error("createOrder:", orderError);
-    return { error: "Could not record the sale. Please try again." };
+  const auditEvents: {
+    actor_id: string | null;
+    actor_role: string | null;
+    action: string;
+    reason_code: string | null;
+    reason_note: string | null;
+    metadata: Record<string, unknown>;
+  }[] = [];
+  if (discount > 0 && !isTraining) {
+    auditEvents.push({
+      actor_id: authUserId,
+      actor_role: role,
+      action: "discount",
+      reason_code: discountReasonCode,
+      reason_note: discountReasonNote ? discountReasonNote.slice(0, 500) : null,
+      metadata: { type: discountType, value: discountValue, amount: discount, staff_id: activeStaffId, staff_name: activeStaffName },
+    });
+  }
+  if (manualExempt && !isTraining) {
+    auditEvents.push({
+      actor_id: authUserId,
+      actor_role: role,
+      action: "tax_exempt",
+      reason_code: exemptCode,
+      reason_note: exemptNote ? exemptNote.slice(0, 500) : null,
+      metadata: { staff_id: activeStaffId, staff_name: activeStaffName, taxable_base: taxableBase },
+    });
   }
 
-  const lines = parsed.data.items.map((i) => ({
-    order_id: order.id,
-    business_id: business.id,
+  const itemsPayload = parsed.data.items.map((i) => ({
     catalog_item_id: i.catalog_item_id ?? null,
     name: i.name,
     unit_price: i.unit_price,
     quantity: i.quantity,
   }));
 
-  const { error: linesError } = await supabase.from("order_items").insert(lines);
-  if (linesError) {
-    console.error("createOrder lines:", linesError);
-    await supabase.from("orders").delete().eq("id", order.id);
-    return { error: "Could not save the order. Please try again." };
-  }
-
-  const paymentRows = tenders.map((t) => ({
-    business_id: business.id,
-    order_id: order.id,
+  const paymentsPayload = tenders.map((t) => ({
     method: t.method,
     amount: t.amount,
     tendered: t.tendered,
     change_given: t.change,
+    tender_type: t.method,
+    finix_transfer_id: null,
+    finix_state: null,
   }));
 
-  const { error: payError } = await supabase.from("payments").insert(paymentRows);
-  if (payError) {
-    console.error("createOrder payments:", payError);
-    await supabase.from("order_items").delete().eq("order_id", order.id);
-    await supabase.from("orders").delete().eq("id", order.id);
-    return { error: "Could not record payment. Please try again." };
-  }
+  const payload = {
+    business_id: business.id,
+    status: "paid",
+    subtotal: Math.round(subtotal * 100) / 100,
+    tax: tax,
+    tip: tip,
+    discount: discount,
+    total: total,
+    payment_method: orderPaymentMethod,
+    customer_id: customerId,
+    drawer_session_id: drawerSessionId,
+    is_training: isTraining,
+    staff_id: activeStaffId,
+    tax_exempt: isExempt,
+    idempotency_key: idemKey,
+    snapshot: snapshot,
+    items: itemsPayload,
+    payments: paymentsPayload,
+    audit_events: auditEvents,
+  };
 
-  if (discount > 0 && !isTraining) {
-    const {
-      data: { user: discUser },
-    } = await supabase.auth.getUser();
-    const { error: discAuditError } = await supabase.from("audit_events").insert({
-      business_id: business.id,
-      actor_id: discUser ? discUser.id : null,
-      actor_role: role,
-      action: "discount",
-      order_id: order.id,
-      reason_code: discountReasonCode,
-      reason_note: discountReasonNote ? discountReasonNote.slice(0, 500) : null,
-      metadata: { type: discountType, value: discountValue, amount: discount, staff_id: activeStaffId, staff_name: activeStaffName },
-    });
-    if (discAuditError) {
-      console.error("createOrder discount audit:", discAuditError);
+  const { data: rpcData, error: rpcError } = await supabase.rpc("create_pos_order", {
+    payload: payload,
+  });
+
+  if (rpcError || !rpcData) {
+    const msg = rpcError && rpcError.message ? rpcError.message : "";
+    if (msg.indexOf("insufficient_stock:") !== -1) {
+      const itemName = (msg.split("insufficient_stock:")[1] || "an item").trim();
+      return { error: "Out of stock: " + itemName + "." };
     }
-  }
-
-  if (manualExempt && !isTraining) {
-    const {
-      data: { user: exUser },
-    } = await supabase.auth.getUser();
-    const { error: exAuditError } = await supabase.from("audit_events").insert({
-      business_id: business.id,
-      actor_id: exUser ? exUser.id : null,
-      actor_role: role,
-      action: "tax_exempt",
-      order_id: order.id,
-      reason_code: exemptCode,
-      reason_note: exemptNote ? exemptNote.slice(0, 500) : null,
-      metadata: { staff_id: activeStaffId, staff_name: activeStaffName, taxable_base: taxableBase },
-    });
-    if (exAuditError) {
-      console.error("createOrder tax exempt audit:", exAuditError);
+    if (msg.indexOf("tender_short") !== -1) {
+      return { error: "Payments don't cover the sale total." };
     }
-  }
-
-  if (!isTraining) {
-    try {
-      const itemIds = Array.from(
-        new Set(
-          parsed.data.items
-            .map((i) => i.catalog_item_id)
-            .filter((id): id is string => !!id)
-        )
-      );
-      if (itemIds.length > 0) {
-        const { data: tracked } = await supabase
-          .from("catalog_items")
-          .select("id, track_inventory")
+    if (msg.indexOf("not_authorized") !== -1) {
+      return { error: "You don't have access to record this sale." };
+    }
+    if (msg.indexOf("duplicate key") !== -1 || (rpcError && (rpcError as { code?: string }).code === "23505")) {
+      if (idemKey) {
+        const { data: dup } = await supabase
+          .from("orders")
+          .select("id, sale_number")
           .eq("business_id", business.id)
-          .in("id", itemIds);
-
-        const trackedSet = new Set(
-          (tracked ?? []).filter((r) => r.track_inventory).map((r) => r.id as string)
-        );
-
-        const qtyByItem: Record<string, number> = {};
-        for (const line of parsed.data.items) {
-          const id = line.catalog_item_id;
-          if (id && trackedSet.has(id)) {
-            qtyByItem[id] = (qtyByItem[id] || 0) + line.quantity;
-          }
-        }
-
-        for (const id of Object.keys(qtyByItem)) {
-          const qty = qtyByItem[id];
-          const { error: invError } = await supabase.rpc("apply_inventory_change", {
-            p_business_id: business.id,
-            p_item_id: id,
-            p_change: -qty,
-            p_reason: "sale",
-            p_note: null,
-            p_order_id: order.id,
-          });
-          if (invError) {
-            console.error("inventory decrement (order " + order.id + ", item " + id + "):", invError);
-          }
+          .eq("idempotency_key", idemKey)
+          .maybeSingle();
+        if (dup) {
+          return { ok: true, id: dup.id as string, sale_number: Number(dup.sale_number) };
         }
       }
-    } catch (e) {
-      console.error("inventory decrement block:", e);
     }
+    console.error("createOrder rpc:", rpcError);
+    return { error: "Could not record the sale. Please try again." };
   }
 
+  const result = rpcData as { order_id: string; sale_number: number | string; replayed?: boolean };
+
   revalidatePath("/app/pos");
-  return { ok: true, id: order.id, sale_number: saleNumber };
+  return { ok: true, id: result.order_id, sale_number: Number(result.sale_number) };
 }
 
 export async function voidOrder(
