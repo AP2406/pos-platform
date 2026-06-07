@@ -652,8 +652,11 @@ export async function searchCustomers(
     .order("name", { ascending: true })
     .limit(10);
 
-  const term = (query || "").trim();
-  if (term) q = q.ilike("name", "%" + term + "%");
+  const term = (query || "").trim().replace(/[(),]/g, " ").trim();
+  if (term) {
+    const like = "%" + term + "%";
+    q = q.or("name.ilike." + like + ",phone.ilike." + like);
+  }
 
   const { data, error } = await q;
   if (error) {
