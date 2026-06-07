@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { refundTransfer } from "@/lib/services/finix";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 
@@ -49,7 +50,7 @@ type RefundLineInput = { order_item_id: string; quantity: number };
 
 type RefundOrderResult = { ok: true; order: { id: string; sale_number: number | null; status: string; subtotal: number; discount: number; tax: number; tip: number; total: number; refunded_amount: number }; lines: { order_item_id: string; name: string; unit_price: number; sold: number; returned: number; returnable: number }[] } | { error: string };
 
-type RefundItemsResult = { ok: true; amount: number; fully: boolean; returned_subtotal: number; discount_portion: number; tax_portion: number } | { needs_approval: true } | { error: string };
+type RefundItemsResult = { ok: true; amount: number; fully: boolean; returned_subtotal: number; discount_portion: number; tax_portion: number; card_refunded: number } | { needs_approval: true } | { error: string };
 
 export async function getOrderForRefund(orderId: string): Promise<RefundOrderResult> {
   if (!orderId) return { error: "Missing sale." };
@@ -220,6 +221,69 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   if (amount > remaining) amount = remaining;
   if (amount < 0) amount = 0;
 
+  // --- Card refund: reverse the original Finix transfer(s) for this sale. ---
+  // This MUST happen before we record anything, so a processor failure leaves
+  // the books untouched. Cash/other sales have no Finix transfer and skip this.
+  let finixReversedCents = 0;
+  const finixReversals: { transfer_id: string; reversal_id: string; cents: number; state: string }[] = [];
+
+  if (amount > 0) {
+    const { data: cardPayments } = await supabase
+      .from("finix_payments")
+      .select("finix_transfer_id, amount_cents, status")
+      .eq("order_id", orderId)
+      .eq("business_id", business.id)
+      .eq("status", "succeeded");
+
+    const succeededTransfers = (cardPayments ?? []).filter(function (p) {
+      return p.finix_transfer_id && Number(p.amount_cents) > 0;
+    });
+
+    if (succeededTransfers.length > 0) {
+      // How much has already been reversed against each transfer in prior refunds.
+      const reversedByTransfer: Record<string, number> = {};
+      for (const r of refundRows ?? []) {
+        const snap = r.snapshot as { finix?: { reversals?: { transfer_id?: string; cents?: number }[] } } | null;
+        const prior = snap && snap.finix && Array.isArray(snap.finix.reversals) ? snap.finix.reversals : [];
+        for (const pr of prior) {
+          if (pr.transfer_id) reversedByTransfer[pr.transfer_id] = (reversedByTransfer[pr.transfer_id] || 0) + (Number(pr.cents) || 0);
+        }
+      }
+
+      let remainingToReverse = Math.round(amount * 100);
+      for (const t of succeededTransfers) {
+        if (remainingToReverse <= 0) break;
+        const transferId = t.finix_transfer_id as string;
+        const chargedCents = Math.round(Number(t.amount_cents) || 0);
+        const alreadyReversed = reversedByTransfer[transferId] || 0;
+        const reversibleOnThis = Math.max(0, chargedCents - alreadyReversed);
+        if (reversibleOnThis <= 0) continue;
+        const reverseCents = Math.min(remainingToReverse, reversibleOnThis);
+        if (reverseCents <= 0) continue;
+
+        const targetCumulative = alreadyReversed + reverseCents;
+        const reversalResult = await refundTransfer(transferId, {
+          refundAmount: reverseCents,
+          idempotency_id: "surge-cust-refund-" + transferId + "-" + String(targetCumulative),
+          tags: { reason: "pos_refund", order_id: orderId },
+        });
+        if ("error" in reversalResult) {
+          console.error("refundItems Finix reversal failed for transfer " + transferId, reversalResult);
+          return { error: "The card refund could not be sent to the processor, so nothing was changed. Please try again." };
+        }
+        const rev = reversalResult.data;
+        const revState = (rev.state || "").toUpperCase();
+        if (revState === "FAILED" || revState === "CANCELED") {
+          console.error("refundItems Finix reversal returned " + revState + " for transfer " + transferId);
+          return { error: "The card refund was rejected by the processor, so nothing was changed. Please try again." };
+        }
+        finixReversals.push({ transfer_id: transferId, reversal_id: rev.id, cents: reverseCents, state: rev.state || "" });
+        finixReversedCents += reverseCents;
+        remainingToReverse -= reverseCents;
+      }
+    }
+  }
+
   let restocked = false;
   if (input.restock) {
     const qtyByItem: Record<string, number> = {};
@@ -256,6 +320,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     discount_portion: discountPortion,
     tax_portion: taxPortion,
     amount: amount,
+    finix: finixReversals.length > 0 ? { reversed_cents: finixReversedCents, reversals: finixReversals } : null,
     reason: input.reason,
     staff: active ? { id: active.id, name: active.name, role: active.role } : null,
     approver: approver ? { id: approver.id, name: approver.name } : null,
@@ -289,7 +354,13 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     created_by: user ? user.id : null,
   });
   if (refundError) {
-    console.error("refundItems insert:", refundError);
+    // If the card was already reversed at Finix but this row failed to write,
+    // the money DID go back to the customer; this needs manual reconciliation.
+    if (finixReversedCents > 0) {
+      console.error("refundItems: Finix reversal of " + finixReversedCents + " cents SUCCEEDED but refund row failed to save (order " + orderId + "). Reconcile manually.", refundError);
+    } else {
+      console.error("refundItems insert:", refundError);
+    }
     return { error: "Could not record the refund. Please try again." };
   }
 
@@ -328,6 +399,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
       restocked: restocked,
       fully: fully,
       line_count: refundLines.length,
+      card_reversed_cents: finixReversedCents,
       staff_id: active ? active.id : null,
       staff_name: active ? active.name : null,
       approved_by: approver ? approver.id : null,
@@ -337,5 +409,5 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   if (refundAuditError) console.error("refundItems audit:", refundAuditError);
 
   revalidatePath("/app/pos/sales");
-  return { ok: true, amount: amount, fully: fully, returned_subtotal: returnedSubtotal, discount_portion: discountPortion, tax_portion: taxPortion };
+  return { ok: true, amount: amount, fully: fully, returned_subtotal: returnedSubtotal, discount_portion: discountPortion, tax_portion: taxPortion, card_refunded: round2(finixReversedCents / 100) };
 }
