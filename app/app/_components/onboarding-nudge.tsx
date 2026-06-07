@@ -27,7 +27,7 @@ export function OnboardingNudge() {
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <Link
-          href="/app/onboarding"
+          href="/onboarding"
           className="px-3 py-1.5 text-sm rounded-md border border-foreground bg-accent font-medium"
         >
           Finish setup
