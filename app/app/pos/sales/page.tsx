@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { getTodayBoundsUTC } from "@/lib/utils/dates";
 import { VoidButton } from "./void-button";
 import { RefundButton } from "./refund-button";
 import { EmailReceiptButton } from "./email-receipt-button";
@@ -19,15 +20,6 @@ type Row = {
   customer_name: string | null;
 };
 
-function dayKey(iso: string, tz: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(iso));
-}
-
 function money(n: number): string {
   return "$" + n.toFixed(2);
 }
@@ -41,11 +33,65 @@ function voidReasonText(code: string, note: string): string {
   return reasonLabel(VOID_REASONS, code);
 }
 
+function fmtDateTime(iso: string, tz: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
 export default async function SalesPage() {
   const { business } = await requireBusiness();
   const supabase = await createClient();
   const tz = business.timezone || "America/Toronto";
 
+  const { start: todayStart, end: todayEnd } = getTodayBoundsUTC(tz);
+
+  // Today's totals: bounded by the business-timezone day at the query level,
+  // so the figure is complete (not capped at a row limit) and timezone-correct.
+  const { data: todayData } = await supabase
+    .from("orders")
+    .select("subtotal, discount, tax, tip, total, payment_method")
+    .eq("business_id", business.id)
+    .neq("is_training", true)
+    .neq("status", "voided")
+    .gte("created_at", todayStart.toISOString())
+    .lt("created_at", todayEnd.toISOString());
+
+  const todayRows = (todayData ?? []).map((o) => ({
+    subtotal: Number(o.subtotal) || 0,
+    discount: Number(o.discount) || 0,
+    tax: Number(o.tax) || 0,
+    tip: Number(o.tip) || 0,
+    total: Number(o.total) || 0,
+    payment_method: (o.payment_method as string | null) ?? "cash",
+  }));
+
+  const sumOf = (f: (r: { subtotal: number; discount: number; tax: number; tip: number; total: number; payment_method: string }) => number) =>
+    round2(todayRows.reduce((a, r) => a + f(r), 0));
+  const count = todayRows.length;
+  const gross = sumOf((r) => r.subtotal);
+  const discounts = sumOf((r) => r.discount);
+  const tax = sumOf((r) => r.tax);
+  const tips = sumOf((r) => r.tip);
+  const collected = sumOf((r) => r.total);
+
+  const byMethod = (m: string) =>
+    round2(
+      todayRows
+        .filter((r) => r.payment_method === m)
+        .reduce((a, r) => a + r.total, 0)
+    );
+  const cash = byMethod("cash");
+  const card = byMethod("card");
+  const other = byMethod("other");
+
+  // Recent sales: the most recent 50 for the list (includes voided/refunded
+  // so their state badges show). Independent of the totals query above.
   const { data } = await supabase
     .from("orders")
     .select(
@@ -54,7 +100,7 @@ export default async function SalesPage() {
     .eq("business_id", business.id)
     .neq("is_training", true)
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(50);
 
   const rows: Row[] = (data ?? []).map((o) => {
     const rawCustomer = (o as { customer?: unknown }).customer;
@@ -78,31 +124,7 @@ export default async function SalesPage() {
     };
   });
 
-  const todayKey = dayKey(new Date().toISOString(), tz);
-  const today = rows.filter(
-    (r) => r.status !== "voided" && dayKey(r.created_at, tz) === todayKey
-  );
-
-  const sumOf = (f: (r: Row) => number) =>
-    round2(today.reduce((a, r) => a + f(r), 0));
-  const count = today.length;
-  const gross = sumOf((r) => r.subtotal);
-  const discounts = sumOf((r) => r.discount);
-  const tax = sumOf((r) => r.tax);
-  const tips = sumOf((r) => r.tip);
-  const collected = sumOf((r) => r.total);
-
-  const byMethod = (m: string) =>
-    round2(
-      today
-        .filter((r) => r.payment_method === m)
-        .reduce((a, r) => a + r.total, 0)
-    );
-  const cash = byMethod("cash");
-  const card = byMethod("card");
-  const other = byMethod("other");
-
-  const list = rows.slice(0, 50);
+  const list = rows;
 
   const voidedIds = list.filter((r) => r.status === "voided").map((r) => r.id);
   const voidReasons: Record<string, string> = {};
@@ -248,7 +270,7 @@ export default async function SalesPage() {
                   )}
                   <div className="text-xs text-muted-foreground">
                     {numberPrefix +
-                      new Date(o.created_at).toLocaleString() +
+                      fmtDateTime(o.created_at, tz) +
                       "  " +
                       "\u00b7" +
                       "  " +
