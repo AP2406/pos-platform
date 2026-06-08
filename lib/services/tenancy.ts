@@ -4,6 +4,12 @@ import { redirect } from "next/navigation";
 
 export const ACTIVE_BUSINESS_COOKIE = "surge_active_business";
 
+// A business is blocked from using the app ONLY if its access_status is one of
+// these. Anything else (including "active", null, or an unexpected value) is
+// allowed through, so an existing/paying merchant can never be locked out by a
+// missing or unrecognized value.
+export const BLOCKED_ACCESS_STATUSES = ["suspended", "past_due"];
+
 export type IndustryType =
   | "transportation"
   | "restaurant"
@@ -23,6 +29,7 @@ export type BusinessContext = {
     default_tax_rate: number;
     timezone: string;
     drivers_enabled: boolean;
+    access_status?: string;
   };
 };
 
@@ -136,10 +143,25 @@ export async function getCurrentBusiness(): Promise<BusinessContext | null> {
 }
 
 /**
- * Same as getCurrentBusiness but redirects to /onboarding if they don't have one.
+ * True if a business's access_status puts it in a blocked state. A missing or
+ * unrecognized status is treated as allowed (never block by default).
+ */
+export function isBusinessBlocked(accessStatus: string | null | undefined): boolean {
+  const status = accessStatus || "active";
+  return BLOCKED_ACCESS_STATUSES.indexOf(status) !== -1;
+}
+
+/**
+ * Same as getCurrentBusiness but redirects to /onboarding if they don't have
+ * one, and to /account-paused if the business has been suspended or is past
+ * due. This is the single chokepoint that gates every protected page and
+ * server action, so a blocked merchant can neither load the app nor transact.
  */
 export async function requireBusiness(): Promise<BusinessContext> {
   const ctx = await getCurrentBusiness();
   if (!ctx) redirect("/onboarding");
+  if (isBusinessBlocked(ctx.business.access_status)) {
+    redirect("/account-paused");
+  }
   return ctx;
 }
