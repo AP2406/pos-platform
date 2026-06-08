@@ -8,6 +8,7 @@ import {
 import { getVocab } from "@/lib/modules/resolve";
 import Link from "next/link";
 import { MiniCalendar } from "./mini-calendar";
+import { PosDashboard } from "./pos-dashboard";
 
 function formatCurrency(amount: number | string | null | undefined): string {
   const num = typeof amount === "number" ? amount : parseFloat(amount ?? "0");
@@ -56,6 +57,11 @@ function businessRevenue(trip: TripData): number {
 
 export default async function DashboardPage() {
   const { business } = await requireBusiness();
+
+  if (business.industry !== "transportation") {
+    return <PosDashboard business={business} />;
+  }
+
   const vocab = getVocab(business.industry);
   const supabase = await createClient();
   const tz = business.timezone || "America/Toronto";
@@ -168,10 +174,7 @@ export default async function DashboardPage() {
       ? Math.round((monthSelfRevenue / totalRevenue) * 100)
       : 0;
 
-  const customerMap = new Map<
-    string,
-    { id: string; name: string; revenue: number; tripCount: number }
-  >();
+  const customerMap = new Map<string, { id: string; name: string; revenue: number; tripCount: number }>();
   for (const t of monthTrips) {
     if (!t.customer?.id) continue;
     const key = t.customer.id;
@@ -191,10 +194,7 @@ export default async function DashboardPage() {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 5);
 
-  const partnerMap = new Map<
-    string,
-    { id: string; name: string; cookies: number; tripCount: number }
-  >();
+  const partnerMap = new Map<string, { id: string; name: string; cookies: number; tripCount: number }>();
   for (const t of monthTrips) {
     if (t.handled_by !== "partner" || !t.partner?.id) continue;
     const key = t.partner.id;
