@@ -10,9 +10,22 @@ const itemSchema = z.object({
   price: z.coerce.number().min(0).max(1000000),
   category: z.string().max(60).optional().or(z.literal("")),
   taxable: z.boolean().optional(),
+  barcode: z.string().max(120).optional().or(z.literal("")),
 });
 
-type ItemInput = { name: string; price: number; category?: string; taxable?: boolean };
+type ItemInput = {
+  name: string;
+  price: number;
+  category?: string;
+  taxable?: boolean;
+  barcode?: string;
+};
+
+function cleanBarcode(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const t = raw.trim();
+  return t.length > 0 ? t.slice(0, 120) : null;
+}
 
 export async function createCatalogItem(
   input: ItemInput
@@ -23,6 +36,20 @@ export async function createCatalogItem(
   }
   const { business } = await requireBusiness();
   const supabase = await createClient();
+
+  const code = cleanBarcode(parsed.data.barcode);
+  if (code) {
+    const { data: dups } = await supabase
+      .from("catalog_items")
+      .select("id, name")
+      .eq("business_id", business.id)
+      .eq("barcode", code)
+      .limit(1);
+    if (dups && dups.length > 0) {
+      return { error: "That code is already used by " + (dups[0].name as string) + "." };
+    }
+  }
+
   const { data, error } = await supabase
     .from("catalog_items")
     .insert({
@@ -31,6 +58,7 @@ export async function createCatalogItem(
       price: parsed.data.price,
       category: parsed.data.category || null,
       taxable: parsed.data.taxable === false ? false : true,
+      barcode: code,
     })
     .select("id")
     .single();
@@ -50,7 +78,7 @@ export async function updateCatalogItem(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  await requireBusiness();
+  const { business } = await requireBusiness();
   const supabase = await createClient();
 
   const updateData: Record<string, unknown> = {
@@ -61,11 +89,15 @@ export async function updateCatalogItem(
   if (typeof parsed.data.taxable === "boolean") {
     updateData.taxable = parsed.data.taxable;
   }
+  if (typeof parsed.data.barcode === "string") {
+    updateData.barcode = cleanBarcode(parsed.data.barcode);
+  }
 
   const { error } = await supabase
     .from("catalog_items")
     .update(updateData)
-    .eq("id", id);
+    .eq("id", id)
+    .eq("business_id", business.id);
   if (error) {
     console.error("updateCatalogItem:", error);
     return { error: "Could not update item. Please try again." };
@@ -107,6 +139,41 @@ export async function setCatalogItemTaxable(
   if (error) {
     console.error("setCatalogItemTaxable:", error);
     return { error: "Could not update item." };
+  }
+  revalidatePath("/app/catalog");
+  return { ok: true };
+}
+
+export async function setCatalogItemBarcode(
+  id: string,
+  barcode: string | null
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing item." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const code = cleanBarcode(barcode);
+  if (code) {
+    const { data: dups } = await supabase
+      .from("catalog_items")
+      .select("id, name")
+      .eq("business_id", business.id)
+      .eq("barcode", code)
+      .neq("id", id)
+      .limit(1);
+    if (dups && dups.length > 0) {
+      return { error: "That code is already used by " + (dups[0].name as string) + "." };
+    }
+  }
+
+  const { error } = await supabase
+    .from("catalog_items")
+    .update({ barcode: code })
+    .eq("id", id)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("setCatalogItemBarcode:", error);
+    return { error: "Could not update the code. Please try again." };
   }
   revalidatePath("/app/catalog");
   return { ok: true };
@@ -178,6 +245,7 @@ export async function deleteVariation(
   revalidatePath("/app/catalog");
   return { ok: true };
 }
+
 const modifierSchema = z.object({
   catalog_item_id: z.string().uuid(),
   name: z.string().min(1, "Add-on name is required").max(80),
@@ -244,6 +312,7 @@ export async function deleteModifier(
   revalidatePath("/app/catalog");
   return { ok: true };
 }
+
 export async function setCatalogItemTaxRate(
   id: string,
   taxRateId: string | null

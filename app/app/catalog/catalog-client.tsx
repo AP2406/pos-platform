@@ -9,6 +9,7 @@ import {
   setCatalogItemActive,
   setCatalogItemTaxable,
   setCatalogItemTaxRate,
+  setCatalogItemBarcode,
   createVariation,
   deleteVariation,
   createModifier,
@@ -25,6 +26,7 @@ type Item = {
   is_active: boolean;
   taxable: boolean;
   tax_rate_id: string | null;
+  barcode: string | null;
   variations: Option[];
   modifiers: Option[];
 };
@@ -34,6 +36,7 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("");
+  const [barcode, setBarcode] = useState("");
   const [taxable, setTaxable] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -45,9 +48,19 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
   const [modName, setModName] = useState("");
   const [modPrice, setModPrice] = useState("");
   const [modError, setModError] = useState<string | null>(null);
+  const [barcodeEdit, setBarcodeEdit] = useState("");
+  const [barcodeError, setBarcodeError] = useState<string | null>(null);
 
   const rateNameById: Record<string, string> = {};
   for (const r of taxRates) rateNameById[r.id] = r.name;
+
+  const categoryOptions = Array.from(
+    new Set(
+      items
+        .map((i) => (i.category || "").trim())
+        .filter((c) => c.length > 0)
+    )
+  ).sort();
 
   function handleAdd() {
     setError(null);
@@ -61,6 +74,7 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
         price: parseFloat(price) || 0,
         category,
         taxable,
+        barcode,
       });
       if ("error" in res) {
         setError(res.error);
@@ -76,6 +90,7 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
           is_active: true,
           taxable: taxable,
           tax_rate_id: null,
+          barcode: barcode.trim() || null,
           variations: [],
           modifiers: [],
         },
@@ -83,6 +98,7 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
       setName("");
       setPrice("");
       setCategory("");
+      setBarcode("");
       setTaxable(true);
     });
   }
@@ -126,14 +142,33 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
     });
   }
 
-  function toggleExpand(itemId: string) {
+  function toggleExpand(item: Item) {
     setVarName("");
     setVarPrice("");
     setVarError(null);
     setModName("");
     setModPrice("");
     setModError(null);
-    setExpandedId((prev) => (prev === itemId ? null : itemId));
+    setBarcodeError(null);
+    setBarcodeEdit(expandedId === item.id ? "" : (item.barcode ?? ""));
+    setExpandedId((prev) => (prev === item.id ? null : item.id));
+  }
+
+  function handleSaveBarcode(itemId: string) {
+    setBarcodeError(null);
+    startTransition(async () => {
+      const clean = barcodeEdit.trim();
+      const res = await setCatalogItemBarcode(itemId, clean.length > 0 ? clean : null);
+      if ("error" in res) {
+        setBarcodeError(res.error);
+        return;
+      }
+      setItems((prev) =>
+        prev.map((i) =>
+          i.id === itemId ? { ...i, barcode: clean.length > 0 ? clean : null } : i
+        )
+      );
+    });
   }
 
   function handleAddVariation(itemId: string) {
@@ -252,7 +287,7 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
     <div className="space-y-4 max-w-2xl">
       <div className="bg-card border border-border rounded-lg p-6">
         <h2 className="text-sm font-medium mb-3">Add an item</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="space-y-1">
             <Label htmlFor="item-name" className="text-xs">
               Name
@@ -284,12 +319,29 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
             </Label>
             <Input
               id="item-category"
+              list="catalog-categories"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               placeholder="Services"
             />
           </div>
+          <div className="space-y-1">
+            <Label htmlFor="item-barcode" className="text-xs">
+              Barcode / code (optional)
+            </Label>
+            <Input
+              id="item-barcode"
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              placeholder="Scan or type"
+            />
+          </div>
         </div>
+        <datalist id="catalog-categories">
+          {categoryOptions.map((c) => (
+            <option key={c} value={c} />
+          ))}
+        </datalist>
         <label className="flex items-center gap-2 mt-3 text-sm cursor-pointer">
           <input
             type="checkbox"
@@ -332,6 +384,9 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
                     item.modifiers.length +
                     (item.modifiers.length === 1 ? " add-on" : " add-ons")
                   : "";
+              const codeSuffix = item.barcode
+                ? "  " + "\u00b7" + "  Code " + item.barcode
+                : "";
               return (
                 <div key={item.id} className="py-3">
                   <div className="flex items-center justify-between">
@@ -355,14 +410,14 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
                         )}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {base + modSuffix}
+                        {base + modSuffix + codeSuffix}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => toggleExpand(item.id)}
+                        onClick={() => toggleExpand(item)}
                       >
                         {expanded ? "Done" : "Options"}
                       </Button>
@@ -413,6 +468,34 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
                             </p>
                           )}
                         </div>
+                      </div>
+
+                      {/* Code / barcode */}
+                      <div className="space-y-2 pt-3 border-t border-border">
+                        <p className="text-xs text-muted-foreground pl-3">
+                          Code &mdash; barcode or SKU used to find this item at the register.
+                        </p>
+                        <div className="pl-3 flex flex-wrap items-end gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Barcode / code</Label>
+                            <Input
+                              value={barcodeEdit}
+                              onChange={(e) => setBarcodeEdit(e.target.value)}
+                              placeholder="Scan or type"
+                              className="h-9 w-44"
+                            />
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => handleSaveBarcode(item.id)}
+                            disabled={pending}
+                          >
+                            Save
+                          </Button>
+                        </div>
+                        {barcodeError && (
+                          <p className="text-sm text-red-600 pl-3">{barcodeError}</p>
+                        )}
                       </div>
 
                       {/* Variations */}
