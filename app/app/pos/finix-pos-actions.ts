@@ -121,6 +121,43 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
 
   const supabase = await createClient();
 
+  // Double-charge guard. If a prior attempt for this same order key already
+  // placed the sale AND captured a (non-failed) transfer, return that result
+  // instead of charging again. This covers the case where a success response
+  // was lost and the cashier reopened the card modal to retry: the modal's
+  // attempt counter resets on remount, so its Finix idempotency_id would
+  // differ and Finix would not dedupe -- but the order already exists here.
+  {
+    const { data: priorOrder } = await supabase
+      .from("orders")
+      .select("id, sale_number")
+      .eq("business_id", business.id)
+      .eq("idempotency_key", input.idempotency_key)
+      .maybeSingle();
+    if (priorOrder) {
+      const { data: priorPay } = await supabase
+        .from("finix_payments")
+        .select("finix_transfer_id, status")
+        .eq("business_id", business.id)
+        .eq("order_id", priorOrder.id)
+        .not("finix_transfer_id", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const priorState = priorPay ? String(priorPay.status || "").toLowerCase() : "";
+      const priorCaptured =
+        !!priorPay && priorState !== "failed" && priorState !== "canceled" && priorState !== "cancelled";
+      if (priorCaptured) {
+        return {
+          ok: true,
+          id: priorOrder.id as string,
+          sale_number: Number(priorOrder.sale_number),
+          transferId: (priorPay.finix_transfer_id as string) || "",
+        };
+      }
+    }
+  }
+
   const { data: biz } = await supabase
     .from("businesses")
     .select("finix_merchant_id, finix_merchant_state")
