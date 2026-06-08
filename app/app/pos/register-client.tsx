@@ -20,6 +20,7 @@ import { getCardConfig } from "./finix-pos-actions";
 import { TenderSheet } from "./tender-sheet";
 import { getPrinterConfig, printReceiptHtml } from "./qz-print";
 import { buildReceiptHtml, type ReceiptSettings } from "./receipt-template";
+import { RegisterRefund } from "./register-refund";
 
 type Variation = { id: string; name: string; price: number };
 type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; variations: Variation[]; modifiers: Variation[] };
@@ -1029,6 +1030,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                       <button type="button" onClick={openStaffPin} className="text-xs font-medium underline">Enter PIN</button>
                     )
                   )}
+                  <RegisterRefund businessName={businessName} />
                   {openTickets.length > 0 && (
                     <button type="button" onClick={() => setTicketsOpen(true)} className="flex items-center gap-1.5 text-xs rounded-md border border-border px-2.5 py-1.5 hover:bg-accent">
                       Tickets
