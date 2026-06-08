@@ -1,4 +1,3 @@
-// lib/modules/presets.ts
 import { ModuleKey, Vocab, DEFAULT_VOCAB } from "./registry";
 
 export type FieldType =
@@ -43,22 +42,22 @@ export const PRESETS: Record<string, Preset> = {
     ],
   },
   restaurant: {
-    modules: ["dashboard", "pos", "orders", "kitchen", "catalog", "customers", "staff", "settings"],
+    modules: ["dashboard", "pos", "orders", "kitchen", "catalog", "customers", "staff", "profit", "settings"],
     vocab: DEFAULT_VOCAB,
     labels: { catalog: "Menu" },
   },
   retail: {
-    modules: ["dashboard", "pos", "orders", "catalog", "customers", "staff", "settings"],
+    modules: ["dashboard", "pos", "orders", "catalog", "customers", "staff", "profit", "settings"],
     vocab: DEFAULT_VOCAB,
     labels: { catalog: "Products" },
   },
   service: {
-    modules: ["dashboard", "pos", "orders", "catalog", "customers", "staff", "settings"],
+    modules: ["dashboard", "pos", "orders", "catalog", "customers", "staff", "profit", "settings"],
     vocab: DEFAULT_VOCAB,
     labels: { pos: "Checkout", orders: "Visits", catalog: "Services" },
   },
   mobile_seller: {
-    modules: ["dashboard", "pos", "orders", "catalog", "settings"],
+    modules: ["dashboard", "pos", "orders", "catalog", "profit", "settings"],
     vocab: DEFAULT_VOCAB,
     labels: { pos: "Sell", orders: "Sales", catalog: "Items" },
   },

@@ -56,29 +56,60 @@ export default async function ProfitPage() {
   const sinceIso = since.toISOString();
   const sinceDate = firstKey + "-01";
 
-  const [tripsRes, expRes, recentRes] = await Promise.all([
+  const [tripsRes, ordersRes, refundsRes, expRes, recentRes] = await Promise.all([
     supabase
       .from("trips")
       .select("scheduled_at, price_total, cookie_amount, handled_by")
+      .eq("business_id", business.id)
       .eq("trip_status", "completed")
       .gte("scheduled_at", sinceIso),
     supabase
+      .from("orders")
+      .select("created_at, subtotal, discount, status, is_training")
+      .eq("business_id", business.id)
+      .neq("status", "voided")
+      .gte("created_at", sinceIso),
+    supabase
+      .from("refunds")
+      .select("created_at, snapshot")
+      .eq("business_id", business.id)
+      .gte("created_at", sinceIso),
+    supabase
       .from("expenses")
       .select("amount, category, incurred_on")
+      .eq("business_id", business.id)
       .gte("incurred_on", sinceDate),
     supabase
       .from("expenses")
       .select("id, amount, category, subcategory, description, incurred_on")
+      .eq("business_id", business.id)
       .order("incurred_on", { ascending: false })
       .limit(50),
   ]);
 
   const revByMonth: Record<string, number> = {};
+
+  // Transportation revenue (trips).
   for (const t of (tripsRes.data ?? []) as Row[]) {
     const k = monthKey(new Date(t.scheduled_at), tz);
     const v =
       t.handled_by === "partner" ? num(t.cookie_amount) : num(t.price_total);
     revByMonth[k] = (revByMonth[k] || 0) + v;
+  }
+
+  // POS sales: goods/services revenue (pre-tax, pre-tip), by month.
+  for (const o of (ordersRes.data ?? []) as Row[]) {
+    if (o.is_training) continue;
+    const k = monthKey(new Date(o.created_at), tz);
+    revByMonth[k] = (revByMonth[k] || 0) + (num(o.subtotal) - num(o.discount));
+  }
+
+  // Subtract refunded goods value in the month the refund occurred.
+  for (const r of (refundsRes.data ?? []) as Row[]) {
+    const k = monthKey(new Date(r.created_at), tz);
+    const snap = (r.snapshot || {}) as { returned_subtotal?: unknown; discount_portion?: unknown };
+    const goods = num(snap.returned_subtotal) - num(snap.discount_portion);
+    if (goods > 0) revByMonth[k] = (revByMonth[k] || 0) - goods;
   }
 
   const curKey = months[months.length - 1].key;
