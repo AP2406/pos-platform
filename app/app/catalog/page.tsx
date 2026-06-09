@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { CatalogClient } from "./catalog-client";
+import { ImportMenu } from "./import-menu";
 
 export default async function CatalogPage() {
   const { business } = await requireBusiness();
@@ -76,11 +77,14 @@ export default async function CatalogPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Catalog</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          The products and services you sell at checkout.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Catalog</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            The products and services you sell at checkout.
+          </p>
+        </div>
+        <ImportMenu />
       </div>
       <CatalogClient initialItems={items} taxRates={taxRates} />
     </div>
