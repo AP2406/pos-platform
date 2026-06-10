@@ -11,8 +11,12 @@ import {
   listOpenTickets,
   resumeTicket,
   discardTicket,
+  updateTableTicket,
+  closeTableTicket,
   type OpenTicketSummary,
+  type TableCart,
 } from "./ticket-actions";
+import { markOrderFulfilled } from "../kitchen/actions";
 import { DISCOUNT_REASONS, TAX_EXEMPT_REASONS } from "./reason-codes";
 import { setActiveStaff, clearActiveStaff, type ActiveStaff } from "./staff-session";
 import { CardPaymentModal } from "./card-payment-modal";
@@ -34,7 +38,11 @@ type CartLine = {
   quantity: number;
   taxable: boolean;
   taxFrac: number;
+  // How many of this line have already been fired to the kitchen (table mode).
+  sent_qty?: number;
 };
+// Binding when the register is opened for a specific full-service table.
+type TableBinding = { tableId: string; ticketId: string; tableLabel: string };
 type Customer = { id: string; name: string; taxExempt?: boolean };
 type Tender = { method: "cash" | "card" | "other"; amount: number; tendered: number | null; change: number | null };
 type PaymentLine = { method: string; amount: number; tendered: number | null; change: number | null };
@@ -103,17 +111,43 @@ function printReceipt(r: Receipt, settings: Partial<ReceiptSettings> | null, wid
   printReceiptHtml(buildReceiptHtml(r, settings, widthMm));
 }
 
-export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string> }) {
-  const [cart, setCart] = useState<CartLine[]>([]);
-  const [tip, setTip] = useState("");
-  const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
-  const [discountValue, setDiscountValue] = useState("");
-  const [discountReason, setDiscountReason] = useState("");
-  const [discountReasonNote, setDiscountReasonNote] = useState("");
+// Rebuild register cart lines from a stored table cart, reconstructing
+// taxable/taxFrac from the catalog (those aren't persisted) — same approach as
+// resuming a held ticket.
+function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], taxRate: number): CartLine[] {
+  if (!stored || !Array.isArray(stored.items)) return [];
+  const taxableById: Record<string, boolean> = {};
+  const fracById: Record<string, number> = {};
+  for (const it of items) {
+    taxableById[it.id] = it.taxable;
+    fracById[it.id] = it.taxFrac;
+  }
+  return stored.items.map((it) => {
+    const cid = it.catalog_item_id ?? null;
+    return {
+      catalog_item_id: cid,
+      variation_id: it.variation_id ?? null,
+      name: it.name,
+      unit_price: Number(it.unit_price) || 0,
+      quantity: Number(it.quantity) || 1,
+      taxable: cid ? (taxableById[cid] ?? true) : true,
+      taxFrac: cid ? (fracById[cid] ?? taxRate) : taxRate,
+      sent_qty: Number(it.sent_qty) || 0,
+    };
+  });
+}
+
+export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, tableBinding, initialTableCart, onExitToFloor }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void }) {
+  const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
+  const [tip, setTip] = useState(initialTableCart?.tip ?? "");
+  const [discountMode, setDiscountMode] = useState<"amount" | "percent">(initialTableCart?.discount_mode === "percent" ? "percent" : "amount");
+  const [discountValue, setDiscountValue] = useState(initialTableCart?.discount_value ?? "");
+  const [discountReason, setDiscountReason] = useState(initialTableCart?.discount_reason ?? "");
+  const [discountReasonNote, setDiscountReasonNote] = useState(initialTableCart?.discount_reason_note ?? "");
   const [taxExempt, setTaxExempt] = useState(false);
   const [taxExemptReason, setTaxExemptReason] = useState("");
   const [taxExemptNote, setTaxExemptNote] = useState("");
-  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(initialTableCart?.customer ? { id: initialTableCart.customer.id, name: initialTableCart.customer.name } : null);
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<{ id: string; name: string; phone: string | null; tax_exempt: boolean }[]>([]);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
@@ -130,6 +164,8 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [pending, startTransition] = useTransition();
   const idemKeyRef = useRef<string | null>(null);
+  // Set once a table is paid out / closed, so autosave stops touching the row.
+  const tableClosedRef = useRef(false);
   const [staff, setStaff] = useState<ActiveStaff | null>(activeStaff);
   const [staffPinOpen, setStaffPinOpen] = useState(false);
   const [pinEntry, setPinEntry] = useState("");
@@ -315,6 +351,59 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   function removeLine(index: number) {
     setCart((prev) => prev.filter((_, i) => i !== index));
     setEditLineIndex(null);
+  }
+
+  // Serialize the current sale into the stored table-cart shape (preserves
+  // per-line sent_qty so the kitchen "Send" only fires new items).
+  function buildTablePayload(): TableCart {
+    return {
+      items: cart.map((l) => ({
+        catalog_item_id: l.catalog_item_id,
+        variation_id: l.variation_id,
+        name: l.name,
+        unit_price: l.unit_price,
+        quantity: l.quantity,
+        sent_qty: l.sent_qty ?? 0,
+      })),
+      tip: tip,
+      discount_mode: discountMode,
+      discount_value: discountValue,
+      discount_reason: discountReason,
+      discount_reason_note: discountReasonNote,
+      customer: customer ? { id: customer.id, name: customer.name } : null,
+    };
+  }
+
+  // Autosave the table ticket (table mode only), debounced. Calls the server
+  // action — never setState — so it doesn't cascade renders.
+  useEffect(() => {
+    if (!tableBinding || tableClosedRef.current) return;
+    const handle = setTimeout(() => {
+      updateTableTicket(tableBinding.ticketId, buildTablePayload());
+    }, 600);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableBinding, cart, tip, discountMode, discountValue, discountReason, discountReasonNote, customer]);
+
+  // Save immediately, then return to the floor (the "Tables" back control).
+  function exitToFloor() {
+    if (tableBinding && !tableClosedRef.current) {
+      updateTableTicket(tableBinding.ticketId, buildTablePayload());
+    }
+    if (onExitToFloor) onExitToFloor();
+  }
+
+  // After a table is paid: drop its open ticket, clear its kitchen tickets, and
+  // mark the freshly-created paid order fulfilled so it doesn't re-appear on the
+  // KDS (the food was already fired during the meal).
+  function closeTableAfterCharge(orderId: string) {
+    if (!tableBinding) return;
+    tableClosedRef.current = true;
+    const ticketId = tableBinding.ticketId;
+    startTransition(async () => {
+      await closeTableTicket(ticketId);
+      await markOrderFulfilled(orderId);
+    });
   }
 
   function clearCart() {
@@ -510,6 +599,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setReceipt(rec);
     setTenderOpen(false);
     clearCart();
+    closeTableAfterCharge(res.id);
     const cfg = getPrinterConfig();
     if (cfg && cfg.autoPrint) doPrint(rec);
   }
@@ -669,6 +759,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setCardModal(null);
     setTenderOpen(false);
     clearCart();
+    closeTableAfterCharge(res.id);
     const cfg = getPrinterConfig();
     if (cfg && cfg.autoPrint) doPrint(rec);
   }
@@ -1013,8 +1104,8 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
               <Button className="flex-1" onClick={() => doPrint(receipt)}>
                 Print receipt
               </Button>
-              <Button variant="outline" className="flex-1" onClick={() => setReceipt(null)}>
-                New sale
+              <Button variant="outline" className="flex-1" onClick={() => { setReceipt(null); if (tableBinding && onExitToFloor) onExitToFloor(); }}>
+                {tableBinding ? "Back to tables" : "New sale"}
               </Button>
             </div>
           </div>
@@ -1024,7 +1115,10 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
           {/* Slim dark top bar */}
           <div className="shrink-0 flex items-center justify-between gap-3 h-12 px-3 bg-sidebar text-sidebar-foreground border-b border-sidebar-border">
             <div className="min-w-0 flex items-baseline gap-2">
-              <span className="font-semibold truncate">{businessName}</span>
+              <span className="font-semibold truncate">{tableBinding ? tableBinding.tableLabel : businessName}</span>
+              {tableBinding && (
+                <span className="text-xs text-sidebar-foreground/70 truncate hidden sm:inline">{businessName}</span>
+              )}
               {hasStaff && (
                 <span className="text-xs text-sidebar-foreground/70 truncate hidden sm:inline">
                   {staff ? "Ringing as " + staff.name : "No cashier set"}
@@ -1043,16 +1137,23 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <RegisterRefund businessName={businessName} />
-              {openTickets.length > 0 && (
+              {!tableBinding && openTickets.length > 0 && (
                 <button type="button" onClick={() => setTicketsOpen(true)} className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent">
                   Tickets
                   <span className="px-1.5 rounded-full bg-sidebar-accent tabular-nums">{openTickets.length}</span>
                 </button>
               )}
-              <Link href="/app" className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
-                Exit
-              </Link>
+              {tableBinding ? (
+                <button type="button" onClick={exitToFloor} className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M15 18l-6-6 6-6" /></svg>
+                  Tables
+                </button>
+              ) : (
+                <Link href="/app" className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
+                  Exit
+                </Link>
+              )}
             </div>
           </div>
 
@@ -1115,7 +1216,9 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                 <h2 className="font-medium">Current sale</h2>
                 {cart.length > 0 && (
                   <div className="flex items-center gap-3">
-                    <button type="button" onClick={openHold} className="text-xs text-muted-foreground underline hover:text-foreground">Hold</button>
+                    {!tableBinding && (
+                      <button type="button" onClick={openHold} className="text-xs text-muted-foreground underline hover:text-foreground">Hold</button>
+                    )}
                     <button type="button" onClick={clearCart} className="text-xs text-muted-foreground underline hover:text-foreground">Clear</button>
                   </div>
                 )}

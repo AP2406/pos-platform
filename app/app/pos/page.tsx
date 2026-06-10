@@ -2,7 +2,11 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { RegisterClient } from "./register-client";
+import { FloorClient } from "./floor-client";
 import { getActiveStaff } from "./staff-session";
+import { listFloor } from "../floor/floor-actions";
+import { listOpenTableTickets } from "./ticket-actions";
+import { hasFloorService } from "@/lib/modules/modes";
 import type { ReceiptSettings } from "./receipt-template";
 
 export default async function PosPage() {
@@ -116,6 +120,27 @@ export default async function PosPage() {
   const trainingMode =
     (business as { training_mode?: boolean }).training_mode === true;
 
+  const registerProps = {
+    items,
+    taxRate,
+    businessName: business.name,
+    hasStaff,
+    activeStaff,
+    receiptSettings,
+    showItemPhotos,
+    categoryColors,
+  };
+
+  // Full-service restaurants get the table floor first; every other mode (and
+  // the transportation register) renders the flat register exactly as before.
+  const showFloor = hasFloorService(business);
+  let floor: Awaited<ReturnType<typeof listFloor>> = { areas: [], tables: [] };
+  let openTables: Awaited<ReturnType<typeof listOpenTableTickets>> = [];
+  if (showFloor) {
+    floor = await listFloor();
+    openTables = await listOpenTableTickets();
+  }
+
   return (
     <div className="h-full flex flex-col">
       {trainingMode && (
@@ -136,16 +161,16 @@ export default async function PosPage() {
       )}
 
       <div className="flex-1 min-h-0">
-        <RegisterClient
-          items={items}
-          taxRate={taxRate}
-          businessName={business.name}
-          hasStaff={hasStaff}
-          activeStaff={activeStaff}
-          receiptSettings={receiptSettings}
-          showItemPhotos={showItemPhotos}
-          categoryColors={categoryColors}
-        />
+        {showFloor ? (
+          <FloorClient
+            register={registerProps}
+            areas={floor.areas}
+            tables={floor.tables}
+            initialOpen={openTables}
+          />
+        ) : (
+          <RegisterClient {...registerProps} />
+        )}
       </div>
     </div>
   );

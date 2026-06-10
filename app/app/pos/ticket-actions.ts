@@ -162,3 +162,218 @@ export async function discardTicket(
 
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------------
+// Table-bound tickets (full-service floor). These are the SAME open_tickets
+// rows, but a table ticket carries a table_id and a persistent lifecycle:
+// loaded WITHOUT deleting (the table stays occupied), re-saved as items change,
+// and only removed when the table is paid out or voided. Non-table tickets
+// (table_id = null) keep their exact current hold/resume behavior above.
+// ---------------------------------------------------------------------------
+
+// A table cart may be empty (a just-opened table) and each line carries a
+// sent_qty so "Send to kitchen" only fires not-yet-sent items.
+const tableCartLineSchema = cartLineSchema.extend({
+  sent_qty: z.coerce.number().int().min(0).max(1000).optional(),
+});
+const tableCartSchema = z.object({
+  items: z.array(tableCartLineSchema).max(200),
+  tip: z.string().max(20).optional(),
+  discount_mode: z.enum(["amount", "percent"]).optional(),
+  discount_value: z.string().max(20).optional(),
+  discount_reason: z.string().max(60).optional(),
+  discount_reason_note: z.string().max(500).optional(),
+  customer: customerSchema.nullable().optional(),
+});
+export type TableCart = z.infer<typeof tableCartSchema>;
+
+export type TableTicketSummary = {
+  id: string;
+  table_id: string;
+  guest_count: number | null;
+  opened_at: string;
+  item_count: number;
+  subtotal: number;
+};
+
+// Open a table: create its persistent ticket. If the table already has an open
+// ticket (unique index race), return that one instead of erroring.
+export async function openTableTicket(
+  tableId: string,
+  guestCount?: number | null
+): Promise<{ ok: true; ticketId: string; cart: TableCart } | { error: string }> {
+  if (!tableId) return { error: "Missing table." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const guests =
+    guestCount && Number.isFinite(guestCount) && guestCount > 0
+      ? Math.min(Math.round(guestCount), 999)
+      : null;
+
+  const { data, error } = await supabase
+    .from("open_tickets")
+    .insert({
+      business_id: business.id,
+      table_id: tableId,
+      guest_count: guests,
+      cart: { items: [] },
+      created_by: user ? user.id : null,
+    })
+    .select("id, cart")
+    .single();
+
+  if (error) {
+    // 23505 = the one-open-ticket-per-table unique index. Load the existing one.
+    if ((error as { code?: string }).code === "23505") {
+      const { data: existing } = await supabase
+        .from("open_tickets")
+        .select("id, cart")
+        .eq("business_id", business.id)
+        .eq("table_id", tableId)
+        .maybeSingle();
+      if (existing) {
+        return {
+          ok: true,
+          ticketId: existing.id as string,
+          cart: (existing.cart as TableCart) || { items: [] },
+        };
+      }
+    }
+    console.error("openTableTicket:", error);
+    return { error: "Could not open the table. Please try again." };
+  }
+
+  return {
+    ok: true,
+    ticketId: data.id as string,
+    cart: (data.cart as TableCart) || { items: [] },
+  };
+}
+
+// Load a table ticket WITHOUT deleting it (the table stays occupied).
+export async function loadTableTicket(
+  ticketId: string
+): Promise<
+  | { ok: true; cart: TableCart; tableId: string | null; guestCount: number | null }
+  | { error: string }
+> {
+  if (!ticketId) return { error: "Missing ticket." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("open_tickets")
+    .select("id, cart, table_id, guest_count")
+    .eq("id", ticketId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (error || !data) return { error: "That table is no longer open." };
+
+  return {
+    ok: true,
+    cart: (data.cart as TableCart) || { items: [] },
+    tableId: (data.table_id as string | null) ?? null,
+    guestCount: (data.guest_count as number | null) ?? null,
+  };
+}
+
+// Re-save a table ticket's cart as items are added/removed (autosave).
+export async function updateTableTicket(
+  ticketId: string,
+  cart: TableCart
+): Promise<{ ok: true } | { error: string }> {
+  if (!ticketId) return { error: "Missing ticket." };
+  const parsed = tableCartSchema.safeParse(cart);
+  if (!parsed.success) return { error: "Could not save the table." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("open_tickets")
+    .update({ cart: parsed.data })
+    .eq("id", ticketId)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("updateTableTicket:", error);
+    return { error: "Could not save the table." };
+  }
+  return { ok: true };
+}
+
+// Close a table: remove its open ticket AND clear that table's open kitchen
+// tickets, so a paid-out or voided table never haunts the kitchen screen.
+export async function closeTableTicket(
+  ticketId: string
+): Promise<{ ok: true } | { error: string }> {
+  if (!ticketId) return { error: "Missing ticket." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data: ticket } = await supabase
+    .from("open_tickets")
+    .select("id, table_id")
+    .eq("id", ticketId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+
+  const tableId = ticket ? ((ticket.table_id as string | null) ?? null) : null;
+  if (tableId) {
+    await supabase
+      .from("kitchen_tickets")
+      .update({ fulfilled_at: new Date().toISOString() })
+      .eq("business_id", business.id)
+      .eq("table_id", tableId)
+      .is("fulfilled_at", null);
+  }
+
+  const { error } = await supabase
+    .from("open_tickets")
+    .delete()
+    .eq("id", ticketId)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("closeTableTicket:", error);
+    return { error: "Could not close the table." };
+  }
+  return { ok: true };
+}
+
+// Summaries of all currently-open tables for the floor view.
+export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("open_tickets")
+    .select("id, table_id, guest_count, opened_at, cart")
+    .eq("business_id", business.id)
+    .not("table_id", "is", null);
+  if (error) {
+    console.error("listOpenTableTickets:", error);
+    return [];
+  }
+
+  return (data ?? []).map((t) => {
+    const cart = (t.cart as TableCart) || { items: [] };
+    const items = Array.isArray(cart.items) ? cart.items : [];
+    let itemCount = 0;
+    let subtotal = 0;
+    for (const it of items) {
+      const qty = Number(it.quantity) || 0;
+      itemCount += qty;
+      subtotal += (Number(it.unit_price) || 0) * qty;
+    }
+    return {
+      id: t.id as string,
+      table_id: t.table_id as string,
+      guest_count: (t.guest_count as number | null) ?? null,
+      opened_at: t.opened_at as string,
+      item_count: itemCount,
+      subtotal: Math.round(subtotal * 100) / 100,
+    };
+  });
+}
