@@ -12,7 +12,10 @@ const lineSchema = z.object({
   name: z.string().min(1).max(120),
   unit_price: z.coerce.number().min(0).max(1000000),
   quantity: z.coerce.number().int().min(1).max(1000),
+  note: z.string().max(280).optional().nullable(),
 });
+
+const DINING_OPTIONS = ["dine_in", "takeout", "delivery", "pickup"] as const;
 
 const paymentLineSchema = z.object({
   method: z.enum(["cash", "card", "other"]),
@@ -34,6 +37,7 @@ const orderSchema = z.object({
   tax_exempt_reason_note: z.string().max(500).optional(),
   customer_id: z.string().uuid().optional().nullable(),
   idempotency_key: z.string().uuid().optional(),
+  dining_option: z.enum(DINING_OPTIONS).optional().nullable(),
 });
 
 type PaymentInput = {
@@ -61,6 +65,7 @@ type OrderInput = {
   tax_exempt_reason_note?: string;
   customer_id?: string | null;
   idempotency_key?: string;
+  dining_option?: "dine_in" | "takeout" | "delivery" | "pickup" | null;
 };
 
 type Tender = {
@@ -361,10 +366,12 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     distinctMethods.length > 1 ? "split" : distinctMethods[0];
 
   const snapshot = {
+    dining_option: parsed.data.dining_option ?? null,
     items: parsed.data.items.map((i) => ({
       name: i.name,
       unit_price: i.unit_price,
       quantity: i.quantity,
+      note: i.note ?? null,
     })),
     subtotal: Math.round(subtotal * 100) / 100,
     discount: {

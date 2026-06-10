@@ -41,6 +41,8 @@ type CartLine = {
   taxFrac: number;
   // How many of this line have already been fired to the kitchen (table mode).
   sent_qty?: number;
+  // Optional kitchen note ("no onions", "well done").
+  note?: string | null;
 };
 // Binding when the register is opened for a specific full-service table.
 type TableBinding = { tableId: string; ticketId: string; tableLabel: string };
@@ -61,6 +63,8 @@ type Receipt = {
   paymentMethod: string;
   payments: PaymentLine[];
   at: string;
+  diningOption?: string | null;
+  bill?: boolean;
 };
 type CardCfg =
   | { enabled: true; applicationId: string; environment: string; merchantId: string }
@@ -79,6 +83,7 @@ type CardModalState = {
     tax_exempt_reason_note?: string;
     customer_id: string | null;
     idempotency_key: string;
+    dining_option?: "dine_in" | "takeout" | "delivery" | "pickup";
   };
   receipt: {
     items: CartLine[];
@@ -185,6 +190,11 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   // Which compact cart action sheet is open, and which cart line is being edited.
   const [sheet, setSheet] = useState<null | "discount" | "tip" | "tax" | "customer">(null);
   const [editLineIndex, setEditLineIndex] = useState<number | null>(null);
+  const [diningOption, setDiningOption] = useState<"dine_in" | "takeout" | "delivery" | "pickup">("dine_in");
+  // Custom (open) item entry.
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customPrice, setCustomPrice] = useState("");
 
   const itemTaxableById: Record<string, boolean> = {};
   const itemTaxFracById: Record<string, number> = {};
@@ -354,6 +364,44 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setEditLineIndex(null);
   }
 
+  function setLineNote(index: number, note: string) {
+    setCart((prev) => prev.map((l, i) => (i === index ? { ...l, note: note } : l)));
+  }
+
+  // Add an open/custom item (ad-hoc name + price, no catalog item).
+  function addCustomItem() {
+    const name = customName.trim();
+    if (!name) return;
+    const price = Math.round((parseFloat(customPrice) || 0) * 100) / 100;
+    addLine({ catalog_item_id: null, variation_id: null, name: name, unit_price: price, taxable: true, taxFrac: taxRate });
+    setCustomName("");
+    setCustomPrice("");
+    setCustomOpen(false);
+  }
+
+  // Print the current unpaid cart as a bill (pre-receipt) — no order created.
+  function printBill() {
+    if (cart.length === 0) return;
+    const rec: Receipt = {
+      id: "bill",
+      saleNumber: 0,
+      businessName,
+      customerName: customer ? customer.name : null,
+      items: cart,
+      subtotal: subtotal,
+      discount: discount,
+      tax: tax,
+      tip: tipNum,
+      total: total,
+      paymentMethod: "",
+      payments: [],
+      at: new Date().toLocaleString(),
+      diningOption: diningOption,
+      bill: true,
+    };
+    doPrint(rec);
+  }
+
   // Serialize the current sale into the stored table-cart shape (preserves
   // per-line sent_qty so the kitchen "Send" only fires new items).
   function buildTablePayload(): TableCart {
@@ -365,6 +413,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         unit_price: l.unit_price,
         quantity: l.quantity,
         sent_qty: l.sent_qty ?? 0,
+        note: l.note ?? null,
       })),
       tip: tip,
       discount_mode: discountMode,
@@ -619,6 +668,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       paymentMethod: pm,
       payments: payments,
       at: new Date().toLocaleString(),
+      diningOption: diningOption,
     };
     setReceipt(rec);
     setTenderOpen(false);
@@ -643,6 +693,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       tax_exempt_reason_note:
         taxExempt && taxExemptReason === "other" ? taxExemptNote.trim() : undefined,
       customer_id: customer ? customer.id : null,
+      dining_option: diningOption,
     };
   }
 
@@ -747,6 +798,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
           taxExempt && taxExemptReason === "other" ? taxExemptNote.trim() : undefined,
         customer_id: customer ? customer.id : null,
         idempotency_key: nextIdemKey(),
+        dining_option: diningOption,
       },
       receipt: {
         items: cart,
@@ -778,6 +830,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       paymentMethod: "card",
       payments: [{ method: "card", amount: m.receipt.total, tendered: null, change: null }],
       at: new Date().toLocaleString(),
+      diningOption: diningOption,
     };
     setReceipt(rec);
     setCardModal(null);
@@ -1198,7 +1251,12 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                   </div>
                 )}
 
-                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search items" className="h-10" />
+                <div className="flex gap-2">
+                  <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search items" className="h-10 flex-1" />
+                  <Button type="button" variant="outline" className="h-10 shrink-0" onClick={() => { setCustomName(""); setCustomPrice(""); setCustomOpen(true); }}>
+                    Custom
+                  </Button>
+                </div>
               </div>
 
               <div className="flex-1 min-h-0 overflow-y-auto p-3">
@@ -1240,6 +1298,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                 <h2 className="font-medium">Current sale</h2>
                 {cart.length > 0 && (
                   <div className="flex items-center gap-3">
+                    <button type="button" onClick={printBill} className="text-xs text-muted-foreground underline hover:text-foreground">Bill</button>
                     {!tableBinding && (
                       <button type="button" onClick={openHold} className="text-xs text-muted-foreground underline hover:text-foreground">Hold</button>
                     )}
@@ -1272,6 +1331,15 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
               </div>
 
               <div className="shrink-0 border-t border-border">
+                {cart.length > 0 && (
+                  <div className="flex items-center gap-1 p-2 border-b border-border">
+                    {(["dine_in", "takeout", "delivery", "pickup"] as const).map((d) => (
+                      <button key={d} type="button" onClick={() => setDiningOption(d)} className={"flex-1 text-xs rounded-md border px-1 py-1.5 capitalize " + (diningOption === d ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>
+                        {d.replace("_", " ")}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {tableBinding && cart.length > 0 && (
                   <div className="p-2 border-b border-border">
                     <Button variant="outline" className="w-full h-11" onClick={sendToKitchen} disabled={pending || sending || unsentCount === 0}>
@@ -1352,9 +1420,38 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                   </div>
                   <span className="text-base font-semibold tabular-nums">{"$" + (cart[editLineIndex].unit_price * cart[editLineIndex].quantity).toFixed(2)}</span>
                 </div>
+                <div className="space-y-1 mt-3">
+                  <Label className="text-xs">Kitchen note</Label>
+                  <Input value={cart[editLineIndex].note ?? ""} onChange={(e) => setLineNote(editLineIndex, e.target.value)} placeholder="e.g. no onions, well done" className="h-10" />
+                </div>
                 <Button variant="outline" className="w-full mt-4 text-red-600" onClick={() => removeLine(editLineIndex)}>
                   Remove from sale
                 </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Custom (open) item sheet */}
+          {customOpen && (
+            <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setCustomOpen(false)}>
+              <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium">Custom item</h3>
+                  <button type="button" onClick={() => setCustomOpen(false)} className="text-xs text-muted-foreground underline">Cancel</button>
+                </div>
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Name</Label>
+                    <Input value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="Item name" className="h-11" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Price</Label>
+                    <Input type="number" min="0" step="0.01" value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} placeholder="0.00" className="h-11 text-right" />
+                  </div>
+                  <Button className="w-full h-11 mt-1" onClick={addCustomItem} disabled={!customName.trim()}>
+                    Add to sale
+                  </Button>
+                </div>
               </div>
             </div>
           )}

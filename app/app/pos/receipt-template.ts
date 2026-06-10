@@ -68,6 +68,16 @@ export type ReceiptData = {
   total: number;
   payments: { method: string; amount: number; tendered: number | null; change: number | null }[];
   at: string;
+  // Optional: dining option label and "this is an unpaid bill" pre-receipt flag.
+  diningOption?: string | null;
+  bill?: boolean;
+};
+
+const DINING_LABELS: Record<string, string> = {
+  dine_in: "Dine in",
+  takeout: "Takeout",
+  delivery: "Delivery",
+  pickup: "Pickup",
 };
 
 function esc(s: string): string {
@@ -109,10 +119,14 @@ function contactBlock(s: ReceiptSettings): string {
 
 function metaBlock(r: ReceiptData, s: ReceiptSettings): string {
   const bits: string[] = [];
-  if (s.showSaleNumber) bits.push("Sale #" + r.saleNumber);
+  if (s.showSaleNumber && !r.bill) bits.push("Sale #" + r.saleNumber);
   if (s.showDateTime) bits.push(esc(r.at));
   let html = "";
+  if (r.bill) html += '<div class="meta">\u2014 BILL \u2014 not a receipt</div>';
   if (bits.length) html += '<div class="meta">' + bits.join("  \u00b7  ") + "</div>";
+  if (r.diningOption && DINING_LABELS[r.diningOption]) {
+    html += '<div class="meta">' + DINING_LABELS[r.diningOption] + "</div>";
+  }
   if (s.showCustomer && r.customerName) html += '<div class="meta">Customer: ' + esc(r.customerName) + "</div>";
   return html;
 }
@@ -245,7 +259,7 @@ export function buildReceiptHtml(r: ReceiptData, settingsIn: Partial<ReceiptSett
     '<div class="rule"></div>' +
     totals +
     '<div class="rule"></div>' +
-    paymentBlock(r) +
+    (r.bill ? "" : paymentBlock(r)) +
     footerBlock(s);
 
   return (

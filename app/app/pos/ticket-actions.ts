@@ -175,6 +175,7 @@ export async function discardTicket(
 // sent_qty so "Send to kitchen" only fires not-yet-sent items.
 const tableCartLineSchema = cartLineSchema.extend({
   sent_qty: z.coerce.number().int().min(0).max(1000).optional(),
+  note: z.string().max(280).optional().nullable(),
 });
 const tableCartSchema = z.object({
   items: z.array(tableCartLineSchema).max(200),
@@ -380,12 +381,12 @@ export async function sendTableTicket(
   }
 
   // Items to fire = quantity beyond what was already sent.
-  const fired: { name: string; quantity: number }[] = [];
+  const fired: { name: string; quantity: number; note?: string | null }[] = [];
   const updatedItems = parsed.data.items.map((it) => {
     const qty = Number(it.quantity) || 0;
     const sent = Number(it.sent_qty) || 0;
     const delta = qty - sent;
-    if (delta > 0) fired.push({ name: it.name, quantity: delta });
+    if (delta > 0) fired.push({ name: it.name, quantity: delta, note: it.note ?? null });
     return { ...it, sent_qty: qty };
   });
 

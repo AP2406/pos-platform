@@ -5,13 +5,14 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { markOrderFulfilled, markKitchenTicketFulfilled } from "./actions";
 
+type KitchenItem = { name: string; quantity: number; note?: string | null };
 type KitchenOrder = {
   id: string;
   kind: "order" | "kitchen";
   createdAt: string;
   customerName: string | null;
   tableLabel: string | null;
-  items: { name: string; quantity: number }[];
+  items: KitchenItem[];
 };
 
 export function KitchenClient({
@@ -90,9 +91,7 @@ export function KitchenClient({
       createdAt: (k.fired_at as string) ?? new Date().toISOString(),
       customerName: null,
       tableLabel: (k.label as string | null) ?? null,
-      items: Array.isArray(k.items)
-        ? (k.items as { name: string; quantity: number }[])
-        : [],
+      items: Array.isArray(k.items) ? (k.items as KitchenItem[]) : [],
     }));
 
     setOrders(
@@ -195,11 +194,16 @@ export function KitchenClient({
               </div>
             ) : (
               o.items.map((it, i) => (
-                <div key={i} className="flex justify-between">
-                  <span className="truncate">{it.name}</span>
-                  <span className="tabular-nums text-muted-foreground">
-                    {"x" + it.quantity}
-                  </span>
+                <div key={i} className="flex flex-col">
+                  <div className="flex justify-between">
+                    <span className="truncate">{it.name}</span>
+                    <span className="tabular-nums text-muted-foreground">
+                      {"x" + it.quantity}
+                    </span>
+                  </div>
+                  {it.note ? (
+                    <span className="text-xs text-amber-600 pl-2">{"→ " + it.note}</span>
+                  ) : null}
                 </div>
               ))
             )}

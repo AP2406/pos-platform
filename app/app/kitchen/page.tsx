@@ -76,7 +76,7 @@ export default async function KitchenPage() {
     customerName: null as string | null,
     tableLabel: (k.label as string | null) ?? null,
     items: Array.isArray(k.items)
-      ? (k.items as { name: string; quantity: number }[])
+      ? (k.items as { name: string; quantity: number; note?: string | null }[])
       : [],
   }));
 
