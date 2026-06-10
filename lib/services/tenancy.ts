@@ -30,6 +30,10 @@ export type BusinessContext = {
     timezone: string;
     drivers_enabled: boolean;
     access_status?: string;
+    // Stored onboarding config (modules + mode). Present at runtime because
+    // getCurrentBusiness selects businesses(*); typed here so mode-gated
+    // features (e.g. full-service floor) can read business.config.mode.
+    config?: { mode?: string } | null;
   };
 };
 

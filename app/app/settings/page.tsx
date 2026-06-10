@@ -8,6 +8,9 @@ import { TaxRatesCard } from "./tax-rates-card";
 import { TrainingModeForm } from "./training-mode-form";
 import { ShowPhotosForm } from "./show-photos-form";
 import { StaffCard } from "./staff-card";
+import { FloorCard } from "./floor-card";
+import { hasFloorService } from "@/lib/modules/modes";
+import { listFloor } from "../floor/floor-actions";
 import { LeadInboxCard } from "./lead-inbox-card";
 import { DriversSettingCard } from "./drivers-setting-card";
 import { NotificationsCard } from "./notifications-card";
@@ -73,6 +76,13 @@ export default async function SettingsPage() {
       is_active: s.is_active as boolean,
       has_pin: !!s.pin_hash,
     }));
+  }
+
+  const showFloor =
+    hasFloorService(business) && (role === "owner" || role === "manager");
+  let floor: Awaited<ReturnType<typeof listFloor>> = { areas: [], tables: [] };
+  if (showFloor) {
+    floor = await listFloor();
   }
 
   let receiptSettings: Partial<ReceiptSettings> | null = null;
@@ -199,6 +209,19 @@ export default async function SettingsPage() {
         <div className="bg-card border border-border rounded-lg p-6">
           <SectionHeader>Staff and PINs</SectionHeader>
           <StaffCard initialStaff={staffList} />
+        </div>
+      ),
+    });
+  }
+
+  if (showFloor) {
+    sections.push({
+      key: "floor",
+      label: "Floor",
+      content: (
+        <div className="bg-card border border-border rounded-lg p-6">
+          <SectionHeader>Floor plan</SectionHeader>
+          <FloorCard initialAreas={floor.areas} initialTables={floor.tables} />
         </div>
       ),
     });

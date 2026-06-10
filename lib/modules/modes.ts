@@ -117,6 +117,23 @@ export const BUSINESS_MODES: BusinessMode[] = [
   },
 ];
 
+// The stored mode key for a business, read from its config JSONB (or null).
+export function getBusinessMode(
+  business: { config?: { mode?: string } | null } | null | undefined
+): string | null {
+  const c = business?.config;
+  if (c && typeof c === "object" && typeof c.mode === "string") return c.mode;
+  return null;
+}
+
+// True only for full-service restaurants, which get the table-service floor.
+// Every other mode (and the transportation register) is unaffected.
+export function hasFloorService(
+  business: { config?: { mode?: string } | null } | null | undefined
+): boolean {
+  return getBusinessMode(business) === "full_service";
+}
+
 // Friendly display label for a business: prefer its stored mode, otherwise a
 // humanized industry (so older businesses like the transportation one still
 // read nicely as "Transportation").
