@@ -49,15 +49,40 @@ export default async function KitchenPage() {
     }
   }
 
-  const initialOrders = orderRows.map((o) => ({
+  const orderCards = orderRows.map((o) => ({
     id: o.id as string,
-    total: Number(o.total),
+    kind: "order" as const,
     createdAt: (o.created_at as string) ?? new Date().toISOString(),
     customerName: o.customer_id
       ? customerNames[o.customer_id as string] ?? null
       : null,
+    tableLabel: null as string | null,
     items: itemsByOrder[o.id as string] ?? [],
   }));
+
+  // Fired-but-unpaid table tickets (full service). Kept separate from orders so
+  // they never count as revenue; the KDS shows both.
+  const { data: kts } = await supabase
+    .from("kitchen_tickets")
+    .select("id, label, items, fired_at")
+    .eq("business_id", business.id)
+    .is("fulfilled_at", null)
+    .order("fired_at", { ascending: true });
+
+  const kitchenCards = (kts ?? []).map((k) => ({
+    id: k.id as string,
+    kind: "kitchen" as const,
+    createdAt: (k.fired_at as string) ?? new Date().toISOString(),
+    customerName: null as string | null,
+    tableLabel: (k.label as string | null) ?? null,
+    items: Array.isArray(k.items)
+      ? (k.items as { name: string; quantity: number }[])
+      : [],
+  }));
+
+  const initialOrders = [...orderCards, ...kitchenCards].sort((a, b) =>
+    a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0
+  );
 
   return (
     <div>

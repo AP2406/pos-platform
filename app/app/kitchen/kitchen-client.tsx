@@ -3,13 +3,14 @@
 import { useEffect, useState, useCallback, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { markOrderFulfilled } from "./actions";
+import { markOrderFulfilled, markKitchenTicketFulfilled } from "./actions";
 
 type KitchenOrder = {
   id: string;
-  total: number;
+  kind: "order" | "kitchen";
   createdAt: string;
   customerName: string | null;
+  tableLabel: string | null;
   items: { name: string; quantity: number }[];
 };
 
@@ -28,7 +29,7 @@ export function KitchenClient({
 
     const { data: orderRows } = await supabase
       .from("orders")
-      .select("id, total, customer_id, created_at")
+      .select("id, customer_id, created_at")
       .eq("business_id", businessId)
       .eq("status", "paid")
       .is("fulfilled_at", null)
@@ -67,31 +68,54 @@ export function KitchenClient({
       }
     }
 
+    const orderCards: KitchenOrder[] = rows.map((o) => ({
+      id: o.id as string,
+      kind: "order",
+      createdAt: (o.created_at as string) ?? new Date().toISOString(),
+      customerName: o.customer_id ? customerNames[o.customer_id as string] ?? null : null,
+      tableLabel: null,
+      items: itemsByOrder[o.id as string] ?? [],
+    }));
+
+    const { data: kts } = await supabase
+      .from("kitchen_tickets")
+      .select("id, label, items, fired_at")
+      .eq("business_id", businessId)
+      .is("fulfilled_at", null)
+      .order("fired_at", { ascending: true });
+
+    const kitchenCards: KitchenOrder[] = (kts ?? []).map((k) => ({
+      id: k.id as string,
+      kind: "kitchen",
+      createdAt: (k.fired_at as string) ?? new Date().toISOString(),
+      customerName: null,
+      tableLabel: (k.label as string | null) ?? null,
+      items: Array.isArray(k.items)
+        ? (k.items as { name: string; quantity: number }[])
+        : [],
+    }));
+
     setOrders(
-      rows.map((o) => ({
-        id: o.id as string,
-        total: Number(o.total),
-        createdAt: (o.created_at as string) ?? new Date().toISOString(),
-        customerName: o.customer_id
-          ? customerNames[o.customer_id as string] ?? null
-          : null,
-        items: itemsByOrder[o.id as string] ?? [],
-      }))
+      [...orderCards, ...kitchenCards].sort((a, b) =>
+        a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0
+      )
     );
   }, [businessId]);
 
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
-      .channel("kitchen-orders-" + businessId)
+      .channel("kitchen-" + businessId)
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "orders",
-          filter: "business_id=eq." + businessId,
-        },
+        { event: "*", schema: "public", table: "orders", filter: "business_id=eq." + businessId },
+        () => {
+          refresh();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "kitchen_tickets", filter: "business_id=eq." + businessId },
         () => {
           refresh();
         }
@@ -103,10 +127,13 @@ export function KitchenClient({
     };
   }, [businessId, refresh]);
 
-  function handleDone(id: string) {
-    setOrders((prev) => prev.filter((o) => o.id !== id));
+  function handleDone(o: KitchenOrder) {
+    setOrders((prev) => prev.filter((x) => x.id !== o.id));
     startTransition(async () => {
-      const res = await markOrderFulfilled(id);
+      const res =
+        o.kind === "kitchen"
+          ? await markKitchenTicketFulfilled(o.id)
+          : await markOrderFulfilled(o.id);
       if ("error" in res) {
         refresh();
       }
@@ -142,7 +169,16 @@ export function KitchenClient({
           className="bg-card border border-border rounded-lg p-4 flex flex-col"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="font-medium text-sm">{"#" + o.id.slice(0, 8)}</span>
+            <span className="font-medium text-sm flex items-center gap-2">
+              {o.kind === "kitchen" ? (
+                <>
+                  <span className="text-[10px] uppercase tracking-wide rounded bg-emerald-500/15 text-emerald-600 px-1.5 py-0.5">Table</span>
+                  {o.tableLabel ?? "Table"}
+                </>
+              ) : (
+                "#" + o.id.slice(0, 8)
+              )}
+            </span>
             <span className="text-xs text-muted-foreground">
               {timeLabel(o.createdAt)}
             </span>
@@ -170,7 +206,7 @@ export function KitchenClient({
           </div>
           <Button
             className="w-full mt-3"
-            onClick={() => handleDone(o.id)}
+            onClick={() => handleDone(o)}
             disabled={pending}
           >
             Done

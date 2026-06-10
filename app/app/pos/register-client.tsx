@@ -13,6 +13,7 @@ import {
   discardTicket,
   updateTableTicket,
   closeTableTicket,
+  sendTableTicket,
   type OpenTicketSummary,
   type TableCart,
 } from "./ticket-actions";
@@ -384,6 +385,29 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableBinding, cart, tip, discountMode, discountValue, discountReason, discountReasonNote, customer]);
+
+  // Count of items not yet fired to the kitchen (table mode).
+  const unsentCount = cart.reduce(
+    (s, l) => s + Math.max(0, l.quantity - (l.sent_qty ?? 0)),
+    0
+  );
+  const [sending, setSending] = useState(false);
+
+  // Fire the new items to the kitchen, then mark them sent locally.
+  function sendToKitchen() {
+    if (!tableBinding || unsentCount === 0) return;
+    setError(null);
+    setSending(true);
+    startTransition(async () => {
+      const res = await sendTableTicket(tableBinding.ticketId, buildTablePayload());
+      setSending(false);
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      setCart((prev) => prev.map((l) => ({ ...l, sent_qty: l.quantity })));
+    });
+  }
 
   // Save immediately, then return to the floor (the "Tables" back control).
   function exitToFloor() {
@@ -1248,6 +1272,13 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
               </div>
 
               <div className="shrink-0 border-t border-border">
+                {tableBinding && cart.length > 0 && (
+                  <div className="p-2 border-b border-border">
+                    <Button variant="outline" className="w-full h-11" onClick={sendToKitchen} disabled={pending || sending || unsentCount === 0}>
+                      {sending ? "Sending..." : unsentCount > 0 ? "Send " + unsentCount + " to kitchen" : "All sent to kitchen"}
+                    </Button>
+                  </div>
+                )}
                 {cart.length > 0 && (
                   <div className="grid grid-cols-4 gap-1 p-2 border-b border-border">
                     <button type="button" onClick={() => setSheet("discount")} className={"rounded-md border px-1 py-2 text-center hover:bg-accent " + (discount > 0 ? "border-foreground" : "border-border")}>

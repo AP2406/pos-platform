@@ -342,6 +342,88 @@ export async function closeTableTicket(
   return { ok: true };
 }
 
+// Fire the not-yet-sent items of a table ticket to the kitchen. Creates a
+// kitchen_tickets row (NOT a paid order, so reporting is untouched) and bumps
+// each line's sent_qty so re-firing only sends new items. Returns the count
+// fired so the register can mark those lines as sent.
+export async function sendTableTicket(
+  ticketId: string,
+  cart: TableCart
+): Promise<{ ok: true; fired: number } | { error: string }> {
+  if (!ticketId) return { error: "Missing ticket." };
+  const parsed = tableCartSchema.safeParse(cart);
+  if (!parsed.success) return { error: "Could not read the table." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: ticket } = await supabase
+    .from("open_tickets")
+    .select("id, table_id")
+    .eq("id", ticketId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!ticket) return { error: "That table is no longer open." };
+  const tableId = (ticket.table_id as string | null) ?? null;
+
+  let label: string | null = null;
+  if (tableId) {
+    const { data: table } = await supabase
+      .from("floor_tables")
+      .select("label")
+      .eq("id", tableId)
+      .eq("business_id", business.id)
+      .maybeSingle();
+    label = table ? (table.label as string) : null;
+  }
+
+  // Items to fire = quantity beyond what was already sent.
+  const fired: { name: string; quantity: number }[] = [];
+  const updatedItems = parsed.data.items.map((it) => {
+    const qty = Number(it.quantity) || 0;
+    const sent = Number(it.sent_qty) || 0;
+    const delta = qty - sent;
+    if (delta > 0) fired.push({ name: it.name, quantity: delta });
+    return { ...it, sent_qty: qty };
+  });
+
+  if (fired.length === 0) {
+    // Nothing new — still persist any pending cart edits, then no-op.
+    await supabase
+      .from("open_tickets")
+      .update({ cart: { ...parsed.data, items: updatedItems } })
+      .eq("id", ticketId)
+      .eq("business_id", business.id);
+    return { ok: true, fired: 0 };
+  }
+
+  const { error: insErr } = await supabase.from("kitchen_tickets").insert({
+    business_id: business.id,
+    table_id: tableId,
+    label: label,
+    items: fired,
+    created_by: user ? user.id : null,
+  });
+  if (insErr) {
+    console.error("sendTableTicket insert:", insErr);
+    return { error: "Could not send to the kitchen. Please try again." };
+  }
+
+  const { error: updErr } = await supabase
+    .from("open_tickets")
+    .update({ cart: { ...parsed.data, items: updatedItems } })
+    .eq("id", ticketId)
+    .eq("business_id", business.id);
+  if (updErr) {
+    console.error("sendTableTicket update:", updErr);
+    // The fire succeeded; the client will still mark items sent locally.
+  }
+
+  return { ok: true, fired: fired.reduce((s, f) => s + f.quantity, 0) };
+}
+
 // Summaries of all currently-open tables for the floor view.
 export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
   const { business } = await requireBusiness();
