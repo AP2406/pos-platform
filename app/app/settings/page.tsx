@@ -80,9 +80,10 @@ export default async function SettingsPage() {
 
   const showFloor =
     hasFloorService(business) && (role === "owner" || role === "manager");
-  let floor: Awaited<ReturnType<typeof listFloor>> = { areas: [], tables: [] };
+  let floorElements: Awaited<ReturnType<typeof listFloor>>["elements"] = [];
   if (showFloor) {
-    floor = await listFloor();
+    const f = await listFloor();
+    floorElements = f.elements;
   }
 
   let receiptSettings: Partial<ReceiptSettings> | null = null;
@@ -221,7 +222,7 @@ export default async function SettingsPage() {
       content: (
         <div className="bg-card border border-border rounded-lg p-6">
           <SectionHeader>Floor plan</SectionHeader>
-          <FloorCard initialAreas={floor.areas} initialTables={floor.tables} />
+          <FloorCard initialElements={floorElements} />
         </div>
       ),
     });

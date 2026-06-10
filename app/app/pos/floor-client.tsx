@@ -14,7 +14,7 @@ import {
 } from "./ticket-actions";
 import type { ActiveStaff } from "./staff-session";
 import type { ReceiptSettings } from "./receipt-template";
-import type { FloorArea, FloorTable } from "../floor/floor-actions";
+import type { FloorElement } from "../floor/floor-actions";
 
 type Variation = { id: string; name: string; price: number };
 type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; variations: Variation[]; modifiers: Variation[] };
@@ -31,33 +31,30 @@ type RegisterProps = {
   categoryColors: Record<string, string>;
 };
 
-type Selected = { tableId: string; ticketId: string; tableLabel: string; cart: TableCart };
+type Selected = { elementId: string; ticketId: string; tableLabel: string; cart: TableCart };
 
 export function FloorClient({
   register,
-  areas,
   tables,
   initialOpen,
 }: {
   register: RegisterProps;
-  areas: FloorArea[];
-  tables: FloorTable[];
+  tables: FloorElement[];
   initialOpen: TableTicketSummary[];
 }) {
-  const [openByTable, setOpenByTable] = useState<Record<string, TableTicketSummary>>(() => {
+  const [openByElement, setOpenByElement] = useState<Record<string, TableTicketSummary>>(() => {
     const m: Record<string, TableTicketSummary> = {};
-    for (const t of initialOpen) m[t.table_id] = t;
+    for (const t of initialOpen) m[t.element_id] = t;
     return m;
   });
   const [selected, setSelected] = useState<Selected | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  // Guest-count prompt before opening an available table.
-  const [promptTable, setPromptTable] = useState<FloorTable | null>(null);
+  const [promptTable, setPromptTable] = useState<FloorElement | null>(null);
   const [guests, setGuests] = useState("");
 
-  // A ticking "now" so open-table timers stay live without reading the clock
+  // Ticking "now" so open-table timers stay live without reading the clock
   // during render. Set from a timer callback (never synchronously in render).
   const [nowMs, setNowMs] = useState(0);
   useEffect(() => {
@@ -70,16 +67,14 @@ export function FloorClient({
     };
   }, []);
 
-  const activeTables = tables.filter((t) => t.is_active);
-
   async function refreshOpen() {
     const rows = await listOpenTableTickets();
     const m: Record<string, TableTicketSummary> = {};
-    for (const t of rows) m[t.table_id] = t;
-    setOpenByTable(m);
+    for (const t of rows) m[t.element_id] = t;
+    setOpenByElement(m);
   }
 
-  function enterTable(table: FloorTable, guestCount: number | null) {
+  function enterTable(table: FloorElement, guestCount: number | null) {
     setError(null);
     setPromptTable(null);
     startTransition(async () => {
@@ -88,11 +83,11 @@ export function FloorClient({
         setError(res.error);
         return;
       }
-      setSelected({ tableId: table.id, ticketId: res.ticketId, tableLabel: table.label, cart: res.cart });
+      setSelected({ elementId: table.id, ticketId: res.ticketId, tableLabel: table.label ?? "Table", cart: res.cart });
     });
   }
 
-  function resumeTable(table: FloorTable, ticketId: string) {
+  function resumeTable(table: FloorElement, ticketId: string) {
     setError(null);
     startTransition(async () => {
       const res = await loadTableTicket(ticketId);
@@ -101,7 +96,7 @@ export function FloorClient({
         await refreshOpen();
         return;
       }
-      setSelected({ tableId: table.id, ticketId: ticketId, tableLabel: table.label, cart: res.cart });
+      setSelected({ elementId: table.id, ticketId: ticketId, tableLabel: table.label ?? "Table", cart: res.cart });
     });
   }
 
@@ -115,21 +110,12 @@ export function FloorClient({
       <RegisterClient
         key={selected.ticketId}
         {...register}
-        tableBinding={{ tableId: selected.tableId, ticketId: selected.ticketId, tableLabel: selected.tableLabel }}
+        tableBinding={{ tableId: selected.elementId, ticketId: selected.ticketId, tableLabel: selected.tableLabel }}
         initialTableCart={selected.cart}
         onExitToFloor={exitToFloor}
       />
     );
   }
-
-  // Group tables by area (areas in order, then any Unassigned).
-  const groups: { key: string; name: string; tables: FloorTable[] }[] = [];
-  for (const a of areas) {
-    const inArea = activeTables.filter((t) => t.area_id === a.id);
-    if (inArea.length > 0) groups.push({ key: a.id, name: a.name, tables: inArea });
-  }
-  const unassigned = activeTables.filter((t) => !t.area_id);
-  if (unassigned.length > 0) groups.push({ key: "none", name: "Unassigned", tables: unassigned });
 
   function minutesOpen(openedAt: string): number {
     if (!nowMs) return 0;
@@ -145,76 +131,68 @@ export function FloorClient({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4">
-        {activeTables.length === 0 ? (
+        {tables.length === 0 ? (
           <div className="max-w-md mx-auto mt-10 text-center">
             <p className="text-sm text-muted-foreground">
-              No tables yet. Add areas and tables in Settings &rarr; Floor, then
-              they&apos;ll appear here.
+              No tables yet. Design your floor in Settings &rarr; Floor, then your
+              tables appear here.
             </p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {groups.map((g) => (
-              <div key={g.key}>
-                <h2 className="text-sm font-medium text-muted-foreground mb-2">{g.name}</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                  {g.tables.map((t) => {
-                    const open = openByTable[t.id];
-                    if (open) {
-                      return (
-                        <button
-                          key={t.id}
-                          type="button"
-                          disabled={pending}
-                          onClick={() => resumeTable(t, open.id)}
-                          className="text-left min-h-[104px] rounded-lg border border-emerald-500/50 bg-emerald-500/10 p-3 flex flex-col justify-between active:scale-[0.98] transition-transform"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold">{t.label}</span>
-                            <span className="text-[10px] uppercase tracking-wide text-emerald-600 font-medium">Open</span>
-                          </div>
-                          <div className="text-sm tabular-nums font-medium">{"$" + open.subtotal.toFixed(2)}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {minutesOpen(open.opened_at) + " min" + (open.guest_count ? "  ·  " + open.guest_count + " guests" : "")}
-                          </div>
-                        </button>
-                      );
-                    }
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        disabled={pending}
-                        onClick={() => { setGuests(""); setPromptTable(t); }}
-                        className="text-left min-h-[104px] rounded-lg border border-border bg-card hover:border-foreground/40 hover:bg-accent/50 p-3 flex flex-col justify-between active:scale-[0.98] transition-all"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold">{t.label}</span>
-                          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Open table</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground">{t.seats + " seats"}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {tables.map((t) => {
+              const open = openByElement[t.id];
+              if (open) {
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    disabled={pending}
+                    onClick={() => resumeTable(t, open.id)}
+                    className="text-left min-h-[104px] rounded-lg border border-emerald-500/50 bg-emerald-500/10 p-3 flex flex-col justify-between active:scale-[0.98] transition-transform"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold">{t.label ?? "Table"}</span>
+                      <span className="text-[10px] uppercase tracking-wide text-emerald-600 font-medium">Open</span>
+                    </div>
+                    <div className="text-sm tabular-nums font-medium">{"$" + open.subtotal.toFixed(2)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {minutesOpen(open.opened_at) + " min" + (open.guest_count ? "  ·  " + open.guest_count + " guests" : "")}
+                    </div>
+                  </button>
+                );
+              }
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  disabled={pending}
+                  onClick={() => { setGuests(""); setPromptTable(t); }}
+                  className="text-left min-h-[104px] rounded-lg border border-border bg-card hover:border-foreground/40 hover:bg-accent/50 p-3 flex flex-col justify-between active:scale-[0.98] transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">{t.label ?? "Table"}</span>
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Open table</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">Available</div>
+                </button>
+              );
+            })}
           </div>
         )}
         {error && <p className="text-sm text-red-600 mt-4">{error}</p>}
       </div>
 
-      {/* Guest-count prompt */}
       {promptTable && (
         <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setPromptTable(null)}>
           <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-xs" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-medium">{"Open " + promptTable.label}</h3>
+              <h3 className="font-medium">{"Open " + (promptTable.label ?? "table")}</h3>
               <button type="button" onClick={() => setPromptTable(null)} className="text-xs text-muted-foreground underline">Cancel</button>
             </div>
             <div className="space-y-1 mb-3">
               <Label className="text-xs">Guests (optional)</Label>
-              <Input type="number" min="1" max="99" value={guests} onChange={(e) => setGuests(e.target.value)} placeholder={String(promptTable.seats)} className="h-11" />
+              <Input type="number" min="1" max="99" value={guests} onChange={(e) => setGuests(e.target.value)} placeholder="2" className="h-11" />
             </div>
             <Button className="w-full h-12" disabled={pending} onClick={() => enterTable(promptTable, guests ? parseInt(guests) : null)}>
               Open table

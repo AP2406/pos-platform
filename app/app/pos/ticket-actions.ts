@@ -189,7 +189,7 @@ export type TableCart = z.infer<typeof tableCartSchema>;
 
 export type TableTicketSummary = {
   id: string;
-  table_id: string;
+  element_id: string;
   guest_count: number | null;
   opened_at: string;
   item_count: number;
@@ -199,10 +199,10 @@ export type TableTicketSummary = {
 // Open a table: create its persistent ticket. If the table already has an open
 // ticket (unique index race), return that one instead of erroring.
 export async function openTableTicket(
-  tableId: string,
+  elementId: string,
   guestCount?: number | null
 ): Promise<{ ok: true; ticketId: string; cart: TableCart } | { error: string }> {
-  if (!tableId) return { error: "Missing table." };
+  if (!elementId) return { error: "Missing table." };
   const { business } = await requireBusiness();
   const supabase = await createClient();
   const {
@@ -218,7 +218,7 @@ export async function openTableTicket(
     .from("open_tickets")
     .insert({
       business_id: business.id,
-      table_id: tableId,
+      element_id: elementId,
       guest_count: guests,
       cart: { items: [] },
       created_by: user ? user.id : null,
@@ -227,13 +227,13 @@ export async function openTableTicket(
     .single();
 
   if (error) {
-    // 23505 = the one-open-ticket-per-table unique index. Load the existing one.
+    // 23505 = the one-open-ticket-per-element unique index. Load the existing one.
     if ((error as { code?: string }).code === "23505") {
       const { data: existing } = await supabase
         .from("open_tickets")
         .select("id, cart")
         .eq("business_id", business.id)
-        .eq("table_id", tableId)
+        .eq("element_id", elementId)
         .maybeSingle();
       if (existing) {
         return {
@@ -258,7 +258,7 @@ export async function openTableTicket(
 export async function loadTableTicket(
   ticketId: string
 ): Promise<
-  | { ok: true; cart: TableCart; tableId: string | null; guestCount: number | null }
+  | { ok: true; cart: TableCart; elementId: string | null; guestCount: number | null }
   | { error: string }
 > {
   if (!ticketId) return { error: "Missing ticket." };
@@ -267,7 +267,7 @@ export async function loadTableTicket(
 
   const { data, error } = await supabase
     .from("open_tickets")
-    .select("id, cart, table_id, guest_count")
+    .select("id, cart, element_id, guest_count")
     .eq("id", ticketId)
     .eq("business_id", business.id)
     .maybeSingle();
@@ -276,7 +276,7 @@ export async function loadTableTicket(
   return {
     ok: true,
     cart: (data.cart as TableCart) || { items: [] },
-    tableId: (data.table_id as string | null) ?? null,
+    elementId: (data.element_id as string | null) ?? null,
     guestCount: (data.guest_count as number | null) ?? null,
   };
 }
@@ -315,18 +315,18 @@ export async function closeTableTicket(
 
   const { data: ticket } = await supabase
     .from("open_tickets")
-    .select("id, table_id")
+    .select("id, element_id")
     .eq("id", ticketId)
     .eq("business_id", business.id)
     .maybeSingle();
 
-  const tableId = ticket ? ((ticket.table_id as string | null) ?? null) : null;
-  if (tableId) {
+  const elementId = ticket ? ((ticket.element_id as string | null) ?? null) : null;
+  if (elementId) {
     await supabase
       .from("kitchen_tickets")
       .update({ fulfilled_at: new Date().toISOString() })
       .eq("business_id", business.id)
-      .eq("table_id", tableId)
+      .eq("element_id", elementId)
       .is("fulfilled_at", null);
   }
 
@@ -361,22 +361,22 @@ export async function sendTableTicket(
 
   const { data: ticket } = await supabase
     .from("open_tickets")
-    .select("id, table_id")
+    .select("id, element_id")
     .eq("id", ticketId)
     .eq("business_id", business.id)
     .maybeSingle();
   if (!ticket) return { error: "That table is no longer open." };
-  const tableId = (ticket.table_id as string | null) ?? null;
+  const elementId = (ticket.element_id as string | null) ?? null;
 
   let label: string | null = null;
-  if (tableId) {
-    const { data: table } = await supabase
-      .from("floor_tables")
+  if (elementId) {
+    const { data: el } = await supabase
+      .from("floor_elements")
       .select("label")
-      .eq("id", tableId)
+      .eq("id", elementId)
       .eq("business_id", business.id)
       .maybeSingle();
-    label = table ? (table.label as string) : null;
+    label = el ? (el.label as string) : null;
   }
 
   // Items to fire = quantity beyond what was already sent.
@@ -401,7 +401,7 @@ export async function sendTableTicket(
 
   const { error: insErr } = await supabase.from("kitchen_tickets").insert({
     business_id: business.id,
-    table_id: tableId,
+    element_id: elementId,
     label: label,
     items: fired,
     created_by: user ? user.id : null,
@@ -431,9 +431,9 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
 
   const { data, error } = await supabase
     .from("open_tickets")
-    .select("id, table_id, guest_count, opened_at, cart")
+    .select("id, element_id, guest_count, opened_at, cart")
     .eq("business_id", business.id)
-    .not("table_id", "is", null);
+    .not("element_id", "is", null);
   if (error) {
     console.error("listOpenTableTickets:", error);
     return [];
@@ -451,7 +451,7 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
     }
     return {
       id: t.id as string,
-      table_id: t.table_id as string,
+      element_id: t.element_id as string,
       guest_count: (t.guest_count as number | null) ?? null,
       opened_at: t.opened_at as string,
       item_count: itemCount,

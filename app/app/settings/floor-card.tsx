@@ -1,301 +1,324 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  createFloorArea,
-  renameFloorArea,
-  deleteFloorArea,
-  reorderFloorAreas,
-  createFloorTable,
-  updateFloorTable,
-  setFloorTableActive,
-  reorderFloorTables,
-  type FloorArea,
-  type FloorTable,
-} from "../floor/floor-actions";
+import { saveFloorLayout, type FloorElement, type ElementKind } from "../floor/floor-actions";
 
-export function FloorCard({
-  initialAreas,
-  initialTables,
-}: {
-  initialAreas: FloorArea[];
-  initialTables: FloorTable[];
-}) {
-  const [areas, setAreas] = useState<FloorArea[]>(initialAreas);
-  const [tables, setTables] = useState<FloorTable[]>(initialTables);
-  const [pending, startTransition] = useTransition();
+const GRID = 20;
+const CANVAS_W = 1000;
+const CANVAS_H = 700;
+
+type El = {
+  id: string;
+  kind: ElementKind;
+  label: string | null;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rotation: number;
+  shape: "rect" | "round";
+  parent_id: string | null;
+  seat_no: number | null;
+};
+
+const PALETTE: { kind: ElementKind; label: string; shape: "rect" | "round"; w: number; h: number }[] = [
+  { kind: "table", label: "Table", shape: "rect", w: 80, h: 80 },
+  { kind: "table", label: "Round table", shape: "round", w: 80, h: 80 },
+  { kind: "seat", label: "Chair", shape: "round", w: 28, h: 28 },
+  { kind: "counter", label: "Counter", shape: "rect", w: 200, h: 40 },
+  { kind: "station", label: "Station", shape: "rect", w: 60, h: 60 },
+  { kind: "wall", label: "Wall", shape: "rect", w: 160, h: 12 },
+  { kind: "room", label: "Room", shape: "rect", w: 260, h: 200 },
+  { kind: "label", label: "Text", shape: "rect", w: 120, h: 24 },
+];
+
+const NAMEABLE: ElementKind[] = ["table", "counter", "station", "room", "label"];
+
+function snap(v: number) {
+  return Math.round(v / GRID) * GRID;
+}
+
+function classesFor(kind: ElementKind, selected: boolean): string {
+  const ring = selected ? " ring-2 ring-foreground ring-offset-1 ring-offset-background" : "";
+  switch (kind) {
+    case "table":
+      return "bg-card border-2 border-foreground/40 text-foreground" + ring;
+    case "seat":
+      return "bg-muted border border-foreground/40" + ring;
+    case "counter":
+      return "bg-accent border-2 border-foreground/40 text-foreground" + ring;
+    case "station":
+      return "bg-blue-500/15 border-2 border-blue-500/50 text-foreground" + ring;
+    case "wall":
+      return "bg-foreground/60" + ring;
+    case "room":
+      return "bg-muted/30 border-2 border-dashed border-foreground/30 text-muted-foreground" + ring;
+    case "label":
+      return "bg-transparent text-foreground" + ring;
+    default:
+      return "bg-card border" + ring;
+  }
+}
+
+function zFor(kind: ElementKind): number {
+  if (kind === "room") return 0;
+  if (kind === "wall") return 1;
+  if (kind === "table" || kind === "counter" || kind === "station") return 2;
+  return 3; // seats, labels on top
+}
+
+export function FloorCard({ initialElements }: { initialElements: FloorElement[] }) {
+  const [els, setEls] = useState<El[]>(() =>
+    initialElements.map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      label: e.label,
+      x: e.x,
+      y: e.y,
+      w: e.w,
+      h: e.h,
+      rotation: e.rotation,
+      shape: e.shape,
+      parent_id: e.parent_id,
+      seat_no: e.seat_no,
+    }))
+  );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saving, startSave] = useTransition();
 
-  const [newArea, setNewArea] = useState("");
-  const [editAreaId, setEditAreaId] = useState<string | null>(null);
-  const [editAreaName, setEditAreaName] = useState("");
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<
+    | { mode: "move" | "resize"; id: string; sx: number; sy: number; ox: number; oy: number; ow: number; oh: number }
+    | null
+  >(null);
 
-  const [newLabel, setNewLabel] = useState("");
-  const [newSeats, setNewSeats] = useState("2");
-  const [newTableArea, setNewTableArea] = useState("");
+  const selected = els.find((e) => e.id === selectedId) || null;
 
-  const [editTableId, setEditTableId] = useState<string | null>(null);
-  const [etLabel, setEtLabel] = useState("");
-  const [etSeats, setEtSeats] = useState("2");
-  const [etArea, setEtArea] = useState("");
-
-  const areaName = (id: string | null) =>
-    id ? areas.find((a) => a.id === id)?.name ?? "Unassigned" : "Unassigned";
-
-  function handleAddArea() {
-    setError(null);
-    const name = newArea.trim();
-    if (!name) return;
-    startTransition(async () => {
-      const res = await createFloorArea(name);
-      if ("error" in res) {
-        setError(res.error);
-        return;
+  function nextTableName(): string {
+    let max = 0;
+    for (const e of els) {
+      if (e.kind === "table" && e.label) {
+        const m = /^Table\s+(\d+)$/i.exec(e.label.trim());
+        if (m) max = Math.max(max, parseInt(m[1]));
       }
-      setAreas((prev) => [...prev, res.area]);
-      setNewArea("");
-    });
+    }
+    return "Table " + (max + 1);
   }
 
-  function startEditArea(a: FloorArea) {
-    setEditAreaName(a.name);
-    setEditAreaId((prev) => (prev === a.id ? null : a.id));
+  function addElement(p: (typeof PALETTE)[number]) {
+    const id = crypto.randomUUID();
+    const offset = (els.length % 8) * GRID;
+    const el: El = {
+      id,
+      kind: p.kind,
+      label: p.kind === "table" ? nextTableName() : NAMEABLE.includes(p.kind) ? "" : null,
+      x: snap(60 + offset),
+      y: snap(60 + offset),
+      w: p.w,
+      h: p.h,
+      rotation: 0,
+      shape: p.shape,
+      parent_id: null,
+      seat_no: null,
+    };
+    setEls((prev) => [...prev, el]);
+    setSelectedId(id);
+    setDirty(true);
   }
 
-  function handleRenameArea(id: string) {
-    setError(null);
-    const name = editAreaName.trim();
-    if (!name) return;
-    startTransition(async () => {
-      const res = await renameFloorArea(id, name);
-      if ("error" in res) {
-        setError(res.error);
-        return;
-      }
-      setAreas((prev) => prev.map((a) => (a.id === id ? { ...a, name } : a)));
-      setEditAreaId(null);
-    });
+  function updateSelected(patch: Partial<El>) {
+    if (!selectedId) return;
+    setEls((prev) => prev.map((e) => (e.id === selectedId ? { ...e, ...patch } : e)));
+    setDirty(true);
   }
 
-  function handleDeleteArea(id: string) {
+  function deleteSelected() {
+    if (!selectedId) return;
+    setEls((prev) => prev.filter((e) => e.id !== selectedId));
+    setSelectedId(null);
+    setDirty(true);
+  }
+
+  function onElementPointerDown(e: React.PointerEvent, el: El, mode: "move" | "resize") {
+    e.stopPropagation();
+    setSelectedId(el.id);
+    canvasRef.current?.setPointerCapture(e.pointerId);
+    drag.current = { mode, id: el.id, sx: e.clientX, sy: e.clientY, ox: el.x, oy: el.y, ow: el.w, oh: el.h };
+  }
+
+  function onCanvasPointerMove(e: React.PointerEvent) {
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.sx;
+    const dy = e.clientY - d.sy;
+    setEls((prev) =>
+      prev.map((el) => {
+        if (el.id !== d.id) return el;
+        if (d.mode === "move") {
+          return { ...el, x: Math.max(0, snap(d.ox + dx)), y: Math.max(0, snap(d.oy + dy)) };
+        }
+        return { ...el, w: Math.max(GRID, snap(d.ow + dx)), h: Math.max(GRID, snap(d.oh + dy)) };
+      })
+    );
+  }
+
+  function onCanvasPointerUp() {
+    if (drag.current) {
+      drag.current = null;
+      setDirty(true);
+    }
+  }
+
+  function handleSave() {
     setError(null);
-    startTransition(async () => {
-      const res = await deleteFloorArea(id);
-      if ("error" in res) {
-        setError(res.error);
-        return;
-      }
-      setAreas((prev) => prev.filter((a) => a.id !== id));
-      // Tables in that area become Unassigned (FK on delete set null).
-      setTables((prev) =>
-        prev.map((t) => (t.area_id === id ? { ...t, area_id: null } : t))
+    startSave(async () => {
+      const res = await saveFloorLayout(
+        els.map((e, i) => ({
+          id: e.id,
+          kind: e.kind,
+          label: e.label,
+          x: e.x,
+          y: e.y,
+          w: e.w,
+          h: e.h,
+          rotation: e.rotation,
+          shape: e.shape,
+          parent_id: e.parent_id,
+          seat_no: e.seat_no,
+          sort_order: i,
+        }))
       );
-    });
-  }
-
-  function moveArea(id: string, dir: -1 | 1) {
-    const idx = areas.findIndex((a) => a.id === id);
-    const next = idx + dir;
-    if (idx < 0 || next < 0 || next >= areas.length) return;
-    const reordered = areas.slice();
-    const [item] = reordered.splice(idx, 1);
-    reordered.splice(next, 0, item);
-    setAreas(reordered);
-    startTransition(async () => {
-      await reorderFloorAreas(reordered.map((a) => a.id));
-    });
-  }
-
-  function handleAddTable() {
-    setError(null);
-    const label = newLabel.trim();
-    if (!label) return;
-    startTransition(async () => {
-      const res = await createFloorTable({
-        label,
-        seats: parseInt(newSeats) || 2,
-        area_id: newTableArea || null,
-      });
       if ("error" in res) {
         setError(res.error);
         return;
       }
-      setTables((prev) => [...prev, res.table]);
-      setNewLabel("");
-      setNewSeats("2");
-    });
-  }
-
-  function startEditTable(t: FloorTable) {
-    setEtLabel(t.label);
-    setEtSeats(String(t.seats));
-    setEtArea(t.area_id ?? "");
-    setEditTableId((prev) => (prev === t.id ? null : t.id));
-  }
-
-  function handleSaveTable(id: string) {
-    setError(null);
-    const label = etLabel.trim();
-    if (!label) return;
-    startTransition(async () => {
-      const res = await updateFloorTable(id, {
-        label,
-        seats: parseInt(etSeats) || 2,
-        area_id: etArea || null,
-      });
-      if ("error" in res) {
-        setError(res.error);
-        return;
-      }
-      setTables((prev) =>
-        prev.map((t) =>
-          t.id === id
-            ? { ...t, label, seats: parseInt(etSeats) || 2, area_id: etArea || null }
-            : t
-        )
-      );
-      setEditTableId(null);
-    });
-  }
-
-  function handleToggleTable(t: FloorTable) {
-    startTransition(async () => {
-      const res = await setFloorTableActive(t.id, !t.is_active);
-      if (!("error" in res)) {
-        setTables((prev) =>
-          prev.map((x) => (x.id === t.id ? { ...x, is_active: !x.is_active } : x))
+      // Reflect any auto-applied "Table N" names locally.
+      setEls((prev) => {
+        let max = 0;
+        for (const e of prev) {
+          if (e.kind === "table" && e.label) {
+            const m = /^Table\s+(\d+)$/i.exec(e.label.trim());
+            if (m) max = Math.max(max, parseInt(m[1]));
+          }
+        }
+        return prev.map((e) =>
+          e.kind === "table" && (!e.label || !e.label.trim()) ? { ...e, label: "Table " + ++max } : e
         );
-      }
-    });
-  }
-
-  function moveTable(id: string, dir: -1 | 1) {
-    const idx = tables.findIndex((t) => t.id === id);
-    const next = idx + dir;
-    if (idx < 0 || next < 0 || next >= tables.length) return;
-    const reordered = tables.slice();
-    const [item] = reordered.splice(idx, 1);
-    reordered.splice(next, 0, item);
-    setTables(reordered);
-    startTransition(async () => {
-      await reorderFloorTables(reordered.map((t) => t.id));
+      });
+      setDirty(false);
     });
   }
 
   return (
     <div>
-      <p className="text-sm text-muted-foreground mb-4">
-        Define your dining areas and the tables in each. Tables show up on the
-        register floor so staff can open a ticket per table.
+      <p className="text-sm text-muted-foreground mb-3">
+        Design your floor: add tables, chairs, counters, stations, walls, and
+        rooms, then drag to position and resize. New tables are named
+        automatically (Table 1, Table 2&hellip;) and names must be unique.
       </p>
 
-      {/* Areas */}
-      <h3 className="text-sm font-medium mb-2">Areas</h3>
-      {areas.length > 0 && (
-        <div className="divide-y divide-border border border-border rounded-md mb-3">
-          {areas.map((a, i) => {
-            const open = editAreaId === a.id;
+      <div className="flex flex-wrap gap-2 mb-3">
+        {PALETTE.map((p) => (
+          <button
+            key={p.kind + p.shape}
+            type="button"
+            onClick={() => addElement(p)}
+            className="text-xs rounded-md border border-border px-2.5 py-1.5 hover:bg-accent"
+          >
+            {"+ " + p.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Selected-element panel */}
+      {selected && (
+        <div className="flex flex-wrap items-end gap-2 mb-3 p-3 rounded-md border border-border bg-card">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground self-center capitalize">{selected.kind}</span>
+          {NAMEABLE.includes(selected.kind) && (
+            <div className="space-y-1">
+              <Label className="text-xs">Name</Label>
+              <Input
+                value={selected.label ?? ""}
+                onChange={(e) => updateSelected({ label: e.target.value })}
+                placeholder={selected.kind === "table" ? "Table 1" : "Name"}
+                className="h-9 w-40"
+              />
+            </div>
+          )}
+          {selected.kind === "table" && (
+            <Button size="sm" variant="outline" onClick={() => updateSelected({ shape: selected.shape === "round" ? "rect" : "round" })}>
+              {selected.shape === "round" ? "Make square" : "Make round"}
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={() => updateSelected({ rotation: (selected.rotation + 15) % 360 })}>
+            Rotate
+          </Button>
+          <Button size="sm" variant="outline" className="text-red-600" onClick={deleteSelected}>
+            Delete
+          </Button>
+        </div>
+      )}
+
+      {/* Canvas */}
+      <div className="overflow-auto rounded-md border border-border bg-muted/10" style={{ maxHeight: 520 }}>
+        <div
+          ref={canvasRef}
+          onPointerMove={onCanvasPointerMove}
+          onPointerUp={onCanvasPointerUp}
+          onPointerDown={() => setSelectedId(null)}
+          className="relative"
+          style={{
+            width: CANVAS_W,
+            height: CANVAS_H,
+            backgroundImage:
+              "linear-gradient(to right, rgba(120,120,120,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(120,120,120,0.12) 1px, transparent 1px)",
+            backgroundSize: GRID + "px " + GRID + "px",
+            touchAction: "none",
+          }}
+        >
+          {els.map((el) => {
+            const isSel = el.id === selectedId;
             return (
-              <div key={a.id} className="px-3 py-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium truncate">{a.name}</span>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button type="button" onClick={() => moveArea(a.id, -1)} disabled={pending || i === 0} className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">↑</button>
-                    <button type="button" onClick={() => moveArea(a.id, 1)} disabled={pending || i === areas.length - 1} className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">↓</button>
-                    <button type="button" onClick={() => startEditArea(a)} className="text-xs text-muted-foreground underline hover:text-foreground">{open ? "Close" : "Rename"}</button>
-                    <button type="button" onClick={() => handleDeleteArea(a.id)} disabled={pending} className="text-xs text-muted-foreground underline hover:text-red-600">Delete</button>
-                  </div>
-                </div>
-                {open && (
-                  <div className="mt-2 flex items-end gap-2 border-l-2 border-border pl-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Area name</Label>
-                      <Input value={editAreaName} onChange={(e) => setEditAreaName(e.target.value)} className="h-9 w-44" />
-                    </div>
-                    <Button size="sm" onClick={() => handleRenameArea(a.id)} disabled={pending}>Save</Button>
-                  </div>
+              <div
+                key={el.id}
+                onPointerDown={(e) => onElementPointerDown(e, el, "move")}
+                className={"absolute flex items-center justify-center text-[10px] font-medium select-none cursor-move overflow-hidden " + classesFor(el.kind, isSel)}
+                style={{
+                  left: el.x,
+                  top: el.y,
+                  width: el.w,
+                  height: el.h,
+                  borderRadius: el.shape === "round" ? 9999 : 6,
+                  transform: el.rotation ? "rotate(" + el.rotation + "deg)" : undefined,
+                  zIndex: zFor(el.kind) + (isSel ? 10 : 0),
+                }}
+              >
+                {el.label ? <span className="px-1 truncate">{el.label}</span> : null}
+                {isSel && el.kind !== "seat" && (
+                  <div
+                    onPointerDown={(e) => onElementPointerDown(e, el, "resize")}
+                    className="absolute right-0 bottom-0 w-3 h-3 bg-foreground rounded-sm cursor-nwse-resize"
+                    style={{ transform: "translate(30%, 30%)" }}
+                  />
                 )}
               </div>
             );
           })}
         </div>
-      )}
-      <div className="flex items-end gap-2 mb-6">
-        <div className="space-y-1">
-          <Label className="text-xs">New area</Label>
-          <Input value={newArea} onChange={(e) => setNewArea(e.target.value)} placeholder="Patio" className="h-9 w-44" />
-        </div>
-        <Button onClick={handleAddArea} disabled={pending || !newArea.trim()}>Add area</Button>
       </div>
 
-      {/* Tables */}
-      <h3 className="text-sm font-medium mb-2">Tables</h3>
-      {tables.length > 0 && (
-        <div className="divide-y divide-border border border-border rounded-md mb-3">
-          {tables.map((t, i) => {
-            const open = editTableId === t.id;
-            return (
-              <div key={t.id} className="px-3 py-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-sm min-w-0">
-                    <span className={"font-medium " + (t.is_active ? "" : "text-muted-foreground line-through")}>{t.label}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">{t.seats + " seats" + "  ·  " + areaName(t.area_id)}</span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button type="button" onClick={() => moveTable(t.id, -1)} disabled={pending || i === 0} className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">↑</button>
-                    <button type="button" onClick={() => moveTable(t.id, 1)} disabled={pending || i === tables.length - 1} className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">↓</button>
-                    <button type="button" onClick={() => startEditTable(t)} className="text-xs text-muted-foreground underline hover:text-foreground">{open ? "Close" : "Edit"}</button>
-                    <button type="button" onClick={() => handleToggleTable(t)} disabled={pending} className="text-xs text-muted-foreground underline hover:text-foreground">{t.is_active ? "Disable" : "Enable"}</button>
-                  </div>
-                </div>
-                {open && (
-                  <div className="mt-2 flex flex-wrap items-end gap-2 border-l-2 border-border pl-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Label</Label>
-                      <Input value={etLabel} onChange={(e) => setEtLabel(e.target.value)} className="h-9 w-28" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Seats</Label>
-                      <Input type="number" min="1" max="99" value={etSeats} onChange={(e) => setEtSeats(e.target.value)} className="h-9 w-20" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Area</Label>
-                      <select value={etArea} onChange={(e) => setEtArea(e.target.value)} className="h-9 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
-                        <option value="">Unassigned</option>
-                        {areas.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
-                      </select>
-                    </div>
-                    <Button size="sm" onClick={() => handleSaveTable(t.id)} disabled={pending}>Save</Button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="space-y-1">
-          <Label className="text-xs">New table</Label>
-          <Input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="T1" className="h-9 w-24" />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Seats</Label>
-          <Input type="number" min="1" max="99" value={newSeats} onChange={(e) => setNewSeats(e.target.value)} className="h-9 w-20" />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Area</Label>
-          <select value={newTableArea} onChange={(e) => setNewTableArea(e.target.value)} className="h-9 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
-            <option value="">Unassigned</option>
-            {areas.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
-          </select>
-        </div>
-        <Button onClick={handleAddTable} disabled={pending || !newLabel.trim()}>Add table</Button>
+      <div className="flex items-center gap-3 mt-3">
+        <Button onClick={handleSave} disabled={saving || !dirty}>
+          {saving ? "Saving..." : dirty ? "Save floor" : "Saved"}
+        </Button>
+        {dirty && <span className="text-xs text-muted-foreground">Unsaved changes</span>}
       </div>
-
-      {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
+      {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
     </div>
   );
 }

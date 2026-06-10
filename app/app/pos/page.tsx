@@ -134,10 +134,11 @@ export default async function PosPage() {
   // Full-service restaurants get the table floor first; every other mode (and
   // the transportation register) renders the flat register exactly as before.
   const showFloor = hasFloorService(business);
-  let floor: Awaited<ReturnType<typeof listFloor>> = { areas: [], tables: [] };
+  let floorTables: Awaited<ReturnType<typeof listFloor>>["elements"] = [];
   let openTables: Awaited<ReturnType<typeof listOpenTableTickets>> = [];
   if (showFloor) {
-    floor = await listFloor();
+    const floor = await listFloor();
+    floorTables = floor.elements.filter((e) => e.kind === "table");
     openTables = await listOpenTableTickets();
   }
 
@@ -164,8 +165,7 @@ export default async function PosPage() {
         {showFloor ? (
           <FloorClient
             register={registerProps}
-            areas={floor.areas}
-            tables={floor.tables}
+            tables={floorTables}
             initialOpen={openTables}
           />
         ) : (
