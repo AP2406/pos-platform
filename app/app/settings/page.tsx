@@ -6,6 +6,7 @@ import { SettingsForm } from "./settings-form";
 import { TaxCurrencyForm } from "./tax-currency-form";
 import { TaxRatesCard } from "./tax-rates-card";
 import { TrainingModeForm } from "./training-mode-form";
+import { ShowPhotosForm } from "./show-photos-form";
 import { StaffCard } from "./staff-card";
 import { LeadInboxCard } from "./lead-inbox-card";
 import { DriversSettingCard } from "./drivers-setting-card";
@@ -54,6 +55,9 @@ export default async function SettingsPage() {
 
   const trainingMode =
     (business as { training_mode?: boolean }).training_mode === true;
+
+  const showItemPhotos =
+    (business as { show_item_photos?: boolean }).show_item_photos !== false;
 
   let staffList: { id: string; name: string; role: string; is_active: boolean; has_pin: boolean }[] = [];
   if (role === "owner" || role === "manager") {
@@ -209,6 +213,10 @@ export default async function SettingsPage() {
           <div className="bg-card border border-border rounded-lg p-6 mb-4">
             <SectionHeader>Training mode</SectionHeader>
             <TrainingModeForm initialEnabled={trainingMode} />
+          </div>
+          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+            <SectionHeader>Register</SectionHeader>
+            <ShowPhotosForm initialEnabled={showItemPhotos} />
           </div>
           {business.industry === "transportation" && (
             <div className="bg-card border border-border rounded-lg p-6">

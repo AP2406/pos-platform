@@ -21,9 +21,11 @@ import { TenderSheet } from "./tender-sheet";
 import { getPrinterConfig, printReceiptHtml } from "./qz-print";
 import { buildReceiptHtml, type ReceiptSettings } from "./receipt-template";
 import { RegisterRefund } from "./register-refund";
+import Link from "next/link";
+import { tileClassesFor } from "./category-colors";
 
 type Variation = { id: string; name: string; price: number };
-type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; variations: Variation[]; modifiers: Variation[] };
+type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; variations: Variation[]; modifiers: Variation[] };
 type CartLine = {
   catalog_item_id: string | null;
   variation_id: string | null;
@@ -101,7 +103,7 @@ function printReceipt(r: Receipt, settings: Partial<ReceiptSettings> | null, wid
   printReceiptHtml(buildReceiptHtml(r, settings, widthMm));
 }
 
-export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff, receiptSettings }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null }) {
+export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string> }) {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [tip, setTip] = useState("");
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
@@ -143,6 +145,9 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [mgrErr, setMgrErr] = useState<string | null>(null);
   const [mgrBusy, setMgrBusy] = useState(false);
   const [approved, setApproved] = useState(false);
+  // Which compact cart action sheet is open, and which cart line is being edited.
+  const [sheet, setSheet] = useState<null | "discount" | "tip" | "tax" | "customer">(null);
+  const [editLineIndex, setEditLineIndex] = useState<number | null>(null);
 
   const itemTaxableById: Record<string, boolean> = {};
   const itemTaxFracById: Record<string, number> = {};
@@ -304,6 +309,12 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         .map((l, i) => (i === index ? { ...l, quantity: l.quantity + delta } : l))
         .filter((l) => l.quantity > 0)
     );
+  }
+
+  // Remove a single cart line outright (used by the tap-to-edit line sheet).
+  function removeLine(index: number) {
+    setCart((prev) => prev.filter((_, i) => i !== index));
+    setEditLineIndex(null);
   }
 
   function clearCart() {
@@ -1009,240 +1020,335 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
           </div>
         </div>
       ) : (
-        <div className="h-full flex flex-col md:flex-row">
-          <div className="flex-1 min-h-0 flex flex-col border-b md:border-b-0 md:border-r border-border">
-            <div className="shrink-0 px-3 pt-3 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="text-base font-semibold truncate">{businessName}</div>
-                  {hasStaff && (
-                    <div className="text-xs text-muted-foreground">{staff ? "Ringing as " + staff.name : "No cashier set"}</div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {hasStaff && (
-                    staff ? (
-                      <>
-                        <button type="button" onClick={openStaffPin} className="text-xs text-muted-foreground underline hover:text-foreground">Switch</button>
-                        <button type="button" onClick={signOutStaff} disabled={staffBusy} className="text-xs text-muted-foreground underline hover:text-foreground">Sign out</button>
-                      </>
-                    ) : (
-                      <button type="button" onClick={openStaffPin} className="text-xs font-medium underline">Enter PIN</button>
-                    )
-                  )}
-                  <RegisterRefund businessName={businessName} />
-                  {openTickets.length > 0 && (
-                    <button type="button" onClick={() => setTicketsOpen(true)} className="flex items-center gap-1.5 text-xs rounded-md border border-border px-2.5 py-1.5 hover:bg-accent">
-                      Tickets
-                      <span className="px-1.5 rounded-full bg-accent tabular-nums">{openTickets.length}</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {categories.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-                  {["All", ...categories].map((c) => {
-                    const active = activeCat === c;
-                    return (
-                      <button key={c} type="button" onClick={() => setActiveCat(c)} className={"shrink-0 text-sm px-3 py-1.5 rounded-full border transition-colors " + (active ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:border-foreground/40")}>
-                        {c}
-                      </button>
-                    );
-                  })}
-                </div>
+        <div className="h-full flex flex-col">
+          {/* Slim dark top bar */}
+          <div className="shrink-0 flex items-center justify-between gap-3 h-12 px-3 bg-sidebar text-sidebar-foreground border-b border-sidebar-border">
+            <div className="min-w-0 flex items-baseline gap-2">
+              <span className="font-semibold truncate">{businessName}</span>
+              {hasStaff && (
+                <span className="text-xs text-sidebar-foreground/70 truncate hidden sm:inline">
+                  {staff ? "Ringing as " + staff.name : "No cashier set"}
+                </span>
               )}
-
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search items" className="h-10" />
+              {hasStaff && (
+                staff ? (
+                  <span className="flex items-center gap-2 shrink-0">
+                    <button type="button" onClick={openStaffPin} className="text-xs text-sidebar-foreground/70 underline hover:text-sidebar-foreground">Switch</button>
+                    <button type="button" onClick={signOutStaff} disabled={staffBusy} className="text-xs text-sidebar-foreground/70 underline hover:text-sidebar-foreground">Sign out</button>
+                  </span>
+                ) : (
+                  <button type="button" onClick={openStaffPin} className="text-xs font-medium underline shrink-0">Enter PIN</button>
+                )
+              )}
             </div>
-
-            <div className="flex-1 min-h-0 overflow-y-auto p-3">
-              {visibleItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground p-4">No items match. Add some in the Catalog, or clear the search.</p>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                  {visibleItems.map((item) => {
-                    const hasVars = item.variations.length > 0;
-                    const priceLabel = hasVars
-                      ? "From $" + Math.min(...item.variations.map((v) => v.price)).toFixed(2)
-                      : "$" + item.price.toFixed(2);
-                    return (
-                      <button key={item.id} type="button" onClick={() => addItem(item)} className="text-left p-3 min-h-[76px] rounded-lg border border-border hover:border-foreground/40 hover:bg-accent/50 active:scale-[0.98] transition-all flex flex-col justify-between">
-                        <div className="font-medium text-sm leading-snug">{item.name}</div>
-                        <div className="text-xs text-muted-foreground mt-1">{priceLabel}</div>
-                      </button>
-                    );
-                  })}
-                </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <RegisterRefund businessName={businessName} />
+              {openTickets.length > 0 && (
+                <button type="button" onClick={() => setTicketsOpen(true)} className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent">
+                  Tickets
+                  <span className="px-1.5 rounded-full bg-sidebar-accent tabular-nums">{openTickets.length}</span>
+                </button>
               )}
+              <Link href="/app" className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
+                Exit
+              </Link>
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 md:flex-none md:w-[400px] flex flex-col bg-card/40">
-            <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-border">
-              <h2 className="font-medium">Current sale</h2>
-              {cart.length > 0 && (
-                <div className="flex items-center gap-3">
-                  <button type="button" onClick={openHold} className="text-xs text-muted-foreground underline hover:text-foreground">Hold</button>
-                  <button type="button" onClick={clearCart} className="text-xs text-muted-foreground underline hover:text-foreground">Clear</button>
-                </div>
-              )}
+          {/* Items + cart */}
+          <div className="flex-1 min-h-0 flex flex-col md:flex-row">
+            <div className="flex-1 min-h-0 flex flex-col border-b md:border-b-0 md:border-r border-border">
+              <div className="shrink-0 px-3 pt-3 space-y-3">
+                {categories.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                    {["All", ...categories].map((c) => {
+                      const active = activeCat === c;
+                      return (
+                        <button key={c} type="button" onClick={() => setActiveCat(c)} className={"shrink-0 text-sm px-3 py-1.5 rounded-full border transition-colors " + (active ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:border-foreground/40")}>
+                          {c}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search items" className="h-10" />
+              </div>
+
+              <div className="flex-1 min-h-0 overflow-y-auto p-3">
+                {visibleItems.length === 0 ? (
+                  <p className="text-sm text-muted-foreground p-4">No items match. Add some in the Catalog, or clear the search.</p>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+                    {visibleItems.map((item) => {
+                      const hasVars = item.variations.length > 0;
+                      const priceLabel = hasVars
+                        ? "From $" + Math.min(...item.variations.map((v) => v.price)).toFixed(2)
+                        : "$" + item.price.toFixed(2);
+                      if (showItemPhotos && item.image_url) {
+                        return (
+                          <button key={item.id} type="button" onClick={() => addItem(item)} className="relative min-h-[110px] rounded-lg border border-border overflow-hidden active:scale-[0.97] transition-transform">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={item.image_url} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
+                            <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white text-left px-2 py-1.5">
+                              <div className="font-semibold text-sm leading-snug line-clamp-2">{item.name}</div>
+                              <div className="text-xs text-white/90">{priceLabel}</div>
+                            </div>
+                          </button>
+                        );
+                      }
+                      return (
+                        <button key={item.id} type="button" onClick={() => addItem(item)} className={"text-left p-3 min-h-[110px] rounded-lg border active:scale-[0.97] transition-all flex flex-col justify-between " + tileClassesFor(item.category, categoryColors)}>
+                          <div className="font-semibold text-sm leading-snug line-clamp-3">{item.name}</div>
+                          <div className="text-xs opacity-80 mt-1">{priceLabel}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3">
-              {cart.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Tap items to add them to the sale.</p>
-              ) : (
-                <div className="space-y-2">
-                  {cart.map((line, index) => (
-                    <div key={index} className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
+            <div className="flex-1 min-h-0 md:flex-none md:w-[400px] flex flex-col bg-card/40">
+              <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-border">
+                <h2 className="font-medium">Current sale</h2>
+                {cart.length > 0 && (
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={openHold} className="text-xs text-muted-foreground underline hover:text-foreground">Hold</button>
+                    <button type="button" onClick={clearCart} className="text-xs text-muted-foreground underline hover:text-foreground">Clear</button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
+                {cart.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Tap items to add them to the sale.</p>
+                ) : (
+                  cart.map((line, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <button type="button" onClick={() => setEditLineIndex(index)} className="min-w-0 flex-1 text-left">
                         <div className="text-sm font-medium truncate">{line.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {"$" + line.unit_price.toFixed(2) + (line.taxable ? "" : "  " + "\u00b7" + "  Tax-free")}
+                          {"$" + line.unit_price.toFixed(2) + " each" + (line.taxable ? "" : "  " + "\u00b7" + "  Tax-free")}
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => changeQty(index, -1)} className="w-8 h-8 rounded-md border border-border hover:bg-accent">-</button>
+                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button type="button" onClick={() => changeQty(index, -1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">-</button>
                         <span className="w-6 text-center text-sm tabular-nums">{line.quantity}</span>
-                        <button type="button" onClick={() => changeQty(index, 1)} className="w-8 h-8 rounded-md border border-border hover:bg-accent">+</button>
+                        <button type="button" onClick={() => changeQty(index, 1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">+</button>
                       </div>
+                      <div className="w-16 text-right text-sm font-semibold tabular-nums shrink-0">{"$" + (line.unit_price * line.quantity).toFixed(2)}</div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  ))
+                )}
+              </div>
 
-              {cart.length > 0 && (
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-muted-foreground">Discount</span>
-                    <div className="flex items-center gap-1">
-                      <div className="flex rounded-md border border-border overflow-hidden text-xs">
-                        <button type="button" onClick={() => setDiscountMode("amount")} className={"px-2 py-1 " + (discountMode === "amount" ? "bg-accent font-medium" : "hover:bg-accent/50")}>$</button>
-                        <button type="button" onClick={() => setDiscountMode("percent")} className={"px-2 py-1 border-l border-border " + (discountMode === "percent" ? "bg-accent font-medium" : "hover:bg-accent/50")}>%</button>
-                      </div>
-                      <Input type="number" min="0" step="0.01" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} placeholder="0" className="w-20 h-8 text-right" />
-                    </div>
+              <div className="shrink-0 border-t border-border">
+                {cart.length > 0 && (
+                  <div className="grid grid-cols-4 gap-1 p-2 border-b border-border">
+                    <button type="button" onClick={() => setSheet("discount")} className={"rounded-md border px-1 py-2 text-center hover:bg-accent " + (discount > 0 ? "border-foreground" : "border-border")}>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Discount</div>
+                      <div className="text-xs font-medium truncate">{discount > 0 ? "-$" + discount.toFixed(2) : "Add"}</div>
+                    </button>
+                    <button type="button" onClick={() => setSheet("tip")} className={"rounded-md border px-1 py-2 text-center hover:bg-accent " + (tipNum > 0 ? "border-foreground" : "border-border")}>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Tip</div>
+                      <div className="text-xs font-medium truncate">{tipNum > 0 ? "$" + tipNum.toFixed(2) : "Add"}</div>
+                    </button>
+                    <button type="button" onClick={() => setSheet("tax")} className={"rounded-md border px-1 py-2 text-center hover:bg-accent " + (effectiveExempt ? "border-emerald-600" : "border-border")}>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Tax</div>
+                      <div className={"text-xs font-medium truncate " + (effectiveExempt ? "text-emerald-600" : "")}>{effectiveExempt ? "Exempt" : "Applied"}</div>
+                    </button>
+                    <button type="button" onClick={() => setSheet("customer")} className={"rounded-md border px-1 py-2 text-center hover:bg-accent " + (customer ? "border-foreground" : "border-border")}>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Customer</div>
+                      <div className="text-xs font-medium truncate">{customer ? customer.name : "Add"}</div>
+                    </button>
                   </div>
+                )}
 
+                <div className="p-4 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span className="tabular-nums">{"$" + subtotal.toFixed(2)}</span>
+                  </div>
                   {discount > 0 && (
-                    <div className="space-y-1">
-                      <Label className="text-xs">Discount reason</Label>
-                      <select value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} className="w-full h-8 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
-                        <option value="">Select a reason...</option>
-                        {DISCOUNT_REASONS.map((r) => (
-                          <option key={r.code} value={r.code}>{r.label}</option>
-                        ))}
-                      </select>
-                      {discountReason === "other" && (
-                        <Input value={discountReasonNote} onChange={(e) => setDiscountReasonNote(e.target.value)} placeholder="Reason note" className="h-8" />
-                      )}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Discount</span>
+                      <span className="tabular-nums text-red-600">{"-$" + discount.toFixed(2)}</span>
                     </div>
                   )}
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Tip</span>
-                    <Input type="number" min="0" step="0.01" value={tip} onChange={(e) => setTip(e.target.value)} placeholder="0.00" className="w-24 h-8 text-right" />
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{effectiveExempt ? "Tax (exempt)" : "Tax"}</span>
+                    <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
+                  </div>
+                  {tipNum > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Tip</span>
+                      <span className="tabular-nums">{"$" + tipNum.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-end justify-between pt-1">
+                    <span className="text-sm font-medium">Total</span>
+                    <span className="text-3xl font-bold tabular-nums leading-none">{"$" + total.toFixed(2)}</span>
                   </div>
 
-                  <div className="space-y-1">
-                    {customerExempt ? (
-                      <div className="flex items-center gap-2 text-sm text-emerald-600">
-                        <span className="w-4 h-4 rounded border border-emerald-600 flex items-center justify-center text-[10px]">{"\u2713"}</span>
-                        Tax exempt (customer)
-                      </div>
-                    ) : (
-                      <>
-                        <label className="flex items-center gap-2 text-sm">
-                          <input type="checkbox" checked={taxExempt} onChange={(e) => setTaxExempt(e.target.checked)} className="w-4 h-4" />
-                          Tax exempt
-                        </label>
-                        {taxExempt && (
-                          <div className="space-y-1">
-                            <select value={taxExemptReason} onChange={(e) => setTaxExemptReason(e.target.value)} className="w-full h-8 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
-                              <option value="">Select a reason...</option>
-                              {TAX_EXEMPT_REASONS.map((r) => (
-                                <option key={r.code} value={r.code}>{r.label}</option>
-                              ))}
-                            </select>
-                            {taxExemptReason === "other" && (
-                              <Input value={taxExemptNote} onChange={(e) => setTaxExemptNote(e.target.value)} placeholder="Reason note" className="h-8" />
-                            )}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
+                  {error && <p className="text-sm text-red-600 pt-1">{error}</p>}
 
-                  <div className="space-y-2">
-                    <Label className="text-xs">Customer (optional)</Label>
-                    {customer ? (
-                      <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                        <span className="text-sm font-medium truncate">{customer.name}</span>
-                        <button type="button" onClick={() => setCustomer(null)} className="text-xs text-muted-foreground underline hover:text-foreground">Remove</button>
-                      </div>
-                    ) : (
-                      <div>
-                        <Input value={customerQuery} onChange={(e) => setCustomerQuery(e.target.value)} placeholder="Search or add a customer" className="h-9" />
-                        {customerQuery.trim() && (
-                          <div className="mt-1 rounded-md border border-border divide-y divide-border overflow-hidden">
-                            {searchingCustomers ? (
-                              <div className="px-3 py-2 text-xs text-muted-foreground">Searching...</div>
-                            ) : customerResults.length > 0 ? (
-                              customerResults.map((c) => (
-                                <button key={c.id} type="button" onClick={() => pickCustomer(c)} className="w-full text-left px-3 py-2 text-sm hover:bg-accent">
-                                  {c.name}
-                                  {c.phone ? <span className="text-xs text-muted-foreground">{"  " + "\u00b7" + "  " + c.phone}</span> : null}
-                                </button>
-                              ))
-                            ) : (
-                              <div className="px-3 py-2 text-xs text-muted-foreground">No matches.</div>
-                            )}
-                            <button type="button" onClick={handleCreateCustomer} disabled={addingCustomer} className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-accent">
-                              {addingCustomer ? "Adding..." : 'Add new customer "' + customerQuery.trim() + '"'}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  <Button className="w-full h-14 text-base mt-2" onClick={openTender} disabled={pending || cart.length === 0 || (discount > 0 && !discountReasonOk) || (taxExempt && !taxExemptOk)}>
+                    {"Charge" + (total > 0 ? " $" + total.toFixed(2) : "")}
+                  </Button>
                 </div>
-              )}
-            </div>
-
-            <div className="shrink-0 border-t border-border p-4 space-y-1">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span className="tabular-nums">{"$" + subtotal.toFixed(2)}</span>
               </div>
-              {discount > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Discount</span>
-                  <span className="tabular-nums text-red-600">{"-$" + discount.toFixed(2)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{effectiveExempt ? "Tax (exempt)" : "Tax"}</span>
-                <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
-              </div>
-              {tipNum > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tip</span>
-                  <span className="tabular-nums">{"$" + tipNum.toFixed(2)}</span>
-                </div>
-              )}
-              <div className="flex justify-between font-semibold text-base pt-1">
-                <span>Total</span>
-                <span className="tabular-nums">{"$" + total.toFixed(2)}</span>
-              </div>
-
-              {error && <p className="text-sm text-red-600 pt-1">{error}</p>}
-
-              <Button className="w-full h-14 text-base mt-2" onClick={openTender} disabled={pending || cart.length === 0 || (discount > 0 && !discountReasonOk) || (taxExempt && !taxExemptOk)}>
-                {"Charge" + (total > 0 ? " $" + total.toFixed(2) : "")}
-              </Button>
             </div>
           </div>
+
+          {/* Tap-a-line editor */}
+          {editLineIndex !== null && cart[editLineIndex] && (
+            <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setEditLineIndex(null)}>
+              <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium truncate pr-2">{cart[editLineIndex].name}</h3>
+                  <button type="button" onClick={() => setEditLineIndex(null)} className="text-xs text-muted-foreground underline shrink-0">Done</button>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => changeQty(editLineIndex, -1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">-</button>
+                    <span className="w-8 text-center text-base tabular-nums">{cart[editLineIndex].quantity}</span>
+                    <button type="button" onClick={() => changeQty(editLineIndex, 1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">+</button>
+                  </div>
+                  <span className="text-base font-semibold tabular-nums">{"$" + (cart[editLineIndex].unit_price * cart[editLineIndex].quantity).toFixed(2)}</span>
+                </div>
+                <Button variant="outline" className="w-full mt-4 text-red-600" onClick={() => removeLine(editLineIndex)}>
+                  Remove from sale
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Discount sheet */}
+          {sheet === "discount" && (
+            <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setSheet(null)}>
+              <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium">Discount</h3>
+                  <button type="button" onClick={() => setSheet(null)} className="text-xs text-muted-foreground underline">Done</button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex rounded-md border border-border overflow-hidden text-sm">
+                    <button type="button" onClick={() => setDiscountMode("amount")} className={"px-3 py-2 " + (discountMode === "amount" ? "bg-accent font-medium" : "hover:bg-accent/50")}>$</button>
+                    <button type="button" onClick={() => setDiscountMode("percent")} className={"px-3 py-2 border-l border-border " + (discountMode === "percent" ? "bg-accent font-medium" : "hover:bg-accent/50")}>%</button>
+                  </div>
+                  <Input type="number" min="0" step="0.01" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} placeholder="0" className="flex-1 h-11 text-right" />
+                </div>
+                {discount > 0 && (
+                  <div className="space-y-1 mt-3">
+                    <Label className="text-xs">Discount reason</Label>
+                    <select value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} className="w-full h-10 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
+                      <option value="">Select a reason...</option>
+                      {DISCOUNT_REASONS.map((r) => (
+                        <option key={r.code} value={r.code}>{r.label}</option>
+                      ))}
+                    </select>
+                    {discountReason === "other" && (
+                      <Input value={discountReasonNote} onChange={(e) => setDiscountReasonNote(e.target.value)} placeholder="Reason note" className="h-10" />
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Tip sheet */}
+          {sheet === "tip" && (
+            <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setSheet(null)}>
+              <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium">Tip</h3>
+                  <button type="button" onClick={() => setSheet(null)} className="text-xs text-muted-foreground underline">Done</button>
+                </div>
+                <Input type="number" min="0" step="0.01" value={tip} onChange={(e) => setTip(e.target.value)} placeholder="0.00" className="h-11 text-right" />
+              </div>
+            </div>
+          )}
+
+          {/* Tax exempt sheet */}
+          {sheet === "tax" && (
+            <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setSheet(null)}>
+              <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium">Tax</h3>
+                  <button type="button" onClick={() => setSheet(null)} className="text-xs text-muted-foreground underline">Done</button>
+                </div>
+                {customerExempt ? (
+                  <div className="flex items-center gap-2 text-sm text-emerald-600">
+                    <span className="w-4 h-4 rounded border border-emerald-600 flex items-center justify-center text-[10px]">{"\u2713"}</span>
+                    Tax exempt (customer)
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={taxExempt} onChange={(e) => setTaxExempt(e.target.checked)} className="w-4 h-4" />
+                      Tax exempt
+                    </label>
+                    {taxExempt && (
+                      <div className="space-y-1">
+                        <select value={taxExemptReason} onChange={(e) => setTaxExemptReason(e.target.value)} className="w-full h-10 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
+                          <option value="">Select a reason...</option>
+                          {TAX_EXEMPT_REASONS.map((r) => (
+                            <option key={r.code} value={r.code}>{r.label}</option>
+                          ))}
+                        </select>
+                        {taxExemptReason === "other" && (
+                          <Input value={taxExemptNote} onChange={(e) => setTaxExemptNote(e.target.value)} placeholder="Reason note" className="h-10" />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Customer sheet */}
+          {sheet === "customer" && (
+            <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setSheet(null)}>
+              <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium">Customer</h3>
+                  <button type="button" onClick={() => setSheet(null)} className="text-xs text-muted-foreground underline">Done</button>
+                </div>
+                {customer ? (
+                  <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                    <span className="text-sm font-medium truncate">{customer.name}</span>
+                    <button type="button" onClick={() => setCustomer(null)} className="text-xs text-muted-foreground underline hover:text-foreground">Remove</button>
+                  </div>
+                ) : (
+                  <div>
+                    <Input value={customerQuery} onChange={(e) => setCustomerQuery(e.target.value)} placeholder="Search or add a customer" className="h-10" />
+                    {customerQuery.trim() && (
+                      <div className="mt-1 rounded-md border border-border divide-y divide-border overflow-hidden">
+                        {searchingCustomers ? (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">Searching...</div>
+                        ) : customerResults.length > 0 ? (
+                          customerResults.map((c) => (
+                            <button key={c.id} type="button" onClick={() => pickCustomer(c)} className="w-full text-left px-3 py-2 text-sm hover:bg-accent">
+                              {c.name}
+                              {c.phone ? <span className="text-xs text-muted-foreground">{"  " + "\u00b7" + "  " + c.phone}</span> : null}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">No matches.</div>
+                        )}
+                        <button type="button" onClick={handleCreateCustomer} disabled={addingCustomer} className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-accent">
+                          {addingCustomer ? "Adding..." : 'Add new customer "' + customerQuery.trim() + '"'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </>

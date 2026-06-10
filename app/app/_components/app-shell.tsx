@@ -159,6 +159,14 @@ export function AppShell({
     };
   }, [open]);
 
+  // The till is a focused kiosk: no admin sidebar, no header, no backdrop. The
+  // register's own slim top bar provides the only way out (exit to dashboard).
+  if (isTill) {
+    return (
+      <main className="h-[100dvh] overflow-hidden bg-background">{children}</main>
+    );
+  }
+
   const asideClasses =
     "w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col shrink-0 " +
     "fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-out " +

@@ -4,12 +4,16 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { createClient } from "@/lib/supabase/client";
+import { CATEGORY_PALETTE } from "../pos/category-colors";
 import {
   createCatalogItem,
   setCatalogItemActive,
   setCatalogItemTaxable,
   setCatalogItemTaxRate,
   setCatalogItemBarcode,
+  setCatalogItemImage,
+  saveCategoryColors,
   createVariation,
   deleteVariation,
   createModifier,
@@ -27,17 +31,50 @@ type Item = {
   taxable: boolean;
   tax_rate_id: string | null;
   barcode: string | null;
+  image_url: string | null;
   variations: Option[];
   modifiers: Option[];
 };
 
-export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]; taxRates: TaxRate[] }) {
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+// Upload an image to the public "item-images" bucket and return its public URL.
+async function uploadItemImage(file: File): Promise<string> {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Please choose an image file.");
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    throw new Error("Image is too large (max 5MB).");
+  }
+  const supabase = createClient();
+  const dot = file.name.lastIndexOf(".");
+  const ext = dot >= 0 ? file.name.slice(dot).toLowerCase() : "";
+  const path = crypto.randomUUID() + ext;
+  const { error } = await supabase.storage
+    .from("item-images")
+    .upload(path, file, { cacheControl: "3600", upsert: false });
+  if (error) throw new Error(error.message);
+  const { data } = supabase.storage.from("item-images").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+export function CatalogClient({
+  initialItems,
+  taxRates,
+  initialCategoryColors,
+}: {
+  initialItems: Item[];
+  taxRates: TaxRate[];
+  initialCategoryColors: Record<string, string>;
+}) {
   const [items, setItems] = useState<Item[]>(initialItems);
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("");
   const [barcode, setBarcode] = useState("");
   const [taxable, setTaxable] = useState(true);
+  const [imageUrl, setImageUrl] = useState("");
+  const [addUploading, setAddUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -50,6 +87,12 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
   const [modError, setModError] = useState<string | null>(null);
   const [barcodeEdit, setBarcodeEdit] = useState("");
   const [barcodeError, setBarcodeError] = useState<string | null>(null);
+  const [itemUploading, setItemUploading] = useState(false);
+  const [itemImgError, setItemImgError] = useState<string | null>(null);
+
+  const [categoryColors, setCategoryColors] =
+    useState<Record<string, string>>(initialCategoryColors);
+  const [colorError, setColorError] = useState<string | null>(null);
 
   const rateNameById: Record<string, string> = {};
   for (const r of taxRates) rateNameById[r.id] = r.name;
@@ -75,6 +118,7 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
         category,
         taxable,
         barcode,
+        image_url: imageUrl,
       });
       if ("error" in res) {
         setError(res.error);
@@ -91,6 +135,7 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
           taxable: taxable,
           tax_rate_id: null,
           barcode: barcode.trim() || null,
+          image_url: imageUrl || null,
           variations: [],
           modifiers: [],
         },
@@ -100,6 +145,72 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
       setCategory("");
       setBarcode("");
       setTaxable(true);
+      setImageUrl("");
+    });
+  }
+
+  function handleAddImageFile(file: File | null) {
+    if (!file) return;
+    setError(null);
+    setAddUploading(true);
+    uploadItemImage(file)
+      .then((url) => setImageUrl(url))
+      .catch((e) => setError(e instanceof Error ? e.message : "Upload failed."))
+      .finally(() => setAddUploading(false));
+  }
+
+  function handleItemImageFile(item: Item, file: File | null) {
+    if (!file) return;
+    setItemImgError(null);
+    setItemUploading(true);
+    uploadItemImage(file)
+      .then((url) => {
+        startTransition(async () => {
+          const res = await setCatalogItemImage(item.id, url);
+          if ("error" in res) {
+            setItemImgError(res.error);
+            return;
+          }
+          setItems((prev) =>
+            prev.map((i) => (i.id === item.id ? { ...i, image_url: url } : i))
+          );
+        });
+      })
+      .catch((e) =>
+        setItemImgError(e instanceof Error ? e.message : "Upload failed.")
+      )
+      .finally(() => setItemUploading(false));
+  }
+
+  function handleItemImageRemove(item: Item) {
+    setItemImgError(null);
+    startTransition(async () => {
+      const res = await setCatalogItemImage(item.id, null);
+      if ("error" in res) {
+        setItemImgError(res.error);
+        return;
+      }
+      setItems((prev) =>
+        prev.map((i) => (i.id === item.id ? { ...i, image_url: null } : i))
+      );
+    });
+  }
+
+  function handleSetCategoryColor(cat: string, key: string) {
+    setColorError(null);
+    const next = { ...categoryColors };
+    if (next[cat] === key) {
+      delete next[cat];
+    } else {
+      next[cat] = key;
+    }
+    setCategoryColors(next);
+    startTransition(async () => {
+      const res = await saveCategoryColors(next);
+      if ("error" in res) {
+        setColorError(res.error);
+        setCategoryColors(categoryColors);
+      }
     });
   }
 
@@ -351,13 +462,99 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
           />
           <span>Taxable (apply tax at checkout)</span>
         </label>
+
+        <div className="mt-3 space-y-1">
+          <Label className="text-xs">Photo (optional)</Label>
+          <div className="flex items-center gap-3">
+            {imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={imageUrl}
+                alt="Item preview"
+                className="h-16 w-16 rounded-md object-cover border border-border"
+              />
+            ) : (
+              <div className="h-16 w-16 rounded-md border border-dashed border-border flex items-center justify-center text-xs text-muted-foreground">
+                None
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <label className="inline-flex items-center justify-center rounded-md border border-border px-3 py-2 text-sm cursor-pointer hover:bg-accent">
+                {addUploading ? "Uploading..." : imageUrl ? "Replace" : "Upload"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  disabled={addUploading}
+                  onChange={(e) => {
+                    handleAddImageFile(e.target.files?.[0] ?? null);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {imageUrl && (
+                <button
+                  type="button"
+                  onClick={() => setImageUrl("")}
+                  className="text-xs text-muted-foreground underline hover:text-foreground"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="mt-3">
-          <Button onClick={handleAdd} disabled={pending || !name.trim()}>
+          <Button onClick={handleAdd} disabled={pending || addUploading || !name.trim()}>
             {pending ? "Saving..." : "Add item"}
           </Button>
         </div>
         {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
       </div>
+
+      {categoryOptions.length > 0 && (
+        <div className="bg-card border border-border rounded-lg p-6">
+          <h2 className="text-sm font-medium mb-1">Category colors</h2>
+          <p className="text-xs text-muted-foreground mb-3">
+            Pick a color for each category. It color-codes the register tiles (for
+            items without a photo).
+          </p>
+          <div className="space-y-3">
+            {categoryOptions.map((cat) => (
+              <div key={cat} className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium truncate">{cat}</span>
+                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                  {CATEGORY_PALETTE.map((p) => {
+                    const selected = categoryColors[cat] === p.key;
+                    return (
+                      <button
+                        key={p.key}
+                        type="button"
+                        title={p.label}
+                        aria-label={cat + " " + p.label}
+                        onClick={() => handleSetCategoryColor(cat, p.key)}
+                        disabled={pending}
+                        className={
+                          "h-6 w-6 rounded-full " +
+                          p.swatch +
+                          " transition-transform hover:scale-110 " +
+                          (selected
+                            ? "ring-2 ring-offset-2 ring-offset-card ring-foreground"
+                            : "")
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          {colorError && (
+            <p className="text-sm text-red-600 mt-2">{colorError}</p>
+          )}
+        </div>
+      )}
 
       <div className="bg-card border border-border rounded-lg p-6">
         <h2 className="text-sm font-medium mb-3">Items ({items.length})</h2>
@@ -495,6 +692,59 @@ export function CatalogClient({ initialItems, taxRates }: { initialItems: Item[]
                         </div>
                         {barcodeError && (
                           <p className="text-sm text-red-600 pl-3">{barcodeError}</p>
+                        )}
+                      </div>
+
+                      {/* Photo */}
+                      <div className="space-y-2 pt-3 border-t border-border">
+                        <p className="text-xs text-muted-foreground pl-3">
+                          Photo &mdash; optional image shown on the register tile.
+                        </p>
+                        <div className="pl-3 flex items-center gap-3">
+                          {item.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.image_url}
+                              alt={item.name}
+                              className="h-16 w-16 rounded-md object-cover border border-border"
+                            />
+                          ) : (
+                            <div className="h-16 w-16 rounded-md border border-dashed border-border flex items-center justify-center text-xs text-muted-foreground">
+                              None
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <label className="inline-flex items-center justify-center rounded-md border border-border px-3 py-2 text-sm cursor-pointer hover:bg-accent">
+                              {itemUploading
+                                ? "Uploading..."
+                                : item.image_url
+                                ? "Replace"
+                                : "Upload"}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="sr-only"
+                                disabled={itemUploading || pending}
+                                onChange={(e) => {
+                                  handleItemImageFile(item, e.target.files?.[0] ?? null);
+                                  e.target.value = "";
+                                }}
+                              />
+                            </label>
+                            {item.image_url && (
+                              <button
+                                type="button"
+                                onClick={() => handleItemImageRemove(item)}
+                                disabled={pending || itemUploading}
+                                className="text-xs text-muted-foreground underline hover:text-red-600"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {itemImgError && (
+                          <p className="text-sm text-red-600 pl-3">{itemImgError}</p>
                         )}
                       </div>
 

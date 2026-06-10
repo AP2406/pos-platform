@@ -11,6 +11,7 @@ const itemSchema = z.object({
   category: z.string().max(60).optional().or(z.literal("")),
   taxable: z.boolean().optional(),
   barcode: z.string().max(120).optional().or(z.literal("")),
+  image_url: z.string().url().max(2000).optional().or(z.literal("")),
 });
 
 type ItemInput = {
@@ -19,6 +20,7 @@ type ItemInput = {
   category?: string;
   taxable?: boolean;
   barcode?: string;
+  image_url?: string;
 };
 
 function cleanBarcode(raw: string | undefined | null): string | null {
@@ -59,6 +61,7 @@ export async function createCatalogItem(
       category: parsed.data.category || null,
       taxable: parsed.data.taxable === false ? false : true,
       barcode: code,
+      image_url: parsed.data.image_url || null,
     })
     .select("id")
     .single();
@@ -91,6 +94,9 @@ export async function updateCatalogItem(
   }
   if (typeof parsed.data.barcode === "string") {
     updateData.barcode = cleanBarcode(parsed.data.barcode);
+  }
+  if (typeof parsed.data.image_url === "string") {
+    updateData.image_url = parsed.data.image_url || null;
   }
 
   const { error } = await supabase
@@ -176,6 +182,65 @@ export async function setCatalogItemBarcode(
     return { error: "Could not update the code. Please try again." };
   }
   revalidatePath("/app/catalog");
+  return { ok: true };
+}
+
+export async function setCatalogItemImage(
+  id: string,
+  imageUrl: string | null
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing item." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  let url: string | null = null;
+  if (imageUrl) {
+    const t = imageUrl.trim();
+    url = t.length > 0 ? t.slice(0, 2000) : null;
+  }
+
+  const { error } = await supabase
+    .from("catalog_items")
+    .update({ image_url: url })
+    .eq("id", id)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("setCatalogItemImage:", error);
+    return { error: "Could not update the photo. Please try again." };
+  }
+  revalidatePath("/app/catalog");
+  revalidatePath("/app/pos");
+  return { ok: true };
+}
+
+export async function saveCategoryColors(
+  map: Record<string, string>
+): Promise<{ ok: true } | { error: string }> {
+  const { business, role } = await requireBusiness();
+  if (role !== "owner" && role !== "manager") {
+    return { error: "Only an owner or manager can change category colors." };
+  }
+  const supabase = await createClient();
+
+  // Keep only string->string entries, trimmed, and bounded so a bad client
+  // payload can't bloat the row.
+  const clean: Record<string, string> = {};
+  for (const key of Object.keys(map || {})) {
+    const name = (key || "").trim().slice(0, 60);
+    const value = (map[key] || "").trim().slice(0, 40);
+    if (name && value) clean[name] = value;
+  }
+
+  const { error } = await supabase
+    .from("businesses")
+    .update({ category_colors: clean })
+    .eq("id", business.id);
+  if (error) {
+    console.error("saveCategoryColors:", error);
+    return { error: "Could not save category colors. Please try again." };
+  }
+  revalidatePath("/app/catalog");
+  revalidatePath("/app/pos");
   return { ok: true };
 }
 

@@ -11,7 +11,7 @@ export default async function PosPage() {
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, taxable, tax_rate_id")
+    .select("id, name, price, category, taxable, tax_rate_id, image_url")
     .eq("business_id", business.id)
     .eq("is_active", true)
     .order("name", { ascending: true });
@@ -46,11 +46,15 @@ export default async function PosPage() {
 
   const { data: rsRow } = await supabase
     .from("businesses")
-    .select("receipt_settings")
+    .select("receipt_settings, show_item_photos, category_colors")
     .eq("id", business.id)
     .maybeSingle();
   const receiptSettings =
     (rsRow?.receipt_settings as Partial<ReceiptSettings> | null) ?? null;
+  const showItemPhotos =
+    (rsRow?.show_item_photos as boolean | null) !== false;
+  const categoryColors =
+    (rsRow?.category_colors as Record<string, string> | null) ?? {};
 
   const { data: openDrawer } = await supabase
     .from("drawer_sessions")
@@ -101,6 +105,7 @@ export default async function PosPage() {
       category: (i.category as string | null) ?? null,
       taxable: (i.taxable as boolean | null) ?? true,
       taxFrac: taxFrac,
+      image_url: (i.image_url as string | null) ?? null,
       variations: varsByItem[i.id as string] ?? [],
       modifiers: modsByItem[i.id as string] ?? [],
     };
@@ -112,17 +117,17 @@ export default async function PosPage() {
     (business as { training_mode?: boolean }).training_mode === true;
 
   return (
-    <div>
+    <div className="h-full flex flex-col">
       {trainingMode && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-sm text-blue-600 font-medium">
-          <span className="inline-block w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+        <div className="shrink-0 flex items-center gap-2 border-b border-blue-500/40 bg-blue-500/10 px-3 py-1.5 text-xs text-blue-600 font-medium">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
           Training mode is on &mdash; these sales are practice and won&apos;t count toward your reports or the till.
         </div>
       )}
 
       {!trainingMode && !drawerOpen && (
-        <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-700 dark:text-amber-500 font-medium">
-          <span className="inline-block w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+        <div className="shrink-0 flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-500 font-medium">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
           You haven&apos;t started the day &mdash; cash sales won&apos;t be counted in an end-of-day till total.
           <Link href="/app/pos/drawer" className="underline underline-offset-2 hover:opacity-80">
             Start the day
@@ -130,20 +135,18 @@ export default async function PosPage() {
         </div>
       )}
 
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Register</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Tap items to build a sale, then charge.
-        </p>
+      <div className="flex-1 min-h-0">
+        <RegisterClient
+          items={items}
+          taxRate={taxRate}
+          businessName={business.name}
+          hasStaff={hasStaff}
+          activeStaff={activeStaff}
+          receiptSettings={receiptSettings}
+          showItemPhotos={showItemPhotos}
+          categoryColors={categoryColors}
+        />
       </div>
-      <RegisterClient
-        items={items}
-        taxRate={taxRate}
-        businessName={business.name}
-        hasStaff={hasStaff}
-        activeStaff={activeStaff}
-        receiptSettings={receiptSettings}
-      />
     </div>
   );
 }

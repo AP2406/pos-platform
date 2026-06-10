@@ -9,9 +9,17 @@ export default async function CatalogPage() {
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, is_active, taxable, tax_rate_id, barcode")
+    .select("id, name, price, category, is_active, taxable, tax_rate_id, barcode, image_url")
     .eq("business_id", business.id)
     .order("created_at", { ascending: true });
+
+  const { data: bizRow } = await supabase
+    .from("businesses")
+    .select("category_colors")
+    .eq("id", business.id)
+    .maybeSingle();
+  const categoryColors =
+    (bizRow?.category_colors as Record<string, string> | null) ?? {};
 
   const { data: varsData } = await supabase
     .from("catalog_item_variations")
@@ -65,6 +73,7 @@ export default async function CatalogPage() {
     taxable: (i.taxable as boolean | null) ?? true,
     tax_rate_id: (i.tax_rate_id as string | null) ?? null,
     barcode: (i.barcode as string | null) ?? null,
+    image_url: (i.image_url as string | null) ?? null,
     variations: varsByItem[i.id as string] ?? [],
     modifiers: modsByItem[i.id as string] ?? [],
   }));
@@ -86,7 +95,11 @@ export default async function CatalogPage() {
         </div>
         <ImportMenu />
       </div>
-      <CatalogClient initialItems={items} taxRates={taxRates} />
+      <CatalogClient
+        initialItems={items}
+        taxRates={taxRates}
+        initialCategoryColors={categoryColors}
+      />
     </div>
   );
 }
