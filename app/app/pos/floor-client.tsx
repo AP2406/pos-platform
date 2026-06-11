@@ -12,10 +12,13 @@ import {
   loadTableTicket,
   listOpenTableTickets,
   listOpenTogoTickets,
+  listChildTickets,
+  unsplitTicket,
   transferTables,
   type TableCart,
   type TableTicketSummary,
   type TogoTicketSummary,
+  type ChildTicket,
 } from "./ticket-actions";
 import { listFloor, type FloorElement, type ElementKind, type FloorPlan } from "../floor/floor-actions";
 import type { ActiveStaff } from "./staff-session";
@@ -82,6 +85,8 @@ export function FloorClient({
 
   const [promptTable, setPromptTable] = useState<FloorElement | null>(null);
   const [guests, setGuests] = useState("");
+  // P0-4: a split table's child-check chooser.
+  const [splitView, setSplitView] = useState<{ parentId: string; label: string; children: ChildTicket[] } | null>(null);
   const [togoOpen, setTogoOpen] = useState(false);
   const [togoName, setTogoName] = useState("");
   const [togoPhone, setTogoPhone] = useState("");
@@ -190,7 +195,9 @@ export function FloorClient({
   function tapElement(el: FloorElement) {
     if (!isRingable(el.kind)) return;
     const open = openByElement[el.id];
-    if (open) {
+    if (open && open.child_count > 0) {
+      openSplitView(el, open);
+    } else if (open) {
       resumeElement(el, open.id, open.server_name);
     } else if (el.kind === "table" || el.kind === "booth") {
       setGuests("");
@@ -198,6 +205,33 @@ export function FloorClient({
     } else {
       enterElement(el, null);
     }
+  }
+
+  // P0-4: open the split-check chooser for a table that's been split.
+  function openSplitView(el: FloorElement, open: TableTicketSummary) {
+    setError(null);
+    startTransition(async () => {
+      const children = await listChildTickets(open.id);
+      setSplitView({ parentId: open.id, label: el.label ?? "Table", children });
+    });
+  }
+
+  // Open one child check in the register to tender it (bound by ticket id, no
+  // table element — so paying it closes just that check; the parent closes when
+  // the last child is paid).
+  function payChild(child: ChildTicket) {
+    setSplitView(null);
+    setSelected({ elementId: "", ticketId: child.id, tableLabel: child.label, cart: child.cart, serverName: null, seatCount: null, guestCount: null });
+  }
+
+  function handleUnsplit(parentId: string) {
+    setError(null);
+    startTransition(async () => {
+      const res = await unsplitTicket(parentId);
+      if ("error" in res) { setError(res.error); return; }
+      setSplitView(null);
+      await refreshOpen();
+    });
   }
 
   function startTogo() {
@@ -539,6 +573,30 @@ export function FloorClient({
             </div>
             <Button className="w-full h-12" disabled={pending} onClick={() => enterElement(promptTable, guests ? parseInt(guests) : null)}>
               Open table
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* P0-4: split-check chooser — pay each guest's check independently. */}
+      {splitView && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setSplitView(null)}>
+          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-medium">{splitView.label + " — split"}</h3>
+              <button type="button" onClick={() => setSplitView(null)} className="text-xs text-muted-foreground underline">Close</button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">{splitView.children.length + " check" + (splitView.children.length === 1 ? "" : "s") + " still to pay. Tap one to tender it."}</p>
+            <div className="space-y-2">
+              {splitView.children.map((c) => (
+                <button key={c.id} type="button" onClick={() => payChild(c)} className="w-full flex items-center justify-between p-3 rounded-md border border-border hover:bg-accent text-left">
+                  <span className="text-sm font-medium">{c.label}</span>
+                  <span className="text-sm tabular-nums">{"$" + c.subtotal.toFixed(2) + " +tax"}</span>
+                </button>
+              ))}
+            </div>
+            <Button variant="outline" className="w-full h-10 mt-3" disabled={pending} onClick={() => handleUnsplit(splitView.parentId)}>
+              Un-split (merge back)
             </Button>
           </div>
         </div>
