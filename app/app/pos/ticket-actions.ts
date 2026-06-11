@@ -180,6 +180,10 @@ const tableCartLineSchema = cartLineSchema.extend({
   note: z.string().max(280).optional().nullable(),
   // Seat this line belongs to (1-based); null/absent = shared / no seat.
   seat: z.coerce.number().int().min(1).max(99).optional().nullable(),
+  // Coursing (P0-1, full-service): which course this line fires with, and when
+  // it was last fired. Kitchen routing only — never affects totals.
+  course_id: z.string().uuid().optional().nullable(),
+  fired_at: z.string().max(40).optional().nullable(),
 });
 const tableCartSchema = z.object({
   items: z.array(tableCartLineSchema).max(200),
@@ -454,6 +458,95 @@ export async function sendTableTicket(
     console.error("sendTableTicket update:", updErr);
     // The fire succeeded; the client will still mark items sent locally.
   }
+
+  return { ok: true, fired: fired.reduce((s, f) => s + f.quantity, 0) };
+}
+
+// Coursing (P0-1): fire only the not-yet-sent items of ONE course to the
+// kitchen. Same kitchen-ticket mechanism as sendTableTicket, but filtered to
+// course_id, and stamps fired_at on the lines it fires. Pure kitchen routing —
+// no order/total/snapshot is touched. Full-service only (gated in the client).
+export async function fireCourse(
+  ticketId: string,
+  cart: TableCart,
+  courseId: string,
+  courseName?: string | null,
+  diningOption?: string | null
+): Promise<{ ok: true; fired: number } | { error: string }> {
+  if (!ticketId) return { error: "Missing ticket." };
+  if (!courseId) return { error: "Missing course." };
+  const parsed = tableCartSchema.safeParse(cart);
+  if (!parsed.success) return { error: "Could not read the table." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: ticket } = await supabase
+    .from("open_tickets")
+    .select("id, element_id, label")
+    .eq("id", ticketId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!ticket) return { error: "That ticket is no longer open." };
+  const elementId = (ticket.element_id as string | null) ?? null;
+
+  let label: string | null = (ticket.label as string | null) ?? null;
+  if (elementId) {
+    const { data: el } = await supabase
+      .from("floor_elements")
+      .select("label")
+      .eq("id", elementId)
+      .eq("business_id", business.id)
+      .maybeSingle();
+    if (el && el.label) label = el.label as string;
+  }
+  if (diningOption && DINING_KDS_LABELS[diningOption]) {
+    label = (label ? label + " · " : "") + DINING_KDS_LABELS[diningOption];
+  }
+  // Name the kitchen ticket after the course being fired.
+  if (courseName) label = (label ? label + " · " : "") + courseName;
+
+  const nowIso = new Date().toISOString();
+  const fired: { name: string; quantity: number; note?: string | null; seat?: number | null }[] = [];
+  const updatedItems = parsed.data.items.map((it) => {
+    if ((it.course_id ?? null) !== courseId) return it;
+    const qty = Number(it.quantity) || 0;
+    const sent = Number(it.sent_qty) || 0;
+    const delta = qty - sent;
+    if (delta <= 0) return it;
+    fired.push({ name: it.name, quantity: delta, note: it.note ?? null, seat: it.seat ?? null });
+    return { ...it, sent_qty: qty, fired_at: nowIso };
+  });
+
+  if (fired.length === 0) {
+    await supabase
+      .from("open_tickets")
+      .update({ cart: { ...parsed.data, items: updatedItems } })
+      .eq("id", ticketId)
+      .eq("business_id", business.id);
+    return { ok: true, fired: 0 };
+  }
+
+  const { error: insErr } = await supabase.from("kitchen_tickets").insert({
+    business_id: business.id,
+    element_id: elementId,
+    label: label,
+    items: fired,
+    created_by: user ? user.id : null,
+  });
+  if (insErr) {
+    console.error("fireCourse insert:", insErr);
+    return { error: "Could not send to the kitchen. Please try again." };
+  }
+
+  const { error: updErr } = await supabase
+    .from("open_tickets")
+    .update({ cart: { ...parsed.data, items: updatedItems } })
+    .eq("id", ticketId)
+    .eq("business_id", business.id);
+  if (updErr) console.error("fireCourse update:", updErr);
 
   return { ok: true, fired: fired.reduce((s, f) => s + f.quantity, 0) };
 }
