@@ -5,7 +5,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { VOID_REASONS, DISCOUNT_REASONS, TAX_EXEMPT_REASONS, isValidReason } from "./reason-codes";
+import { VOID_REASONS, DISCOUNT_REASONS, TAX_EXEMPT_REASONS, COMP_REASONS, SERVICE_CHARGE_WAIVE_REASONS, isValidReason } from "./reason-codes";
 
 const lineSchema = z.object({
   catalog_item_id: z.string().uuid().optional().nullable(),
@@ -33,6 +33,12 @@ const orderSchema = z.object({
   discount_value: z.coerce.number().min(0).max(1000000).optional(),
   discount_reason_code: z.string().max(60).optional(),
   discount_reason_note: z.string().max(500).optional(),
+  comp_value: z.coerce.number().min(0).max(1000000).optional(),
+  comp_reason_code: z.string().max(60).optional(),
+  comp_reason_note: z.string().max(500).optional(),
+  service_charge: z.coerce.boolean().optional(),
+  service_charge_waive_reason_code: z.string().max(60).optional(),
+  service_charge_waive_reason_note: z.string().max(500).optional(),
   tax_exempt: z.coerce.boolean().optional(),
   tax_exempt_reason_code: z.string().max(60).optional(),
   tax_exempt_reason_note: z.string().max(500).optional(),
@@ -61,6 +67,12 @@ type OrderInput = {
   discount_value?: number;
   discount_reason_code?: string;
   discount_reason_note?: string;
+  comp_value?: number;
+  comp_reason_code?: string;
+  comp_reason_note?: string;
+  service_charge?: boolean;
+  service_charge_waive_reason_code?: string;
+  service_charge_waive_reason_note?: string;
   tax_exempt?: boolean;
   tax_exempt_reason_code?: string;
   tax_exempt_reason_note?: string;
@@ -216,6 +228,24 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
 
   const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
 
+  // Comp (on-the-house): a pre-tax reduction applied after any discount,
+  // recorded separately from discount. Capped to what's left after the discount.
+  let comp = parsed.data.comp_value ?? 0;
+  if (comp < 0) comp = 0;
+  if (comp > discountedSubtotal) comp = discountedSubtotal;
+  comp = Math.round(comp * 100) / 100;
+  const compReasonCode = (parsed.data.comp_reason_code || "").trim();
+  const compReasonNote = (parsed.data.comp_reason_note || "").trim();
+  if (comp > 0) {
+    if (!isValidReason(COMP_REASONS, compReasonCode)) {
+      return { error: "Choose a reason for the comp." };
+    }
+    if (compReasonCode === "other" && !compReasonNote) {
+      return { error: "Add a note explaining the comp." };
+    }
+  }
+  const netSubtotal = Math.round((discountedSubtotal - comp) * 100) / 100;
+
   let rate = Number(business.default_tax_rate) || 0;
   if (rate > 1) rate = rate / 100;
 
@@ -262,7 +292,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     }
   }
 
-  const taxF = subtotal > 0 ? discountedSubtotal / subtotal : 0;
+  const taxF = subtotal > 0 ? netSubtotal / subtotal : 0;
 
   const rateBuckets: Record<string, { label: string; frac: number; base: number }> = {};
   for (const i of parsed.data.items) {
@@ -320,8 +350,34 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     tax = 0;
   }
 
+  // Service charge / auto-gratuity — the amount is recomputed here from the
+  // business policy (the client only says whether it's applied). It is NOT
+  // taxed; its base is the pre-tax net (default) or the post-tax amount.
+  const scEnabled = (business as { service_charge_enabled?: boolean }).service_charge_enabled === true;
+  let scPct = Number((business as { service_charge_pct?: number }).service_charge_pct) || 0;
+  if (scPct < 0) scPct = 0;
+  if (scPct > 100) scPct = 100;
+  const scPostTax = (business as { service_charge_post_tax?: boolean }).service_charge_post_tax === true;
+  const scLabel = ((business as { service_charge_label?: string }).service_charge_label || "Service charge").toString();
+  const scApplied = scEnabled && scPct > 0 && parsed.data.service_charge === true;
+  const scBase = scApplied ? (scPostTax ? Math.round((netSubtotal + tax) * 100) / 100 : netSubtotal) : 0;
+  const serviceCharge = scApplied ? Math.round(scBase * (scPct / 100) * 100) / 100 : 0;
+
+  // Waiving an enabled service charge is the sensitive, reason-coded action.
+  const scWaiveCode = (parsed.data.service_charge_waive_reason_code || "").trim();
+  const scWaiveNote = (parsed.data.service_charge_waive_reason_note || "").trim();
+  const scWaived = scEnabled && scPct > 0 && !scApplied && scWaiveCode !== "";
+  if (scWaived) {
+    if (!isValidReason(SERVICE_CHARGE_WAIVE_REASONS, scWaiveCode)) {
+      return { error: "Choose a reason for waiving the service charge." };
+    }
+    if (scWaiveCode === "other" && !scWaiveNote) {
+      return { error: "Add a note explaining the waived service charge." };
+    }
+  }
+
   const tip = parsed.data.tip ?? 0;
-  const total = Math.round((discountedSubtotal + tax + tip) * 100) / 100;
+  const total = Math.round((netSubtotal + tax + serviceCharge + tip) * 100) / 100;
   const paymentMethod = parsed.data.payment_method ?? "cash";
 
   let tenders: Tender[] = [];
@@ -383,7 +439,23 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       reason_code: discount > 0 ? discountReasonCode : null,
       reason_note: discount > 0 && discountReasonNote ? discountReasonNote : null,
     },
+    comp: {
+      amount: comp,
+      reason_code: comp > 0 ? compReasonCode : null,
+      reason_note: comp > 0 && compReasonNote ? compReasonNote : null,
+    },
     tax: { rate: rate, amount: tax, taxable_base: taxableBase, breakdown: taxBreakdown, exempt: taxExemptInfo },
+    service_charge: {
+      applied: scApplied,
+      label: scLabel,
+      pct: scPct,
+      post_tax: scPostTax,
+      base: scBase,
+      amount: serviceCharge,
+      waived: scWaived,
+      waive_reason_code: scWaived ? scWaiveCode : null,
+      waive_reason_note: scWaived && scWaiveNote ? scWaiveNote : null,
+    },
     tip: tip,
     total: total,
     payment_method: orderPaymentMethod,
@@ -422,6 +494,26 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       metadata: { type: discountType, value: discountValue, amount: discount, staff_id: activeStaffId, staff_name: activeStaffName },
     });
   }
+  if (comp > 0 && !isTraining) {
+    auditEvents.push({
+      actor_id: authUserId,
+      actor_role: role,
+      action: "comp",
+      reason_code: compReasonCode,
+      reason_note: compReasonNote ? compReasonNote.slice(0, 500) : null,
+      metadata: { amount: comp, staff_id: activeStaffId, staff_name: activeStaffName },
+    });
+  }
+  if (scWaived && !isTraining) {
+    auditEvents.push({
+      actor_id: authUserId,
+      actor_role: role,
+      action: "service_charge_waived",
+      reason_code: scWaiveCode,
+      reason_note: scWaiveNote ? scWaiveNote.slice(0, 500) : null,
+      metadata: { pct: scPct, staff_id: activeStaffId, staff_name: activeStaffName },
+    });
+  }
   if (manualExempt && !isTraining) {
     auditEvents.push({
       actor_id: authUserId,
@@ -457,6 +549,8 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     tax: tax,
     tip: tip,
     discount: discount,
+    comp: comp,
+    service_charge: serviceCharge,
     total: total,
     payment_method: orderPaymentMethod,
     customer_id: customerId,

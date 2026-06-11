@@ -9,6 +9,8 @@ import { TrainingModeForm } from "./training-mode-form";
 import { ShowPhotosForm } from "./show-photos-form";
 import { StaffCard } from "./staff-card";
 import { FloorCard } from "./floor-card";
+import { ServiceChargeCard } from "./service-charge-card";
+import { SplitCard } from "./split-card";
 import { hasFloorService } from "@/lib/modules/modes";
 import { listFloor, listFloorPlans } from "../floor/floor-actions";
 import { LeadInboxCard } from "./lead-inbox-card";
@@ -58,6 +60,29 @@ export default async function SettingsPage() {
 
   const trainingMode =
     (business as { training_mode?: boolean }).training_mode === true;
+
+  const scb = business as {
+    service_charge_enabled?: boolean;
+    service_charge_pct?: number;
+    service_charge_auto_party?: number;
+    service_charge_post_tax?: boolean;
+    service_charge_label?: string;
+  };
+  const serviceChargeSettings = {
+    enabled: scb.service_charge_enabled === true,
+    pct: Number(scb.service_charge_pct) || 0,
+    autoParty: Number(scb.service_charge_auto_party) || 0,
+    postTax: scb.service_charge_post_tax === true,
+    label: (scb.service_charge_label || "Service charge").toString(),
+  };
+  const showServiceCharge = hasFloorService(business);
+
+  const splitb = business as { split_settlement_mode?: string; split_allow_units?: boolean };
+  const splitSettings = {
+    settlementMode: (splitb.split_settlement_mode === "informational" ? "informational" : "separate") as "separate" | "informational",
+    allowUnits: splitb.split_allow_units === true,
+  };
+  const showSplit = hasFloorService(business);
 
   const showItemPhotos =
     (business as { show_item_photos?: boolean }).show_item_photos !== false;
@@ -166,10 +191,22 @@ export default async function SettingsPage() {
               initialCurrency={business.currency || "CAD"}
             />
           </div>
-          <div className="bg-card border border-border rounded-lg p-6">
+          <div className="bg-card border border-border rounded-lg p-6 mb-4">
             <SectionHeader>Additional tax rates</SectionHeader>
             <TaxRatesCard initialRates={taxRates} />
           </div>
+          {showServiceCharge && (
+            <div className="bg-card border border-border rounded-lg p-6 mb-4">
+              <SectionHeader>Service charge</SectionHeader>
+              <ServiceChargeCard initial={serviceChargeSettings} />
+            </div>
+          )}
+          {showSplit && (
+            <div className="bg-card border border-border rounded-lg p-6">
+              <SectionHeader>Check splitting</SectionHeader>
+              <SplitCard initial={splitSettings} />
+            </div>
+          )}
         </>
       ),
     });

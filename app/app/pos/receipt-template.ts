@@ -63,6 +63,9 @@ export type ReceiptData = {
   items: { name: string; quantity: number; unit_price: number }[];
   subtotal: number;
   discount: number;
+  comp?: number;
+  serviceCharge?: number;
+  serviceLabel?: string;
   tax: number;
   tip: number;
   total: number;
@@ -143,7 +146,9 @@ function totalsBlock(r: ReceiptData, s: ReceiptSettings, boldTotal: boolean): st
   const taxLabel = s.taxLabel.trim() ? esc(s.taxLabel.trim()) : "Tax";
   let html = row("Subtotal", money(r.subtotal), { muted: true });
   if (r.discount > 0) html += row("Discount", "-" + money(r.discount), { muted: true });
+  if ((r.comp ?? 0) > 0) html += row("Comp", "-" + money(r.comp as number), { muted: true });
   html += row(taxLabel, money(r.tax), { muted: true });
+  if ((r.serviceCharge ?? 0) > 0) html += row(r.serviceLabel || "Service charge", money(r.serviceCharge as number), { muted: true });
   if (r.tip > 0) html += row("Tip", money(r.tip), { muted: true });
   html += row("Total", money(r.total), { bold: true });
   return html;
@@ -243,7 +248,9 @@ export function buildReceiptHtml(r: ReceiptData, settingsIn: Partial<ReceiptSett
     totals =
       row("Subtotal", money(r.subtotal), { muted: true }) +
       (r.discount > 0 ? row("Discount", "-" + money(r.discount), { muted: true }) : "") +
+      ((r.comp ?? 0) > 0 ? row("Comp", "-" + money(r.comp as number), { muted: true }) : "") +
       row(s.taxLabel.trim() ? esc(s.taxLabel.trim()) : "Tax", money(r.tax), { muted: true }) +
+      ((r.serviceCharge ?? 0) > 0 ? row(r.serviceLabel || "Service charge", money(r.serviceCharge as number), { muted: true }) : "") +
       (r.tip > 0 ? row("Tip", money(r.tip), { muted: true }) : "") +
       '<div class="totbox"><span>TOTAL</span><span>' +
       money(r.total) +
