@@ -5,7 +5,7 @@ import { RegisterClient } from "./register-client";
 import { FloorClient } from "./floor-client";
 import { getActiveStaff } from "./staff-session";
 import { listFloor } from "../floor/floor-actions";
-import { listOpenTableTickets } from "./ticket-actions";
+import { listOpenTableTickets, listOpenTogoTickets } from "./ticket-actions";
 import { hasFloorService } from "@/lib/modules/modes";
 import type { ReceiptSettings } from "./receipt-template";
 
@@ -137,10 +137,20 @@ export default async function PosPage() {
   const showFloor = hasFloorService(business);
   let floorTables: Awaited<ReturnType<typeof listFloor>>["elements"] = [];
   let openTables: Awaited<ReturnType<typeof listOpenTableTickets>> = [];
+  let openTogo: Awaited<ReturnType<typeof listOpenTogoTickets>> = [];
+  let serverStaff: { id: string; name: string }[] = [];
   if (showFloor) {
     const floor = await listFloor();
     floorTables = floor.elements.filter((e) => e.kind === "table");
     openTables = await listOpenTableTickets();
+    openTogo = await listOpenTogoTickets();
+    const { data: staffData } = await supabase
+      .from("staff_members")
+      .select("id, name")
+      .eq("business_id", business.id)
+      .eq("is_active", true)
+      .order("name", { ascending: true });
+    serverStaff = (staffData ?? []).map((s) => ({ id: s.id as string, name: s.name as string }));
   }
 
   return (
@@ -168,6 +178,8 @@ export default async function PosPage() {
             register={registerProps}
             tables={floorTables}
             initialOpen={openTables}
+            initialTogo={openTogo}
+            staff={serverStaff}
           />
         ) : (
           <RegisterClient {...registerProps} />

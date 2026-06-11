@@ -14,6 +14,7 @@ import {
   updateTableTicket,
   closeTableTicket,
   sendTableTicket,
+  setTicketServer,
   type OpenTicketSummary,
   type TableCart,
 } from "./ticket-actions";
@@ -45,8 +46,9 @@ type CartLine = {
   // Optional kitchen note ("no onions", "well done").
   note?: string | null;
 };
-// Binding when the register is opened for a specific full-service table.
-type TableBinding = { tableId: string; ticketId: string; tableLabel: string };
+// Binding when the register is opened for a specific full-service table or to-go.
+type TableBinding = { tableId: string; ticketId: string; tableLabel: string; serverName?: string | null };
+type StaffMember = { id: string; name: string };
 type Customer = { id: string; name: string; taxExempt?: boolean };
 type Tender = { method: "cash" | "card" | "other"; amount: number; tendered: number | null; change: number | null };
 type PaymentLine = { method: string; amount: number; tendered: number | null; change: number | null };
@@ -144,7 +146,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
   });
 }
 
-export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, tableBinding, initialTableCart, onExitToFloor }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void }) {
+export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, tableBinding, initialTableCart, onExitToFloor, staffList }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[] }) {
   const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
   const [tip, setTip] = useState(initialTableCart?.tip ?? "");
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">(initialTableCart?.discount_mode === "percent" ? "percent" : "amount");
@@ -200,6 +202,9 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [localOos, setLocalOos] = useState<Record<string, boolean>>({});
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lpFired = useRef(false);
+  // Server assigned to this table/to-go ticket (change-server).
+  const [serverName, setServerName] = useState<string | null>(tableBinding?.serverName ?? null);
+  const [serverSheet, setServerSheet] = useState(false);
 
   const itemTaxableById: Record<string, boolean> = {};
   const itemTaxFracById: Record<string, number> = {};
@@ -495,6 +500,15 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         return;
       }
       setCart((prev) => prev.map((l) => ({ ...l, sent_qty: l.quantity })));
+    });
+  }
+
+  function changeServer(member: StaffMember) {
+    if (!tableBinding) return;
+    setServerName(member.name);
+    setServerSheet(false);
+    startTransition(async () => {
+      await setTicketServer(tableBinding.ticketId, member.id);
     });
   }
 
@@ -1259,6 +1273,11 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {tableBinding && staffList && staffList.length > 0 && (
+                <button type="button" onClick={() => setServerSheet(true)} className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent">
+                  {serverName ? serverName : "Assign server"}
+                </button>
+              )}
               <RegisterRefund businessName={businessName} />
               {!tableBinding && openTickets.length > 0 && (
                 <button type="button" onClick={() => setTicketsOpen(true)} className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent">
@@ -1477,6 +1496,25 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                 <Button variant="outline" className="w-full mt-4 text-red-600" onClick={() => removeLine(editLineIndex)}>
                   Remove from sale
                 </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Change-server sheet */}
+          {serverSheet && (
+            <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setServerSheet(false)}>
+              <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-xs max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium">Assign server</h3>
+                  <button type="button" onClick={() => setServerSheet(false)} className="text-xs text-muted-foreground underline">Cancel</button>
+                </div>
+                <div className="space-y-1">
+                  {(staffList ?? []).map((m) => (
+                    <button key={m.id} type="button" onClick={() => changeServer(m)} className={"w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent " + (serverName === m.name ? "bg-accent font-medium" : "")}>
+                      {m.name}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}

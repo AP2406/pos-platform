@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { getActiveStaff } from "./staff-session";
 import { z } from "zod";
 
 const cartLineSchema = z.object({
@@ -195,6 +196,18 @@ export type TableTicketSummary = {
   opened_at: string;
   item_count: number;
   subtotal: number;
+  staff_id: string | null;
+  server_name: string | null;
+};
+
+export type TogoTicketSummary = {
+  id: string;
+  name: string | null;
+  opened_at: string;
+  item_count: number;
+  subtotal: number;
+  staff_id: string | null;
+  server_name: string | null;
 };
 
 // Open a table: create its persistent ticket. If the table already has an open
@@ -215,12 +228,15 @@ export async function openTableTicket(
       ? Math.min(Math.round(guestCount), 999)
       : null;
 
+  const active = await getActiveStaff();
   const { data, error } = await supabase
     .from("open_tickets")
     .insert({
       business_id: business.id,
       element_id: elementId,
+      ticket_type: "table",
       guest_count: guests,
+      staff_id: active ? active.id : null,
       cart: { items: [] },
       created_by: user ? user.id : null,
     })
@@ -362,14 +378,15 @@ export async function sendTableTicket(
 
   const { data: ticket } = await supabase
     .from("open_tickets")
-    .select("id, element_id")
+    .select("id, element_id, label")
     .eq("id", ticketId)
     .eq("business_id", business.id)
     .maybeSingle();
-  if (!ticket) return { error: "That table is no longer open." };
+  if (!ticket) return { error: "That ticket is no longer open." };
   const elementId = (ticket.element_id as string | null) ?? null;
 
-  let label: string | null = null;
+  // Kitchen ticket label: the table's name, or the ticket's own label (to-go).
+  let label: string | null = (ticket.label as string | null) ?? null;
   if (elementId) {
     const { data: el } = await supabase
       .from("floor_elements")
@@ -377,7 +394,7 @@ export async function sendTableTicket(
       .eq("id", elementId)
       .eq("business_id", business.id)
       .maybeSingle();
-    label = el ? (el.label as string) : null;
+    if (el && el.label) label = el.label as string;
   }
 
   // Items to fire = quantity beyond what was already sent.
@@ -425,6 +442,37 @@ export async function sendTableTicket(
   return { ok: true, fired: fired.reduce((s, f) => s + f.quantity, 0) };
 }
 
+function cartTotals(cartRaw: unknown): { item_count: number; subtotal: number } {
+  const cart = (cartRaw as TableCart) || { items: [] };
+  const items = Array.isArray(cart.items) ? cart.items : [];
+  let itemCount = 0;
+  let subtotal = 0;
+  for (const it of items) {
+    const qty = Number(it.quantity) || 0;
+    itemCount += qty;
+    subtotal += (Number(it.unit_price) || 0) * qty;
+  }
+  return { item_count: itemCount, subtotal: Math.round(subtotal * 100) / 100 };
+}
+
+// Resolve staff ids -> display names in one query.
+async function serverNames(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  ids: (string | null)[]
+): Promise<Record<string, string>> {
+  const unique = Array.from(new Set(ids.filter((x): x is string => !!x)));
+  if (unique.length === 0) return {};
+  const { data } = await supabase
+    .from("staff_members")
+    .select("id, name")
+    .eq("business_id", businessId)
+    .in("id", unique);
+  const map: Record<string, string> = {};
+  for (const s of data ?? []) map[s.id as string] = s.name as string;
+  return map;
+}
+
 // Summaries of all currently-open tables for the floor view.
 export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
   const { business } = await requireBusiness();
@@ -432,7 +480,7 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
 
   const { data, error } = await supabase
     .from("open_tickets")
-    .select("id, element_id, guest_count, opened_at, cart")
+    .select("id, element_id, guest_count, opened_at, cart, staff_id")
     .eq("business_id", business.id)
     .not("element_id", "is", null);
   if (error) {
@@ -440,23 +488,101 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
     return [];
   }
 
+  const names = await serverNames(supabase, business.id, (data ?? []).map((t) => (t.staff_id as string | null) ?? null));
   return (data ?? []).map((t) => {
-    const cart = (t.cart as TableCart) || { items: [] };
-    const items = Array.isArray(cart.items) ? cart.items : [];
-    let itemCount = 0;
-    let subtotal = 0;
-    for (const it of items) {
-      const qty = Number(it.quantity) || 0;
-      itemCount += qty;
-      subtotal += (Number(it.unit_price) || 0) * qty;
-    }
+    const totals = cartTotals(t.cart);
+    const staffId = (t.staff_id as string | null) ?? null;
     return {
       id: t.id as string,
       element_id: t.element_id as string,
       guest_count: (t.guest_count as number | null) ?? null,
       opened_at: t.opened_at as string,
-      item_count: itemCount,
-      subtotal: Math.round(subtotal * 100) / 100,
+      item_count: totals.item_count,
+      subtotal: totals.subtotal,
+      staff_id: staffId,
+      server_name: staffId ? names[staffId] ?? null : null,
     };
   });
+}
+
+// Open a to-go (takeout) ticket — a check with no table.
+export async function openTogoTicket(
+  name?: string | null
+): Promise<{ ok: true; ticketId: string; name: string | null } | { error: string }> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const active = await getActiveStaff();
+
+  const label = name && name.trim() ? name.trim().slice(0, 80) : null;
+  const { data, error } = await supabase
+    .from("open_tickets")
+    .insert({
+      business_id: business.id,
+      ticket_type: "togo",
+      label: label,
+      staff_id: active ? active.id : null,
+      cart: { items: [] },
+      created_by: user ? user.id : null,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    console.error("openTogoTicket:", error);
+    return { error: "Could not start the to-go order. Please try again." };
+  }
+  return { ok: true, ticketId: data.id as string, name: label };
+}
+
+// Summaries of all currently-open to-go tickets for the floor rail.
+export async function listOpenTogoTickets(): Promise<TogoTicketSummary[]> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("open_tickets")
+    .select("id, label, opened_at, cart, staff_id")
+    .eq("business_id", business.id)
+    .eq("ticket_type", "togo");
+  if (error) {
+    console.error("listOpenTogoTickets:", error);
+    return [];
+  }
+
+  const names = await serverNames(supabase, business.id, (data ?? []).map((t) => (t.staff_id as string | null) ?? null));
+  return (data ?? []).map((t) => {
+    const totals = cartTotals(t.cart);
+    const staffId = (t.staff_id as string | null) ?? null;
+    return {
+      id: t.id as string,
+      name: (t.label as string | null) ?? null,
+      opened_at: t.opened_at as string,
+      item_count: totals.item_count,
+      subtotal: totals.subtotal,
+      staff_id: staffId,
+      server_name: staffId ? names[staffId] ?? null : null,
+    };
+  });
+}
+
+// Reassign the server on an open ticket (table or to-go).
+export async function setTicketServer(
+  ticketId: string,
+  staffId: string | null
+): Promise<{ ok: true } | { error: string }> {
+  if (!ticketId) return { error: "Missing ticket." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("open_tickets")
+    .update({ staff_id: staffId })
+    .eq("id", ticketId)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("setTicketServer:", error);
+    return { error: "Could not change the server." };
+  }
+  return { ok: true };
 }

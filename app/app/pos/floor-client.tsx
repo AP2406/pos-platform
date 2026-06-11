@@ -8,10 +8,13 @@ import { Label } from "@/components/ui/label";
 import { RegisterClient } from "./register-client";
 import {
   openTableTicket,
+  openTogoTicket,
   loadTableTicket,
   listOpenTableTickets,
+  listOpenTogoTickets,
   type TableCart,
   type TableTicketSummary,
+  type TogoTicketSummary,
 } from "./ticket-actions";
 import type { ActiveStaff } from "./staff-session";
 import type { ReceiptSettings } from "./receipt-template";
@@ -32,28 +35,37 @@ type RegisterProps = {
   categoryColors: Record<string, string>;
 };
 
-type Selected = { elementId: string; ticketId: string; tableLabel: string; cart: TableCart };
+type StaffMember = { id: string; name: string };
+type Selected = { elementId: string; ticketId: string; tableLabel: string; cart: TableCart; serverName: string | null };
 
 export function FloorClient({
   register,
   tables,
   initialOpen,
+  initialTogo,
+  staff,
 }: {
   register: RegisterProps;
   tables: FloorElement[];
   initialOpen: TableTicketSummary[];
+  initialTogo: TogoTicketSummary[];
+  staff: StaffMember[];
 }) {
   const [openByElement, setOpenByElement] = useState<Record<string, TableTicketSummary>>(() => {
     const m: Record<string, TableTicketSummary> = {};
     for (const t of initialOpen) m[t.element_id] = t;
     return m;
   });
+  const [togo, setTogo] = useState<TogoTicketSummary[]>(initialTogo);
   const [selected, setSelected] = useState<Selected | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   const [promptTable, setPromptTable] = useState<FloorElement | null>(null);
   const [guests, setGuests] = useState("");
+  const [togoOpen, setTogoOpen] = useState(false);
+  const [togoName, setTogoName] = useState("");
+  const [find, setFind] = useState("");
 
   // Ticking "now" so open-table timers stay live without reading the clock
   // during render. Set from a timer callback (never synchronously in render).
@@ -69,10 +81,11 @@ export function FloorClient({
   }, []);
 
   async function refreshOpen() {
-    const rows = await listOpenTableTickets();
+    const [rows, togoRows] = await Promise.all([listOpenTableTickets(), listOpenTogoTickets()]);
     const m: Record<string, TableTicketSummary> = {};
     for (const t of rows) m[t.element_id] = t;
     setOpenByElement(m);
+    setTogo(togoRows);
   }
 
   function enterTable(table: FloorElement, guestCount: number | null) {
@@ -84,11 +97,11 @@ export function FloorClient({
         setError(res.error);
         return;
       }
-      setSelected({ elementId: table.id, ticketId: res.ticketId, tableLabel: table.label ?? "Table", cart: res.cart });
+      setSelected({ elementId: table.id, ticketId: res.ticketId, tableLabel: table.label ?? "Table", cart: res.cart, serverName: null });
     });
   }
 
-  function resumeTable(table: FloorElement, ticketId: string) {
+  function resumeTable(table: FloorElement, ticketId: string, serverName: string | null) {
     setError(null);
     startTransition(async () => {
       const res = await loadTableTicket(ticketId);
@@ -97,7 +110,35 @@ export function FloorClient({
         await refreshOpen();
         return;
       }
-      setSelected({ elementId: table.id, ticketId: ticketId, tableLabel: table.label ?? "Table", cart: res.cart });
+      setSelected({ elementId: table.id, ticketId: ticketId, tableLabel: table.label ?? "Table", cart: res.cart, serverName: serverName });
+    });
+  }
+
+  function startTogo() {
+    setError(null);
+    const name = togoName.trim();
+    setTogoOpen(false);
+    startTransition(async () => {
+      const res = await openTogoTicket(name || null);
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      setSelected({ elementId: "", ticketId: res.ticketId, tableLabel: "To-go" + (res.name ? " · " + res.name : ""), cart: { items: [] }, serverName: null });
+      setTogoName("");
+    });
+  }
+
+  function resumeTogo(t: TogoTicketSummary) {
+    setError(null);
+    startTransition(async () => {
+      const res = await loadTableTicket(t.id);
+      if ("error" in res) {
+        setError(res.error);
+        await refreshOpen();
+        return;
+      }
+      setSelected({ elementId: "", ticketId: t.id, tableLabel: "To-go" + (t.name ? " · " + t.name : ""), cart: res.cart, serverName: t.server_name });
     });
   }
 
@@ -111,9 +152,10 @@ export function FloorClient({
       <RegisterClient
         key={selected.ticketId}
         {...register}
-        tableBinding={{ tableId: selected.elementId, ticketId: selected.ticketId, tableLabel: selected.tableLabel }}
+        tableBinding={{ tableId: selected.elementId, ticketId: selected.ticketId, tableLabel: selected.tableLabel, serverName: selected.serverName }}
         initialTableCart={selected.cart}
         onExitToFloor={exitToFloor}
+        staffList={staff}
       />
     );
   }
@@ -123,6 +165,17 @@ export function FloorClient({
     const ms = nowMs - new Date(openedAt).getTime();
     return Math.max(0, Math.floor(ms / 60000));
   }
+
+  // Find-a-check filter across tables + to-go (label / server name).
+  const q = find.trim().toLowerCase();
+  const visibleTables = tables.filter((t) => {
+    if (!q) return true;
+    const open = openByElement[t.id];
+    return (t.label ?? "").toLowerCase().includes(q) || (open?.server_name ?? "").toLowerCase().includes(q);
+  });
+  const visibleTogo = togo.filter(
+    (t) => !q || (t.name ?? "").toLowerCase().includes(q) || (t.server_name ?? "").toLowerCase().includes(q)
+  );
 
   return (
     <div className="h-full flex flex-col">
@@ -137,7 +190,30 @@ export function FloorClient({
         </Link>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-5">
+        <div className="flex gap-2">
+          <Input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a check (table, name, server)" className="h-10 flex-1" />
+          <Button variant="outline" className="h-10 shrink-0" onClick={() => { setTogoName(""); setTogoOpen(true); }}>New to-go</Button>
+        </div>
+
+        {visibleTogo.length > 0 && (
+          <div>
+            <h2 className="text-sm font-medium text-muted-foreground mb-2">To-go</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {visibleTogo.map((t) => (
+                <button key={t.id} type="button" disabled={pending} onClick={() => resumeTogo(t)} className="text-left min-h-[104px] rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 flex flex-col justify-between active:scale-[0.98] transition-transform">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-semibold truncate">{t.name ?? "To-go"}</span>
+                    <span className="text-[10px] uppercase tracking-wide text-amber-600 font-medium shrink-0">To-go</span>
+                  </div>
+                  <div className="text-sm tabular-nums font-medium">{"$" + t.subtotal.toFixed(2)}</div>
+                  <div className="text-xs text-muted-foreground truncate">{minutesOpen(t.opened_at) + " min" + (t.server_name ? "  ·  " + t.server_name : "")}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {tables.length === 0 ? (
           <div className="max-w-md mx-auto mt-10 text-center">
             <p className="text-sm text-muted-foreground">
@@ -146,49 +222,68 @@ export function FloorClient({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-            {tables.map((t) => {
-              const open = openByElement[t.id];
-              if (open) {
+          <div>
+            <h2 className="text-sm font-medium text-muted-foreground mb-2">Tables</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {visibleTables.map((t) => {
+                const open = openByElement[t.id];
+                if (open) {
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      disabled={pending}
+                      onClick={() => resumeTable(t, open.id, open.server_name)}
+                      className="text-left min-h-[104px] rounded-lg border border-emerald-500/50 bg-emerald-500/10 p-3 flex flex-col justify-between active:scale-[0.98] transition-transform"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold">{t.label ?? "Table"}</span>
+                        <span className="text-[10px] uppercase tracking-wide text-emerald-600 font-medium">Open</span>
+                      </div>
+                      <div className="text-sm tabular-nums font-medium">{"$" + open.subtotal.toFixed(2)}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {minutesOpen(open.opened_at) + " min" + (open.guest_count ? "  ·  " + open.guest_count + "g" : "") + (open.server_name ? "  ·  " + open.server_name : "")}
+                      </div>
+                    </button>
+                  );
+                }
                 return (
                   <button
                     key={t.id}
                     type="button"
                     disabled={pending}
-                    onClick={() => resumeTable(t, open.id)}
-                    className="text-left min-h-[104px] rounded-lg border border-emerald-500/50 bg-emerald-500/10 p-3 flex flex-col justify-between active:scale-[0.98] transition-transform"
+                    onClick={() => { setGuests(""); setPromptTable(t); }}
+                    className="text-left min-h-[104px] rounded-lg border border-border bg-card hover:border-foreground/40 hover:bg-accent/50 p-3 flex flex-col justify-between active:scale-[0.98] transition-all"
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-semibold">{t.label ?? "Table"}</span>
-                      <span className="text-[10px] uppercase tracking-wide text-emerald-600 font-medium">Open</span>
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Open table</span>
                     </div>
-                    <div className="text-sm tabular-nums font-medium">{"$" + open.subtotal.toFixed(2)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {minutesOpen(open.opened_at) + " min" + (open.guest_count ? "  ·  " + open.guest_count + " guests" : "")}
-                    </div>
+                    <div className="text-xs text-muted-foreground">Available</div>
                   </button>
                 );
-              }
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  disabled={pending}
-                  onClick={() => { setGuests(""); setPromptTable(t); }}
-                  className="text-left min-h-[104px] rounded-lg border border-border bg-card hover:border-foreground/40 hover:bg-accent/50 p-3 flex flex-col justify-between active:scale-[0.98] transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold">{t.label ?? "Table"}</span>
-                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Open table</span>
-                  </div>
-                  <div className="text-xs text-muted-foreground">Available</div>
-                </button>
-              );
-            })}
+              })}
+            </div>
           </div>
         )}
         {error && <p className="text-sm text-red-600 mt-4">{error}</p>}
       </div>
+
+      {togoOpen && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setTogoOpen(false)}>
+          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium">New to-go order</h3>
+              <button type="button" onClick={() => setTogoOpen(false)} className="text-xs text-muted-foreground underline">Cancel</button>
+            </div>
+            <div className="space-y-1 mb-3">
+              <Label className="text-xs">Name (optional)</Label>
+              <Input value={togoName} onChange={(e) => setTogoName(e.target.value)} placeholder="Customer or order name" className="h-11" />
+            </div>
+            <Button className="w-full h-12" disabled={pending} onClick={startTogo}>Start to-go</Button>
+          </div>
+        </div>
+      )}
 
       {promptTable && (
         <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setPromptTable(null)}>
