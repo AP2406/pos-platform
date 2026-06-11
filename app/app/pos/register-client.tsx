@@ -20,7 +20,7 @@ import {
 } from "./ticket-actions";
 import { markOrderFulfilled } from "../kitchen/actions";
 import { setCatalogItemOutOfStock } from "../catalog/actions";
-import { DISCOUNT_REASONS, TAX_EXEMPT_REASONS } from "./reason-codes";
+import { DISCOUNT_REASONS, COMP_REASONS, TAX_EXEMPT_REASONS } from "./reason-codes";
 import { setActiveStaff, clearActiveStaff, type ActiveStaff } from "./staff-session";
 import { CardPaymentModal } from "./card-payment-modal";
 import { getCardConfig } from "./finix-pos-actions";
@@ -62,6 +62,7 @@ type Receipt = {
   items: CartLine[];
   subtotal: number;
   discount: number;
+  comp: number;
   tax: number;
   tip: number;
   total: number;
@@ -83,6 +84,9 @@ type CardModalState = {
     discount_value: number;
     discount_reason_code?: string;
     discount_reason_note?: string;
+    comp_value?: number;
+    comp_reason_code?: string;
+    comp_reason_note?: string;
     tax_exempt?: boolean;
     tax_exempt_reason_code?: string;
     tax_exempt_reason_note?: string;
@@ -94,6 +98,7 @@ type CardModalState = {
     items: CartLine[];
     subtotal: number;
     discount: number;
+    comp: number;
     tax: number;
     tip: number;
     total: number;
@@ -105,6 +110,7 @@ type Snap = {
   items: CartLine[];
   subtotal: number;
   discount: number;
+  comp: number;
   tax: number;
   tip: number;
   total: number;
@@ -157,6 +163,9 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [discountValue, setDiscountValue] = useState(initialTableCart?.discount_value ?? "");
   const [discountReason, setDiscountReason] = useState(initialTableCart?.discount_reason ?? "");
   const [discountReasonNote, setDiscountReasonNote] = useState(initialTableCart?.discount_reason_note ?? "");
+  const [compValue, setCompValue] = useState("");
+  const [compReason, setCompReason] = useState("");
+  const [compReasonNote, setCompReasonNote] = useState("");
   const [taxExempt, setTaxExempt] = useState(false);
   const [taxExemptReason, setTaxExemptReason] = useState("");
   const [taxExemptNote, setTaxExemptNote] = useState("");
@@ -195,7 +204,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [mgrBusy, setMgrBusy] = useState(false);
   const [approved, setApproved] = useState(false);
   // Which compact cart action sheet is open, and which cart line is being edited.
-  const [sheet, setSheet] = useState<null | "discount" | "tip" | "tax" | "customer">(null);
+  const [sheet, setSheet] = useState<null | "discount" | "tip" | "tax" | "customer" | "comp">(null);
   const [editLineIndex, setEditLineIndex] = useState<number | null>(null);
   const [diningOption, setDiningOption] = useState<"dine_in" | "takeout" | "delivery" | "pickup">("dine_in");
   // Custom (open) item entry.
@@ -468,6 +477,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       items: cart,
       subtotal: subtotal,
       discount: discount,
+      comp: comp,
       tax: tax,
       tip: tipNum,
       total: total,
@@ -579,6 +589,9 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setDiscountValue("");
     setDiscountReason("");
     setDiscountReasonNote("");
+    setCompValue("");
+    setCompReason("");
+    setCompReasonNote("");
     setTaxExempt(false);
     setTaxExemptReason("");
     setTaxExemptNote("");
@@ -692,7 +705,15 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   discount = Math.round(discount * 100) / 100;
 
   const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
-  const taxF = subtotal > 0 ? discountedSubtotal / subtotal : 0;
+
+  // Comp (on-the-house): pre-tax reduction after discount, capped to remaining.
+  let comp = parseFloat(compValue) || 0;
+  if (comp < 0) comp = 0;
+  if (comp > discountedSubtotal) comp = discountedSubtotal;
+  comp = Math.round(comp * 100) / 100;
+  const netSubtotal = Math.round((discountedSubtotal - comp) * 100) / 100;
+
+  const taxF = subtotal > 0 ? netSubtotal / subtotal : 0;
 
   const taxBucketsPreview: Record<string, number> = {};
   for (const l of cart) {
@@ -714,11 +735,15 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   if (effectiveExempt) tax = 0;
 
   const tipNum = parseFloat(tip) || 0;
-  const total = Math.round((discountedSubtotal + tax + tipNum) * 100) / 100;
+  const total = Math.round((netSubtotal + tax + tipNum) * 100) / 100;
 
   const discountReasonOk =
     discount <= 0 ||
     (discountReason !== "" && (discountReason !== "other" || discountReasonNote.trim().length > 0));
+
+  const compReasonOk =
+    comp <= 0 ||
+    (compReason !== "" && (compReason !== "other" || compReasonNote.trim().length > 0));
 
   const taxExemptOk =
     !taxExempt ||
@@ -728,13 +753,14 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
 
   const cashierRole = staff ? (staff as { role?: string }).role : null;
   const needsManagerApproval =
-    hasStaff && !!staff && (discount > 0 || taxExempt) && cashierRole !== "manager";
+    hasStaff && !!staff && (discount > 0 || taxExempt || comp > 0) && cashierRole !== "manager";
 
   function snapshot(): Snap {
     return {
       items: cart,
       subtotal: subtotal,
       discount: discount,
+      comp: comp,
       tax: tax,
       tip: tipNum,
       total: total,
@@ -756,6 +782,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       items: snap.items,
       subtotal: snap.subtotal,
       discount: snap.discount,
+      comp: snap.comp,
       tax: snap.tax,
       tip: snap.tip,
       total: snap.total,
@@ -782,6 +809,10 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       discount_reason_code: discount > 0 ? discountReason : undefined,
       discount_reason_note:
         discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
+      comp_value: comp > 0 ? comp : undefined,
+      comp_reason_code: comp > 0 ? compReason : undefined,
+      comp_reason_note:
+        comp > 0 && compReason === "other" ? compReasonNote.trim() : undefined,
       tax_exempt: taxExempt || undefined,
       tax_exempt_reason_code: taxExempt ? taxExemptReason : undefined,
       tax_exempt_reason_note:
@@ -797,12 +828,16 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       setError("Add at least one item.");
       return;
     }
-    if (total <= 0) {
-      setError("Total must be more than zero.");
+    if (total < 0) {
+      setError("Total can't be negative.");
       return;
     }
     if (discount > 0 && !discountReasonOk) {
       setError("Choose a reason for the discount.");
+      return;
+    }
+    if (comp > 0 && !compReasonOk) {
+      setError("Choose a reason for the comp.");
       return;
     }
     if (taxExempt && !taxExemptOk) {
@@ -815,7 +850,26 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       setMgrOpen(true);
       return;
     }
+    if (total === 0) {
+      finalizeZero();
+      return;
+    }
     setTenderOpen(true);
+  }
+
+  // A fully-comped (or all-free) check closes at $0 without the tender sheet.
+  function finalizeZero() {
+    setError(null);
+    if (cart.length === 0) return;
+    const snap = snapshot();
+    startTransition(async () => {
+      const res = await createOrder({ ...commonOrderFields(), payment_method: "other" });
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      finishSale(res, "other", [{ method: "other", amount: 0, tendered: null, change: null }], snap);
+    });
   }
 
   function recordCash(tenderedDollars: number) {
@@ -886,6 +940,10 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         discount_reason_code: discount > 0 ? discountReason : undefined,
         discount_reason_note:
           discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
+        comp_value: comp > 0 ? comp : undefined,
+        comp_reason_code: comp > 0 ? compReason : undefined,
+        comp_reason_note:
+          comp > 0 && compReason === "other" ? compReasonNote.trim() : undefined,
         tax_exempt: taxExempt || undefined,
         tax_exempt_reason_code: taxExempt ? taxExemptReason : undefined,
         tax_exempt_reason_note:
@@ -898,6 +956,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         items: cart,
         subtotal: subtotal,
         discount: discount,
+        comp: comp,
         tax: tax,
         tip: tipNum,
         total: total,
@@ -918,6 +977,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       items: m.receipt.items,
       subtotal: m.receipt.subtotal,
       discount: m.receipt.discount,
+      comp: m.receipt.comp,
       tax: m.receipt.tax,
       tip: m.receipt.tip,
       total: m.receipt.total,
@@ -1255,6 +1315,12 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                   <span className="tabular-nums text-red-600">{"-$" + receipt.discount.toFixed(2)}</span>
                 </div>
               )}
+              {receipt.comp > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Comp</span>
+                  <span className="tabular-nums text-red-600">{"-$" + receipt.comp.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-semibold pt-2 border-t border-border">
                 <span>Total</span>
                 <span className="tabular-nums">{"$" + receipt.total.toFixed(2)}</span>
@@ -1468,10 +1534,14 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                   </div>
                 )}
                 {cart.length > 0 && (
-                  <div className="grid grid-cols-4 gap-1 p-2 border-b border-border">
+                  <div className="grid grid-cols-5 gap-1 p-2 border-b border-border">
                     <button type="button" onClick={() => setSheet("discount")} className={"rounded-md border px-1 py-2 text-center hover:bg-accent " + (discount > 0 ? "border-foreground" : "border-border")}>
                       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Discount</div>
                       <div className="text-xs font-medium truncate">{discount > 0 ? "-$" + discount.toFixed(2) : "Add"}</div>
+                    </button>
+                    <button type="button" onClick={() => { setCompValue(""); setSheet("comp"); }} className={"rounded-md border px-1 py-2 text-center hover:bg-accent " + (comp > 0 ? "border-foreground" : "border-border")}>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Comp</div>
+                      <div className="text-xs font-medium truncate">{comp > 0 ? "-$" + comp.toFixed(2) : "Add"}</div>
                     </button>
                     <button type="button" onClick={() => setSheet("tip")} className={"rounded-md border px-1 py-2 text-center hover:bg-accent " + (tipNum > 0 ? "border-foreground" : "border-border")}>
                       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Tip</div>
@@ -1499,6 +1569,12 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                       <span className="tabular-nums text-red-600">{"-$" + discount.toFixed(2)}</span>
                     </div>
                   )}
+                  {comp > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Comp</span>
+                      <span className="tabular-nums text-red-600">{"-$" + comp.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">{effectiveExempt ? "Tax (exempt)" : "Tax"}</span>
                     <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
@@ -1516,7 +1592,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
 
                   {error && <p className="text-sm text-red-600 pt-1">{error}</p>}
 
-                  <Button className="w-full h-14 text-base mt-2" onClick={openTender} disabled={pending || cart.length === 0 || (discount > 0 && !discountReasonOk) || (taxExempt && !taxExemptOk)}>
+                  <Button className="w-full h-14 text-base mt-2" onClick={openTender} disabled={pending || cart.length === 0 || (discount > 0 && !discountReasonOk) || (comp > 0 && !compReasonOk) || (taxExempt && !taxExemptOk)}>
                     {"Charge" + (total > 0 ? " $" + total.toFixed(2) : "")}
                   </Button>
                 </div>
@@ -1632,6 +1708,37 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                     </select>
                     {discountReason === "other" && (
                       <Input value={discountReasonNote} onChange={(e) => setDiscountReasonNote(e.target.value)} placeholder="Reason note" className="h-10" />
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Comp sheet */}
+          {sheet === "comp" && (
+            <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setSheet(null)}>
+              <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium">Comp (on the house)</h3>
+                  <button type="button" onClick={() => setSheet(null)} className="text-xs text-muted-foreground underline">Done</button>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">A comp removes the cost of items as a courtesy. It is recorded separately from a discount and may require a manager.</p>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min="0" step="0.01" value={compValue} onChange={(e) => setCompValue(e.target.value)} placeholder="0.00" className="flex-1 h-11 text-right" />
+                  <Button type="button" variant="outline" className="h-11 shrink-0" onClick={() => setCompValue(discountedSubtotal.toFixed(2))}>Whole check</Button>
+                </div>
+                {comp > 0 && (
+                  <div className="space-y-1 mt-3">
+                    <Label className="text-xs">Comp reason</Label>
+                    <select value={compReason} onChange={(e) => setCompReason(e.target.value)} className="w-full h-10 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
+                      <option value="">Select a reason...</option>
+                      {COMP_REASONS.map((r) => (
+                        <option key={r.code} value={r.code}>{r.label}</option>
+                      ))}
+                    </select>
+                    {compReason === "other" && (
+                      <Input value={compReasonNote} onChange={(e) => setCompReasonNote(e.target.value)} placeholder="Reason note" className="h-10" />
                     )}
                   </div>
                 )}

@@ -28,6 +28,15 @@ export const REFUND_REASONS: ReasonCode[] = [
   { code: "other", label: "Other" },
 ];
 
+export const COMP_REASONS: ReasonCode[] = [
+  { code: "service_recovery", label: "Service recovery" },
+  { code: "manager_comp", label: "Manager comp" },
+  { code: "staff_meal", label: "Staff / employee meal" },
+  { code: "owner_guest", label: "Owner / VIP guest" },
+  { code: "quality_issue", label: "Quality issue" },
+  { code: "other", label: "Other" },
+];
+
 export const CASH_MOVEMENT_REASONS: ReasonCode[] = [
   { code: "tips_out", label: "Tips paid out" },
   { code: "supplies", label: "Supplies / expense" },

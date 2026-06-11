@@ -5,7 +5,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { VOID_REASONS, DISCOUNT_REASONS, TAX_EXEMPT_REASONS, isValidReason } from "./reason-codes";
+import { VOID_REASONS, DISCOUNT_REASONS, TAX_EXEMPT_REASONS, COMP_REASONS, isValidReason } from "./reason-codes";
 
 const lineSchema = z.object({
   catalog_item_id: z.string().uuid().optional().nullable(),
@@ -33,6 +33,9 @@ const orderSchema = z.object({
   discount_value: z.coerce.number().min(0).max(1000000).optional(),
   discount_reason_code: z.string().max(60).optional(),
   discount_reason_note: z.string().max(500).optional(),
+  comp_value: z.coerce.number().min(0).max(1000000).optional(),
+  comp_reason_code: z.string().max(60).optional(),
+  comp_reason_note: z.string().max(500).optional(),
   tax_exempt: z.coerce.boolean().optional(),
   tax_exempt_reason_code: z.string().max(60).optional(),
   tax_exempt_reason_note: z.string().max(500).optional(),
@@ -61,6 +64,9 @@ type OrderInput = {
   discount_value?: number;
   discount_reason_code?: string;
   discount_reason_note?: string;
+  comp_value?: number;
+  comp_reason_code?: string;
+  comp_reason_note?: string;
   tax_exempt?: boolean;
   tax_exempt_reason_code?: string;
   tax_exempt_reason_note?: string;
@@ -216,6 +222,24 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
 
   const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
 
+  // Comp (on-the-house): a pre-tax reduction applied after any discount,
+  // recorded separately from discount. Capped to what's left after the discount.
+  let comp = parsed.data.comp_value ?? 0;
+  if (comp < 0) comp = 0;
+  if (comp > discountedSubtotal) comp = discountedSubtotal;
+  comp = Math.round(comp * 100) / 100;
+  const compReasonCode = (parsed.data.comp_reason_code || "").trim();
+  const compReasonNote = (parsed.data.comp_reason_note || "").trim();
+  if (comp > 0) {
+    if (!isValidReason(COMP_REASONS, compReasonCode)) {
+      return { error: "Choose a reason for the comp." };
+    }
+    if (compReasonCode === "other" && !compReasonNote) {
+      return { error: "Add a note explaining the comp." };
+    }
+  }
+  const netSubtotal = Math.round((discountedSubtotal - comp) * 100) / 100;
+
   let rate = Number(business.default_tax_rate) || 0;
   if (rate > 1) rate = rate / 100;
 
@@ -262,7 +286,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     }
   }
 
-  const taxF = subtotal > 0 ? discountedSubtotal / subtotal : 0;
+  const taxF = subtotal > 0 ? netSubtotal / subtotal : 0;
 
   const rateBuckets: Record<string, { label: string; frac: number; base: number }> = {};
   for (const i of parsed.data.items) {
@@ -321,7 +345,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   }
 
   const tip = parsed.data.tip ?? 0;
-  const total = Math.round((discountedSubtotal + tax + tip) * 100) / 100;
+  const total = Math.round((netSubtotal + tax + tip) * 100) / 100;
   const paymentMethod = parsed.data.payment_method ?? "cash";
 
   let tenders: Tender[] = [];
@@ -383,6 +407,11 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       reason_code: discount > 0 ? discountReasonCode : null,
       reason_note: discount > 0 && discountReasonNote ? discountReasonNote : null,
     },
+    comp: {
+      amount: comp,
+      reason_code: comp > 0 ? compReasonCode : null,
+      reason_note: comp > 0 && compReasonNote ? compReasonNote : null,
+    },
     tax: { rate: rate, amount: tax, taxable_base: taxableBase, breakdown: taxBreakdown, exempt: taxExemptInfo },
     tip: tip,
     total: total,
@@ -422,6 +451,16 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       metadata: { type: discountType, value: discountValue, amount: discount, staff_id: activeStaffId, staff_name: activeStaffName },
     });
   }
+  if (comp > 0 && !isTraining) {
+    auditEvents.push({
+      actor_id: authUserId,
+      actor_role: role,
+      action: "comp",
+      reason_code: compReasonCode,
+      reason_note: compReasonNote ? compReasonNote.slice(0, 500) : null,
+      metadata: { amount: comp, staff_id: activeStaffId, staff_name: activeStaffName },
+    });
+  }
   if (manualExempt && !isTraining) {
     auditEvents.push({
       actor_id: authUserId,
@@ -457,6 +496,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     tax: tax,
     tip: tip,
     discount: discount,
+    comp: comp,
     total: total,
     payment_method: orderPaymentMethod,
     customer_id: customerId,
