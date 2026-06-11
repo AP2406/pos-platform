@@ -850,6 +850,97 @@ export async function transferLineToTicket(
   return { ok: true };
 }
 
+// P0-7: tables a check can be moved to (occupied or not), excluding its own.
+export async function listTableMoveTargets(
+  currentTicketId: string
+): Promise<{ elementId: string; label: string; occupied: boolean }[]> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { data: els } = await supabase
+    .from("floor_elements")
+    .select("id, label, sort_order")
+    .eq("business_id", business.id)
+    .eq("is_active", true)
+    .in("kind", ["table", "booth"])
+    .order("sort_order", { ascending: true });
+  const { data: open } = await supabase
+    .from("open_tickets")
+    .select("id, element_id")
+    .eq("business_id", business.id)
+    .is("parent_ticket_id", null)
+    .not("element_id", "is", null);
+  const occupiedBy: Record<string, string> = {};
+  for (const o of open ?? []) occupiedBy[o.element_id as string] = o.id as string;
+  return (els ?? [])
+    .filter((e) => occupiedBy[e.id as string] !== currentTicketId)
+    .map((e) => ({ elementId: e.id as string, label: (e.label as string) || "Table", occupied: !!occupiedBy[e.id as string] }));
+}
+
+// Move a whole open check to another table. If the target already has a check,
+// the moving check is merged into it; otherwise the check just re-points to the
+// new table. The source table is freed. Open checks only (no split parent/child).
+export async function moveTicketToTable(
+  ticketId: string,
+  targetElementId: string
+): Promise<{ ok: true; merged: boolean } | { error: string }> {
+  if (!ticketId || !targetElementId) return { error: "Missing table." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data: ticket } = await supabase
+    .from("open_tickets")
+    .select("id, element_id, cart, parent_ticket_id")
+    .eq("id", ticketId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!ticket) return { error: "That check is no longer open." };
+  if (ticket.parent_ticket_id) return { error: "Can't move a split check." };
+  if (ticket.element_id === targetElementId) return { ok: true, merged: false };
+
+  const { count: kids } = await supabase
+    .from("open_tickets").select("id", { count: "exact", head: true })
+    .eq("business_id", business.id).eq("parent_ticket_id", ticketId);
+  if ((kids ?? 0) > 0) return { error: "Un-split this check before moving it." };
+
+  const { data: el } = await supabase
+    .from("floor_elements")
+    .select("id, kind")
+    .eq("id", targetElementId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!el || (el.kind !== "table" && el.kind !== "booth")) return { error: "Pick a table." };
+
+  // Occupied target → merge into its check; otherwise re-point this check.
+  const { data: targetTicket } = await supabase
+    .from("open_tickets")
+    .select("id, cart")
+    .eq("business_id", business.id)
+    .eq("element_id", targetElementId)
+    .is("parent_ticket_id", null)
+    .maybeSingle();
+
+  if (targetTicket && targetTicket.id !== ticketId) {
+    const fromCart = tableCartSchema.safeParse(ticket.cart);
+    const intoCart = tableCartSchema.safeParse(targetTicket.cart);
+    if (!fromCart.success || !intoCart.success) return { error: "Could not read a check." };
+    const merged: TableCart = { ...intoCart.data, items: [...intoCart.data.items, ...fromCart.data.items] };
+    await supabase.from("open_tickets").update({ cart: merged }).eq("id", targetTicket.id).eq("business_id", business.id);
+    await supabase.from("open_tickets").delete().eq("id", ticketId).eq("business_id", business.id);
+    return { ok: true, merged: true };
+  }
+
+  const { error } = await supabase
+    .from("open_tickets")
+    .update({ element_id: targetElementId })
+    .eq("id", ticketId)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("moveTicketToTable:", error);
+    return { error: "Could not move the check." };
+  }
+  return { ok: true, merged: false };
+}
+
 function cartTotals(cartRaw: unknown): { item_count: number; subtotal: number } {
   const cart = (cartRaw as TableCart) || { items: [] };
   const items = Array.isArray(cart.items) ? cart.items : [];
