@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,13 +97,32 @@ export function FloorClient({
     };
   }, []);
 
-  // Designed-layout bounds (the floor grows to at least the screen via CSS).
+  // Designed-layout bounds (the floor is scaled to fit its container).
   let canvasW = 600;
   let canvasH = 400;
   for (const e of elements) {
     canvasW = Math.max(canvasW, e.x + e.w + 60);
     canvasH = Math.max(canvasH, e.y + e.h + 60);
   }
+
+  // Fit-to-container scale so the floor fills the space instead of floating
+  // top-left. Set from a ResizeObserver (never synchronously in render).
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const node = mapRef.current;
+    if (!node) return;
+    const ro = new ResizeObserver(() => {
+      const cw = node.clientWidth;
+      const ch = node.clientHeight;
+      if (cw > 0 && ch > 0) {
+        const s = Math.min(cw / canvasW, ch / canvasH);
+        setScale(Math.max(0.4, Math.min(2, s)));
+      }
+    });
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, [canvasW, canvasH]);
 
   async function refreshOpen() {
     const [rows, togoRows] = await Promise.all([listOpenTableTickets(), listOpenTogoTickets()]);
@@ -305,9 +324,9 @@ export function FloorClient({
 
       {/* Floor + takeout column */}
       <div className="flex-1 min-h-0 flex">
-        <div className="flex-1 min-h-0 overflow-auto bg-muted">
+        <div ref={mapRef} className="flex-1 min-h-0 relative overflow-hidden bg-background">
           {ringableCount === 0 ? (
-            <div className="h-full flex items-center justify-center p-6">
+            <div className="absolute inset-0 flex items-center justify-center p-6">
               <p className="text-sm text-muted-foreground max-w-md text-center">
                 Your floor is empty. Design it in Settings &rarr; Floor &mdash; add
                 tables, booths, counters, walls and rooms &mdash; and it shows up
@@ -315,12 +334,19 @@ export function FloorClient({
               </p>
             </div>
           ) : (
-            <div className="relative" style={{ width: canvasW, height: canvasH, minWidth: "100%", minHeight: "100%" }}>
-              {ordered.map((el) => {
+            <div
+              className="absolute"
+              style={{
+                width: canvasW, height: canvasH, left: "50%", top: "50%",
+                transform: "translate(-50%, -50%) scale(" + scale + ")", transformOrigin: "center",
+              }}
+            >
+              {/* Chairs are designed in Settings; the live floor stays clean. */}
+              {ordered.filter((el) => el.kind !== "seat").map((el) => {
                 const ring = isRingable(el.kind);
                 const open = ring ? openByElement[el.id] : undefined;
                 const dim = q && ring && !matchesFind(el);
-                const radius = el.shape === "round" ? 9999 : el.kind === "wall" ? 2 : el.kind === "seat" ? 6 : 12;
+                const radius = el.shape === "round" ? 9999 : el.kind === "wall" ? 2 : 12;
                 const baseStyle = {
                   left: el.x, top: el.y, width: el.w, height: el.h, borderRadius: radius,
                   transform: el.rotation ? "rotate(" + el.rotation + "deg)" : undefined,
@@ -330,14 +356,16 @@ export function FloorClient({
                 if (!ring) {
                   return (
                     <div key={el.id} className={"absolute flex items-center justify-center text-[10px] overflow-hidden " + decorClass(el.kind)} style={baseStyle}>
-                      {el.label && el.kind !== "seat" ? <span className="px-1 truncate">{el.label}</span> : null}
+                      {el.label ? <span className="px-1 truncate">{el.label}</span> : null}
                     </div>
                   );
                 }
 
                 const status = tableStatus(open);
                 const seats = seatsOf(el.id);
+                const isTable = el.kind === "table" || el.kind === "booth";
                 const fallback = el.kind === "counter" ? "Counter" : el.kind === "station" ? "Station" : "Table";
+                const displayLabel = el.label && el.label.trim() ? el.label : fallback;
                 return (
                   <button
                     key={el.id}
@@ -347,7 +375,7 @@ export function FloorClient({
                     className={"absolute border p-1.5 flex flex-col items-center justify-center text-center leading-tight gap-0.5 active:scale-[0.97] transition-all " + statusClass(status)}
                     style={baseStyle}
                   >
-                    <span className="text-sm font-medium truncate max-w-full">{el.label ?? fallback}</span>
+                    <span className="text-sm font-medium truncate max-w-full">{displayLabel}</span>
                     {open ? (
                       <>
                         <span className="text-sm tabular-nums font-medium">{"$" + open.subtotal.toFixed(2)}</span>
@@ -355,7 +383,7 @@ export function FloorClient({
                       </>
                     ) : (
                       <>
-                        {seats > 0 && <span className="text-[11px] rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{seats + " seats"}</span>}
+                        {isTable && <span className="text-[11px] rounded-full bg-background/60 border border-border px-2 py-0.5 text-muted-foreground">{(seats > 0 ? seats : 2) + " seats"}</span>}
                         <span className="text-[11px] text-muted-foreground">Available</span>
                       </>
                     )}
@@ -364,7 +392,7 @@ export function FloorClient({
               })}
             </div>
           )}
-          {error && <p className="text-sm text-red-600 mt-4 px-4">{error}</p>}
+          {error && <p className="text-sm text-red-600 absolute bottom-2 left-3 z-10">{error}</p>}
         </div>
 
         {/* Takeout side column */}
