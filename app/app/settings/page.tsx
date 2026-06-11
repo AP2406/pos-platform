@@ -10,7 +10,7 @@ import { ShowPhotosForm } from "./show-photos-form";
 import { StaffCard } from "./staff-card";
 import { FloorCard } from "./floor-card";
 import { hasFloorService } from "@/lib/modules/modes";
-import { listFloor } from "../floor/floor-actions";
+import { listFloor, listFloorPlans } from "../floor/floor-actions";
 import { LeadInboxCard } from "./lead-inbox-card";
 import { DriversSettingCard } from "./drivers-setting-card";
 import { NotificationsCard } from "./notifications-card";
@@ -80,10 +80,13 @@ export default async function SettingsPage() {
 
   const showFloor =
     hasFloorService(business) && (role === "owner" || role === "manager");
+  let floorPlans: Awaited<ReturnType<typeof listFloorPlans>> = [];
   let floorElements: Awaited<ReturnType<typeof listFloor>>["elements"] = [];
+  const chairMode: "follow" | "editable" =
+    (business as { floor_chair_mode?: string }).floor_chair_mode === "editable" ? "editable" : "follow";
   if (showFloor) {
-    const f = await listFloor();
-    floorElements = f.elements;
+    floorPlans = await listFloorPlans();
+    if (floorPlans[0]) floorElements = (await listFloor(floorPlans[0].id)).elements;
   }
 
   let receiptSettings: Partial<ReceiptSettings> | null = null;
@@ -222,7 +225,7 @@ export default async function SettingsPage() {
       content: (
         <div className="bg-card border border-border rounded-lg p-6">
           <SectionHeader>Floor plan</SectionHeader>
-          <FloorCard initialElements={floorElements} />
+          <FloorCard initialPlans={floorPlans} initialElements={floorElements} initialChairMode={chairMode} />
         </div>
       ),
     });

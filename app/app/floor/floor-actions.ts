@@ -31,6 +31,8 @@ export type FloorElement = {
   is_active: boolean;
 };
 
+export type FloorPlan = { id: string; name: string; sort_order: number };
+
 type FloorGate =
   | { ok: false; error: string }
   | { ok: true; business: { id: string } };
@@ -43,14 +45,129 @@ async function requireFloorManager(): Promise<FloorGate> {
   return { ok: true, business: { id: ctx.business.id } };
 }
 
-export async function listFloor(): Promise<{ elements: FloorElement[] }> {
+// All floor plans for the business. Creates a default "Main floor" if there
+// are none so the editor and live floor always have a plan to show.
+export async function listFloorPlans(): Promise<FloorPlan[]> {
   const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("floor_plans")
+    .select("id, name, sort_order")
+    .eq("business_id", business.id)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  let plans = data ?? [];
+  if (plans.length === 0) {
+    const { data: created } = await supabase
+      .from("floor_plans")
+      .insert({ business_id: business.id, name: "Main floor", sort_order: 0 })
+      .select("id, name, sort_order")
+      .single();
+    if (created) plans = [created];
+  }
+  return plans.map((p) => ({
+    id: p.id as string,
+    name: p.name as string,
+    sort_order: Number(p.sort_order) || 0,
+  }));
+}
+
+const planNameSchema = z.string().trim().min(1, "Name is required.").max(60);
+
+export async function createFloorPlan(
+  name: string
+): Promise<{ ok: true; plan: FloorPlan } | { error: string }> {
+  const gate = await requireFloorManager();
+  if (!gate.ok) return { error: gate.error };
+  const parsed = planNameSchema.safeParse(name);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid name." };
+  const supabase = await createClient();
+
+  const { count } = await supabase
+    .from("floor_plans")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", gate.business.id);
+
+  const { data, error } = await supabase
+    .from("floor_plans")
+    .insert({ business_id: gate.business.id, name: parsed.data, sort_order: count ?? 0 })
+    .select("id, name, sort_order")
+    .single();
+  if (error || !data) {
+    console.error("createFloorPlan:", error);
+    return { error: "Could not add the floor. Please try again." };
+  }
+  revalidatePath("/app/settings");
+  revalidatePath("/app/pos");
+  return { ok: true, plan: { id: data.id as string, name: data.name as string, sort_order: Number(data.sort_order) || 0 } };
+}
+
+export async function renameFloorPlan(
+  id: string,
+  name: string
+): Promise<{ ok: true } | { error: string }> {
+  const gate = await requireFloorManager();
+  if (!gate.ok) return { error: gate.error };
+  if (!id) return { error: "Missing floor." };
+  const parsed = planNameSchema.safeParse(name);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid name." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("floor_plans")
+    .update({ name: parsed.data })
+    .eq("id", id)
+    .eq("business_id", gate.business.id);
+  if (error) {
+    console.error("renameFloorPlan:", error);
+    return { error: "Could not rename the floor." };
+  }
+  revalidatePath("/app/settings");
+  revalidatePath("/app/pos");
+  return { ok: true };
+}
+
+export async function deleteFloorPlan(
+  id: string
+): Promise<{ ok: true } | { error: string }> {
+  const gate = await requireFloorManager();
+  if (!gate.ok) return { error: gate.error };
+  if (!id) return { error: "Missing floor." };
+  const supabase = await createClient();
+
+  const { count } = await supabase
+    .from("floor_plans")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", gate.business.id);
+  if ((count ?? 0) <= 1) return { error: "Keep at least one floor." };
+
+  // Elements on this plan cascade-delete via the FK.
+  const { error } = await supabase
+    .from("floor_plans")
+    .delete()
+    .eq("id", id)
+    .eq("business_id", gate.business.id);
+  if (error) {
+    console.error("deleteFloorPlan:", error);
+    return { error: "Could not delete the floor." };
+  }
+  revalidatePath("/app/settings");
+  revalidatePath("/app/pos");
+  return { ok: true };
+}
+
+// Elements for one plan.
+export async function listFloor(planId: string): Promise<{ elements: FloorElement[] }> {
+  const { business } = await requireBusiness();
+  if (!planId) return { elements: [] };
   const supabase = await createClient();
 
   const { data } = await supabase
     .from("floor_elements")
     .select("id, kind, label, x, y, w, h, rotation, shape, parent_id, seat_no, sort_order, is_active")
     .eq("business_id", business.id)
+    .eq("plan_id", planId)
     .eq("is_active", true)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
@@ -89,30 +206,28 @@ const elementSchema = z.object({
   sort_order: z.coerce.number().int().min(0).max(100000).optional(),
 });
 
-// Save the whole floor layout in one shot: upsert everything in the payload and
-// remove anything no longer present — except elements that currently hold an
-// open ticket (those are protected so a live table/seat can't be deleted from
-// under a server).
+// Save one plan's layout: upsert its elements and remove anything no longer
+// present ON THAT PLAN — except elements that currently hold an open ticket.
 export async function saveFloorLayout(
+  planId: string,
   elements: z.input<typeof elementSchema>[]
 ): Promise<{ ok: true } | { error: string }> {
   const gate = await requireFloorManager();
   if (!gate.ok) return { error: gate.error };
+  if (!planId) return { error: "Missing floor." };
 
   const parsed = z.array(elementSchema).max(500).safeParse(elements);
   if (!parsed.success) return { error: "The floor layout is invalid." };
   const items = parsed.data;
 
-  // Auto-name unnamed tables "Table N", continuing past the highest existing N.
+  // Auto-name unnamed tables/booths within this plan.
   let maxN = 0;
+  let maxB = 0;
   for (const it of items) {
     if (it.kind === "table" && it.label) {
       const m = /^Table\s+(\d+)$/i.exec(it.label.trim());
       if (m) maxN = Math.max(maxN, parseInt(m[1]));
     }
-  }
-  let maxB = 0;
-  for (const it of items) {
     if (it.kind === "booth" && it.label) {
       const m = /^Booth\s+(\d+)$/i.exec(it.label.trim());
       if (m) maxB = Math.max(maxB, parseInt(m[1]));
@@ -130,7 +245,7 @@ export async function saveFloorLayout(
     return it;
   });
 
-  // Reject duplicate active table names (case-insensitive).
+  // Reject duplicate active table names within this plan.
   const seen = new Set<string>();
   for (const it of named) {
     if (it.kind !== "table" || !it.label) continue;
@@ -143,7 +258,6 @@ export async function saveFloorLayout(
 
   const supabase = await createClient();
 
-  // Protect elements that currently hold an open ticket from deletion.
   const { data: openRows } = await supabase
     .from("open_tickets")
     .select("element_id")
@@ -154,7 +268,8 @@ export async function saveFloorLayout(
   const { data: existingRows } = await supabase
     .from("floor_elements")
     .select("id")
-    .eq("business_id", gate.business.id);
+    .eq("business_id", gate.business.id)
+    .eq("plan_id", planId);
   const existing = new Set((existingRows ?? []).map((r) => r.id as string));
   const keepIds = new Set(named.map((it) => it.id));
 
@@ -174,6 +289,7 @@ export async function saveFloorLayout(
   const rows = named.map((it, i) => ({
     id: it.id,
     business_id: gate.business.id,
+    plan_id: planId,
     kind: it.kind,
     label: it.label && it.label.trim() ? it.label.trim() : null,
     x: it.x,
@@ -194,7 +310,6 @@ export async function saveFloorLayout(
       .upsert(rows, { onConflict: "id" });
     if (upErr) {
       console.error("saveFloorLayout upsert:", upErr);
-      // Surface the unique-table-name violation in a friendly way.
       if ((upErr as { code?: string }).code === "23505") {
         return { error: "Table names must be unique." };
       }

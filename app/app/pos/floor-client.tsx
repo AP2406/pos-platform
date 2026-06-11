@@ -16,9 +16,9 @@ import {
   type TableTicketSummary,
   type TogoTicketSummary,
 } from "./ticket-actions";
+import { listFloor, type FloorElement, type ElementKind, type FloorPlan } from "../floor/floor-actions";
 import type { ActiveStaff } from "./staff-session";
 import type { ReceiptSettings } from "./receipt-template";
-import type { FloorElement, ElementKind } from "../floor/floor-actions";
 
 type Variation = { id: string; name: string; price: number };
 type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[] };
@@ -53,17 +53,22 @@ function zFor(kind: ElementKind): number {
 
 export function FloorClient({
   register,
-  elements,
+  plans,
+  initialElements,
   initialOpen,
   initialTogo,
   staff,
 }: {
   register: RegisterProps;
-  elements: FloorElement[];
+  plans: FloorPlan[];
+  initialElements: FloorElement[];
   initialOpen: TableTicketSummary[];
   initialTogo: TogoTicketSummary[];
   staff: StaffMember[];
 }) {
+  const [elements, setElements] = useState<FloorElement[]>(initialElements);
+  const [activePlan, setActivePlan] = useState<string>(plans[0]?.id ?? "");
+  const [planLoading, setPlanLoading] = useState(false);
   const [openByElement, setOpenByElement] = useState<Record<string, TableTicketSummary>>(() => {
     const m: Record<string, TableTicketSummary> = {};
     for (const t of initialOpen) m[t.element_id] = t;
@@ -108,21 +113,39 @@ export function FloorClient({
     setTogo(togoRows);
   }
 
+  function switchPlan(id: string) {
+    if (id === activePlan || planLoading) return;
+    setPlanLoading(true);
+    startTransition(async () => {
+      const { elements: els } = await listFloor(id);
+      setElements(els);
+      setActivePlan(id);
+      setPlanLoading(false);
+    });
+  }
+
+  // A table's seat count = how many chairs are drawn around it (fallback: guests).
+  function seatsOf(elementId: string): number {
+    return elements.filter((e) => e.kind === "seat" && e.parent_id === elementId).length;
+  }
+
   function enterElement(el: FloorElement, guestCount: number | null) {
     setError(null);
     setPromptTable(null);
+    const chairs = seatsOf(el.id);
     startTransition(async () => {
       const res = await openTableTicket(el.id, guestCount);
       if ("error" in res) {
         setError(res.error);
         return;
       }
-      setSelected({ elementId: el.id, ticketId: res.ticketId, tableLabel: el.label ?? "Table", cart: res.cart, serverName: null, seatCount: guestCount });
+      setSelected({ elementId: el.id, ticketId: res.ticketId, tableLabel: el.label ?? "Table", cart: res.cart, serverName: null, seatCount: chairs > 0 ? chairs : guestCount });
     });
   }
 
   function resumeElement(el: FloorElement, ticketId: string, serverName: string | null) {
     setError(null);
+    const chairs = seatsOf(el.id);
     startTransition(async () => {
       const res = await loadTableTicket(ticketId);
       if ("error" in res) {
@@ -130,7 +153,7 @@ export function FloorClient({
         await refreshOpen();
         return;
       }
-      setSelected({ elementId: el.id, ticketId: ticketId, tableLabel: el.label ?? "Table", cart: res.cart, serverName: serverName, seatCount: res.guestCount });
+      setSelected({ elementId: el.id, ticketId: ticketId, tableLabel: el.label ?? "Table", cart: res.cart, serverName: serverName, seatCount: chairs > 0 ? chairs : res.guestCount });
     });
   }
 
@@ -220,10 +243,10 @@ export function FloorClient({
   const ringableCount = elements.filter((e) => isRingable(e.kind)).length;
 
   function decorClass(kind: ElementKind): string {
-    if (kind === "wall") return "bg-foreground/70";
-    if (kind === "room") return "bg-muted/20 border-2 border-dashed border-foreground/25 text-muted-foreground";
-    if (kind === "seat") return "bg-muted border border-foreground/30";
-    return "bg-transparent text-foreground";
+    if (kind === "wall") return "bg-zinc-500";
+    if (kind === "room") return "bg-zinc-200/40 border-2 border-dashed border-zinc-400 text-zinc-500";
+    if (kind === "seat") return "bg-zinc-200 border border-zinc-400";
+    return "bg-transparent text-zinc-600";
   }
 
   return (
@@ -244,6 +267,17 @@ export function FloorClient({
         <Button variant="outline" className="h-10 shrink-0" onClick={() => { setTogoName(""); setTogoPhone(""); setTogoOpen(true); }}>Takeout</Button>
       </div>
 
+      {/* Floor plan tabs */}
+      {plans.length > 1 && (
+        <div className="shrink-0 flex items-center gap-1 px-2 py-1.5 border-b border-border overflow-x-auto bg-card/40">
+          {plans.map((pl) => (
+            <button key={pl.id} type="button" onClick={() => switchPlan(pl.id)} disabled={planLoading} className={"shrink-0 text-sm rounded-md px-3 py-1.5 border transition-colors " + (pl.id === activePlan ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>
+              {pl.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Takeout rail */}
       {visibleTogo.length > 0 && (
         <div className="shrink-0 flex gap-2 overflow-x-auto p-2 border-b border-border bg-card/40">
@@ -260,11 +294,11 @@ export function FloorClient({
         </div>
       )}
 
-      {/* Visual floor map — the gridded floor fills the whole screen */}
-      <div className="flex-1 min-h-0 overflow-auto bg-muted/10">
+      {/* Visual floor map — light "blueprint" floor filling the whole screen */}
+      <div className="flex-1 min-h-0 overflow-auto" style={{ background: "#f4f4f5" }}>
         {ringableCount === 0 ? (
           <div className="h-full flex items-center justify-center p-6">
-            <p className="text-sm text-muted-foreground max-w-md text-center">
+            <p className="text-sm text-zinc-500 max-w-md text-center">
               Your floor is empty. Design it in Settings &rarr; Floor &mdash; add
               tables, booths, counters, walls and rooms &mdash; and it shows up
               here as your map.
@@ -279,7 +313,7 @@ export function FloorClient({
               minWidth: "100%",
               minHeight: "100%",
               backgroundImage:
-                "linear-gradient(to right, rgba(130,130,130,0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(130,130,130,0.14) 1px, transparent 1px)",
+                "linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)",
               backgroundSize: "24px 24px",
             }}
           >
@@ -287,7 +321,7 @@ export function FloorClient({
               const ring = isRingable(el.kind);
               const open = ring ? openByElement[el.id] : undefined;
               const dim = q && ring && !matchesFind(el);
-              const radius = el.shape === "round" ? 9999 : el.kind === "wall" ? 3 : 8;
+              const radius = el.shape === "round" ? 9999 : el.kind === "wall" ? 2 : el.kind === "seat" ? 6 : 12;
               const baseStyle = {
                 left: el.x,
                 top: el.y,
@@ -306,28 +340,28 @@ export function FloorClient({
                     className={"absolute flex items-center justify-center text-[10px] overflow-hidden " + decorClass(el.kind)}
                     style={baseStyle}
                   >
-                    {el.label ? <span className="px-1 truncate">{el.label}</span> : null}
+                    {el.label && el.kind !== "seat" ? <span className="px-1 truncate">{el.label}</span> : null}
                   </div>
                 );
               }
 
               const cls = open
-                ? "border-emerald-500/60 bg-emerald-500/15 text-foreground"
-                : "border-border bg-card hover:border-foreground/40 hover:bg-accent/50 text-foreground";
+                ? "border-emerald-500 bg-emerald-50 text-emerald-900 shadow-md ring-2 ring-emerald-400/40"
+                : "border-zinc-300 bg-white text-zinc-800 shadow-sm hover:border-zinc-400 hover:shadow-md";
               return (
                 <button
                   key={el.id}
                   type="button"
                   disabled={pending}
                   onClick={() => tapElement(el)}
-                  className={"absolute border-2 p-1.5 flex flex-col items-center justify-center text-center leading-tight active:scale-[0.97] transition-transform " + cls}
+                  className={"absolute border p-1.5 flex flex-col items-center justify-center text-center leading-tight active:scale-[0.97] transition-all " + cls}
                   style={baseStyle}
                 >
                   <span className="text-xs font-semibold truncate max-w-full">{el.label ?? (el.kind === "counter" ? "Counter" : el.kind === "station" ? "Station" : "Table")}</span>
                   {open && (
                     <>
-                      <span className="text-[11px] tabular-nums font-medium">{"$" + open.subtotal.toFixed(2)}</span>
-                      <span className="text-[9px] text-muted-foreground truncate max-w-full">
+                      <span className="text-[11px] tabular-nums font-semibold">{"$" + open.subtotal.toFixed(2)}</span>
+                      <span className="text-[9px] text-emerald-700/80 truncate max-w-full">
                         {minutesOpen(open.opened_at) + "m" + (open.server_name ? " · " + open.server_name : "")}
                       </span>
                     </>
@@ -337,7 +371,7 @@ export function FloorClient({
             })}
           </div>
         )}
-        {error && <p className="text-sm text-red-600 mt-4">{error}</p>}
+        {error && <p className="text-sm text-red-600 mt-4 px-4">{error}</p>}
       </div>
 
       {togoOpen && (
