@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createOrder, searchCustomers, quickCreateCustomer } from "./actions";
+import { finalizeSplitCheck, type SplitResultOrder } from "./split-actions";
+import { SplitSheet, type SplitCheck } from "./split-sheet";
 import { verifyManagerPin } from "./approval-actions";
 import {
   holdTicket,
@@ -51,6 +53,7 @@ type CartLine = {
 // Binding when the register is opened for a specific full-service table or to-go.
 type TableBinding = { tableId: string; ticketId: string; tableLabel: string; serverName?: string | null; seatCount?: number | null; guestCount?: number | null };
 type ServiceChargeCfg = { enabled: boolean; pct: number; autoParty: number; postTax: boolean; label: string };
+type SplitCfg = { settlementMode: "separate" | "informational"; allowUnits: boolean };
 type StaffMember = { id: string; name: string };
 type Customer = { id: string; name: string; taxExempt?: boolean };
 type Tender = { method: "cash" | "card" | "other"; amount: number; tendered: number | null; change: number | null };
@@ -166,7 +169,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
   });
 }
 
-export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, tableBinding, initialTableCart, onExitToFloor, staffList }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[] }) {
+export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, tableBinding, initialTableCart, onExitToFloor, staffList }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[] }) {
   const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
   const [tip, setTip] = useState(initialTableCart?.tip ?? "");
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">(initialTableCart?.discount_mode === "percent" ? "percent" : "amount");
@@ -185,6 +188,10 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [serviceOn, setServiceOn] = useState<boolean>(scAuto);
   const [serviceWaiveReason, setServiceWaiveReason] = useState("");
   const [serviceWaiveNote, setServiceWaiveNote] = useState("");
+  const splitCfg: SplitCfg = splitSettings ?? { settlementMode: "separate", allowUnits: false };
+  const [splitOpen, setSplitOpen] = useState(false);
+  const [splitResult, setSplitResult] = useState<{ mode: "separate" | "informational"; orders: SplitResultOrder[] } | null>(null);
+  const [mgrIntent, setMgrIntent] = useState<"tender" | "split">("tender");
   const [taxExempt, setTaxExempt] = useState(false);
   const [taxExemptReason, setTaxExemptReason] = useState("");
   const [taxExemptNote, setTaxExemptNote] = useState("");
@@ -696,7 +703,97 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setApproved(true);
     setMgrOpen(false);
     setMgrPin("");
-    setTenderOpen(true);
+    if (mgrIntent === "split") {
+      setSplitOpen(true);
+    } else {
+      setTenderOpen(true);
+    }
+  }
+
+  function openSplit() {
+    setError(null);
+    if (cart.length === 0) return;
+    if (total < 0) {
+      setError("Total can't be negative.");
+      return;
+    }
+    if (discount > 0 && !discountReasonOk) { setError("Choose a reason for the discount."); return; }
+    if (comp > 0 && !compReasonOk) { setError("Choose a reason for the comp."); return; }
+    if (scWaived && !serviceWaiveOk) { setError("Choose a reason for waiving the service charge."); return; }
+    if (taxExempt && !taxExemptOk) { setError("Choose a reason for the tax exemption."); return; }
+    if (needsManagerApproval && !approved) {
+      setMgrIntent("split");
+      setMgrErr(null);
+      setMgrPin("");
+      setMgrOpen(true);
+      return;
+    }
+    setSplitOpen(true);
+  }
+
+  function submitSplit(checks: SplitCheck[]) {
+    setError(null);
+    if (cart.length === 0) return;
+    startTransition(async () => {
+      const res = await finalizeSplitCheck({
+        items: cart.map((l) => ({ catalog_item_id: l.catalog_item_id, name: l.name, unit_price: l.unit_price, quantity: l.quantity, taxable: l.taxable })),
+        checks: checks,
+        settlement: splitCfg.settlementMode,
+        discount_type: discountMode,
+        discount_value: discountInput,
+        discount_reason_code: discount > 0 ? discountReason : undefined,
+        discount_reason_note: discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
+        comp_value: comp > 0 ? comp : undefined,
+        comp_reason_code: comp > 0 ? compReason : undefined,
+        comp_reason_note: comp > 0 && compReason === "other" ? compReasonNote.trim() : undefined,
+        service_charge: serviceApplied || undefined,
+        service_charge_waive_reason_code: scWaived ? serviceWaiveReason : undefined,
+        service_charge_waive_reason_note: scWaived && serviceWaiveReason === "other" ? serviceWaiveNote.trim() : undefined,
+        tax_exempt: taxExempt || undefined,
+        tax_exempt_reason_code: taxExempt ? taxExemptReason : undefined,
+        tax_exempt_reason_note: taxExempt && taxExemptReason === "other" ? taxExemptNote.trim() : undefined,
+        customer_id: customer ? customer.id : null,
+        dining_option: diningOption,
+        idempotency_key: nextIdemKey(),
+      });
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      setSplitOpen(false);
+      setSplitResult({ mode: res.mode, orders: res.orders });
+      printSplitReceipts(res.orders);
+      const firstId = res.orders[0] ? res.orders[0].id : "";
+      clearCart();
+      if (firstId) closeTableAfterCharge(firstId);
+    });
+  }
+
+  function printSplitReceipts(orders: SplitResultOrder[]) {
+    const cfg = getPrinterConfig();
+    if (!cfg || !cfg.autoPrint) return;
+    for (const o of orders) {
+      const rec: Receipt = {
+        id: o.id,
+        saleNumber: o.sale_number,
+        businessName,
+        customerName: customer ? customer.name : null,
+        items: o.items.map((it) => ({ catalog_item_id: null, variation_id: null, name: it.name, unit_price: it.unit_price, quantity: it.quantity, taxable: true, taxFrac: 0 })),
+        subtotal: o.subtotal,
+        discount: o.discount,
+        comp: o.comp,
+        serviceCharge: o.service_charge,
+        serviceLabel: scCfg.label,
+        tax: o.tax,
+        tip: o.tip,
+        total: o.total,
+        paymentMethod: o.payment_method,
+        payments: [{ method: o.payment_method, amount: o.total, tendered: null, change: null }],
+        at: new Date().toLocaleString(),
+        diningOption: diningOption,
+      };
+      doPrint(rec);
+    }
   }
 
   function pickCustomer(c: { id: string; name: string; tax_exempt?: boolean }) {
@@ -1342,6 +1439,48 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         onCardRecord={recordCardNoCharge}
       />
 
+      <SplitSheet
+        open={splitOpen}
+        onClose={() => setSplitOpen(false)}
+        lines={cart.map((l) => ({ catalog_item_id: l.catalog_item_id, name: l.name, unit_price: l.unit_price, quantity: l.quantity, taxable: l.taxable, seat: l.seat ?? null }))}
+        allowUnits={splitCfg.allowUnits}
+        settlementMode={splitCfg.settlementMode}
+        pending={pending}
+        onConfirm={submitSplit}
+      />
+
+      {splitResult && (
+        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setSplitResult(null)}>
+          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg w-full sm:max-w-md max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <h3 className="font-medium">{splitResult.mode === "separate" ? "Split paid — " + splitResult.orders.length + " seats" : "Check paid — split breakdown"}</h3>
+              <button type="button" onClick={() => setSplitResult(null)} className="text-xs text-muted-foreground underline">Done</button>
+            </div>
+            <div className="overflow-y-auto p-4 space-y-2">
+              {splitResult.orders.map((o) => (
+                <div key={o.id} className="rounded-md border border-border p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{o.label}{splitResult.mode === "separate" ? " · #" + o.sale_number : ""}</span>
+                    <span className="text-sm tabular-nums font-semibold">{"$" + o.total.toFixed(2)}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground space-y-0.5">
+                    {o.items.map((it, k) => (
+                      <div key={k} className="flex justify-between"><span className="truncate pr-2">{it.name}{it.quantity > 1 ? " ×" + it.quantity : ""}</span><span className="tabular-nums">{"$" + (it.unit_price * it.quantity).toFixed(2)}</span></div>
+                    ))}
+                    <div className="flex justify-between pt-1 border-t border-border/60"><span>Tax{o.service_charge > 0 ? " + charge" : ""}</span><span className="tabular-nums">{"$" + (o.tax + o.service_charge).toFixed(2)}</span></div>
+                    {splitResult.mode === "separate" && <div className="flex justify-between capitalize"><span>{o.payment_method}</span><span className="tabular-nums">{"$" + o.total.toFixed(2)}</span></div>}
+                  </div>
+                </div>
+              ))}
+              <div className="flex justify-between text-sm font-medium pt-1">
+                <span>Total collected</span>
+                <span className="tabular-nums">{"$" + splitResult.orders.reduce((s, o) => s + o.total, 0).toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {receipt && cart.length === 0 ? (
         <div className="h-full overflow-y-auto flex items-start justify-center p-4">
           <div className="w-full max-w-sm bg-card border border-border rounded-lg p-5 mt-6 space-y-3">
@@ -1593,24 +1732,24 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                   </div>
                 )}
                 {cart.length > 0 && (
-                  <div className="grid grid-cols-5 gap-1 p-2 border-b border-border">
-                    <button type="button" onClick={() => setSheet("discount")} className={"rounded-md border px-1 py-2 text-center hover:bg-accent " + (discount > 0 ? "border-foreground" : "border-border")}>
+                  <div className="flex gap-1 p-2 border-b border-border overflow-x-auto">
+                    <button type="button" onClick={() => setSheet("discount")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (discount > 0 ? "border-foreground" : "border-border")}>
                       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Discount</div>
                       <div className="text-xs font-medium truncate">{discount > 0 ? "-$" + discount.toFixed(2) : "Add"}</div>
                     </button>
-                    <button type="button" onClick={() => { setCompValue(""); setSheet("comp"); }} className={"rounded-md border px-1 py-2 text-center hover:bg-accent " + (comp > 0 ? "border-foreground" : "border-border")}>
+                    <button type="button" onClick={() => { setCompValue(""); setSheet("comp"); }} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (comp > 0 ? "border-foreground" : "border-border")}>
                       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Comp</div>
                       <div className="text-xs font-medium truncate">{comp > 0 ? "-$" + comp.toFixed(2) : "Add"}</div>
                     </button>
-                    <button type="button" onClick={() => setSheet("tip")} className={"rounded-md border px-1 py-2 text-center hover:bg-accent " + (tipNum > 0 ? "border-foreground" : "border-border")}>
+                    <button type="button" onClick={() => setSheet("tip")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (tipNum > 0 ? "border-foreground" : "border-border")}>
                       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Tip</div>
                       <div className="text-xs font-medium truncate">{tipNum > 0 ? "$" + tipNum.toFixed(2) : "Add"}</div>
                     </button>
-                    <button type="button" onClick={() => setSheet("tax")} className={"rounded-md border px-1 py-2 text-center hover:bg-accent " + (effectiveExempt ? "border-emerald-600" : "border-border")}>
+                    <button type="button" onClick={() => setSheet("tax")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (effectiveExempt ? "border-emerald-600" : "border-border")}>
                       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Tax</div>
                       <div className={"text-xs font-medium truncate " + (effectiveExempt ? "text-emerald-600" : "")}>{effectiveExempt ? "Exempt" : "Applied"}</div>
                     </button>
-                    <button type="button" onClick={() => setSheet("customer")} className={"rounded-md border px-1 py-2 text-center hover:bg-accent " + (customer ? "border-foreground" : "border-border")}>
+                    <button type="button" onClick={() => setSheet("customer")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (customer ? "border-foreground" : "border-border")}>
                       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Customer</div>
                       <div className="text-xs font-medium truncate">{customer ? customer.name : "Add"}</div>
                     </button>
@@ -1660,6 +1799,11 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                   <Button className="w-full h-14 text-base mt-2" onClick={openTender} disabled={pending || cart.length === 0 || (discount > 0 && !discountReasonOk) || (comp > 0 && !compReasonOk) || (scWaived && !serviceWaiveOk) || (taxExempt && !taxExemptOk)}>
                     {"Charge" + (total > 0 ? " $" + total.toFixed(2) : "")}
                   </Button>
+                  {splitSettings && total > 0 && (
+                    <button type="button" onClick={openSplit} disabled={pending || cart.length === 0} className="w-full h-10 mt-1 rounded-md border border-border text-sm hover:bg-accent disabled:opacity-50">
+                      Split check
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

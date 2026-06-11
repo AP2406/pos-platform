@@ -121,6 +121,10 @@ export default async function PosPage() {
   const trainingMode =
     (business as { training_mode?: boolean }).training_mode === true;
 
+  // Service charge + check splitting are full-service features. For QSR / retail
+  // / the transportation register, leave these undefined so the register renders
+  // exactly as before (no service-charge line, no Split control).
+  const isFullService = hasFloorService(business);
   const b = business as {
     service_charge_enabled?: boolean;
     service_charge_pct?: number;
@@ -128,13 +132,22 @@ export default async function PosPage() {
     service_charge_post_tax?: boolean;
     service_charge_label?: string;
   };
-  const serviceCharge = {
-    enabled: b.service_charge_enabled === true,
-    pct: Number(b.service_charge_pct) || 0,
-    autoParty: Number(b.service_charge_auto_party) || 0,
-    postTax: b.service_charge_post_tax === true,
-    label: (b.service_charge_label || "Service charge").toString(),
-  };
+  const serviceCharge = isFullService
+    ? {
+        enabled: b.service_charge_enabled === true,
+        pct: Number(b.service_charge_pct) || 0,
+        autoParty: Number(b.service_charge_auto_party) || 0,
+        postTax: b.service_charge_post_tax === true,
+        label: (b.service_charge_label || "Service charge").toString(),
+      }
+    : undefined;
+
+  const splitSettings = isFullService
+    ? {
+        settlementMode: ((business as { split_settlement_mode?: string }).split_settlement_mode === "informational" ? "informational" : "separate") as "separate" | "informational",
+        allowUnits: (business as { split_allow_units?: boolean }).split_allow_units === true,
+      }
+    : undefined;
 
   const registerProps = {
     items,
@@ -146,6 +159,7 @@ export default async function PosPage() {
     showItemPhotos,
     categoryColors,
     serviceCharge,
+    splitSettings,
   };
 
   // Full-service restaurants get the table floor first; every other mode (and

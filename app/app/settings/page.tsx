@@ -10,6 +10,7 @@ import { ShowPhotosForm } from "./show-photos-form";
 import { StaffCard } from "./staff-card";
 import { FloorCard } from "./floor-card";
 import { ServiceChargeCard } from "./service-charge-card";
+import { SplitCard } from "./split-card";
 import { hasFloorService } from "@/lib/modules/modes";
 import { listFloor, listFloorPlans } from "../floor/floor-actions";
 import { LeadInboxCard } from "./lead-inbox-card";
@@ -75,6 +76,13 @@ export default async function SettingsPage() {
     label: (scb.service_charge_label || "Service charge").toString(),
   };
   const showServiceCharge = hasFloorService(business);
+
+  const splitb = business as { split_settlement_mode?: string; split_allow_units?: boolean };
+  const splitSettings = {
+    settlementMode: (splitb.split_settlement_mode === "informational" ? "informational" : "separate") as "separate" | "informational",
+    allowUnits: splitb.split_allow_units === true,
+  };
+  const showSplit = hasFloorService(business);
 
   const showItemPhotos =
     (business as { show_item_photos?: boolean }).show_item_photos !== false;
@@ -188,9 +196,15 @@ export default async function SettingsPage() {
             <TaxRatesCard initialRates={taxRates} />
           </div>
           {showServiceCharge && (
-            <div className="bg-card border border-border rounded-lg p-6">
+            <div className="bg-card border border-border rounded-lg p-6 mb-4">
               <SectionHeader>Service charge</SectionHeader>
               <ServiceChargeCard initial={serviceChargeSettings} />
+            </div>
+          )}
+          {showSplit && (
+            <div className="bg-card border border-border rounded-lg p-6">
+              <SectionHeader>Check splitting</SectionHeader>
+              <SplitCard initial={splitSettings} />
             </div>
           )}
         </>
