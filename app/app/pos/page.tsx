@@ -30,7 +30,7 @@ export default async function PosPage() {
 
   const { data: modsData } = await supabase
     .from("catalog_item_modifiers")
-    .select("id, catalog_item_id, name, price, group_id, sort_order")
+    .select("id, catalog_item_id, name, price, group_id, sort_order, child_group_id")
     .eq("business_id", business.id)
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
@@ -94,44 +94,72 @@ export default async function PosPage() {
     });
   }
 
+  // P0-2/P0-3: modifier groups (required/min/max) and nested follow-up groups.
+  type ModOpt = { id: string; name: string; price: number; child_group?: ModGroup };
+  type ModGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; options: ModOpt[] };
+
+  type RawOpt = { id: string; name: string; price: number; child_group_id: string | null };
   const modsByItem: Record<string, { id: string; name: string; price: number }[]> = {};
-  const modsByGroup: Record<string, { id: string; name: string; price: number }[]> = {};
-  const modsNoGroup: Record<string, { id: string; name: string; price: number }[]> = {};
+  const optsByGroup: Record<string, RawOpt[]> = {};
+  const looseByItem: Record<string, RawOpt[]> = {};
   for (const m of modsData ?? []) {
     const itemId = m.catalog_item_id as string;
-    const opt = { id: m.id as string, name: m.name as string, price: Number(m.price) };
+    const ro: RawOpt = { id: m.id as string, name: m.name as string, price: Number(m.price), child_group_id: (m.child_group_id as string | null) ?? null };
     if (!modsByItem[itemId]) modsByItem[itemId] = [];
-    modsByItem[itemId].push(opt);
+    modsByItem[itemId].push({ id: ro.id, name: ro.name, price: ro.price });
     const gid = (m.group_id as string | null) ?? null;
     if (gid) {
-      if (!modsByGroup[gid]) modsByGroup[gid] = [];
-      modsByGroup[gid].push(opt);
+      if (!optsByGroup[gid]) optsByGroup[gid] = [];
+      optsByGroup[gid].push(ro);
     } else {
-      if (!modsNoGroup[itemId]) modsNoGroup[itemId] = [];
-      modsNoGroup[itemId].push(opt);
+      if (!looseByItem[itemId]) looseByItem[itemId] = [];
+      looseByItem[itemId].push(ro);
     }
   }
 
-  // P0-2: modifier groups (required / min / max) with their options, per item.
-  type ModGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; options: { id: string; name: string; price: number }[] };
-  const groupsByItem: Record<string, ModGroup[]> = {};
+  type RawGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null };
+  const rawGroupById = new Map<string, RawGroup>();
+  const groupIdsByItem: Record<string, string[]> = {};
   for (const g of groupsData ?? []) {
     const itemId = g.catalog_item_id as string;
-    if (!groupsByItem[itemId]) groupsByItem[itemId] = [];
-    groupsByItem[itemId].push({
+    rawGroupById.set(g.id as string, {
       id: g.id as string,
       name: g.name as string,
       required: (g.required as boolean | null) ?? false,
       min_select: Number(g.min_select) || 0,
       max_select: g.max_select === null || g.max_select === undefined ? null : Number(g.max_select),
-      options: modsByGroup[g.id as string] ?? [],
     });
+    if (!groupIdsByItem[itemId]) groupIdsByItem[itemId] = [];
+    groupIdsByItem[itemId].push(g.id as string);
   }
+  // Groups referenced by an option's child_group_id render nested, not top-level.
+  const childGroupIds = new Set<string>();
+  for (const arr of Object.values(optsByGroup)) for (const o of arr) if (o.child_group_id) childGroupIds.add(o.child_group_id);
+
+  function buildGroup(groupId: string, depth: number, seen: Set<string>): ModGroup | null {
+    const rg = rawGroupById.get(groupId);
+    if (!rg) return null;
+    const options: ModOpt[] = (optsByGroup[groupId] ?? []).map((o) => {
+      let child: ModGroup | undefined;
+      if (o.child_group_id && depth < 3 && !seen.has(o.child_group_id)) {
+        const c = buildGroup(o.child_group_id, depth + 1, new Set([...seen, groupId]));
+        if (c && c.options.length > 0) child = c;
+      }
+      return { id: o.id, name: o.name, price: o.price, child_group: child };
+    });
+    return { id: rg.id, name: rg.name, required: rg.required, min_select: rg.min_select, max_select: rg.max_select, options };
+  }
+
   function modifierGroupsFor(itemId: string): ModGroup[] {
-    const out = (groupsByItem[itemId] ?? []).filter((g) => g.options.length > 0).slice();
-    const loose = modsNoGroup[itemId] ?? [];
+    const out: ModGroup[] = [];
+    for (const gid of groupIdsByItem[itemId] ?? []) {
+      if (childGroupIds.has(gid)) continue;
+      const g = buildGroup(gid, 0, new Set());
+      if (g && g.options.length > 0) out.push(g);
+    }
+    const loose = looseByItem[itemId] ?? [];
     if (loose.length > 0) {
-      out.push({ id: "loose:" + itemId, name: "Add-ons", required: false, min_select: 0, max_select: null, options: loose });
+      out.push({ id: "loose:" + itemId, name: "Add-ons", required: false, min_select: 0, max_select: null, options: loose.map((o) => ({ id: o.id, name: o.name, price: o.price })) });
     }
     return out;
   }
