@@ -45,9 +45,11 @@ type CartLine = {
   sent_qty?: number;
   // Optional kitchen note ("no onions", "well done").
   note?: string | null;
+  // Seat this line belongs to (1-based); null = shared.
+  seat?: number | null;
 };
 // Binding when the register is opened for a specific full-service table or to-go.
-type TableBinding = { tableId: string; ticketId: string; tableLabel: string; serverName?: string | null };
+type TableBinding = { tableId: string; ticketId: string; tableLabel: string; serverName?: string | null; seatCount?: number | null };
 type StaffMember = { id: string; name: string };
 type Customer = { id: string; name: string; taxExempt?: boolean };
 type Tender = { method: "cash" | "card" | "other"; amount: number; tendered: number | null; change: number | null };
@@ -142,6 +144,8 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
       taxable: cid ? (taxableById[cid] ?? true) : true,
       taxFrac: cid ? (fracById[cid] ?? taxRate) : taxRate,
       sent_qty: Number(it.sent_qty) || 0,
+      note: it.note ?? null,
+      seat: it.seat ?? null,
     };
   });
 }
@@ -205,6 +209,15 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   // Server assigned to this table/to-go ticket (change-server).
   const [serverName, setServerName] = useState<string | null>(tableBinding?.serverName ?? null);
   const [serverSheet, setServerSheet] = useState(false);
+  // Seat-level ordering: a real table (not takeout) splits its order by seat.
+  const tableMode = !!(tableBinding && tableBinding.tableId);
+  const [seatCount, setSeatCount] = useState<number>(() => {
+    if (!tableMode) return 0;
+    let m = tableBinding?.seatCount || 0;
+    for (const it of initialTableCart?.items ?? []) m = Math.max(m, Number(it.seat) || 0);
+    return Math.max(m, 4);
+  });
+  const [activeSeat, setActiveSeat] = useState<number | null>(tableMode ? 1 : null);
 
   const itemTaxableById: Record<string, boolean> = {};
   const itemTaxFracById: Record<string, number> = {};
@@ -270,21 +283,15 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
 
   function addLine(line: { catalog_item_id: string | null; variation_id: string | null; name: string; unit_price: number; taxable: boolean; taxFrac: number }) {
     setReceipt(null);
+    const seat = tableMode ? activeSeat : null;
     setCart((prev) => {
-      const existing = prev.find(
-        (l) =>
-          l.catalog_item_id === line.catalog_item_id &&
-          l.variation_id === line.variation_id &&
-          l.name === line.name
-      );
-      if (existing) {
-        return prev.map((l) =>
-          l.catalog_item_id === line.catalog_item_id &&
-          l.variation_id === line.variation_id &&
-          l.name === line.name
-            ? { ...l, quantity: l.quantity + 1 }
-            : l
-        );
+      const match = (l: CartLine) =>
+        l.catalog_item_id === line.catalog_item_id &&
+        l.variation_id === line.variation_id &&
+        l.name === line.name &&
+        (l.seat ?? null) === (seat ?? null);
+      if (prev.some(match)) {
+        return prev.map((l) => (match(l) ? { ...l, quantity: l.quantity + 1 } : l));
       }
       return [
         ...prev,
@@ -296,6 +303,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
           quantity: 1,
           taxable: line.taxable,
           taxFrac: line.taxFrac,
+          seat: seat,
         },
       ];
     });
@@ -413,6 +421,31 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setCart((prev) => prev.map((l, i) => (i === index ? { ...l, note: note } : l)));
   }
 
+  // Move a line to a different seat (null = shared).
+  function setLineSeat(index: number, seat: number | null) {
+    setCart((prev) => prev.map((l, i) => (i === index ? { ...l, seat: seat } : l)));
+  }
+
+  // One cart line row (reused by the flat and seat-grouped layouts).
+  function renderLine(line: CartLine, index: number) {
+    return (
+      <div key={index} className="flex items-center gap-2">
+        <button type="button" onClick={() => setEditLineIndex(index)} className="min-w-0 flex-1 text-left">
+          <div className="text-sm font-medium truncate">{line.name}</div>
+          <div className="text-xs text-muted-foreground">
+            {"$" + line.unit_price.toFixed(2) + " each" + (line.taxable ? "" : "  " + "·" + "  Tax-free") + (line.note ? "  " + "·" + "  " + line.note : "")}
+          </div>
+        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button type="button" onClick={() => changeQty(index, -1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">-</button>
+          <span className="w-6 text-center text-sm tabular-nums">{line.quantity}</span>
+          <button type="button" onClick={() => changeQty(index, 1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">+</button>
+        </div>
+        <div className="w-16 text-right text-sm font-semibold tabular-nums shrink-0">{"$" + (line.unit_price * line.quantity).toFixed(2)}</div>
+      </div>
+    );
+  }
+
   // Add an open/custom item (ad-hoc name + price, no catalog item).
   function addCustomItem() {
     const name = customName.trim();
@@ -459,6 +492,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         quantity: l.quantity,
         sent_qty: l.sent_qty ?? 0,
         note: l.note ?? null,
+        seat: l.seat ?? null,
       })),
       tip: tip,
       discount_mode: discountMode,
@@ -1373,26 +1407,43 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                 )}
               </div>
 
+              {/* Seat selector (real tables only) */}
+              {tableMode && (
+                <div className="shrink-0 flex items-center gap-1 px-2 py-2 border-b border-border overflow-x-auto">
+                  <button type="button" onClick={() => setActiveSeat(null)} className={"shrink-0 text-xs rounded-md border px-2.5 py-1.5 " + (activeSeat === null ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>Shared</button>
+                  {Array.from({ length: seatCount }, (_, i) => i + 1).map((s) => (
+                    <button key={s} type="button" onClick={() => setActiveSeat(s)} className={"shrink-0 text-xs rounded-md border px-2.5 py-1.5 " + (activeSeat === s ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>{"Seat " + s}</button>
+                  ))}
+                  <button type="button" onClick={() => setSeatCount((n) => Math.min(n + 1, 30))} className="shrink-0 text-xs rounded-md border border-dashed border-border px-2 py-1.5 text-muted-foreground hover:bg-accent/50">+ Seat</button>
+                </div>
+              )}
+
               <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
                 {cart.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Tap items to add them to the sale.</p>
+                  <p className="text-sm text-muted-foreground">{tableMode ? "Pick a seat, then tap items to add to it." : "Tap items to add them to the sale."}</p>
+                ) : !tableMode ? (
+                  cart.map((line, index) => renderLine(line, index))
                 ) : (
-                  cart.map((line, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <button type="button" onClick={() => setEditLineIndex(index)} className="min-w-0 flex-1 text-left">
-                        <div className="text-sm font-medium truncate">{line.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {"$" + line.unit_price.toFixed(2) + " each" + (line.taxable ? "" : "  " + "\u00b7" + "  Tax-free")}
+                  <>
+                    {[...Array.from({ length: seatCount }, (_, i) => i + 1), null].map((seat) => {
+                      const entries = cart.map((l, i) => ({ l, i })).filter((e) => (e.l.seat ?? null) === seat);
+                      if (seat === null && entries.length === 0) return null;
+                      const sub = entries.reduce((s, e) => s + e.l.unit_price * e.l.quantity, 0);
+                      return (
+                        <div key={seat === null ? "shared" : "s" + seat} className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{seat === null ? "Shared" : "Seat " + seat}</span>
+                            {entries.length > 0 && <span className="text-xs tabular-nums text-muted-foreground">{"$" + sub.toFixed(2)}</span>}
+                          </div>
+                          {entries.length === 0 ? (
+                            <p className="text-xs text-muted-foreground/60 pl-1">No items</p>
+                          ) : (
+                            entries.map((e) => renderLine(e.l, e.i))
+                          )}
                         </div>
-                      </button>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button type="button" onClick={() => changeQty(index, -1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">-</button>
-                        <span className="w-6 text-center text-sm tabular-nums">{line.quantity}</span>
-                        <button type="button" onClick={() => changeQty(index, 1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">+</button>
-                      </div>
-                      <div className="w-16 text-right text-sm font-semibold tabular-nums shrink-0">{"$" + (line.unit_price * line.quantity).toFixed(2)}</div>
-                    </div>
-                  ))
+                      );
+                    })}
+                  </>
                 )}
               </div>
 
@@ -1493,6 +1544,17 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                   <Label className="text-xs">Kitchen note</Label>
                   <Input value={cart[editLineIndex].note ?? ""} onChange={(e) => setLineNote(editLineIndex, e.target.value)} placeholder="e.g. no onions, well done" className="h-10" />
                 </div>
+                {tableMode && (
+                  <div className="space-y-1 mt-3">
+                    <Label className="text-xs">Seat</Label>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <button type="button" onClick={() => setLineSeat(editLineIndex, null)} className={"text-xs rounded-md border px-2.5 py-1.5 " + ((cart[editLineIndex].seat ?? null) === null ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground")}>Shared</button>
+                      {Array.from({ length: seatCount }, (_, i) => i + 1).map((s) => (
+                        <button key={s} type="button" onClick={() => setLineSeat(editLineIndex, s)} className={"text-xs rounded-md border px-2.5 py-1.5 " + (cart[editLineIndex].seat === s ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground")}>{s}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <Button variant="outline" className="w-full mt-4 text-red-600" onClick={() => removeLine(editLineIndex)}>
                   Remove from sale
                 </Button>

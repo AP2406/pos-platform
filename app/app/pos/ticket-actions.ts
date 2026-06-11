@@ -177,6 +177,8 @@ export async function discardTicket(
 const tableCartLineSchema = cartLineSchema.extend({
   sent_qty: z.coerce.number().int().min(0).max(1000).optional(),
   note: z.string().max(280).optional().nullable(),
+  // Seat this line belongs to (1-based); null/absent = shared / no seat.
+  seat: z.coerce.number().int().min(1).max(99).optional().nullable(),
 });
 const tableCartSchema = z.object({
   items: z.array(tableCartLineSchema).max(200),
@@ -203,6 +205,7 @@ export type TableTicketSummary = {
 export type TogoTicketSummary = {
   id: string;
   name: string | null;
+  phone: string | null;
   opened_at: string;
   item_count: number;
   subtotal: number;
@@ -398,12 +401,12 @@ export async function sendTableTicket(
   }
 
   // Items to fire = quantity beyond what was already sent.
-  const fired: { name: string; quantity: number; note?: string | null }[] = [];
+  const fired: { name: string; quantity: number; note?: string | null; seat?: number | null }[] = [];
   const updatedItems = parsed.data.items.map((it) => {
     const qty = Number(it.quantity) || 0;
     const sent = Number(it.sent_qty) || 0;
     const delta = qty - sent;
-    if (delta > 0) fired.push({ name: it.name, quantity: delta, note: it.note ?? null });
+    if (delta > 0) fired.push({ name: it.name, quantity: delta, note: it.note ?? null, seat: it.seat ?? null });
     return { ...it, sent_qty: qty };
   });
 
@@ -505,9 +508,11 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
   });
 }
 
-// Open a to-go (takeout) ticket — a check with no table.
+// Open a takeout ticket — a check with no table. Name + phone are required so
+// staff can call the customer when it's ready.
 export async function openTogoTicket(
-  name?: string | null
+  name?: string | null,
+  phone?: string | null
 ): Promise<{ ok: true; ticketId: string; name: string | null } | { error: string }> {
   const { business } = await requireBusiness();
   const supabase = await createClient();
@@ -517,12 +522,17 @@ export async function openTogoTicket(
   const active = await getActiveStaff();
 
   const label = name && name.trim() ? name.trim().slice(0, 80) : null;
+  const tel = phone && phone.trim() ? phone.trim().slice(0, 40) : null;
+  if (!label) return { error: "Enter the customer's name." };
+  if (!tel) return { error: "Enter the customer's phone number." };
+
   const { data, error } = await supabase
     .from("open_tickets")
     .insert({
       business_id: business.id,
       ticket_type: "togo",
       label: label,
+      customer_phone: tel,
       staff_id: active ? active.id : null,
       cart: { items: [] },
       created_by: user ? user.id : null,
@@ -531,7 +541,7 @@ export async function openTogoTicket(
     .single();
   if (error || !data) {
     console.error("openTogoTicket:", error);
-    return { error: "Could not start the to-go order. Please try again." };
+    return { error: "Could not start the takeout order. Please try again." };
   }
   return { ok: true, ticketId: data.id as string, name: label };
 }
@@ -543,7 +553,7 @@ export async function listOpenTogoTickets(): Promise<TogoTicketSummary[]> {
 
   const { data, error } = await supabase
     .from("open_tickets")
-    .select("id, label, opened_at, cart, staff_id")
+    .select("id, label, customer_phone, opened_at, cart, staff_id")
     .eq("business_id", business.id)
     .eq("ticket_type", "togo");
   if (error) {
@@ -558,6 +568,7 @@ export async function listOpenTogoTickets(): Promise<TogoTicketSummary[]> {
     return {
       id: t.id as string,
       name: (t.label as string | null) ?? null,
+      phone: (t.customer_phone as string | null) ?? null,
       opened_at: t.opened_at as string,
       item_count: totals.item_count,
       subtotal: totals.subtotal,

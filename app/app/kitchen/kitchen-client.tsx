@@ -27,7 +27,7 @@ function esc(s: string): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-type KitchenItem = { name: string; quantity: number; note?: string | null };
+type KitchenItem = { name: string; quantity: number; note?: string | null; seat?: number | null };
 type KitchenOrder = {
   id: string;
   kind: "order" | "kitchen";
@@ -229,7 +229,7 @@ export function KitchenClient({
               o.items.map((it, i) => (
                 <div key={i} className="flex flex-col">
                   <div className="flex justify-between">
-                    <span className="truncate">{it.name}</span>
+                    <span className="truncate">{(it.seat ? "S" + it.seat + " · " : "") + it.name}</span>
                     <span className="tabular-nums text-muted-foreground">
                       {"x" + it.quantity}
                     </span>

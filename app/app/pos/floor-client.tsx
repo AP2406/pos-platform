@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +35,7 @@ type RegisterProps = {
 };
 
 type StaffMember = { id: string; name: string };
-type Selected = { elementId: string; ticketId: string; tableLabel: string; cart: TableCart; serverName: string | null };
+type Selected = { elementId: string; ticketId: string; tableLabel: string; cart: TableCart; serverName: string | null; seatCount: number | null };
 
 // Elements a server can ring up (open a ticket on). Walls/rooms/labels/chairs
 // are visual only on the live floor.
@@ -78,7 +78,12 @@ export function FloorClient({
   const [guests, setGuests] = useState("");
   const [togoOpen, setTogoOpen] = useState(false);
   const [togoName, setTogoName] = useState("");
+  const [togoPhone, setTogoPhone] = useState("");
   const [find, setFind] = useState("");
+
+  // Scale the designed floor to fill the available area.
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
 
   const [nowMs, setNowMs] = useState(0);
   useEffect(() => {
@@ -90,6 +95,28 @@ export function FloorClient({
       clearInterval(id);
     };
   }, []);
+
+  // Designed-layout bounds (fit the elements, with a sensible minimum).
+  let canvasW = 900;
+  let canvasH = 560;
+  for (const e of elements) {
+    canvasW = Math.max(canvasW, e.x + e.w + 40);
+    canvasH = Math.max(canvasH, e.y + e.h + 40);
+  }
+
+  // Recompute the scale whenever the map node or its size changes so the floor
+  // fills the available area. (Initial measure comes from ResizeObserver.)
+  useEffect(() => {
+    const node = mapRef.current;
+    if (!node) return;
+    const ro = new ResizeObserver(() => {
+      const cw = node.clientWidth;
+      const ch = node.clientHeight;
+      if (cw > 0 && ch > 0) setScale(Math.min(cw / canvasW, ch / canvasH));
+    });
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, [selected, canvasW, canvasH]);
 
   async function refreshOpen() {
     const [rows, togoRows] = await Promise.all([listOpenTableTickets(), listOpenTogoTickets()]);
@@ -108,7 +135,7 @@ export function FloorClient({
         setError(res.error);
         return;
       }
-      setSelected({ elementId: el.id, ticketId: res.ticketId, tableLabel: el.label ?? "Table", cart: res.cart, serverName: null });
+      setSelected({ elementId: el.id, ticketId: res.ticketId, tableLabel: el.label ?? "Table", cart: res.cart, serverName: null, seatCount: guestCount });
     });
   }
 
@@ -121,7 +148,7 @@ export function FloorClient({
         await refreshOpen();
         return;
       }
-      setSelected({ elementId: el.id, ticketId: ticketId, tableLabel: el.label ?? "Table", cart: res.cart, serverName: serverName });
+      setSelected({ elementId: el.id, ticketId: ticketId, tableLabel: el.label ?? "Table", cart: res.cart, serverName: serverName, seatCount: res.guestCount });
     });
   }
 
@@ -142,15 +169,21 @@ export function FloorClient({
   function startTogo() {
     setError(null);
     const name = togoName.trim();
+    const phone = togoPhone.trim();
+    if (!name || !phone) {
+      setError("Enter the customer's name and phone.");
+      return;
+    }
     setTogoOpen(false);
     startTransition(async () => {
-      const res = await openTogoTicket(name || null);
+      const res = await openTogoTicket(name, phone);
       if ("error" in res) {
         setError(res.error);
         return;
       }
-      setSelected({ elementId: "", ticketId: res.ticketId, tableLabel: "To-go" + (res.name ? " · " + res.name : ""), cart: { items: [] }, serverName: null });
+      setSelected({ elementId: "", ticketId: res.ticketId, tableLabel: "Takeout" + (res.name ? " · " + res.name : ""), cart: { items: [] }, serverName: null, seatCount: null });
       setTogoName("");
+      setTogoPhone("");
     });
   }
 
@@ -163,7 +196,7 @@ export function FloorClient({
         await refreshOpen();
         return;
       }
-      setSelected({ elementId: "", ticketId: t.id, tableLabel: "To-go" + (t.name ? " · " + t.name : ""), cart: res.cart, serverName: t.server_name });
+      setSelected({ elementId: "", ticketId: t.id, tableLabel: "Takeout" + (t.name ? " · " + t.name : ""), cart: res.cart, serverName: t.server_name, seatCount: null });
     });
   }
 
@@ -177,7 +210,7 @@ export function FloorClient({
       <RegisterClient
         key={selected.ticketId}
         {...register}
-        tableBinding={{ tableId: selected.elementId, ticketId: selected.ticketId, tableLabel: selected.tableLabel, serverName: selected.serverName }}
+        tableBinding={{ tableId: selected.elementId, ticketId: selected.ticketId, tableLabel: selected.tableLabel, serverName: selected.serverName, seatCount: selected.seatCount }}
         initialTableCart={selected.cart}
         onExitToFloor={exitToFloor}
         staffList={staff}
@@ -201,13 +234,6 @@ export function FloorClient({
     (t) => !q || (t.name ?? "").toLowerCase().includes(q) || (t.server_name ?? "").toLowerCase().includes(q)
   );
 
-  // Canvas bounds — fit the designed layout (with a sensible minimum).
-  let canvasW = 900;
-  let canvasH = 560;
-  for (const e of elements) {
-    canvasW = Math.max(canvasW, e.x + e.w + 40);
-    canvasH = Math.max(canvasH, e.y + e.h + 40);
-  }
   const ordered = [...elements].sort((a, b) => zFor(a.kind) - zFor(b.kind));
   const ringableCount = elements.filter((e) => isRingable(e.kind)).length;
 
@@ -233,30 +259,30 @@ export function FloorClient({
 
       <div className="shrink-0 flex items-center gap-2 p-2 border-b border-border">
         <Input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a check (table, name, server)" className="h-10 flex-1" />
-        <Button variant="outline" className="h-10 shrink-0" onClick={() => { setTogoName(""); setTogoOpen(true); }}>New to-go</Button>
+        <Button variant="outline" className="h-10 shrink-0" onClick={() => { setTogoName(""); setTogoPhone(""); setTogoOpen(true); }}>Takeout</Button>
       </div>
 
-      {/* To-go rail */}
+      {/* Takeout rail */}
       {visibleTogo.length > 0 && (
         <div className="shrink-0 flex gap-2 overflow-x-auto p-2 border-b border-border bg-card/40">
           {visibleTogo.map((t) => (
             <button key={t.id} type="button" disabled={pending} onClick={() => resumeTogo(t)} className="shrink-0 w-40 text-left rounded-lg border border-amber-500/50 bg-amber-500/10 p-2.5 active:scale-[0.98] transition-transform">
               <div className="flex items-center justify-between gap-1">
-                <span className="font-semibold text-sm truncate">{t.name ?? "To-go"}</span>
-                <span className="text-[10px] uppercase tracking-wide text-amber-600 font-medium shrink-0">To-go</span>
+                <span className="font-semibold text-sm truncate">{t.name ?? "Takeout"}</span>
+                <span className="text-[10px] uppercase tracking-wide text-amber-600 font-medium shrink-0">Takeout</span>
               </div>
               <div className="text-sm tabular-nums font-medium">{"$" + t.subtotal.toFixed(2)}</div>
-              <div className="text-xs text-muted-foreground truncate">{minutesOpen(t.opened_at) + " min" + (t.server_name ? "  ·  " + t.server_name : "")}</div>
+              <div className="text-xs text-muted-foreground truncate">{(t.phone ? t.phone + "  ·  " : "") + minutesOpen(t.opened_at) + " min"}</div>
             </button>
           ))}
         </div>
       )}
 
-      {/* Visual floor map */}
-      <div className="flex-1 min-h-0 overflow-auto p-4">
+      {/* Visual floor map — fills the screen, scaled to fit */}
+      <div ref={mapRef} className="flex-1 min-h-0 relative overflow-hidden">
         {ringableCount === 0 ? (
-          <div className="max-w-md mx-auto mt-10 text-center">
-            <p className="text-sm text-muted-foreground">
+          <div className="absolute inset-0 flex items-center justify-center p-6">
+            <p className="text-sm text-muted-foreground max-w-md text-center">
               Your floor is empty. Design it in Settings &rarr; Floor &mdash; add
               tables, booths, counters, walls and rooms &mdash; and it shows up
               here as your map.
@@ -264,10 +290,14 @@ export function FloorClient({
           </div>
         ) : (
           <div
-            className="relative mx-auto rounded-lg border border-border bg-muted/10"
+            className="absolute rounded-lg border border-border bg-muted/10"
             style={{
               width: canvasW,
               height: canvasH,
+              left: "50%",
+              top: "50%",
+              transform: "translate(-50%, -50%) scale(" + scale + ")",
+              transformOrigin: "center",
               backgroundImage:
                 "linear-gradient(to right, rgba(120,120,120,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(120,120,120,0.08) 1px, transparent 1px)",
               backgroundSize: "20px 20px",
@@ -334,14 +364,20 @@ export function FloorClient({
         <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setTogoOpen(false)}>
           <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-xs" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-medium">New to-go order</h3>
+              <h3 className="font-medium">New takeout order</h3>
               <button type="button" onClick={() => setTogoOpen(false)} className="text-xs text-muted-foreground underline">Cancel</button>
             </div>
-            <div className="space-y-1 mb-3">
-              <Label className="text-xs">Name (optional)</Label>
-              <Input value={togoName} onChange={(e) => setTogoName(e.target.value)} placeholder="Customer or order name" className="h-11" />
+            <div className="space-y-2 mb-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Customer name</Label>
+                <Input value={togoName} onChange={(e) => setTogoName(e.target.value)} placeholder="Name" className="h-11" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Phone number</Label>
+                <Input type="tel" inputMode="tel" value={togoPhone} onChange={(e) => setTogoPhone(e.target.value)} placeholder="(555) 123-4567" className="h-11" />
+              </div>
             </div>
-            <Button className="w-full h-12" disabled={pending} onClick={startTogo}>Start to-go</Button>
+            <Button className="w-full h-12" disabled={pending || !togoName.trim() || !togoPhone.trim()} onClick={startTogo}>Start takeout</Button>
           </div>
         </div>
       )}

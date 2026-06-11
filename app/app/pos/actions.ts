@@ -13,6 +13,7 @@ const lineSchema = z.object({
   unit_price: z.coerce.number().min(0).max(1000000),
   quantity: z.coerce.number().int().min(1).max(1000),
   note: z.string().max(280).optional().nullable(),
+  seat: z.coerce.number().int().min(1).max(99).optional().nullable(),
 });
 
 const DINING_OPTIONS = ["dine_in", "takeout", "delivery", "pickup"] as const;
@@ -372,6 +373,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       unit_price: i.unit_price,
       quantity: i.quantity,
       note: i.note ?? null,
+      seat: i.seat ?? null,
     })),
     subtotal: Math.round(subtotal * 100) / 100,
     discount: {
