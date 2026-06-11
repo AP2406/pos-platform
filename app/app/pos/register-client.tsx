@@ -16,6 +16,7 @@ import {
   updateTableTicket,
   closeTableTicket,
   sendTableTicket,
+  fireCourse,
   setTicketServer,
   type OpenTicketSummary,
   type TableCart,
@@ -34,7 +35,8 @@ import Link from "next/link";
 import { tileClassesFor } from "./category-colors";
 
 type Variation = { id: string; name: string; price: number };
-type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[] };
+type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; default_course_id?: string | null };
+type Course = { id: string; name: string; sort_order: number };
 type CartLine = {
   catalog_item_id: string | null;
   variation_id: string | null;
@@ -49,6 +51,9 @@ type CartLine = {
   note?: string | null;
   // Seat this line belongs to (1-based); null = shared.
   seat?: number | null;
+  // Coursing (P0-1): which course this line fires with, and when last fired.
+  course_id?: string | null;
+  fired_at?: string | null;
 };
 // Binding when the register is opened for a specific full-service table or to-go.
 type TableBinding = { tableId: string; ticketId: string; tableLabel: string; serverName?: string | null; seatCount?: number | null; guestCount?: number | null };
@@ -165,11 +170,13 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
       sent_qty: Number(it.sent_qty) || 0,
       note: it.note ?? null,
       seat: it.seat ?? null,
+      course_id: it.course_id ?? null,
+      fired_at: it.fired_at ?? null,
     };
   });
 }
 
-export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, tableBinding, initialTableCart, onExitToFloor, staffList }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[] }) {
+export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, tableBinding, initialTableCart, onExitToFloor, staffList }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[] }) {
   const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
   const [tip, setTip] = useState(initialTableCart?.tip ?? "");
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">(initialTableCart?.discount_mode === "percent" ? "percent" : "amount");
@@ -253,6 +260,18 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     return Math.max(m, 4);
   });
   const [activeSeat, setActiveSeat] = useState<number | null>(tableMode ? 1 : null);
+
+  // Coursing (P0-1): only on real full-service tables that have courses.
+  const courseList = courses ?? [];
+  const coursingOn = tableMode && courseList.length > 0;
+  const firstCourseId = courseList[0]?.id ?? null;
+  const courseById = new Map(courseList.map((c) => [c.id, c]));
+  const itemDefaultCourse = new Map(items.map((i) => [i.id, i.default_course_id ?? null]));
+  function defaultCourseFor(catalogItemId: string | null): string | null {
+    if (!coursingOn) return null;
+    const fromItem = catalogItemId ? itemDefaultCourse.get(catalogItemId) ?? null : null;
+    return fromItem || firstCourseId;
+  }
 
   const itemTaxableById: Record<string, boolean> = {};
   const itemTaxFracById: Record<string, number> = {};
@@ -339,6 +358,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
           taxable: line.taxable,
           taxFrac: line.taxFrac,
           seat: seat,
+          course_id: defaultCourseFor(line.catalog_item_id),
         },
       ];
     });
@@ -461,6 +481,11 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setCart((prev) => prev.map((l, i) => (i === index ? { ...l, seat: seat } : l)));
   }
 
+  // Move a line to a different course (P0-1). Free while unfired.
+  function setLineCourse(index: number, courseId: string) {
+    setCart((prev) => prev.map((l, i) => (i === index ? { ...l, course_id: courseId } : l)));
+  }
+
   // One cart line row (reused by the flat and seat-grouped layouts).
   function renderLine(line: CartLine, index: number) {
     return (
@@ -470,6 +495,14 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
           <div className="text-xs text-muted-foreground">
             {"$" + line.unit_price.toFixed(2) + " each" + (line.taxable ? "" : "  " + "·" + "  Tax-free") + (line.note ? "  " + "·" + "  " + line.note : "")}
           </div>
+          {coursingOn && (
+            <div className="text-[10px] mt-0.5 flex items-center gap-1.5">
+              <span className="text-muted-foreground">{line.seat ? "Seat " + line.seat : "Shared"}</span>
+              {line.quantity > 0 && (line.sent_qty ?? 0) >= line.quantity
+                ? <span className="text-emerald-600">Fired</span>
+                : <span className="text-amber-600">Held</span>}
+            </div>
+          )}
         </button>
         <div className="flex items-center gap-1.5 shrink-0">
           <button type="button" onClick={() => changeQty(index, -1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">-</button>
@@ -531,6 +564,8 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         sent_qty: l.sent_qty ?? 0,
         note: l.note ?? null,
         seat: l.seat ?? null,
+        course_id: l.course_id ?? null,
+        fired_at: l.fired_at ?? null,
       })),
       tip: tip,
       discount_mode: discountMode,
@@ -572,6 +607,30 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         return;
       }
       setCart((prev) => prev.map((l) => ({ ...l, sent_qty: l.quantity })));
+    });
+  }
+
+  // Coursing: how many items in a course still need firing, and the next course
+  // with anything to fire (drives the "Fire [Course]" footer button).
+  function courseUnsent(courseId: string): number {
+    return cart.reduce((s, l) => s + ((l.course_id ?? null) === courseId ? Math.max(0, l.quantity - (l.sent_qty ?? 0)) : 0), 0);
+  }
+  const nextUnfiredCourse = coursingOn ? courseList.find((c) => courseUnsent(c.id) > 0) ?? null : null;
+
+  // Fire just one course's new items to the kitchen, then mark them sent locally.
+  function fireCourseClient(course: Course) {
+    if (!tableBinding || courseUnsent(course.id) === 0) return;
+    setError(null);
+    setSending(true);
+    startTransition(async () => {
+      const res = await fireCourse(tableBinding.ticketId, buildTablePayload(), course.id, course.name, diningOption);
+      setSending(false);
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      const nowIso = new Date().toISOString();
+      setCart((prev) => prev.map((l) => ((l.course_id ?? null) === course.id ? { ...l, sent_qty: l.quantity, fired_at: nowIso } : l)));
     });
   }
 
@@ -1687,6 +1746,38 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                   <p className="text-sm text-muted-foreground">{tableMode ? "Pick a seat, then tap items to add to it." : "Tap items to add them to the sale."}</p>
                 ) : !tableMode ? (
                   cart.map((line, index) => renderLine(line, index))
+                ) : coursingOn ? (
+                  <>
+                    {courseList.map((course) => {
+                      const entries = cart.map((l, i) => ({ l, i })).filter((e) => (e.l.course_id ?? null) === course.id);
+                      if (entries.length === 0) return null;
+                      entries.sort((a, b) => (a.l.seat ?? 99) - (b.l.seat ?? 99));
+                      const unsent = entries.reduce((s, e) => s + Math.max(0, e.l.quantity - (e.l.sent_qty ?? 0)), 0);
+                      return (
+                        <div key={course.id} className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{course.name}</span>
+                            {unsent > 0 ? (
+                              <button type="button" onClick={() => fireCourseClient(course)} disabled={sending || pending} className="text-[11px] rounded-md border border-foreground px-2 py-0.5 hover:bg-accent disabled:opacity-50">{"Fire " + unsent}</button>
+                            ) : (
+                              <span className="text-[11px] text-emerald-600">Fired</span>
+                            )}
+                          </div>
+                          {entries.map((e) => renderLine(e.l, e.i))}
+                        </div>
+                      );
+                    })}
+                    {(() => {
+                      const orphan = cart.map((l, i) => ({ l, i })).filter((e) => { const cid = e.l.course_id ?? null; return !cid || !courseById.has(cid); });
+                      if (orphan.length === 0) return null;
+                      return (
+                        <div className="space-y-1.5">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">No course</span>
+                          {orphan.map((e) => renderLine(e.l, e.i))}
+                        </div>
+                      );
+                    })()}
+                  </>
                 ) : (
                   <>
                     {[...Array.from({ length: seatCount }, (_, i) => i + 1), null].map((seat) => {
@@ -1723,9 +1814,18 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                 )}
                 {tableBinding && cart.length > 0 && (
                   <div className="p-2 border-b border-border flex gap-2">
-                    <Button variant="outline" className="flex-1 h-11" onClick={sendToKitchen} disabled={pending || sending || unsentCount === 0}>
-                      {sending ? "Sending..." : unsentCount > 0 ? "Send " + unsentCount : "All sent"}
-                    </Button>
+                    {coursingOn ? (
+                      <Button variant="outline" className="flex-1 h-11" onClick={() => nextUnfiredCourse && fireCourseClient(nextUnfiredCourse)} disabled={pending || sending || !nextUnfiredCourse}>
+                        {sending ? "Firing..." : nextUnfiredCourse ? "Fire " + nextUnfiredCourse.name + " (" + courseUnsent(nextUnfiredCourse.id) + ")" : "All fired"}
+                      </Button>
+                    ) : (
+                      <Button variant="outline" className="flex-1 h-11" onClick={sendToKitchen} disabled={pending || sending || unsentCount === 0}>
+                        {sending ? "Sending..." : unsentCount > 0 ? "Send " + unsentCount : "All sent"}
+                      </Button>
+                    )}
+                    {coursingOn && unsentCount > 0 && (
+                      <Button variant="outline" className="h-11 px-3" onClick={sendToKitchen} disabled={pending || sending} title="Fire everything now">Send all</Button>
+                    )}
                     <Button variant="outline" className="flex-1 h-11" onClick={sendAndPay} disabled={pending}>
                       Send &amp; Pay
                     </Button>
@@ -1838,6 +1938,19 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                         <button key={s} type="button" onClick={() => setLineSeat(editLineIndex, s)} className={"text-xs rounded-md border px-2.5 py-1.5 " + (cart[editLineIndex].seat === s ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground")}>{s}</button>
                       ))}
                     </div>
+                  </div>
+                )}
+                {coursingOn && (
+                  <div className="space-y-1 mt-3">
+                    <Label className="text-xs">Course{(cart[editLineIndex].sent_qty ?? 0) >= cart[editLineIndex].quantity ? " (already fired)" : ""}</Label>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {courseList.map((co) => (
+                        <button key={co.id} type="button" onClick={() => setLineCourse(editLineIndex, co.id)} className={"text-xs rounded-md border px-2.5 py-1.5 " + ((cart[editLineIndex].course_id ?? null) === co.id ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground")}>{co.name}</button>
+                      ))}
+                    </div>
+                    {(cart[editLineIndex].sent_qty ?? 0) >= cart[editLineIndex].quantity && cart[editLineIndex].quantity > 0 && (
+                      <p className="text-[11px] text-amber-600">Moving an already-fired item won&apos;t un-fire it in the kitchen.</p>
+                    )}
                   </div>
                 )}
                 <Button variant="outline" className="w-full mt-4 text-red-600" onClick={() => removeLine(editLineIndex)}>

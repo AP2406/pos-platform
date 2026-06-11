@@ -11,6 +11,7 @@ import {
   setCatalogItemActive,
   setCatalogItemTaxable,
   setCatalogItemTaxRate,
+  setCatalogItemDefaultCourse,
   setCatalogItemBarcode,
   setCatalogItemImage,
   setCatalogItemOutOfStock,
@@ -34,9 +35,11 @@ type Item = {
   barcode: string | null;
   image_url: string | null;
   out_of_stock: boolean;
+  default_course_id: string | null;
   variations: Option[];
   modifiers: Option[];
 };
+type CourseOption = { id: string; name: string };
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -64,10 +67,12 @@ export function CatalogClient({
   initialItems,
   taxRates,
   initialCategoryColors,
+  courses = [],
 }: {
   initialItems: Item[];
   taxRates: TaxRate[];
   initialCategoryColors: Record<string, string>;
+  courses?: CourseOption[];
 }) {
   const [items, setItems] = useState<Item[]>(initialItems);
   const [name, setName] = useState("");
@@ -139,6 +144,7 @@ export function CatalogClient({
           barcode: barcode.trim() || null,
           image_url: imageUrl || null,
           out_of_stock: false,
+          default_course_id: null,
           variations: [],
           modifiers: [],
         },
@@ -264,6 +270,17 @@ export function CatalogClient({
           prev.map((i) =>
             i.id === item.id ? { ...i, tax_rate_id: taxRateId } : i
           )
+        );
+      }
+    });
+  }
+
+  function handleSetDefaultCourse(item: Item, courseId: string | null) {
+    startTransition(async () => {
+      const res = await setCatalogItemDefaultCourse(item.id, courseId);
+      if (!("error" in res)) {
+        setItems((prev) =>
+          prev.map((i) => (i.id === item.id ? { ...i, default_course_id: courseId } : i))
         );
       }
     });
@@ -693,6 +710,27 @@ export function CatalogClient({
                           )}
                         </div>
                       </div>
+
+                      {courses.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground pl-3">
+                            Course &mdash; which course this item fires with on a table (full-service).
+                          </p>
+                          <div className="pl-3">
+                            <select
+                              value={item.default_course_id ?? ""}
+                              onChange={(e) => handleSetDefaultCourse(item, e.target.value || null)}
+                              disabled={pending}
+                              className="h-9 rounded-md border border-border bg-transparent text-foreground px-2 text-sm"
+                            >
+                              <option value="">First course</option>
+                              {courses.map((c) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Code / barcode */}
                       <div className="space-y-2 pt-3 border-t border-border">

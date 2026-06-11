@@ -429,3 +429,35 @@ export async function setCatalogItemTaxRate(
   revalidatePath("/app/catalog");
   return { ok: true };
 }
+
+// P0-1: the course a menu item fires with by default on a full-service table.
+export async function setCatalogItemDefaultCourse(
+  id: string,
+  courseId: string | null
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing item." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  if (courseId) {
+    const { data: course } = await supabase
+      .from("courses")
+      .select("id")
+      .eq("id", courseId)
+      .eq("business_id", business.id)
+      .maybeSingle();
+    if (!course) return { error: "Course not found." };
+  }
+
+  const { error } = await supabase
+    .from("catalog_items")
+    .update({ default_course_id: courseId })
+    .eq("id", id)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("setCatalogItemDefaultCourse:", error);
+    return { error: "Could not update the course. Please try again." };
+  }
+  revalidatePath("/app/catalog");
+  return { ok: true };
+}

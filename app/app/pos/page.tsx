@@ -6,6 +6,7 @@ import { FloorClient } from "./floor-client";
 import { getActiveStaff } from "./staff-session";
 import { listFloor, listFloorPlans } from "../floor/floor-actions";
 import { listOpenTableTickets, listOpenTogoTickets } from "./ticket-actions";
+import { listCourses } from "./courses-actions";
 import { hasFloorService } from "@/lib/modules/modes";
 import type { ReceiptSettings } from "./receipt-template";
 
@@ -15,7 +16,7 @@ export default async function PosPage() {
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, taxable, tax_rate_id, image_url, out_of_stock")
+    .select("id, name, price, category, taxable, tax_rate_id, image_url, out_of_stock, default_course_id")
     .eq("business_id", business.id)
     .eq("is_active", true)
     .order("name", { ascending: true });
@@ -111,6 +112,7 @@ export default async function PosPage() {
       taxFrac: taxFrac,
       image_url: (i.image_url as string | null) ?? null,
       out_of_stock: (i.out_of_stock as boolean | null) ?? false,
+      default_course_id: (i.default_course_id as string | null) ?? null,
       variations: varsByItem[i.id as string] ?? [],
       modifiers: modsByItem[i.id as string] ?? [],
     };
@@ -149,6 +151,9 @@ export default async function PosPage() {
       }
     : undefined;
 
+  // Coursing (P0-1) is full-service only; listCourses seeds the default four.
+  const courses = isFullService ? await listCourses() : undefined;
+
   const registerProps = {
     items,
     taxRate,
@@ -160,6 +165,7 @@ export default async function PosPage() {
     categoryColors,
     serviceCharge,
     splitSettings,
+    courses,
   };
 
   // Full-service restaurants get the table floor first; every other mode (and

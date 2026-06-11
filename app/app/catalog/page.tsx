@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { CatalogClient } from "./catalog-client";
 import { ImportMenu } from "./import-menu";
+import { CoursesCard } from "./courses-card";
+import { hasFloorService } from "@/lib/modules/modes";
+import { listCourses } from "../pos/courses-actions";
 
 export default async function CatalogPage() {
   const { business } = await requireBusiness();
@@ -9,7 +12,7 @@ export default async function CatalogPage() {
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, is_active, taxable, tax_rate_id, barcode, image_url, out_of_stock")
+    .select("id, name, price, category, is_active, taxable, tax_rate_id, barcode, image_url, out_of_stock, default_course_id")
     .eq("business_id", business.id)
     .order("created_at", { ascending: true });
 
@@ -75,6 +78,7 @@ export default async function CatalogPage() {
     barcode: (i.barcode as string | null) ?? null,
     image_url: (i.image_url as string | null) ?? null,
     out_of_stock: (i.out_of_stock as boolean | null) ?? false,
+    default_course_id: (i.default_course_id as string | null) ?? null,
     variations: varsByItem[i.id as string] ?? [],
     modifiers: modsByItem[i.id as string] ?? [],
   }));
@@ -84,6 +88,11 @@ export default async function CatalogPage() {
     name: r.name as string,
     rate: Number(r.rate),
   }));
+
+  // Courses (full-service only): drive both the per-item "default course" picker
+  // and the Courses management card on this page.
+  const courseRows = hasFloorService(business) ? await listCourses() : [];
+  const courses = courseRows.map((c) => ({ id: c.id, name: c.name }));
 
   return (
     <div>
@@ -96,10 +105,17 @@ export default async function CatalogPage() {
         </div>
         <ImportMenu />
       </div>
+      {courseRows.length > 0 && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-6">
+          <h2 className="text-sm font-semibold mb-3">Courses</h2>
+          <CoursesCard initial={courseRows} />
+        </div>
+      )}
       <CatalogClient
         initialItems={items}
         taxRates={taxRates}
         initialCategoryColors={categoryColors}
+        courses={courses}
       />
     </div>
   );
