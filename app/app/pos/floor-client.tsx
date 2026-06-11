@@ -12,6 +12,7 @@ import {
   loadTableTicket,
   listOpenTableTickets,
   listOpenTogoTickets,
+  transferTables,
   type TableCart,
   type TableTicketSummary,
   type TogoTicketSummary,
@@ -85,6 +86,15 @@ export function FloorClient({
   const [togoName, setTogoName] = useState("");
   const [togoPhone, setTogoPhone] = useState("");
   const [find, setFind] = useState("");
+
+  // Server handoff (transfer all of one server's open tickets to another).
+  const [handoffOpen, setHandoffOpen] = useState(false);
+  const [handoffFrom, setHandoffFrom] = useState("");
+  const [handoffTo, setHandoffTo] = useState("");
+  const [handoffPin, setHandoffPin] = useState("");
+  const [handoffNeedsPin, setHandoffNeedsPin] = useState(false);
+  const [handoffErr, setHandoffErr] = useState<string | null>(null);
+  const [handoffBusy, setHandoffBusy] = useState(false);
 
   const [nowMs, setNowMs] = useState(0);
   useEffect(() => {
@@ -229,6 +239,39 @@ export function FloorClient({
     refreshOpen();
   }
 
+  function openHandoff() {
+    setHandoffFrom("");
+    setHandoffTo("");
+    setHandoffPin("");
+    setHandoffNeedsPin(false);
+    setHandoffErr(null);
+    setHandoffOpen(true);
+  }
+
+  function submitHandoff() {
+    if (!handoffFrom || !handoffTo) {
+      setHandoffErr("Pick both servers.");
+      return;
+    }
+    setHandoffErr(null);
+    setHandoffBusy(true);
+    startTransition(async () => {
+      const res = await transferTables(handoffFrom, handoffTo, handoffNeedsPin ? handoffPin : undefined);
+      setHandoffBusy(false);
+      if ("needs_approval" in res) {
+        setHandoffNeedsPin(true);
+        setHandoffErr("A manager PIN is needed to hand off tables.");
+        return;
+      }
+      if ("error" in res) {
+        setHandoffErr(res.error);
+        return;
+      }
+      setHandoffOpen(false);
+      await refreshOpen();
+    });
+  }
+
   if (selected) {
     return (
       <RegisterClient
@@ -257,6 +300,12 @@ export function FloorClient({
   const visibleTogo = togo.filter(
     (t) => !q || (t.name ?? "").toLowerCase().includes(q) || (t.server_name ?? "").toLowerCase().includes(q)
   );
+
+  // Open-ticket counts per server, for the handoff picker.
+  const openCountByStaff: Record<string, number> = {};
+  for (const t of Object.values(openByElement)) if (t.staff_id) openCountByStaff[t.staff_id] = (openCountByStaff[t.staff_id] || 0) + 1;
+  for (const t of togo) if (t.staff_id) openCountByStaff[t.staff_id] = (openCountByStaff[t.staff_id] || 0) + 1;
+  const serversWithOpen = staff.filter((s) => (openCountByStaff[s.id] || 0) > 0);
 
   const ordered = [...elements].sort((a, b) => zFor(a.kind) - zFor(b.kind));
   const ringableCount = elements.filter((e) => isRingable(e.kind)).length;
@@ -314,6 +363,9 @@ export function FloorClient({
         )}
         <div className="ml-auto flex items-center gap-2">
           <Input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a check" className="h-9 w-40 sm:w-48" />
+          {serversWithOpen.length > 0 && staff.length > 1 && (
+            <Button variant="outline" className="h-9 hidden sm:inline-flex" onClick={openHandoff}>Handoff</Button>
+          )}
           <Button variant="outline" className="h-9" onClick={() => { setTogoName(""); setTogoPhone(""); setTogoOpen(true); }}>New to-go</Button>
           <Link href="/app" className="flex items-center gap-1.5 text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
@@ -409,6 +461,48 @@ export function FloorClient({
           </aside>
         )}
       </div>
+
+      {handoffOpen && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setHandoffOpen(false)}>
+          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium">Hand off tables</h3>
+              <button type="button" onClick={() => setHandoffOpen(false)} className="text-xs text-muted-foreground underline">Cancel</button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">Move every open table and to-go owned by one server to another.</p>
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <Label className="text-xs">From server</Label>
+                <select value={handoffFrom} onChange={(e) => setHandoffFrom(e.target.value)} className="w-full h-10 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
+                  <option value="">Select…</option>
+                  {serversWithOpen.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name + " (" + (openCountByStaff[s.id] || 0) + ")"}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">To server</Label>
+                <select value={handoffTo} onChange={(e) => setHandoffTo(e.target.value)} className="w-full h-10 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
+                  <option value="">Select…</option>
+                  {staff.filter((s) => s.id !== handoffFrom).map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              {handoffNeedsPin && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Manager PIN</Label>
+                  <Input type="password" inputMode="numeric" value={handoffPin} onChange={(e) => setHandoffPin(e.target.value)} placeholder="4-6 digits" className="h-10" />
+                </div>
+              )}
+              <Button className="w-full h-11 mt-1" onClick={submitHandoff} disabled={handoffBusy || !handoffFrom || !handoffTo}>
+                {handoffBusy ? "Transferring…" : "Transfer tables"}
+              </Button>
+              {handoffErr && <p className="text-sm text-red-600">{handoffErr}</p>}
+            </div>
+          </div>
+        </div>
+      )}
 
       {togoOpen && (
         <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setTogoOpen(false)}>

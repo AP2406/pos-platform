@@ -527,7 +527,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setError(null);
     setSending(true);
     startTransition(async () => {
-      const res = await sendTableTicket(tableBinding.ticketId, buildTablePayload());
+      const res = await sendTableTicket(tableBinding.ticketId, buildTablePayload(), diningOption);
       setSending(false);
       if ("error" in res) {
         setError(res.error);

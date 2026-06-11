@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { getActiveStaff } from "./staff-session";
+import { verifyManagerPin } from "./approval-actions";
 import { z } from "zod";
 
 const cartLineSchema = z.object({
@@ -366,9 +367,16 @@ export async function closeTableTicket(
 // kitchen_tickets row (NOT a paid order, so reporting is untouched) and bumps
 // each line's sent_qty so re-firing only sends new items. Returns the count
 // fired so the register can mark those lines as sent.
+const DINING_KDS_LABELS: Record<string, string> = {
+  takeout: "Takeout",
+  delivery: "Delivery",
+  pickup: "Pickup",
+};
+
 export async function sendTableTicket(
   ticketId: string,
-  cart: TableCart
+  cart: TableCart,
+  diningOption?: string | null
 ): Promise<{ ok: true; fired: number } | { error: string }> {
   if (!ticketId) return { error: "Missing ticket." };
   const parsed = tableCartSchema.safeParse(cart);
@@ -398,6 +406,11 @@ export async function sendTableTicket(
       .eq("business_id", business.id)
       .maybeSingle();
     if (el && el.label) label = el.label as string;
+  }
+
+  // Tag the kitchen ticket with the dining option when it isn't plain dine-in.
+  if (diningOption && DINING_KDS_LABELS[diningOption]) {
+    label = (label ? label + " · " : "") + DINING_KDS_LABELS[diningOption];
   }
 
   // Items to fire = quantity beyond what was already sent.
@@ -596,4 +609,37 @@ export async function setTicketServer(
     return { error: "Could not change the server." };
   }
   return { ok: true };
+}
+
+// End-of-shift handoff: reassign EVERY open ticket owned by one server to
+// another. No money math — only ownership changes. Manager-PIN gated when a
+// staff/trainee initiates (same gate as voids/refunds).
+export async function transferTables(
+  fromStaffId: string,
+  toStaffId: string,
+  approverPin?: string
+): Promise<{ ok: true; moved: number } | { needs_approval: true } | { error: string }> {
+  if (!fromStaffId || !toStaffId) return { error: "Pick both servers." };
+  if (fromStaffId === toStaffId) return { error: "Pick a different server to hand off to." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const active = await getActiveStaff();
+  if (active && (active.role === "staff" || active.role === "trainee")) {
+    if (!approverPin) return { needs_approval: true };
+    const v = await verifyManagerPin(approverPin);
+    if ("error" in v) return { error: v.error };
+  }
+
+  const { data, error } = await supabase
+    .from("open_tickets")
+    .update({ staff_id: toStaffId })
+    .eq("business_id", business.id)
+    .eq("staff_id", fromStaffId)
+    .select("id");
+  if (error) {
+    console.error("transferTables:", error);
+    return { error: "Could not transfer the tables. Please try again." };
+  }
+  return { ok: true, moved: (data ?? []).length };
 }
