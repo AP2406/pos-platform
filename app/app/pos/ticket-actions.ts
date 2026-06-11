@@ -205,6 +205,9 @@ export type TableTicketSummary = {
   subtotal: number;
   staff_id: string | null;
   server_name: string | null;
+  // P0-4: when this table has been split, how many child checks are still unpaid.
+  split_kind: string | null;
+  child_count: number;
 };
 
 export type TogoTicketSummary = {
@@ -340,12 +343,13 @@ export async function closeTableTicket(
 
   const { data: ticket } = await supabase
     .from("open_tickets")
-    .select("id, element_id")
+    .select("id, element_id, parent_ticket_id")
     .eq("id", ticketId)
     .eq("business_id", business.id)
     .maybeSingle();
 
   const elementId = ticket ? ((ticket.element_id as string | null) ?? null) : null;
+  const parentTicketId = ticket ? ((ticket.parent_ticket_id as string | null) ?? null) : null;
   if (elementId) {
     await supabase
       .from("kitchen_tickets")
@@ -363,6 +367,37 @@ export async function closeTableTicket(
   if (error) {
     console.error("closeTableTicket:", error);
     return { error: "Could not close the table." };
+  }
+
+  // P0-4: if this was a split child, close the parent once the last sibling is
+  // paid (no more children) and the parent itself carries no items.
+  if (parentTicketId) {
+    const { count } = await supabase
+      .from("open_tickets")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", business.id)
+      .eq("parent_ticket_id", parentTicketId);
+    if (!count || count === 0) {
+      const { data: parent } = await supabase
+        .from("open_tickets")
+        .select("id, element_id, cart")
+        .eq("id", parentTicketId)
+        .eq("business_id", business.id)
+        .maybeSingle();
+      const parentItems = (parent?.cart as { items?: unknown[] } | null)?.items ?? [];
+      if (parent && parentItems.length === 0) {
+        const pEl = (parent.element_id as string | null) ?? null;
+        if (pEl) {
+          await supabase
+            .from("kitchen_tickets")
+            .update({ fulfilled_at: new Date().toISOString() })
+            .eq("business_id", business.id)
+            .eq("element_id", pEl)
+            .is("fulfilled_at", null);
+        }
+        await supabase.from("open_tickets").delete().eq("id", parentTicketId).eq("business_id", business.id);
+      }
+    }
   }
   return { ok: true };
 }
@@ -551,6 +586,143 @@ export async function fireCourse(
   return { ok: true, fired: fired.reduce((s, f) => s + f.quantity, 0) };
 }
 
+// ---------------------------------------------------------------------------
+// P0-4: split a table check into separate child checks that pay independently.
+// ---------------------------------------------------------------------------
+
+function cartSubtotalCents(cart: TableCart): number {
+  return cart.items.reduce((s, it) => s + Math.round(Number(it.unit_price) * Number(it.quantity) * 100), 0);
+}
+
+export type ChildTicket = { id: string; label: string; cart: TableCart; subtotal: number };
+
+// Fan a parent ticket into N child checks. The partition (sum of child
+// subtotals) must equal the parent's subtotal to the cent, or it is rejected —
+// no children are created. Each child becomes an independent open_ticket; the
+// parent is emptied and kept as a container until every child is paid.
+export async function splitTicketIntoChildren(
+  parentId: string,
+  kind: string,
+  children: { label: string; cart: TableCart }[]
+): Promise<{ ok: true; childIds: string[] } | { error: string }> {
+  if (!parentId) return { error: "Missing ticket." };
+  if (!Array.isArray(children) || children.length < 2) return { error: "Need at least two checks." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: parent } = await supabase
+    .from("open_tickets")
+    .select("id, element_id, cart, staff_id, parent_ticket_id")
+    .eq("id", parentId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!parent) return { error: "That ticket is no longer open." };
+  if (parent.parent_ticket_id) return { error: "This is already a split check." };
+
+  const { count: existing } = await supabase
+    .from("open_tickets")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", business.id)
+    .eq("parent_ticket_id", parentId);
+  if (existing && existing > 0) return { error: "This check is already split. Un-split it first." };
+
+  const parentParsed = tableCartSchema.safeParse(parent.cart);
+  const parentSub = parentParsed.success ? cartSubtotalCents(parentParsed.data) : 0;
+
+  let sum = 0;
+  const clean: { label: string; cart: TableCart }[] = [];
+  for (const ch of children) {
+    const parsed = tableCartSchema.safeParse(ch.cart);
+    if (!parsed.success) return { error: "Could not read a split check." };
+    const sub = cartSubtotalCents(parsed.data);
+    if (sub <= 0) return { error: "Every check needs at least one item." };
+    sum += sub;
+    clean.push({ label: (ch.label || "Check").slice(0, 80), cart: parsed.data });
+  }
+  if (sum !== parentSub) return { error: "The split doesn't add up to the check total." };
+
+  const rows = clean.map((ch) => ({
+    business_id: business.id,
+    parent_ticket_id: parentId,
+    element_id: null,
+    ticket_type: "table",
+    label: ch.label,
+    cart: ch.cart,
+    staff_id: parent.staff_id,
+    created_by: user ? user.id : null,
+  }));
+  const { data: inserted, error: insErr } = await supabase.from("open_tickets").insert(rows).select("id");
+  if (insErr) {
+    console.error("splitTicketIntoChildren:", insErr);
+    return { error: "Could not create the split checks." };
+  }
+
+  const pc = parentParsed.success ? parentParsed.data : ({ items: [] } as TableCart);
+  await supabase
+    .from("open_tickets")
+    .update({ cart: { ...pc, items: [] }, split_kind: kind })
+    .eq("id", parentId)
+    .eq("business_id", business.id);
+
+  return { ok: true, childIds: (inserted ?? []).map((r) => r.id as string) };
+}
+
+export async function listChildTickets(parentId: string): Promise<ChildTicket[]> {
+  if (!parentId) return [];
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("open_tickets")
+    .select("id, label, cart")
+    .eq("business_id", business.id)
+    .eq("parent_ticket_id", parentId)
+    .order("created_at", { ascending: true });
+  return (data ?? []).map((r) => {
+    const parsed = tableCartSchema.safeParse(r.cart);
+    const cart = parsed.success ? parsed.data : ({ items: [] } as TableCart);
+    return { id: r.id as string, label: (r.label as string) || "Check", cart, subtotal: cartSubtotalCents(cart) / 100 };
+  });
+}
+
+// Re-merge a split back into one check (only while all children are unpaid).
+export async function unsplitTicket(parentId: string): Promise<{ ok: true } | { error: string }> {
+  if (!parentId) return { error: "Missing ticket." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { data: parent } = await supabase
+    .from("open_tickets")
+    .select("id, cart")
+    .eq("id", parentId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!parent) return { error: "That ticket is no longer open." };
+  const { data: kids } = await supabase
+    .from("open_tickets")
+    .select("id, cart")
+    .eq("business_id", business.id)
+    .eq("parent_ticket_id", parentId)
+    .order("created_at", { ascending: true });
+
+  const pc = tableCartSchema.safeParse(parent.cart);
+  const merged: TableCart = pc.success ? { ...pc.data, items: [...pc.data.items] } : { items: [] };
+  for (const ch of kids ?? []) {
+    const cc = tableCartSchema.safeParse(ch.cart);
+    if (cc.success) merged.items.push(...cc.data.items);
+  }
+  await supabase
+    .from("open_tickets")
+    .update({ cart: merged, split_kind: null })
+    .eq("id", parentId)
+    .eq("business_id", business.id);
+  if (kids && kids.length > 0) {
+    await supabase.from("open_tickets").delete().eq("business_id", business.id).eq("parent_ticket_id", parentId);
+  }
+  return { ok: true };
+}
+
 function cartTotals(cartRaw: unknown): { item_count: number; subtotal: number } {
   const cart = (cartRaw as TableCart) || { items: [] };
   const items = Array.isArray(cart.items) ? cart.items : [];
@@ -589,7 +761,7 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
 
   const { data, error } = await supabase
     .from("open_tickets")
-    .select("id, element_id, guest_count, opened_at, cart, staff_id")
+    .select("id, element_id, guest_count, opened_at, cart, staff_id, split_kind")
     .eq("business_id", business.id)
     .not("element_id", "is", null);
   if (error) {
@@ -597,19 +769,41 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
     return [];
   }
 
+  // Count the unpaid child checks per split parent (children have element_id null).
+  const parentIds = (data ?? []).map((t) => t.id as string);
+  const childCount: Record<string, number> = {};
+  const childSub: Record<string, number> = {};
+  if (parentIds.length > 0) {
+    const { data: kids } = await supabase
+      .from("open_tickets")
+      .select("parent_ticket_id, cart")
+      .eq("business_id", business.id)
+      .in("parent_ticket_id", parentIds);
+    for (const k of kids ?? []) {
+      const pid = k.parent_ticket_id as string;
+      childCount[pid] = (childCount[pid] ?? 0) + 1;
+      childSub[pid] = (childSub[pid] ?? 0) + cartTotals(k.cart).subtotal;
+    }
+  }
+
   const names = await serverNames(supabase, business.id, (data ?? []).map((t) => (t.staff_id as string | null) ?? null));
   return (data ?? []).map((t) => {
     const totals = cartTotals(t.cart);
     const staffId = (t.staff_id as string | null) ?? null;
+    const id = t.id as string;
+    const kids = childCount[id] ?? 0;
     return {
-      id: t.id as string,
+      id: id,
       element_id: t.element_id as string,
       guest_count: (t.guest_count as number | null) ?? null,
       opened_at: t.opened_at as string,
+      // A split parent's own items are empty; show the children's combined subtotal.
       item_count: totals.item_count,
-      subtotal: totals.subtotal,
+      subtotal: kids > 0 ? Math.round((childSub[id] ?? 0) * 100) / 100 : totals.subtotal,
       staff_id: staffId,
       server_name: staffId ? names[staffId] ?? null : null,
+      split_kind: (t.split_kind as string | null) ?? null,
+      child_count: kids,
     };
   });
 }

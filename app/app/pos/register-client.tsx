@@ -17,6 +17,7 @@ import {
   closeTableTicket,
   sendTableTicket,
   fireCourse,
+  splitTicketIntoChildren,
   setTicketServer,
   type OpenTicketSummary,
   type TableCart,
@@ -899,6 +900,30 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   function submitSplit(checks: SplitCheck[]) {
     setError(null);
     if (cart.length === 0) return;
+
+    // P0-4: on a real table, persist the split as independent child checks that
+    // each pay later; the table stays open until the last child is paid.
+    if (tableBinding && tableBinding.tableId) {
+      startTransition(async () => {
+        const children = checks.map((ck, i) => ({
+          label: "Check " + (i + 1),
+          cart: {
+            items: ck.lines.map((l) => ({ catalog_item_id: l.catalog_item_id, variation_id: null, name: l.name, unit_price: l.unit_price, quantity: l.quantity, sent_qty: l.quantity, note: null, seat: null, course_id: null, fired_at: null })),
+            tip: "",
+          } as TableCart,
+        }));
+        const res = await splitTicketIntoChildren(tableBinding.ticketId, "item", children);
+        if ("error" in res) {
+          setError(res.error);
+          return;
+        }
+        setSplitOpen(false);
+        tableClosedRef.current = true; // stop autosave from refilling the emptied parent
+        if (onExitToFloor) onExitToFloor();
+      });
+      return;
+    }
+
     startTransition(async () => {
       const res = await finalizeSplitCheck({
         items: cart.map((l) => ({ catalog_item_id: l.catalog_item_id, name: l.name, unit_price: l.unit_price, quantity: l.quantity, taxable: l.taxable })),
