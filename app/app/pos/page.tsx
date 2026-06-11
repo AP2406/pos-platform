@@ -121,6 +121,21 @@ export default async function PosPage() {
   const trainingMode =
     (business as { training_mode?: boolean }).training_mode === true;
 
+  const b = business as {
+    service_charge_enabled?: boolean;
+    service_charge_pct?: number;
+    service_charge_auto_party?: number;
+    service_charge_post_tax?: boolean;
+    service_charge_label?: string;
+  };
+  const serviceCharge = {
+    enabled: b.service_charge_enabled === true,
+    pct: Number(b.service_charge_pct) || 0,
+    autoParty: Number(b.service_charge_auto_party) || 0,
+    postTax: b.service_charge_post_tax === true,
+    label: (b.service_charge_label || "Service charge").toString(),
+  };
+
   const registerProps = {
     items,
     taxRate,
@@ -130,6 +145,7 @@ export default async function PosPage() {
     receiptSettings,
     showItemPhotos,
     categoryColors,
+    serviceCharge,
   };
 
   // Full-service restaurants get the table floor first; every other mode (and

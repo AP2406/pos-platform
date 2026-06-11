@@ -5,7 +5,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { VOID_REASONS, DISCOUNT_REASONS, TAX_EXEMPT_REASONS, COMP_REASONS, isValidReason } from "./reason-codes";
+import { VOID_REASONS, DISCOUNT_REASONS, TAX_EXEMPT_REASONS, COMP_REASONS, SERVICE_CHARGE_WAIVE_REASONS, isValidReason } from "./reason-codes";
 
 const lineSchema = z.object({
   catalog_item_id: z.string().uuid().optional().nullable(),
@@ -36,6 +36,9 @@ const orderSchema = z.object({
   comp_value: z.coerce.number().min(0).max(1000000).optional(),
   comp_reason_code: z.string().max(60).optional(),
   comp_reason_note: z.string().max(500).optional(),
+  service_charge: z.coerce.boolean().optional(),
+  service_charge_waive_reason_code: z.string().max(60).optional(),
+  service_charge_waive_reason_note: z.string().max(500).optional(),
   tax_exempt: z.coerce.boolean().optional(),
   tax_exempt_reason_code: z.string().max(60).optional(),
   tax_exempt_reason_note: z.string().max(500).optional(),
@@ -67,6 +70,9 @@ type OrderInput = {
   comp_value?: number;
   comp_reason_code?: string;
   comp_reason_note?: string;
+  service_charge?: boolean;
+  service_charge_waive_reason_code?: string;
+  service_charge_waive_reason_note?: string;
   tax_exempt?: boolean;
   tax_exempt_reason_code?: string;
   tax_exempt_reason_note?: string;
@@ -344,8 +350,34 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     tax = 0;
   }
 
+  // Service charge / auto-gratuity — the amount is recomputed here from the
+  // business policy (the client only says whether it's applied). It is NOT
+  // taxed; its base is the pre-tax net (default) or the post-tax amount.
+  const scEnabled = (business as { service_charge_enabled?: boolean }).service_charge_enabled === true;
+  let scPct = Number((business as { service_charge_pct?: number }).service_charge_pct) || 0;
+  if (scPct < 0) scPct = 0;
+  if (scPct > 100) scPct = 100;
+  const scPostTax = (business as { service_charge_post_tax?: boolean }).service_charge_post_tax === true;
+  const scLabel = ((business as { service_charge_label?: string }).service_charge_label || "Service charge").toString();
+  const scApplied = scEnabled && scPct > 0 && parsed.data.service_charge === true;
+  const scBase = scApplied ? (scPostTax ? Math.round((netSubtotal + tax) * 100) / 100 : netSubtotal) : 0;
+  const serviceCharge = scApplied ? Math.round(scBase * (scPct / 100) * 100) / 100 : 0;
+
+  // Waiving an enabled service charge is the sensitive, reason-coded action.
+  const scWaiveCode = (parsed.data.service_charge_waive_reason_code || "").trim();
+  const scWaiveNote = (parsed.data.service_charge_waive_reason_note || "").trim();
+  const scWaived = scEnabled && scPct > 0 && !scApplied && scWaiveCode !== "";
+  if (scWaived) {
+    if (!isValidReason(SERVICE_CHARGE_WAIVE_REASONS, scWaiveCode)) {
+      return { error: "Choose a reason for waiving the service charge." };
+    }
+    if (scWaiveCode === "other" && !scWaiveNote) {
+      return { error: "Add a note explaining the waived service charge." };
+    }
+  }
+
   const tip = parsed.data.tip ?? 0;
-  const total = Math.round((netSubtotal + tax + tip) * 100) / 100;
+  const total = Math.round((netSubtotal + tax + serviceCharge + tip) * 100) / 100;
   const paymentMethod = parsed.data.payment_method ?? "cash";
 
   let tenders: Tender[] = [];
@@ -413,6 +445,17 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       reason_note: comp > 0 && compReasonNote ? compReasonNote : null,
     },
     tax: { rate: rate, amount: tax, taxable_base: taxableBase, breakdown: taxBreakdown, exempt: taxExemptInfo },
+    service_charge: {
+      applied: scApplied,
+      label: scLabel,
+      pct: scPct,
+      post_tax: scPostTax,
+      base: scBase,
+      amount: serviceCharge,
+      waived: scWaived,
+      waive_reason_code: scWaived ? scWaiveCode : null,
+      waive_reason_note: scWaived && scWaiveNote ? scWaiveNote : null,
+    },
     tip: tip,
     total: total,
     payment_method: orderPaymentMethod,
@@ -461,6 +504,16 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       metadata: { amount: comp, staff_id: activeStaffId, staff_name: activeStaffName },
     });
   }
+  if (scWaived && !isTraining) {
+    auditEvents.push({
+      actor_id: authUserId,
+      actor_role: role,
+      action: "service_charge_waived",
+      reason_code: scWaiveCode,
+      reason_note: scWaiveNote ? scWaiveNote.slice(0, 500) : null,
+      metadata: { pct: scPct, staff_id: activeStaffId, staff_name: activeStaffName },
+    });
+  }
   if (manualExempt && !isTraining) {
     auditEvents.push({
       actor_id: authUserId,
@@ -497,6 +550,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     tip: tip,
     discount: discount,
     comp: comp,
+    service_charge: serviceCharge,
     total: total,
     payment_method: orderPaymentMethod,
     customer_id: customerId,

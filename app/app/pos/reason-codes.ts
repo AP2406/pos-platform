@@ -37,6 +37,14 @@ export const COMP_REASONS: ReasonCode[] = [
   { code: "other", label: "Other" },
 ];
 
+export const SERVICE_CHARGE_WAIVE_REASONS: ReasonCode[] = [
+  { code: "manager_decision", label: "Manager decision" },
+  { code: "service_issue", label: "Service issue / recovery" },
+  { code: "split_party", label: "Party split separately" },
+  { code: "regular_guest", label: "Regular / VIP guest" },
+  { code: "other", label: "Other" },
+];
+
 export const CASH_MOVEMENT_REASONS: ReasonCode[] = [
   { code: "tips_out", label: "Tips paid out" },
   { code: "supplies", label: "Supplies / expense" },

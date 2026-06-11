@@ -36,7 +36,7 @@ type RegisterProps = {
 };
 
 type StaffMember = { id: string; name: string };
-type Selected = { elementId: string; ticketId: string; tableLabel: string; cart: TableCart; serverName: string | null; seatCount: number | null };
+type Selected = { elementId: string; ticketId: string; tableLabel: string; cart: TableCart; serverName: string | null; seatCount: number | null; guestCount: number | null };
 
 // Elements a server can ring up (open a ticket on). Walls/rooms/labels/chairs
 // are visual only on the live floor.
@@ -168,7 +168,7 @@ export function FloorClient({
         setError(res.error);
         return;
       }
-      setSelected({ elementId: el.id, ticketId: res.ticketId, tableLabel: el.label ?? "Table", cart: res.cart, serverName: null, seatCount: chairs > 0 ? chairs : guestCount });
+      setSelected({ elementId: el.id, ticketId: res.ticketId, tableLabel: el.label ?? "Table", cart: res.cart, serverName: null, seatCount: chairs > 0 ? chairs : guestCount, guestCount: guestCount });
     });
   }
 
@@ -182,7 +182,7 @@ export function FloorClient({
         await refreshOpen();
         return;
       }
-      setSelected({ elementId: el.id, ticketId: ticketId, tableLabel: el.label ?? "Table", cart: res.cart, serverName: serverName, seatCount: chairs > 0 ? chairs : res.guestCount });
+      setSelected({ elementId: el.id, ticketId: ticketId, tableLabel: el.label ?? "Table", cart: res.cart, serverName: serverName, seatCount: chairs > 0 ? chairs : res.guestCount, guestCount: res.guestCount });
     });
   }
 
@@ -215,7 +215,7 @@ export function FloorClient({
         setError(res.error);
         return;
       }
-      setSelected({ elementId: "", ticketId: res.ticketId, tableLabel: "Takeout" + (res.name ? " · " + res.name : ""), cart: { items: [] }, serverName: null, seatCount: null });
+      setSelected({ elementId: "", ticketId: res.ticketId, tableLabel: "Takeout" + (res.name ? " · " + res.name : ""), cart: { items: [] }, serverName: null, seatCount: null, guestCount: null });
       setTogoName("");
       setTogoPhone("");
     });
@@ -230,7 +230,7 @@ export function FloorClient({
         await refreshOpen();
         return;
       }
-      setSelected({ elementId: "", ticketId: t.id, tableLabel: "Takeout" + (t.name ? " · " + t.name : ""), cart: res.cart, serverName: t.server_name, seatCount: null });
+      setSelected({ elementId: "", ticketId: t.id, tableLabel: "Takeout" + (t.name ? " · " + t.name : ""), cart: res.cart, serverName: t.server_name, seatCount: null, guestCount: null });
     });
   }
 
@@ -277,7 +277,7 @@ export function FloorClient({
       <RegisterClient
         key={selected.ticketId}
         {...register}
-        tableBinding={{ tableId: selected.elementId, ticketId: selected.ticketId, tableLabel: selected.tableLabel, serverName: selected.serverName, seatCount: selected.seatCount }}
+        tableBinding={{ tableId: selected.elementId, ticketId: selected.ticketId, tableLabel: selected.tableLabel, serverName: selected.serverName, seatCount: selected.seatCount, guestCount: selected.guestCount }}
         initialTableCart={selected.cart}
         onExitToFloor={exitToFloor}
         staffList={staff}
