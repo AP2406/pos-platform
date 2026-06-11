@@ -35,7 +35,8 @@ import Link from "next/link";
 import { tileClassesFor } from "./category-colors";
 
 type Variation = { id: string; name: string; price: number };
-type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; default_course_id?: string | null };
+type ModifierGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; options: Variation[] };
+type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null };
 type Course = { id: string; name: string; sort_order: number };
 type CartLine = {
   catalog_item_id: string | null;
@@ -410,10 +411,40 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     addItem(item);
   }
 
+  // P0-2: modifier groups for an item (falls back to one loose "Add-ons" group).
+  function modGroupsOf(item: Item): ModifierGroup[] {
+    if (item.modifierGroups && item.modifierGroups.length) return item.modifierGroups;
+    if (item.modifiers.length) return [{ id: "all", name: "Add-ons", required: false, min_select: 0, max_select: null, options: item.modifiers }];
+    return [];
+  }
+  function pickerGroupOf(optId: string): ModifierGroup | undefined {
+    if (!pickerItem) return undefined;
+    return modGroupsOf(pickerItem).find((g) => g.options.some((o) => o.id === optId));
+  }
   function togglePickerMod(id: string) {
-    setPickerMods((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+    const g = pickerGroupOf(id);
+    setPickerMods((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (g && g.max_select === 1) {
+        // Single-select group: the new choice replaces any prior one.
+        const others = prev.filter((x) => !g.options.some((o) => o.id === x));
+        return [...others, id];
+      }
+      if (g && g.max_select != null) {
+        const inGroup = prev.filter((x) => g.options.some((o) => o.id === x)).length;
+        if (inGroup >= g.max_select) return prev; // at the group's max — ignore.
+      }
+      return [...prev, id];
+    });
+  }
+  // Required groups that don't yet have their minimum selected (blocks confirm).
+  function requiredUnmet(item: Item): ModifierGroup[] {
+    return modGroupsOf(item).filter((g) => {
+      const min = g.required ? Math.max(1, g.min_select) : g.min_select;
+      if (min <= 0) return false;
+      const count = pickerMods.filter((x) => g.options.some((o) => o.id === x)).length;
+      return count < min;
+    });
   }
 
   function pickerUnitPrice(item: Item): number {
@@ -1381,26 +1412,42 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
               </div>
             )}
 
-            {pickerItem.modifiers.length > 0 && (
-              <div className="space-y-2 mb-3">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Add-ons</div>
-                {pickerItem.modifiers.map((m) => {
-                  const checked = pickerMods.includes(m.id);
-                  return (
-                    <button key={m.id} type="button" onClick={() => togglePickerMod(m.id)} className={"w-full flex items-center justify-between p-3 rounded-md border text-left transition-colors " + (checked ? "border-foreground bg-accent" : "border-border hover:border-foreground/40 hover:bg-accent/50")}>
-                      <span className="flex items-center gap-2">
-                        <span className={"w-4 h-4 rounded border flex items-center justify-center text-[10px] " + (checked ? "bg-foreground text-background border-foreground" : "border-muted-foreground")}>{checked ? "\u2713" : ""}</span>
-                        <span className="text-sm font-medium">{m.name}</span>
-                      </span>
-                      <span className="text-sm tabular-nums text-muted-foreground">{"+$" + m.price.toFixed(2)}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            {modGroupsOf(pickerItem).map((g) => {
+              const single = g.max_select === 1;
+              const min = g.required ? Math.max(1, g.min_select) : g.min_select;
+              const count = pickerMods.filter((x) => g.options.some((o) => o.id === x)).length;
+              const unmet = min > 0 && count < min;
+              const atMax = g.max_select != null && count >= g.max_select;
+              const hint = single
+                ? "Choose 1"
+                : g.max_select != null
+                  ? (min > 0 ? "Choose " + min + "\u2013" + g.max_select : "Choose up to " + g.max_select)
+                  : min > 0 ? "Choose at least " + min : "Optional";
+              return (
+                <div key={g.id} className="space-y-2 mb-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">{g.name}</span>
+                    <span className={"text-[10px] " + (unmet ? "text-red-600" : "text-muted-foreground")}>{(g.required ? "Required \u00b7 " : "") + hint}</span>
+                  </div>
+                  {g.options.map((m) => {
+                    const checked = pickerMods.includes(m.id);
+                    const disabled = !checked && atMax && !single;
+                    return (
+                      <button key={m.id} type="button" onClick={() => togglePickerMod(m.id)} disabled={disabled} className={"w-full flex items-center justify-between p-3 rounded-md border text-left transition-colors disabled:opacity-40 " + (checked ? "border-foreground bg-accent" : "border-border hover:border-foreground/40 hover:bg-accent/50")}>
+                        <span className="flex items-center gap-2">
+                          <span className={"w-4 h-4 border flex items-center justify-center text-[10px] " + (single ? "rounded-full" : "rounded") + " " + (checked ? "bg-foreground text-background border-foreground" : "border-muted-foreground")}>{checked ? "\u2713" : ""}</span>
+                          <span className="text-sm font-medium">{m.name}</span>
+                        </span>
+                        {m.price > 0 && <span className="text-sm tabular-nums text-muted-foreground">{"+$" + m.price.toFixed(2)}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
 
-            <Button className="w-full" onClick={confirmOptions} disabled={pickerItem.variations.length > 0 && !pickerVariationId}>
-              {"Add to cart - $" + pickerUnitPrice(pickerItem).toFixed(2)}
+            <Button className="w-full" onClick={confirmOptions} disabled={(pickerItem.variations.length > 0 && !pickerVariationId) || requiredUnmet(pickerItem).length > 0}>
+              {requiredUnmet(pickerItem).length > 0 ? "Choose " + requiredUnmet(pickerItem)[0].name : "Add to cart - $" + pickerUnitPrice(pickerItem).toFixed(2)}
             </Button>
           </div>
         </div>

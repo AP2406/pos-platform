@@ -12,14 +12,15 @@ import {
   setCatalogItemTaxable,
   setCatalogItemTaxRate,
   setCatalogItemDefaultCourse,
+} from "./actions";
+import { ModifierGroupsEditor, type ModGroup } from "./modifier-groups-editor";
+import {
   setCatalogItemBarcode,
   setCatalogItemImage,
   setCatalogItemOutOfStock,
   saveCategoryColors,
   createVariation,
   deleteVariation,
-  createModifier,
-  deleteModifier,
 } from "./actions";
 
 type Option = { id: string; name: string; price: number };
@@ -38,6 +39,7 @@ type Item = {
   default_course_id: string | null;
   variations: Option[];
   modifiers: Option[];
+  modifierGroups: ModGroup[];
 };
 type CourseOption = { id: string; name: string };
 
@@ -89,9 +91,6 @@ export function CatalogClient({
   const [varName, setVarName] = useState("");
   const [varPrice, setVarPrice] = useState("");
   const [varError, setVarError] = useState<string | null>(null);
-  const [modName, setModName] = useState("");
-  const [modPrice, setModPrice] = useState("");
-  const [modError, setModError] = useState<string | null>(null);
   const [barcodeEdit, setBarcodeEdit] = useState("");
   const [barcodeError, setBarcodeError] = useState<string | null>(null);
   const [itemUploading, setItemUploading] = useState(false);
@@ -145,6 +144,7 @@ export function CatalogClient({
           image_url: imageUrl || null,
           out_of_stock: false,
           default_course_id: null,
+          modifierGroups: [],
           variations: [],
           modifiers: [],
         },
@@ -290,9 +290,6 @@ export function CatalogClient({
     setVarName("");
     setVarPrice("");
     setVarError(null);
-    setModName("");
-    setModPrice("");
-    setModError(null);
     setBarcodeError(null);
     setBarcodeEdit(expandedId === item.id ? "" : (item.barcode ?? ""));
     setExpandedId((prev) => (prev === item.id ? null : item.id));
@@ -371,61 +368,6 @@ export function CatalogClient({
     });
   }
 
-  function handleAddModifier(itemId: string) {
-    setModError(null);
-    if (!modName.trim()) {
-      setModError("Add-on name is required.");
-      return;
-    }
-    startTransition(async () => {
-      const res = await createModifier(
-        itemId,
-        modName.trim(),
-        parseFloat(modPrice) || 0
-      );
-      if ("error" in res) {
-        setModError(res.error);
-        return;
-      }
-      setItems((prev) =>
-        prev.map((i) =>
-          i.id === itemId
-            ? {
-                ...i,
-                modifiers: [
-                  ...i.modifiers,
-                  {
-                    id: res.id,
-                    name: modName.trim(),
-                    price: parseFloat(modPrice) || 0,
-                  },
-                ],
-              }
-            : i
-        )
-      );
-      setModName("");
-      setModPrice("");
-    });
-  }
-
-  function handleDeleteModifier(itemId: string, modifierId: string) {
-    startTransition(async () => {
-      const res = await deleteModifier(modifierId);
-      if (!("error" in res)) {
-        setItems((prev) =>
-          prev.map((i) =>
-            i.id === itemId
-              ? {
-                  ...i,
-                  modifiers: i.modifiers.filter((m) => m.id !== modifierId),
-                }
-              : i
-          )
-        );
-      }
-    });
-  }
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -887,79 +829,8 @@ export function CatalogClient({
                         )}
                       </div>
 
-                      {/* Add-ons (modifiers) */}
-                      <div className="space-y-3 pt-3 border-t border-border">
-                        <p className="text-xs text-muted-foreground pl-3">
-                          Add-ons &mdash; optional extras like &quot;extra shot.&quot;
-                          The customer can add any number and each adds its price.
-                        </p>
-
-                        <div className="pl-3 space-y-2">
-                          {item.modifiers.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">
-                              No add-ons yet.
-                            </p>
-                          ) : (
-                            item.modifiers.map((m) => (
-                              <div
-                                key={m.id}
-                                className="flex items-center justify-between"
-                              >
-                                <div className="text-sm">
-                                  {m.name}
-                                  <span className="text-muted-foreground">
-                                    {"  " + "\u00b7" + "  +$" + m.price.toFixed(2)}
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleDeleteModifier(item.id, m.id)
-                                  }
-                                  disabled={pending}
-                                  className="text-xs text-muted-foreground underline hover:text-red-600"
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            ))
-                          )}
-                        </div>
-
-                        <div className="pl-3 flex flex-wrap items-end gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-xs">Add-on</Label>
-                            <Input
-                              value={modName}
-                              onChange={(e) => setModName(e.target.value)}
-                              placeholder="Extra shot"
-                              className="h-9 w-32"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Adds</Label>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={modPrice}
-                              onChange={(e) => setModPrice(e.target.value)}
-                              placeholder="0.00"
-                              className="h-9 w-24 text-right"
-                            />
-                          </div>
-                          <Button
-                            size="sm"
-                            onClick={() => handleAddModifier(item.id)}
-                            disabled={pending || !modName.trim()}
-                          >
-                            Add
-                          </Button>
-                        </div>
-                        {modError && (
-                          <p className="text-sm text-red-600 pl-3">{modError}</p>
-                        )}
-                      </div>
+                      {/* Modifier groups (P0-2) */}
+                      <ModifierGroupsEditor itemId={item.id} initial={item.modifierGroups} />
                     </div>
                   )}
                 </div>

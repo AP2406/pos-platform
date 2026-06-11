@@ -30,10 +30,16 @@ export default async function PosPage() {
 
   const { data: modsData } = await supabase
     .from("catalog_item_modifiers")
-    .select("id, catalog_item_id, name, price")
+    .select("id, catalog_item_id, name, price, group_id, sort_order")
     .eq("business_id", business.id)
     .eq("is_active", true)
-    .order("created_at", { ascending: true });
+    .order("sort_order", { ascending: true });
+
+  const { data: groupsData } = await supabase
+    .from("catalog_modifier_groups")
+    .select("id, catalog_item_id, name, required, min_select, max_select, sort_order")
+    .eq("business_id", business.id)
+    .order("sort_order", { ascending: true });
 
   const { data: ratesData } = await supabase
     .from("tax_rates")
@@ -89,14 +95,45 @@ export default async function PosPage() {
   }
 
   const modsByItem: Record<string, { id: string; name: string; price: number }[]> = {};
+  const modsByGroup: Record<string, { id: string; name: string; price: number }[]> = {};
+  const modsNoGroup: Record<string, { id: string; name: string; price: number }[]> = {};
   for (const m of modsData ?? []) {
     const itemId = m.catalog_item_id as string;
+    const opt = { id: m.id as string, name: m.name as string, price: Number(m.price) };
     if (!modsByItem[itemId]) modsByItem[itemId] = [];
-    modsByItem[itemId].push({
-      id: m.id as string,
-      name: m.name as string,
-      price: Number(m.price),
+    modsByItem[itemId].push(opt);
+    const gid = (m.group_id as string | null) ?? null;
+    if (gid) {
+      if (!modsByGroup[gid]) modsByGroup[gid] = [];
+      modsByGroup[gid].push(opt);
+    } else {
+      if (!modsNoGroup[itemId]) modsNoGroup[itemId] = [];
+      modsNoGroup[itemId].push(opt);
+    }
+  }
+
+  // P0-2: modifier groups (required / min / max) with their options, per item.
+  type ModGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; options: { id: string; name: string; price: number }[] };
+  const groupsByItem: Record<string, ModGroup[]> = {};
+  for (const g of groupsData ?? []) {
+    const itemId = g.catalog_item_id as string;
+    if (!groupsByItem[itemId]) groupsByItem[itemId] = [];
+    groupsByItem[itemId].push({
+      id: g.id as string,
+      name: g.name as string,
+      required: (g.required as boolean | null) ?? false,
+      min_select: Number(g.min_select) || 0,
+      max_select: g.max_select === null || g.max_select === undefined ? null : Number(g.max_select),
+      options: modsByGroup[g.id as string] ?? [],
     });
+  }
+  function modifierGroupsFor(itemId: string): ModGroup[] {
+    const out = (groupsByItem[itemId] ?? []).filter((g) => g.options.length > 0).slice();
+    const loose = modsNoGroup[itemId] ?? [];
+    if (loose.length > 0) {
+      out.push({ id: "loose:" + itemId, name: "Add-ons", required: false, min_select: 0, max_select: null, options: loose });
+    }
+    return out;
   }
 
   const items = (itemsData ?? []).map((i) => {
@@ -115,6 +152,7 @@ export default async function PosPage() {
       default_course_id: (i.default_course_id as string | null) ?? null,
       variations: varsByItem[i.id as string] ?? [],
       modifiers: modsByItem[i.id as string] ?? [],
+      modifierGroups: modifierGroupsFor(i.id as string),
     };
   });
 
