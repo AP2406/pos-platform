@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,10 +81,6 @@ export function FloorClient({
   const [togoPhone, setTogoPhone] = useState("");
   const [find, setFind] = useState("");
 
-  // Scale the designed floor to fill the available area.
-  const mapRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-
   const [nowMs, setNowMs] = useState(0);
   useEffect(() => {
     const tick = () => setNowMs(Date.now());
@@ -96,27 +92,13 @@ export function FloorClient({
     };
   }, []);
 
-  // Designed-layout bounds (fit the elements, with a sensible minimum).
-  let canvasW = 900;
-  let canvasH = 560;
+  // Designed-layout bounds (the floor grows to at least the screen via CSS).
+  let canvasW = 600;
+  let canvasH = 400;
   for (const e of elements) {
-    canvasW = Math.max(canvasW, e.x + e.w + 40);
-    canvasH = Math.max(canvasH, e.y + e.h + 40);
+    canvasW = Math.max(canvasW, e.x + e.w + 60);
+    canvasH = Math.max(canvasH, e.y + e.h + 60);
   }
-
-  // Recompute the scale whenever the map node or its size changes so the floor
-  // fills the available area. (Initial measure comes from ResizeObserver.)
-  useEffect(() => {
-    const node = mapRef.current;
-    if (!node) return;
-    const ro = new ResizeObserver(() => {
-      const cw = node.clientWidth;
-      const ch = node.clientHeight;
-      if (cw > 0 && ch > 0) setScale(Math.min(cw / canvasW, ch / canvasH));
-    });
-    ro.observe(node);
-    return () => ro.disconnect();
-  }, [selected, canvasW, canvasH]);
 
   async function refreshOpen() {
     const [rows, togoRows] = await Promise.all([listOpenTableTickets(), listOpenTogoTickets()]);
@@ -278,10 +260,10 @@ export function FloorClient({
         </div>
       )}
 
-      {/* Visual floor map — fills the screen, scaled to fit */}
-      <div ref={mapRef} className="flex-1 min-h-0 relative overflow-hidden">
+      {/* Visual floor map — the gridded floor fills the whole screen */}
+      <div className="flex-1 min-h-0 overflow-auto bg-muted/10">
         {ringableCount === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center p-6">
+          <div className="h-full flex items-center justify-center p-6">
             <p className="text-sm text-muted-foreground max-w-md text-center">
               Your floor is empty. Design it in Settings &rarr; Floor &mdash; add
               tables, booths, counters, walls and rooms &mdash; and it shows up
@@ -290,17 +272,15 @@ export function FloorClient({
           </div>
         ) : (
           <div
-            className="absolute rounded-lg border border-border bg-muted/10"
+            className="relative"
             style={{
               width: canvasW,
               height: canvasH,
-              left: "50%",
-              top: "50%",
-              transform: "translate(-50%, -50%) scale(" + scale + ")",
-              transformOrigin: "center",
+              minWidth: "100%",
+              minHeight: "100%",
               backgroundImage:
-                "linear-gradient(to right, rgba(120,120,120,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(120,120,120,0.08) 1px, transparent 1px)",
-              backgroundSize: "20px 20px",
+                "linear-gradient(to right, rgba(130,130,130,0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(130,130,130,0.14) 1px, transparent 1px)",
+              backgroundSize: "24px 24px",
             }}
           >
             {ordered.map((el) => {
