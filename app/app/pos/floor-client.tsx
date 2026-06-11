@@ -14,6 +14,7 @@ import {
   listOpenTogoTickets,
   listChildTickets,
   unsplitTicket,
+  mergeTickets,
   transferTables,
   type TableCart,
   type TableTicketSummary,
@@ -100,6 +101,12 @@ export function FloorClient({
   const [handoffNeedsPin, setHandoffNeedsPin] = useState(false);
   const [handoffErr, setHandoffErr] = useState<string | null>(null);
   const [handoffBusy, setHandoffBusy] = useState(false);
+  // P0-5: merge two open checks into one.
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeFrom, setMergeFrom] = useState("");
+  const [mergeInto, setMergeInto] = useState("");
+  const [mergeErr, setMergeErr] = useState<string | null>(null);
+  const [mergeBusy, setMergeBusy] = useState(false);
 
   const [nowMs, setNowMs] = useState(0);
   useEffect(() => {
@@ -282,6 +289,31 @@ export function FloorClient({
     setHandoffOpen(true);
   }
 
+  // Open checks eligible to merge (not split parents — those have child checks).
+  const mergeableTables = elements
+    .filter((e) => openByElement[e.id] && (openByElement[e.id].child_count ?? 0) === 0)
+    .map((e) => ({ ticketId: openByElement[e.id].id, label: e.label ?? "Table" }));
+
+  function openMerge() {
+    setMergeFrom("");
+    setMergeInto("");
+    setMergeErr(null);
+    setMergeOpen(true);
+  }
+  function submitMerge() {
+    if (!mergeFrom || !mergeInto) { setMergeErr("Pick two checks."); return; }
+    if (mergeFrom === mergeInto) { setMergeErr("Pick two different checks."); return; }
+    setMergeErr(null);
+    setMergeBusy(true);
+    startTransition(async () => {
+      const res = await mergeTickets(mergeFrom, mergeInto);
+      setMergeBusy(false);
+      if ("error" in res) { setMergeErr(res.error); return; }
+      setMergeOpen(false);
+      await refreshOpen();
+    });
+  }
+
   function submitHandoff() {
     if (!handoffFrom || !handoffTo) {
       setHandoffErr("Pick both servers.");
@@ -399,6 +431,9 @@ export function FloorClient({
           <Input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a check" className="h-9 w-40 sm:w-48" />
           {serversWithOpen.length > 0 && staff.length > 1 && (
             <Button variant="outline" className="h-9 hidden sm:inline-flex" onClick={openHandoff}>Handoff</Button>
+          )}
+          {mergeableTables.length >= 2 && (
+            <Button variant="outline" className="h-9 hidden sm:inline-flex" onClick={openMerge}>Merge</Button>
           )}
           <Button variant="outline" className="h-9" onClick={() => { setTogoName(""); setTogoPhone(""); setTogoOpen(true); }}>New to-go</Button>
           <Link href="/app" className="flex items-center gap-1.5 text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent">
@@ -533,6 +568,43 @@ export function FloorClient({
                 {handoffBusy ? "Transferring…" : "Transfer tables"}
               </Button>
               {handoffErr && <p className="text-sm text-red-600">{handoffErr}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* P0-5: merge two open checks */}
+      {mergeOpen && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setMergeOpen(false)}>
+          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium">Merge checks</h3>
+              <button type="button" onClick={() => setMergeOpen(false)} className="text-xs text-muted-foreground underline">Cancel</button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">Move one open check&apos;s items onto another. The source table is freed.</p>
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Move this check</Label>
+                <select value={mergeFrom} onChange={(e) => setMergeFrom(e.target.value)} className="w-full h-10 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
+                  <option value="">Select…</option>
+                  {mergeableTables.map((t) => (
+                    <option key={t.ticketId} value={t.ticketId}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Into</Label>
+                <select value={mergeInto} onChange={(e) => setMergeInto(e.target.value)} className="w-full h-10 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
+                  <option value="">Select…</option>
+                  {mergeableTables.filter((t) => t.ticketId !== mergeFrom).map((t) => (
+                    <option key={t.ticketId} value={t.ticketId}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+              <Button className="w-full h-11 mt-1" onClick={submitMerge} disabled={mergeBusy || !mergeFrom || !mergeInto}>
+                {mergeBusy ? "Merging…" : "Merge checks"}
+              </Button>
+              {mergeErr && <p className="text-sm text-red-600">{mergeErr}</p>}
             </div>
           </div>
         </div>

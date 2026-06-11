@@ -723,6 +723,63 @@ export async function unsplitTicket(parentId: string): Promise<{ ok: true } | { 
   return { ok: true };
 }
 
+// P0-5: merge one open check into another. Items (with seat / course / fired
+// state / modifiers) move to the destination; the source ticket is removed and
+// its table freed. Open tickets only — never a split parent/child or a paid
+// order. Fired kitchen tickets are left untouched (the food is already in flight).
+export async function mergeTickets(
+  fromTicketId: string,
+  intoTicketId: string
+): Promise<{ ok: true } | { error: string }> {
+  if (!fromTicketId || !intoTicketId) return { error: "Pick two checks to merge." };
+  if (fromTicketId === intoTicketId) return { error: "Pick two different checks." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data: rows } = await supabase
+    .from("open_tickets")
+    .select("id, element_id, cart, parent_ticket_id, split_kind")
+    .eq("business_id", business.id)
+    .in("id", [fromTicketId, intoTicketId]);
+  const from = (rows ?? []).find((r) => r.id === fromTicketId);
+  const into = (rows ?? []).find((r) => r.id === intoTicketId);
+  if (!from || !into) return { error: "One of those checks is no longer open." };
+  if (from.parent_ticket_id || into.parent_ticket_id) return { error: "Can't merge a split check. Un-split it first." };
+
+  const { count: fromKids } = await supabase
+    .from("open_tickets").select("id", { count: "exact", head: true })
+    .eq("business_id", business.id).eq("parent_ticket_id", fromTicketId);
+  const { count: intoKids } = await supabase
+    .from("open_tickets").select("id", { count: "exact", head: true })
+    .eq("business_id", business.id).eq("parent_ticket_id", intoTicketId);
+  if ((fromKids ?? 0) > 0 || (intoKids ?? 0) > 0) return { error: "Un-split before merging." };
+
+  const fromCart = tableCartSchema.safeParse(from.cart);
+  const intoCart = tableCartSchema.safeParse(into.cart);
+  if (!fromCart.success || !intoCart.success) return { error: "Could not read a check." };
+
+  const merged: TableCart = { ...intoCart.data, items: [...intoCart.data.items, ...fromCart.data.items] };
+  const { error: upErr } = await supabase
+    .from("open_tickets")
+    .update({ cart: merged })
+    .eq("id", intoTicketId)
+    .eq("business_id", business.id);
+  if (upErr) {
+    console.error("mergeTickets update:", upErr);
+    return { error: "Could not merge the checks." };
+  }
+  const { error: delErr } = await supabase
+    .from("open_tickets")
+    .delete()
+    .eq("id", fromTicketId)
+    .eq("business_id", business.id);
+  if (delErr) {
+    console.error("mergeTickets delete:", delErr);
+    return { error: "Merged, but could not free the source table." };
+  }
+  return { ok: true };
+}
+
 function cartTotals(cartRaw: unknown): { item_count: number; subtotal: number } {
   const cart = (cartRaw as TableCart) || { items: [] };
   const items = Array.isArray(cart.items) ? cart.items : [];
