@@ -780,6 +780,76 @@ export async function mergeTickets(
   return { ok: true };
 }
 
+// P0-6: open table checks an item can be moved to (label + ticket id),
+// excluding split parents. The caller filters out the current ticket.
+export async function listOpenTableTargets(): Promise<{ ticketId: string; label: string }[]> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("open_tickets")
+    .select("id, element_id")
+    .eq("business_id", business.id)
+    .is("parent_ticket_id", null)
+    .not("element_id", "is", null);
+  const ids = (data ?? []).map((t) => t.id as string);
+  const childCount: Record<string, number> = {};
+  if (ids.length) {
+    const { data: kids } = await supabase
+      .from("open_tickets").select("parent_ticket_id")
+      .eq("business_id", business.id).in("parent_ticket_id", ids);
+    for (const k of kids ?? []) {
+      const pid = k.parent_ticket_id as string;
+      childCount[pid] = (childCount[pid] ?? 0) + 1;
+    }
+  }
+  const elIds = (data ?? []).map((t) => t.element_id as string);
+  const labels: Record<string, string> = {};
+  if (elIds.length) {
+    const { data: els } = await supabase
+      .from("floor_elements").select("id, label")
+      .eq("business_id", business.id).in("id", elIds);
+    for (const e of els ?? []) labels[e.id as string] = (e.label as string) || "Table";
+  }
+  return (data ?? [])
+    .filter((t) => (childCount[t.id as string] ?? 0) === 0)
+    .map((t) => ({ ticketId: t.id as string, label: labels[t.element_id as string] || "Table" }));
+}
+
+// Append one cart line to another open check (P0-6 transfer item). The caller
+// removes the line from the source locally; its autosave persists that removal.
+export async function transferLineToTicket(
+  destTicketId: string,
+  line: unknown
+): Promise<{ ok: true } | { error: string }> {
+  if (!destTicketId) return { error: "Pick a check." };
+  const parsedLine = tableCartLineSchema.safeParse(line);
+  if (!parsedLine.success) return { error: "Could not read the item." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { data: dest } = await supabase
+    .from("open_tickets")
+    .select("id, cart, parent_ticket_id")
+    .eq("id", destTicketId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!dest) return { error: "That check is no longer open." };
+  if (dest.parent_ticket_id) return { error: "Can't move into a split check." };
+  const cart = tableCartSchema.safeParse(dest.cart);
+  const merged: TableCart = cart.success
+    ? { ...cart.data, items: [...cart.data.items, parsedLine.data] }
+    : { items: [parsedLine.data] };
+  const { error } = await supabase
+    .from("open_tickets")
+    .update({ cart: merged })
+    .eq("id", destTicketId)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("transferLineToTicket:", error);
+    return { error: "Could not move the item." };
+  }
+  return { ok: true };
+}
+
 function cartTotals(cartRaw: unknown): { item_count: number; subtotal: number } {
   const cart = (cartRaw as TableCart) || { items: [] };
   const items = Array.isArray(cart.items) ? cart.items : [];

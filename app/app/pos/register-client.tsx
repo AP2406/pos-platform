@@ -18,6 +18,8 @@ import {
   sendTableTicket,
   fireCourse,
   splitTicketIntoChildren,
+  listOpenTableTargets,
+  transferLineToTicket,
   setTicketServer,
   type OpenTicketSummary,
   type TableCart,
@@ -593,11 +595,49 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setCart((prev) => prev.map((l, i) => (i === index ? { ...l, course_id: courseId } : l)));
   }
 
+  // P0-6: move a line to another open check.
+  const [moveTargets, setMoveTargets] = useState<{ ticketId: string; label: string }[]>([]);
+  const [moveOpen, setMoveOpen] = useState(false);
+  function openMoveLine() {
+    setError(null);
+    startTransition(async () => {
+      const targets = await listOpenTableTargets();
+      setMoveTargets(tableBinding ? targets.filter((t) => t.ticketId !== tableBinding.ticketId) : targets);
+      setMoveOpen(true);
+    });
+  }
+  function moveLineTo(index: number, destTicketId: string) {
+    const line = cart[index];
+    if (!line) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await transferLineToTicket(destTicketId, {
+        catalog_item_id: line.catalog_item_id,
+        variation_id: line.variation_id,
+        name: line.name,
+        unit_price: line.unit_price,
+        quantity: line.quantity,
+        sent_qty: line.sent_qty ?? 0,
+        note: line.note ?? null,
+        seat: line.seat ?? null,
+        course_id: line.course_id ?? null,
+        fired_at: line.fired_at ?? null,
+      });
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      removeLine(index);
+      setMoveOpen(false);
+      setEditLineIndex(null);
+    });
+  }
+
   // One cart line row (reused by the flat and seat-grouped layouts).
   function renderLine(line: CartLine, index: number) {
     return (
       <div key={index} className="flex items-center gap-2">
-        <button type="button" onClick={() => setEditLineIndex(index)} className="min-w-0 flex-1 text-left">
+        <button type="button" onClick={() => { setEditLineIndex(index); setMoveOpen(false); }} className="min-w-0 flex-1 text-left">
           <div className="text-sm font-medium truncate">{line.name}</div>
           <div className="text-xs text-muted-foreground">
             {"$" + line.unit_price.toFixed(2) + " each" + (line.taxable ? "" : "  " + "·" + "  Tax-free") + (line.note ? "  " + "·" + "  " + line.note : "")}
@@ -2068,7 +2108,28 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                     )}
                   </div>
                 )}
-                <Button variant="outline" className="w-full mt-4 text-red-600" onClick={() => removeLine(editLineIndex)}>
+                {tableMode && (
+                  <div className="mt-4">
+                    {!moveOpen ? (
+                      <Button variant="outline" className="w-full" onClick={openMoveLine} disabled={pending}>Move to another check</Button>
+                    ) : (
+                      <div className="space-y-1 rounded-md border border-border p-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">Move to…</span>
+                          <button type="button" onClick={() => setMoveOpen(false)} className="text-xs text-muted-foreground underline">Cancel</button>
+                        </div>
+                        {moveTargets.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No other open checks.</p>
+                        ) : (
+                          moveTargets.map((t) => (
+                            <button key={t.ticketId} type="button" onClick={() => moveLineTo(editLineIndex, t.ticketId)} disabled={pending} className="w-full text-left text-sm rounded-md border border-border px-2 py-2 hover:bg-accent">{t.label}</button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <Button variant="outline" className="w-full mt-3 text-red-600" onClick={() => removeLine(editLineIndex)}>
                   Remove from sale
                 </Button>
               </div>
