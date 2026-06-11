@@ -9,7 +9,7 @@ export default async function CatalogPage() {
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, is_active, taxable, tax_rate_id, barcode, image_url")
+    .select("id, name, price, category, is_active, taxable, tax_rate_id, barcode, image_url, out_of_stock")
     .eq("business_id", business.id)
     .order("created_at", { ascending: true });
 
@@ -74,6 +74,7 @@ export default async function CatalogPage() {
     tax_rate_id: (i.tax_rate_id as string | null) ?? null,
     barcode: (i.barcode as string | null) ?? null,
     image_url: (i.image_url as string | null) ?? null,
+    out_of_stock: (i.out_of_stock as boolean | null) ?? false,
     variations: varsByItem[i.id as string] ?? [],
     modifiers: modsByItem[i.id as string] ?? [],
   }));

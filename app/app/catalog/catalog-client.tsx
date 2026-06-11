@@ -13,6 +13,7 @@ import {
   setCatalogItemTaxRate,
   setCatalogItemBarcode,
   setCatalogItemImage,
+  setCatalogItemOutOfStock,
   saveCategoryColors,
   createVariation,
   deleteVariation,
@@ -32,6 +33,7 @@ type Item = {
   tax_rate_id: string | null;
   barcode: string | null;
   image_url: string | null;
+  out_of_stock: boolean;
   variations: Option[];
   modifiers: Option[];
 };
@@ -136,6 +138,7 @@ export function CatalogClient({
           tax_rate_id: null,
           barcode: barcode.trim() || null,
           image_url: imageUrl || null,
+          out_of_stock: false,
           variations: [],
           modifiers: [],
         },
@@ -221,6 +224,19 @@ export function CatalogClient({
         setItems((prev) =>
           prev.map((i) =>
             i.id === item.id ? { ...i, is_active: !i.is_active } : i
+          )
+        );
+      }
+    });
+  }
+
+  function handleToggleOos(item: Item) {
+    startTransition(async () => {
+      const res = await setCatalogItemOutOfStock(item.id, !item.out_of_stock);
+      if (!("error" in res)) {
+        setItems((prev) =>
+          prev.map((i) =>
+            i.id === item.id ? { ...i, out_of_stock: !i.out_of_stock } : i
           )
         );
       }
@@ -597,6 +613,9 @@ export function CatalogClient({
                         }
                       >
                         {item.name}
+                        {item.out_of_stock && (
+                          <span className="ml-2 text-xs text-red-600 font-semibold">86&apos;d</span>
+                        )}
                         {!item.taxable && (
                           <span className="ml-2 text-xs text-amber-500">Tax-free</span>
                         )}
@@ -625,6 +644,14 @@ export function CatalogClient({
                         disabled={pending}
                       >
                         {item.taxable ? "Taxable" : "Tax-free"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleToggleOos(item)}
+                        disabled={pending}
+                      >
+                        {item.out_of_stock ? "Restock" : "86"}
                       </Button>
                       <Button
                         variant="outline"

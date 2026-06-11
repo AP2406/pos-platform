@@ -18,6 +18,7 @@ import {
   type TableCart,
 } from "./ticket-actions";
 import { markOrderFulfilled } from "../kitchen/actions";
+import { setCatalogItemOutOfStock } from "../catalog/actions";
 import { DISCOUNT_REASONS, TAX_EXEMPT_REASONS } from "./reason-codes";
 import { setActiveStaff, clearActiveStaff, type ActiveStaff } from "./staff-session";
 import { CardPaymentModal } from "./card-payment-modal";
@@ -30,7 +31,7 @@ import Link from "next/link";
 import { tileClassesFor } from "./category-colors";
 
 type Variation = { id: string; name: string; price: number };
-type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; variations: Variation[]; modifiers: Variation[] };
+type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[] };
 type CartLine = {
   catalog_item_id: string | null;
   variation_id: string | null;
@@ -195,6 +196,10 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [customOpen, setCustomOpen] = useState(false);
   const [customName, setCustomName] = useState("");
   const [customPrice, setCustomPrice] = useState("");
+  // Local 86 overrides so a long-press toggle reflects instantly.
+  const [localOos, setLocalOos] = useState<Record<string, boolean>>({});
+  const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lpFired = useRef(false);
 
   const itemTaxableById: Record<string, boolean> = {};
   const itemTaxFracById: Record<string, number> = {};
@@ -300,6 +305,41 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       return;
     }
     addLine({ catalog_item_id: item.id, variation_id: null, name: item.name, unit_price: item.price, taxable: item.taxable, taxFrac: item.taxFrac });
+  }
+
+  function isOos(item: Item): boolean {
+    return localOos[item.id] ?? item.out_of_stock;
+  }
+
+  function toggleOos(item: Item) {
+    const next = !isOos(item);
+    setLocalOos((p) => ({ ...p, [item.id]: next }));
+    startTransition(async () => {
+      await setCatalogItemOutOfStock(item.id, next);
+    });
+  }
+
+  // Long-press a tile to 86 / restock it on the fly; a normal tap adds it.
+  function tileDown(item: Item) {
+    lpFired.current = false;
+    lpTimer.current = setTimeout(() => {
+      lpFired.current = true;
+      toggleOos(item);
+    }, 550);
+  }
+  function tileUp() {
+    if (lpTimer.current) {
+      clearTimeout(lpTimer.current);
+      lpTimer.current = null;
+    }
+  }
+  function tileClick(item: Item) {
+    if (lpFired.current) {
+      lpFired.current = false;
+      return;
+    }
+    if (isOos(item)) return;
+    addItem(item);
   }
 
   function togglePickerMod(id: string) {
@@ -456,6 +496,12 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       }
       setCart((prev) => prev.map((l) => ({ ...l, sent_qty: l.quantity })));
     });
+  }
+
+  // Fire any new items, then go straight to payment.
+  function sendAndPay() {
+    if (tableBinding && unsentCount > 0) sendToKitchen();
+    openTender();
   }
 
   // Save immediately, then return to the floor (the "Tables" back control).
@@ -1269,22 +1315,23 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                       const priceLabel = hasVars
                         ? "From $" + Math.min(...item.variations.map((v) => v.price)).toFixed(2)
                         : "$" + item.price.toFixed(2);
+                      const oos = isOos(item);
                       if (showItemPhotos && item.image_url) {
                         return (
-                          <button key={item.id} type="button" onClick={() => addItem(item)} className="relative min-h-[110px] rounded-lg border border-border overflow-hidden active:scale-[0.97] transition-transform">
+                          <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative min-h-[110px] rounded-lg border border-border overflow-hidden active:scale-[0.97] transition-transform " + (oos ? "opacity-50" : "")}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={item.image_url} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
                             <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white text-left px-2 py-1.5">
                               <div className="font-semibold text-sm leading-snug line-clamp-2">{item.name}</div>
-                              <div className="text-xs text-white/90">{priceLabel}</div>
+                              <div className="text-xs text-white/90">{oos ? "86'd" : priceLabel}</div>
                             </div>
                           </button>
                         );
                       }
                       return (
-                        <button key={item.id} type="button" onClick={() => addItem(item)} className={"text-left p-3 min-h-[110px] rounded-lg border active:scale-[0.97] transition-all flex flex-col justify-between " + tileClassesFor(item.category, categoryColors)}>
+                        <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"text-left p-3 min-h-[110px] rounded-lg border active:scale-[0.97] transition-all flex flex-col justify-between " + tileClassesFor(item.category, categoryColors) + (oos ? " opacity-50" : "")}>
                           <div className="font-semibold text-sm leading-snug line-clamp-3">{item.name}</div>
-                          <div className="text-xs opacity-80 mt-1">{priceLabel}</div>
+                          <div className="text-xs opacity-80 mt-1">{oos ? "86'd" : priceLabel}</div>
                         </button>
                       );
                     })}
@@ -1341,9 +1388,12 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                   </div>
                 )}
                 {tableBinding && cart.length > 0 && (
-                  <div className="p-2 border-b border-border">
-                    <Button variant="outline" className="w-full h-11" onClick={sendToKitchen} disabled={pending || sending || unsentCount === 0}>
-                      {sending ? "Sending..." : unsentCount > 0 ? "Send " + unsentCount + " to kitchen" : "All sent to kitchen"}
+                  <div className="p-2 border-b border-border flex gap-2">
+                    <Button variant="outline" className="flex-1 h-11" onClick={sendToKitchen} disabled={pending || sending || unsentCount === 0}>
+                      {sending ? "Sending..." : unsentCount > 0 ? "Send " + unsentCount : "All sent"}
+                    </Button>
+                    <Button variant="outline" className="flex-1 h-11" onClick={sendAndPay} disabled={pending}>
+                      Send &amp; Pay
                     </Button>
                   </div>
                 )}

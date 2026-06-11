@@ -3,7 +3,29 @@
 import { useEffect, useState, useCallback, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { markOrderFulfilled, markKitchenTicketFulfilled } from "./actions";
+import { markOrderFulfilled, markKitchenTicketFulfilled, refireKitchenTicket } from "./actions";
+import { printReceiptHtml } from "../pos/qz-print";
+
+function ticketHtml(o: { tableLabel: string | null; id: string; createdAt: string; items: { name: string; quantity: number; note?: string | null }[] }): string {
+  const title = o.tableLabel ? o.tableLabel : "#" + o.id.slice(0, 8);
+  const rows = o.items
+    .map(
+      (it) =>
+        "<div style='display:flex;justify-content:space-between'><span>" +
+        it.quantity + "x " + esc(it.name) + "</span></div>" +
+        (it.note ? "<div style='font-size:11px;padding-left:8px'>&rarr; " + esc(it.note) + "</div>" : "")
+    )
+    .join("");
+  return (
+    "<html><head><meta name='viewport' content='width=device-width,initial-scale=1'>" +
+    "<style>body{font-family:'Courier New',monospace;font-size:14px;width:72mm;margin:0 auto;padding:6px}h1{font-size:16px;margin:0 0 6px}</style></head><body>" +
+    "<h1>" + esc(title) + "</h1>" + rows + "</body></html>"
+  );
+}
+
+function esc(s: string): string {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 type KitchenItem = { name: string; quantity: number; note?: string | null };
 type KitchenOrder = {
@@ -126,6 +148,17 @@ export function KitchenClient({
     };
   }, [businessId, refresh]);
 
+  function handleReprint(o: KitchenOrder) {
+    printReceiptHtml(ticketHtml(o));
+  }
+
+  function handleRefire(o: KitchenOrder) {
+    startTransition(async () => {
+      await refireKitchenTicket(o.id);
+      refresh();
+    });
+  }
+
   function handleDone(o: KitchenOrder) {
     setOrders((prev) => prev.filter((x) => x.id !== o.id));
     startTransition(async () => {
@@ -208,13 +241,15 @@ export function KitchenClient({
               ))
             )}
           </div>
-          <Button
-            className="w-full mt-3"
-            onClick={() => handleDone(o)}
-            disabled={pending}
-          >
-            Done
-          </Button>
+          <div className="flex gap-2 mt-3">
+            <button type="button" onClick={() => handleReprint(o)} className="text-xs rounded-md border border-border px-2 py-1.5 hover:bg-accent">Reprint</button>
+            {o.kind === "kitchen" && (
+              <button type="button" onClick={() => handleRefire(o)} disabled={pending} className="text-xs rounded-md border border-border px-2 py-1.5 hover:bg-accent">Re-fire</button>
+            )}
+            <Button className="flex-1" onClick={() => handleDone(o)} disabled={pending}>
+              Done
+            </Button>
+          </div>
         </div>
       ))}
     </div>

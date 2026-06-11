@@ -112,6 +112,27 @@ export async function updateCatalogItem(
   return { ok: true };
 }
 
+export async function setCatalogItemOutOfStock(
+  id: string,
+  outOfStock: boolean
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing item." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("catalog_items")
+    .update({ out_of_stock: outOfStock })
+    .eq("id", id)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("setCatalogItemOutOfStock:", error);
+    return { error: "Could not update the item." };
+  }
+  revalidatePath("/app/catalog");
+  revalidatePath("/app/pos");
+  return { ok: true };
+}
+
 export async function setCatalogItemActive(
   id: string,
   active: boolean

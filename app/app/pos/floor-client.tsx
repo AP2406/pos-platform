@@ -17,7 +17,7 @@ import type { ReceiptSettings } from "./receipt-template";
 import type { FloorElement } from "../floor/floor-actions";
 
 type Variation = { id: string; name: string; price: number };
-type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; variations: Variation[]; modifiers: Variation[] };
+type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[] };
 
 // Everything RegisterClient needs, passed straight through when a table opens.
 type RegisterProps = {

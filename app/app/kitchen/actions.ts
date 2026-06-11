@@ -27,6 +27,41 @@ export async function markOrderFulfilled(
   return { ok: true };
 }
 
+// Re-fire a kitchen ticket: insert a fresh copy so it reappears on the KDS
+// (e.g. a lost or unreadable ticket). Does not touch orders/revenue.
+export async function refireKitchenTicket(
+  ticketId: string
+): Promise<{ ok: true } | { error: string }> {
+  if (!ticketId) return { error: "Missing ticket." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: t } = await supabase
+    .from("kitchen_tickets")
+    .select("element_id, label, items")
+    .eq("id", ticketId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!t) return { error: "That ticket is gone." };
+
+  const { error } = await supabase.from("kitchen_tickets").insert({
+    business_id: business.id,
+    element_id: (t.element_id as string | null) ?? null,
+    label: (t.label as string | null) ?? null,
+    items: t.items,
+    created_by: user ? user.id : null,
+  });
+  if (error) {
+    console.error("refireKitchenTicket:", error);
+    return { error: "Could not re-fire the ticket." };
+  }
+  revalidatePath("/app/kitchen");
+  return { ok: true };
+}
+
 export async function markKitchenTicketFulfilled(
   ticketId: string
 ): Promise<{ ok: true } | { error: string }> {
