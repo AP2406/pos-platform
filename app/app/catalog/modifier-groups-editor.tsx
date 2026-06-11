@@ -10,9 +10,10 @@ import {
   createModifierGroup,
   updateModifierGroup,
   deleteModifierGroup,
+  setModifierChildGroup,
 } from "./actions";
 
-export type ModOption = { id: string; name: string; price: number };
+export type ModOption = { id: string; name: string; price: number; child_group_id: string | null };
 export type ModGroup = {
   id: string;
   name: string;
@@ -78,10 +79,15 @@ export function ModifierGroupsEditor({ itemId, initial }: { itemId: string; init
     startTransition(async () => {
       const res = await createModifier(itemId, name, price, groupId);
       if ("error" in res) { setErr(res.error); return; }
-      setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, options: [...g.options, { id: res.id, name, price }] } : g)));
+      setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, options: [...g.options, { id: res.id, name, price, child_group_id: null }] } : g)));
       setOptName((p) => ({ ...p, [groupId]: "" }));
       setOptPrice((p) => ({ ...p, [groupId]: "" }));
     });
+  }
+
+  function setChild(groupId: string, optId: string, childId: string | null) {
+    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, options: g.options.map((o) => (o.id === optId ? { ...o, child_group_id: childId } : o)) } : g)));
+    startTransition(async () => { await setModifierChildGroup(optId, childId); });
   }
 
   function removeOption(groupId: string, optId: string) {
@@ -126,9 +132,17 @@ export function ModifierGroupsEditor({ itemId, initial }: { itemId: string; init
                 <p className="text-xs text-muted-foreground">No options yet.</p>
               ) : (
                 g.options.map((o) => (
-                  <div key={o.id} className="flex items-center justify-between text-sm">
-                    <span>{o.name}<span className="text-muted-foreground">{o.price > 0 ? "  ·  +$" + o.price.toFixed(2) : ""}</span></span>
-                    <button type="button" onClick={() => removeOption(g.id, o.id)} disabled={pending} className="text-xs text-muted-foreground underline hover:text-red-600">Remove</button>
+                  <div key={o.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="min-w-0 truncate">{o.name}<span className="text-muted-foreground">{o.price > 0 ? "  ·  +$" + o.price.toFixed(2) : ""}</span></span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <select value={o.child_group_id ?? ""} onChange={(e) => setChild(g.id, o.id, e.target.value || null)} disabled={pending} className="h-7 rounded border border-border bg-transparent text-xs px-1" title="Follow-up group when this is chosen">
+                        <option value="">No follow-up</option>
+                        {groups.filter((x) => x.id !== g.id).map((x) => (
+                          <option key={x.id} value={x.id}>→ {x.name}</option>
+                        ))}
+                      </select>
+                      <button type="button" onClick={() => removeOption(g.id, o.id)} disabled={pending} className="text-xs text-muted-foreground underline hover:text-red-600">Remove</button>
+                    </div>
                   </div>
                 ))
               )}

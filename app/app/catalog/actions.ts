@@ -394,6 +394,36 @@ export async function createModifier(
   return { ok: true, id: data.id as string };
 }
 
+// P0-3: link a modifier option to a follow-up (child) group, or clear it.
+export async function setModifierChildGroup(
+  modifierId: string,
+  childGroupId: string | null
+): Promise<{ ok: true } | { error: string }> {
+  if (!modifierId) return { error: "Missing option." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  if (childGroupId) {
+    const { data: grp } = await supabase
+      .from("catalog_modifier_groups")
+      .select("id")
+      .eq("id", childGroupId)
+      .eq("business_id", business.id)
+      .maybeSingle();
+    if (!grp) return { error: "Group not found." };
+  }
+  const { error } = await supabase
+    .from("catalog_item_modifiers")
+    .update({ child_group_id: childGroupId })
+    .eq("id", modifierId)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("setModifierChildGroup:", error);
+    return { error: "Could not link the follow-up group." };
+  }
+  revalidatePath("/app/catalog");
+  return { ok: true };
+}
+
 // --- P0-2: modifier groups (required / min / max selection rules) ---
 const groupSchema = z.object({
   name: z.string().min(1, "Group name is required").max(60),

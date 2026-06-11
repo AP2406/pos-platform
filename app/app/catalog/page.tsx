@@ -33,7 +33,7 @@ export default async function CatalogPage() {
 
   const { data: modsData } = await supabase
     .from("catalog_item_modifiers")
-    .select("id, catalog_item_id, name, price, group_id, sort_order")
+    .select("id, catalog_item_id, name, price, group_id, sort_order, child_group_id")
     .eq("business_id", business.id)
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
@@ -63,12 +63,12 @@ export default async function CatalogPage() {
   }
 
   const modsByItem: Record<string, { id: string; name: string; price: number }[]> = {};
-  const modsByGroup: Record<string, { id: string; name: string; price: number }[]> = {};
+  const modsByGroup: Record<string, { id: string; name: string; price: number; child_group_id: string | null }[]> = {};
   for (const m of modsData ?? []) {
     const itemId = m.catalog_item_id as string;
-    const opt = { id: m.id as string, name: m.name as string, price: Number(m.price) };
+    const opt = { id: m.id as string, name: m.name as string, price: Number(m.price), child_group_id: (m.child_group_id as string | null) ?? null };
     if (!modsByItem[itemId]) modsByItem[itemId] = [];
-    modsByItem[itemId].push(opt);
+    modsByItem[itemId].push({ id: opt.id, name: opt.name, price: opt.price });
     const gid = (m.group_id as string | null) ?? null;
     if (gid) {
       if (!modsByGroup[gid]) modsByGroup[gid] = [];
@@ -76,7 +76,7 @@ export default async function CatalogPage() {
     }
   }
 
-  type CatModGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; options: { id: string; name: string; price: number }[] };
+  type CatModGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; options: { id: string; name: string; price: number; child_group_id: string | null }[] };
   const groupsByItem: Record<string, CatModGroup[]> = {};
   for (const g of modGroupsData ?? []) {
     const itemId = g.catalog_item_id as string;

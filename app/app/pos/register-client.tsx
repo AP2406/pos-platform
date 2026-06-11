@@ -35,7 +35,8 @@ import Link from "next/link";
 import { tileClassesFor } from "./category-colors";
 
 type Variation = { id: string; name: string; price: number };
-type ModifierGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; options: Variation[] };
+type ModOption = { id: string; name: string; price: number; child_group?: ModifierGroup };
+type ModifierGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; options: ModOption[] };
 type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null };
 type Course = { id: string; name: string; sort_order: number };
 type CartLine = {
@@ -417,18 +418,44 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     if (item.modifiers.length) return [{ id: "all", name: "Add-ons", required: false, min_select: 0, max_select: null, options: item.modifiers }];
     return [];
   }
+  // P0-3: the group an option belongs to, searching the whole nested tree.
   function pickerGroupOf(optId: string): ModifierGroup | undefined {
     if (!pickerItem) return undefined;
-    return modGroupsOf(pickerItem).find((g) => g.options.some((o) => o.id === optId));
+    let found: ModifierGroup | undefined;
+    const walk = (g: ModifierGroup) => {
+      if (g.options.some((o) => o.id === optId)) found = g;
+      for (const o of g.options) if (o.child_group) walk(o.child_group);
+    };
+    for (const g of modGroupsOf(pickerItem)) walk(g);
+    return found;
+  }
+  // Every option id under a group's subtree (used to clear nested picks).
+  function descendantOptionIds(g: ModifierGroup): string[] {
+    const ids: string[] = [];
+    for (const o of g.options) {
+      ids.push(o.id);
+      if (o.child_group) ids.push(...descendantOptionIds(o.child_group));
+    }
+    return ids;
   }
   function togglePickerMod(id: string) {
     const g = pickerGroupOf(id);
+    const opt = g?.options.find((o) => o.id === id);
     setPickerMods((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.includes(id)) {
+        // Deselecting: also clear anything chosen in this option's follow-up.
+        let next = prev.filter((x) => x !== id);
+        if (opt?.child_group) {
+          const sub = new Set(descendantOptionIds(opt.child_group));
+          next = next.filter((x) => !sub.has(x));
+        }
+        return next;
+      }
       if (g && g.max_select === 1) {
-        // Single-select group: the new choice replaces any prior one.
-        const others = prev.filter((x) => !g.options.some((o) => o.id === x));
-        return [...others, id];
+        // Single-select: the new choice replaces any prior one (and its subtree).
+        const drop = new Set<string>();
+        for (const o of g.options) { drop.add(o.id); if (o.child_group) descendantOptionIds(o.child_group).forEach((x) => drop.add(x)); }
+        return [...prev.filter((x) => !drop.has(x)), id];
       }
       if (g && g.max_select != null) {
         const inGroup = prev.filter((x) => g.options.some((o) => o.id === x)).length;
@@ -437,14 +464,62 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       return [...prev, id];
     });
   }
-  // Required groups that don't yet have their minimum selected (blocks confirm).
+  // The groups currently "active": top-level always, a child group only when its
+  // parent option is selected. Required active groups gate confirm.
+  function activeGroups(item: Item): ModifierGroup[] {
+    const out: ModifierGroup[] = [];
+    const walk = (g: ModifierGroup) => {
+      out.push(g);
+      for (const o of g.options) if (o.child_group && pickerMods.includes(o.id)) walk(o.child_group);
+    };
+    for (const g of modGroupsOf(item)) walk(g);
+    return out;
+  }
   function requiredUnmet(item: Item): ModifierGroup[] {
-    return modGroupsOf(item).filter((g) => {
+    return activeGroups(item).filter((g) => {
       const min = g.required ? Math.max(1, g.min_select) : g.min_select;
       if (min <= 0) return false;
       const count = pickerMods.filter((x) => g.options.some((o) => o.id === x)).length;
       return count < min;
     });
+  }
+
+  // Recursive picker rendering: a selected option reveals its follow-up group.
+  function renderModGroup(g: ModifierGroup, depth: number) {
+    const single = g.max_select === 1;
+    const min = g.required ? Math.max(1, g.min_select) : g.min_select;
+    const count = pickerMods.filter((x) => g.options.some((o) => o.id === x)).length;
+    const unmet = min > 0 && count < min;
+    const atMax = g.max_select != null && count >= g.max_select;
+    const hint = single
+      ? "Choose 1"
+      : g.max_select != null
+        ? (min > 0 ? "Choose " + min + "–" + g.max_select : "Choose up to " + g.max_select)
+        : min > 0 ? "Choose at least " + min : "Optional";
+    return (
+      <div key={g.id} className={"space-y-2 mb-3 " + (depth > 0 ? "ml-2 pl-3 border-l border-border" : "")}>
+        <div className="flex items-center justify-between">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">{g.name}</span>
+          <span className={"text-[10px] " + (unmet ? "text-red-600" : "text-muted-foreground")}>{(g.required ? "Required · " : "") + hint}</span>
+        </div>
+        {g.options.map((m) => {
+          const checked = pickerMods.includes(m.id);
+          const disabled = !checked && atMax && !single;
+          return (
+            <div key={m.id} className="space-y-2">
+              <button type="button" onClick={() => togglePickerMod(m.id)} disabled={disabled} className={"w-full flex items-center justify-between p-3 rounded-md border text-left transition-colors disabled:opacity-40 " + (checked ? "border-foreground bg-accent" : "border-border hover:border-foreground/40 hover:bg-accent/50")}>
+                <span className="flex items-center gap-2">
+                  <span className={"w-4 h-4 border flex items-center justify-center text-[10px] " + (single ? "rounded-full" : "rounded") + " " + (checked ? "bg-foreground text-background border-foreground" : "border-muted-foreground")}>{checked ? "✓" : ""}</span>
+                  <span className="text-sm font-medium">{m.name}</span>
+                </span>
+                {m.price > 0 && <span className="text-sm tabular-nums text-muted-foreground">{"+$" + m.price.toFixed(2)}</span>}
+              </button>
+              {checked && m.child_group && renderModGroup(m.child_group, depth + 1)}
+            </div>
+          );
+        })}
+      </div>
+    );
   }
 
   function pickerUnitPrice(item: Item): number {
@@ -1412,39 +1487,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
               </div>
             )}
 
-            {modGroupsOf(pickerItem).map((g) => {
-              const single = g.max_select === 1;
-              const min = g.required ? Math.max(1, g.min_select) : g.min_select;
-              const count = pickerMods.filter((x) => g.options.some((o) => o.id === x)).length;
-              const unmet = min > 0 && count < min;
-              const atMax = g.max_select != null && count >= g.max_select;
-              const hint = single
-                ? "Choose 1"
-                : g.max_select != null
-                  ? (min > 0 ? "Choose " + min + "\u2013" + g.max_select : "Choose up to " + g.max_select)
-                  : min > 0 ? "Choose at least " + min : "Optional";
-              return (
-                <div key={g.id} className="space-y-2 mb-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-wide text-muted-foreground">{g.name}</span>
-                    <span className={"text-[10px] " + (unmet ? "text-red-600" : "text-muted-foreground")}>{(g.required ? "Required \u00b7 " : "") + hint}</span>
-                  </div>
-                  {g.options.map((m) => {
-                    const checked = pickerMods.includes(m.id);
-                    const disabled = !checked && atMax && !single;
-                    return (
-                      <button key={m.id} type="button" onClick={() => togglePickerMod(m.id)} disabled={disabled} className={"w-full flex items-center justify-between p-3 rounded-md border text-left transition-colors disabled:opacity-40 " + (checked ? "border-foreground bg-accent" : "border-border hover:border-foreground/40 hover:bg-accent/50")}>
-                        <span className="flex items-center gap-2">
-                          <span className={"w-4 h-4 border flex items-center justify-center text-[10px] " + (single ? "rounded-full" : "rounded") + " " + (checked ? "bg-foreground text-background border-foreground" : "border-muted-foreground")}>{checked ? "\u2713" : ""}</span>
-                          <span className="text-sm font-medium">{m.name}</span>
-                        </span>
-                        {m.price > 0 && <span className="text-sm tabular-nums text-muted-foreground">{"+$" + m.price.toFixed(2)}</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              );
-            })}
+            {modGroupsOf(pickerItem).map((g) => renderModGroup(g, 0))}
 
             <Button className="w-full" onClick={confirmOptions} disabled={(pickerItem.variations.length > 0 && !pickerVariationId) || requiredUnmet(pickerItem).length > 0}>
               {requiredUnmet(pickerItem).length > 0 ? "Choose " + requiredUnmet(pickerItem)[0].name : "Add to cart - $" + pickerUnitPrice(pickerItem).toFixed(2)}
