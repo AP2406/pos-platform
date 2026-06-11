@@ -27,6 +27,7 @@ type El = {
 const PALETTE: { kind: ElementKind; label: string; shape: "rect" | "round"; w: number; h: number }[] = [
   { kind: "table", label: "Table", shape: "rect", w: 80, h: 80 },
   { kind: "table", label: "Round table", shape: "round", w: 80, h: 80 },
+  { kind: "booth", label: "Booth", shape: "rect", w: 140, h: 70 },
   { kind: "seat", label: "Chair", shape: "round", w: 28, h: 28 },
   { kind: "counter", label: "Counter", shape: "rect", w: 200, h: 40 },
   { kind: "station", label: "Station", shape: "rect", w: 60, h: 60 },
@@ -35,7 +36,7 @@ const PALETTE: { kind: ElementKind; label: string; shape: "rect" | "round"; w: n
   { kind: "label", label: "Text", shape: "rect", w: 120, h: 24 },
 ];
 
-const NAMEABLE: ElementKind[] = ["table", "counter", "station", "room", "label"];
+const NAMEABLE: ElementKind[] = ["table", "booth", "counter", "station", "room", "label"];
 
 function snap(v: number) {
   return Math.round(v / GRID) * GRID;
@@ -45,6 +46,7 @@ function classesFor(kind: ElementKind, selected: boolean): string {
   const ring = selected ? " ring-2 ring-foreground ring-offset-1 ring-offset-background" : "";
   switch (kind) {
     case "table":
+    case "booth":
       return "bg-card border-2 border-foreground/40 text-foreground" + ring;
     case "seat":
       return "bg-muted border border-foreground/40" + ring;
@@ -66,7 +68,7 @@ function classesFor(kind: ElementKind, selected: boolean): string {
 function zFor(kind: ElementKind): number {
   if (kind === "room") return 0;
   if (kind === "wall") return 1;
-  if (kind === "table" || kind === "counter" || kind === "station") return 2;
+  if (kind === "table" || kind === "booth" || kind === "counter" || kind === "station") return 2;
   return 3; // seats, labels on top
 }
 

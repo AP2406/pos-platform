@@ -135,13 +135,13 @@ export default async function PosPage() {
   // Full-service restaurants get the table floor first; every other mode (and
   // the transportation register) renders the flat register exactly as before.
   const showFloor = hasFloorService(business);
-  let floorTables: Awaited<ReturnType<typeof listFloor>>["elements"] = [];
+  let floorElements: Awaited<ReturnType<typeof listFloor>>["elements"] = [];
   let openTables: Awaited<ReturnType<typeof listOpenTableTickets>> = [];
   let openTogo: Awaited<ReturnType<typeof listOpenTogoTickets>> = [];
   let serverStaff: { id: string; name: string }[] = [];
   if (showFloor) {
     const floor = await listFloor();
-    floorTables = floor.elements.filter((e) => e.kind === "table");
+    floorElements = floor.elements;
     openTables = await listOpenTableTickets();
     openTogo = await listOpenTogoTickets();
     const { data: staffData } = await supabase
@@ -176,7 +176,7 @@ export default async function PosPage() {
         {showFloor ? (
           <FloorClient
             register={registerProps}
-            tables={floorTables}
+            elements={floorElements}
             initialOpen={openTables}
             initialTogo={openTogo}
             staff={serverStaff}

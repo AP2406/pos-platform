@@ -7,6 +7,7 @@ import { z } from "zod";
 
 export type ElementKind =
   | "table"
+  | "booth"
   | "seat"
   | "counter"
   | "station"
@@ -75,7 +76,7 @@ export async function listFloor(): Promise<{ elements: FloorElement[] }> {
 
 const elementSchema = z.object({
   id: z.string().uuid(),
-  kind: z.enum(["table", "seat", "counter", "station", "wall", "room", "label"]),
+  kind: z.enum(["table", "booth", "seat", "counter", "station", "wall", "room", "label"]),
   label: z.string().trim().max(60).nullable().optional(),
   x: z.coerce.number().int().min(-1000).max(20000),
   y: z.coerce.number().int().min(-1000).max(20000),
@@ -110,10 +111,21 @@ export async function saveFloorLayout(
       if (m) maxN = Math.max(maxN, parseInt(m[1]));
     }
   }
+  let maxB = 0;
+  for (const it of items) {
+    if (it.kind === "booth" && it.label) {
+      const m = /^Booth\s+(\d+)$/i.exec(it.label.trim());
+      if (m) maxB = Math.max(maxB, parseInt(m[1]));
+    }
+  }
   const named = items.map((it) => {
     if (it.kind === "table" && (!it.label || !it.label.trim())) {
       maxN += 1;
       return { ...it, label: "Table " + maxN };
+    }
+    if (it.kind === "booth" && (!it.label || !it.label.trim())) {
+      maxB += 1;
+      return { ...it, label: "Booth " + maxB };
     }
     return it;
   });
