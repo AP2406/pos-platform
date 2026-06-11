@@ -341,7 +341,8 @@ const modifierSchema = z.object({
 export async function createModifier(
   catalogItemId: string,
   name: string,
-  price: number
+  price: number,
+  groupId?: string | null
 ): Promise<{ ok: true; id: string } | { error: string }> {
   const parsed = modifierSchema.safeParse({
     catalog_item_id: catalogItemId,
@@ -362,6 +363,18 @@ export async function createModifier(
     .maybeSingle();
   if (!item) return { error: "Item not found." };
 
+  // Validate the group belongs to this item, when one is given.
+  if (groupId) {
+    const { data: grp } = await supabase
+      .from("catalog_modifier_groups")
+      .select("id")
+      .eq("id", groupId)
+      .eq("catalog_item_id", parsed.data.catalog_item_id)
+      .eq("business_id", business.id)
+      .maybeSingle();
+    if (!grp) return { error: "Group not found." };
+  }
+
   const { data, error } = await supabase
     .from("catalog_item_modifiers")
     .insert({
@@ -369,6 +382,7 @@ export async function createModifier(
       catalog_item_id: parsed.data.catalog_item_id,
       name: parsed.data.name,
       price: parsed.data.price,
+      group_id: groupId ?? null,
     })
     .select("id")
     .single();
@@ -378,6 +392,104 @@ export async function createModifier(
   }
   revalidatePath("/app/catalog");
   return { ok: true, id: data.id as string };
+}
+
+// --- P0-2: modifier groups (required / min / max selection rules) ---
+const groupSchema = z.object({
+  name: z.string().min(1, "Group name is required").max(60),
+  required: z.coerce.boolean().optional(),
+  min_select: z.coerce.number().int().min(0).max(50).optional(),
+  max_select: z.coerce.number().int().min(1).max(50).optional().nullable(),
+});
+
+export async function createModifierGroup(
+  catalogItemId: string,
+  input: { name: string; required?: boolean; min_select?: number; max_select?: number | null }
+): Promise<{ ok: true; id: string } | { error: string }> {
+  const parsed = groupSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { data: item } = await supabase
+    .from("catalog_items")
+    .select("id")
+    .eq("id", catalogItemId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!item) return { error: "Item not found." };
+  const { data: maxRow } = await supabase
+    .from("catalog_modifier_groups")
+    .select("sort_order")
+    .eq("catalog_item_id", catalogItemId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const sort = maxRow ? (maxRow.sort_order as number) + 1 : 0;
+  const required = parsed.data.required ?? false;
+  const { data, error } = await supabase
+    .from("catalog_modifier_groups")
+    .insert({
+      business_id: business.id,
+      catalog_item_id: catalogItemId,
+      name: parsed.data.name,
+      required: required,
+      min_select: parsed.data.min_select ?? (required ? 1 : 0),
+      max_select: parsed.data.max_select ?? null,
+      sort_order: sort,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    console.error("createModifierGroup:", error);
+    return { error: "Could not add the group. Please try again." };
+  }
+  revalidatePath("/app/catalog");
+  return { ok: true, id: data.id as string };
+}
+
+export async function updateModifierGroup(
+  id: string,
+  input: { name?: string; required?: boolean; min_select?: number; max_select?: number | null }
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing group." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const patch: Record<string, unknown> = {};
+  if (input.name !== undefined) patch.name = input.name.trim().slice(0, 60) || "Group";
+  if (input.required !== undefined) patch.required = !!input.required;
+  if (input.min_select !== undefined) patch.min_select = Math.max(0, Math.min(50, Math.round(input.min_select)));
+  if (input.max_select !== undefined) patch.max_select = input.max_select === null ? null : Math.max(1, Math.min(50, Math.round(input.max_select)));
+  const { error } = await supabase
+    .from("catalog_modifier_groups")
+    .update(patch)
+    .eq("id", id)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("updateModifierGroup:", error);
+    return { error: "Could not update the group." };
+  }
+  revalidatePath("/app/catalog");
+  return { ok: true };
+}
+
+export async function deleteModifierGroup(
+  id: string
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing group." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  // Options cascade-delete via the FK.
+  const { error } = await supabase
+    .from("catalog_modifier_groups")
+    .delete()
+    .eq("id", id)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("deleteModifierGroup:", error);
+    return { error: "Could not remove the group." };
+  }
+  revalidatePath("/app/catalog");
+  return { ok: true };
 }
 
 export async function deleteModifier(
