@@ -12,11 +12,15 @@ type Closeout = {
   card_sales: number;
   other_sales: number;
   refunds: number;
+  pay_ins?: number;
+  pay_outs?: number;
   sale_count: number;
   expected_cash: number;
   counted_cash: number;
   over_short: number;
 };
+
+type Movement = { id: string; kind: string; amount: number; reason_code: string | null; created_at: string };
 
 type OpenSession = {
   id: string;
@@ -26,8 +30,11 @@ type OpenSession = {
   card: number;
   other: number;
   refunds: number;
+  pay_ins: number;
+  pay_outs: number;
   expected: number;
   count: number;
+  movements: Movement[];
 };
 
 export default async function DrawerPage() {
@@ -99,6 +106,28 @@ export default async function DrawerPage() {
     for (const r of refundData ?? []) refundsTotal += Number(r.amount) || 0;
     refundsTotal = round2(refundsTotal);
 
+    const { data: moveData } = await supabase
+      .from("cash_movements")
+      .select("id, kind, amount, reason_code, created_at")
+      .eq("business_id", business.id)
+      .eq("drawer_session_id", sessionData.id)
+      .order("created_at", { ascending: false });
+    const movements: Movement[] = (moveData ?? []).map((m) => ({
+      id: m.id as string,
+      kind: m.kind as string,
+      amount: Number(m.amount) || 0,
+      reason_code: (m.reason_code as string | null) ?? null,
+      created_at: m.created_at as string,
+    }));
+    let payIns = 0;
+    let payOuts = 0;
+    for (const m of movements) {
+      if (m.kind === "pay_in") payIns += m.amount;
+      else if (m.kind === "pay_out") payOuts += m.amount;
+    }
+    payIns = round2(payIns);
+    payOuts = round2(payOuts);
+
     const startingCash = Number(sessionData.starting_cash) || 0;
     open = {
       id: sessionData.id as string,
@@ -108,8 +137,11 @@ export default async function DrawerPage() {
       card: round2(card),
       other: round2(other),
       refunds: refundsTotal,
-      expected: round2(startingCash + cash - refundsTotal),
+      pay_ins: payIns,
+      pay_outs: payOuts,
+      expected: round2(startingCash + cash - refundsTotal + payIns - payOuts),
       count,
+      movements,
     };
   }
 

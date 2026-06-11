@@ -3,6 +3,85 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
+import { getActiveStaff } from "../staff-session";
+import { verifyManagerPin } from "../approval-actions";
+import { CASH_MOVEMENT_REASONS, isValidReason } from "../reason-codes";
+
+// No Sale / Pay In / Pay Out. Recorded in cash_movements and folded into the
+// closeout expected-cash total. Pay Out needs a reason; cash adjustments by a
+// staff/trainee need a manager PIN (mirrors the void/refund gate).
+export async function recordCashMovement(input: {
+  kind: "pay_in" | "pay_out" | "no_sale";
+  amount?: number;
+  reason_code?: string;
+  reason_note?: string;
+  approver_pin?: string;
+}): Promise<{ ok: true } | { needs_approval: true } | { error: string }> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const kind = input.kind;
+  if (kind !== "pay_in" && kind !== "pay_out" && kind !== "no_sale") {
+    return { error: "Invalid action." };
+  }
+
+  let amount = 0;
+  if (kind !== "no_sale") {
+    amount = Math.round((Number(input.amount) || 0) * 100) / 100;
+    if (amount <= 0) return { error: "Enter an amount greater than zero." };
+    if (amount > 100000) return { error: "That amount is too large." };
+  }
+
+  if (kind === "pay_out") {
+    if (!input.reason_code || !isValidReason(CASH_MOVEMENT_REASONS, input.reason_code)) {
+      return { error: "Choose a reason for the pay out." };
+    }
+    if (input.reason_code === "other" && !(input.reason_note && input.reason_note.trim())) {
+      return { error: "Add a note for the pay out." };
+    }
+  }
+
+  const { data: session } = await supabase
+    .from("drawer_sessions")
+    .select("id")
+    .eq("business_id", business.id)
+    .eq("status", "open")
+    .maybeSingle();
+  if (kind !== "no_sale" && !session) {
+    return { error: "Start the day before moving cash." };
+  }
+
+  // Manager PIN gate for staff/trainee on cash adjustments.
+  if (kind !== "no_sale") {
+    const active = await getActiveStaff();
+    if (active && (active.role === "staff" || active.role === "trainee")) {
+      if (!input.approver_pin) return { needs_approval: true };
+      const v = await verifyManagerPin(input.approver_pin);
+      if ("error" in v) return { error: v.error };
+    }
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { error } = await supabase.from("cash_movements").insert({
+    business_id: business.id,
+    drawer_session_id: session ? session.id : null,
+    kind: kind,
+    amount: amount,
+    reason_code: input.reason_code ?? null,
+    reason_note: input.reason_note ? input.reason_note.trim().slice(0, 500) : null,
+    created_by: user ? user.id : null,
+  });
+  if (error) {
+    console.error("recordCashMovement:", error);
+    return { error: "Could not record that. Please try again." };
+  }
+
+  revalidatePath("/app/pos/drawer");
+  return { ok: true };
+}
 
 export async function openDrawerSession(
   startingCash: number
@@ -55,6 +134,8 @@ type CloseResult =
       card_sales: number;
       other_sales: number;
       refunds: number;
+      pay_ins: number;
+      pay_outs: number;
       sale_count: number;
     }
   | { error: string };
@@ -134,9 +215,25 @@ export async function closeDrawerSession(input: {
   for (const r of refundData ?? []) refundsTotal += Number(r.amount) || 0;
   refundsTotal = Math.round(refundsTotal * 100) / 100;
 
+  // Cash paid in / out of the till during the session.
+  const { data: moveData } = await supabase
+    .from("cash_movements")
+    .select("kind, amount")
+    .eq("business_id", business.id)
+    .eq("drawer_session_id", session.id);
+  let payIns = 0;
+  let payOuts = 0;
+  for (const m of moveData ?? []) {
+    const a = Number(m.amount) || 0;
+    if (m.kind === "pay_in") payIns += a;
+    else if (m.kind === "pay_out") payOuts += a;
+  }
+  payIns = Math.round(payIns * 100) / 100;
+  payOuts = Math.round(payOuts * 100) / 100;
+
   const startingCash = Number(session.starting_cash) || 0;
   const expected =
-    Math.round((startingCash + cashSales - refundsTotal) * 100) / 100;
+    Math.round((startingCash + cashSales - refundsTotal + payIns - payOuts) * 100) / 100;
   const counted = Math.round((Number(input.counted_cash) || 0) * 100) / 100;
   const overShort = Math.round((counted - expected) * 100) / 100;
   const saleCount = liveOrders.length;
@@ -147,6 +244,8 @@ export async function closeDrawerSession(input: {
     card_sales: cardSales,
     other_sales: otherSales,
     refunds: refundsTotal,
+    pay_ins: payIns,
+    pay_outs: payOuts,
     sale_count: saleCount,
     expected_cash: expected,
     counted_cash: counted,
@@ -192,6 +291,8 @@ export async function closeDrawerSession(input: {
     card_sales: cardSales,
     other_sales: otherSales,
     refunds: refundsTotal,
+    pay_ins: payIns,
+    pay_outs: payOuts,
     sale_count: saleCount,
   };
 }

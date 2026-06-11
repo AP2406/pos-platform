@@ -28,6 +28,16 @@ export const REFUND_REASONS: ReasonCode[] = [
   { code: "other", label: "Other" },
 ];
 
+export const CASH_MOVEMENT_REASONS: ReasonCode[] = [
+  { code: "tips_out", label: "Tips paid out" },
+  { code: "supplies", label: "Supplies / expense" },
+  { code: "petty_cash", label: "Petty cash" },
+  { code: "bank_deposit", label: "Bank deposit / drop" },
+  { code: "change_order", label: "Change order" },
+  { code: "correction", label: "Correction" },
+  { code: "other", label: "Other" },
+];
+
 export function isValidReason(list: ReasonCode[], code: string): boolean {
   return list.some((r) => r.code === code);
 }

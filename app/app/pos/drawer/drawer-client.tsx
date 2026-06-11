@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { openDrawerSession, closeDrawerSession } from "./actions";
+import { openDrawerSession, closeDrawerSession, recordCashMovement } from "./actions";
+import { CASH_MOVEMENT_REASONS } from "../reason-codes";
 
 function money(n: number): string {
   return (n < 0 ? "-$" : "$") + Math.abs(n).toFixed(2);
@@ -16,11 +18,15 @@ type Closeout = {
   card_sales: number;
   other_sales: number;
   refunds: number;
+  pay_ins?: number;
+  pay_outs?: number;
   sale_count: number;
   expected_cash: number;
   counted_cash: number;
   over_short: number;
 };
+
+type Movement = { id: string; kind: string; amount: number; reason_code: string | null; created_at: string };
 
 type OpenSession = {
   id: string;
@@ -30,8 +36,11 @@ type OpenSession = {
   card: number;
   other: number;
   refunds: number;
+  pay_ins: number;
+  pay_outs: number;
   expected: number;
   count: number;
+  movements: Movement[];
 };
 
 type ClosedSession = {
@@ -53,8 +62,12 @@ type CloseResult = {
   card_sales: number;
   other_sales: number;
   refunds: number;
+  pay_ins: number;
+  pay_outs: number;
   sale_count: number;
 };
+
+const MOVE_LABEL: Record<string, string> = { pay_in: "Pay in", pay_out: "Pay out", no_sale: "No sale" };
 
 export function DrawerClient({
   open,
@@ -63,12 +76,60 @@ export function DrawerClient({
   open: OpenSession | null;
   closed: ClosedSession[];
 }) {
+  const router = useRouter();
   const [startingCash, setStartingCash] = useState("");
   const [countedCash, setCountedCash] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CloseResult | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Cash movement modal.
+  const [cashKind, setCashKind] = useState<"pay_in" | "pay_out" | "no_sale" | null>(null);
+  const [cashAmount, setCashAmount] = useState("");
+  const [cashReason, setCashReason] = useState("");
+  const [cashNote, setCashNote] = useState("");
+  const [cashPin, setCashPin] = useState("");
+  const [needsPin, setNeedsPin] = useState(false);
+  const [cashErr, setCashErr] = useState<string | null>(null);
+  const [cashBusy, setCashBusy] = useState(false);
+
+  function openCash(kind: "pay_in" | "pay_out" | "no_sale") {
+    setCashKind(kind);
+    setCashAmount("");
+    setCashReason("");
+    setCashNote("");
+    setCashPin("");
+    setNeedsPin(false);
+    setCashErr(null);
+  }
+
+  function submitCash() {
+    if (!cashKind) return;
+    setCashErr(null);
+    setCashBusy(true);
+    startTransition(async () => {
+      const res = await recordCashMovement({
+        kind: cashKind,
+        amount: cashKind === "no_sale" ? 0 : parseFloat(cashAmount) || 0,
+        reason_code: cashKind === "pay_out" ? cashReason : undefined,
+        reason_note: cashKind === "pay_out" && cashReason === "other" ? cashNote : undefined,
+        approver_pin: needsPin ? cashPin : undefined,
+      });
+      setCashBusy(false);
+      if ("needs_approval" in res) {
+        setNeedsPin(true);
+        setCashErr("A manager PIN is needed to move cash.");
+        return;
+      }
+      if ("error" in res) {
+        setCashErr(res.error);
+        return;
+      }
+      setCashKind(null);
+      router.refresh();
+    });
+  }
 
   function fmt(iso: string | null): string {
     if (!iso) return "";
@@ -111,6 +172,8 @@ export function DrawerClient({
         card_sales: res.card_sales,
         other_sales: res.other_sales,
         refunds: res.refunds,
+        pay_ins: res.pay_ins,
+        pay_outs: res.pay_outs,
         sale_count: res.sale_count,
       });
       setCountedCash("");
@@ -147,6 +210,18 @@ export function DrawerClient({
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Refunds (cash out)</span>
                 <span className="tabular-nums text-red-600">{"-" + money(result.refunds)}</span>
+              </div>
+            )}
+            {result.pay_ins > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Paid in</span>
+                <span className="tabular-nums">{"+" + money(result.pay_ins)}</span>
+              </div>
+            )}
+            {result.pay_outs > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Paid out</span>
+                <span className="tabular-nums text-red-600">{"-" + money(result.pay_outs)}</span>
               </div>
             )}
             <div className="flex justify-between pt-2 border-t border-border">
@@ -202,6 +277,13 @@ export function DrawerClient({
             </div>
           )}
 
+          {(open.pay_ins > 0 || open.pay_outs > 0) && (
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Paid in / out</span>
+              <span className="tabular-nums">{"+" + money(open.pay_ins) + " / -" + money(open.pay_outs)}</span>
+            </div>
+          )}
+
           <div className="flex justify-between text-sm pt-3 border-t border-border">
             <span className="text-muted-foreground">
               {"Expected cash in till (" +
@@ -211,6 +293,25 @@ export function DrawerClient({
             <span className="tabular-nums font-semibold">
               {money(open.expected)}
             </span>
+          </div>
+
+          {/* Cash management */}
+          <div className="pt-3 border-t border-border space-y-2">
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => openCash("pay_in")}>Pay in</Button>
+              <Button variant="outline" size="sm" onClick={() => openCash("pay_out")}>Pay out</Button>
+              <Button variant="outline" size="sm" onClick={() => openCash("no_sale")}>No sale</Button>
+            </div>
+            {open.movements.length > 0 && (
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                {open.movements.slice(0, 6).map((m) => (
+                  <div key={m.id} className="flex justify-between">
+                    <span>{MOVE_LABEL[m.kind] || m.kind}{m.reason_code ? " · " + m.reason_code : ""}</span>
+                    <span className="tabular-nums">{m.kind === "no_sale" ? "—" : (m.kind === "pay_out" ? "-" : "+") + money(m.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="pt-2 space-y-2">
@@ -310,6 +411,52 @@ export function DrawerClient({
           </div>
         )}
       </div>
+
+      {/* Cash movement modal */}
+      {cashKind && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setCashKind(null)}>
+          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium">{MOVE_LABEL[cashKind]}</h3>
+              <button type="button" onClick={() => setCashKind(null)} className="text-xs text-muted-foreground underline">Cancel</button>
+            </div>
+            <div className="space-y-2">
+              {cashKind === "no_sale" ? (
+                <p className="text-sm text-muted-foreground">Opens the drawer and records a no-sale. No cash changes hands.</p>
+              ) : (
+                <div className="space-y-1">
+                  <Label className="text-xs">Amount</Label>
+                  <Input type="number" min="0" step="0.01" value={cashAmount} onChange={(e) => setCashAmount(e.target.value)} placeholder="0.00" className="h-11 text-right" />
+                </div>
+              )}
+              {cashKind === "pay_out" && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Reason</Label>
+                  <select value={cashReason} onChange={(e) => setCashReason(e.target.value)} className="w-full h-10 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
+                    <option value="">Select a reason...</option>
+                    {CASH_MOVEMENT_REASONS.map((r) => (
+                      <option key={r.code} value={r.code}>{r.label}</option>
+                    ))}
+                  </select>
+                  {cashReason === "other" && (
+                    <Input value={cashNote} onChange={(e) => setCashNote(e.target.value)} placeholder="Note" className="h-10" />
+                  )}
+                </div>
+              )}
+              {needsPin && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Manager PIN</Label>
+                  <Input type="password" inputMode="numeric" value={cashPin} onChange={(e) => setCashPin(e.target.value)} placeholder="4-6 digits" className="h-11" />
+                </div>
+              )}
+              <Button className="w-full h-11 mt-1" onClick={submitCash} disabled={cashBusy}>
+                {cashBusy ? "Saving..." : MOVE_LABEL[cashKind]}
+              </Button>
+              {cashErr && <p className="text-sm text-red-600">{cashErr}</p>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
