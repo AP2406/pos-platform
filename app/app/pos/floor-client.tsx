@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -126,8 +127,14 @@ export function FloorClient({
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0 flex items-center justify-between gap-3 h-12 px-3 bg-sidebar text-sidebar-foreground border-b border-sidebar-border">
-        <span className="font-semibold truncate">{register.businessName}</span>
-        <span className="text-xs text-sidebar-foreground/70">Tables</span>
+        <div className="min-w-0 flex items-baseline gap-2">
+          <span className="font-semibold truncate">{register.businessName}</span>
+          <span className="text-xs text-sidebar-foreground/70 hidden sm:inline">Tables</span>
+        </div>
+        <Link href="/app" className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
+          Exit
+        </Link>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4">
