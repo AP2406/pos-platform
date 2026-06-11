@@ -20,6 +20,8 @@ import {
   splitTicketIntoChildren,
   listOpenTableTargets,
   transferLineToTicket,
+  listTableMoveTargets,
+  moveTicketToTable,
   setTicketServer,
   type OpenTicketSummary,
   type TableCart,
@@ -630,6 +632,33 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       removeLine(index);
       setMoveOpen(false);
       setEditLineIndex(null);
+    });
+  }
+
+  // P0-7: move this whole check to another table.
+  const [moveTableTargets, setMoveTableTargets] = useState<{ elementId: string; label: string; occupied: boolean }[]>([]);
+  const [moveTableOpen, setMoveTableOpen] = useState(false);
+  function openMoveTable() {
+    if (!tableBinding) return;
+    setError(null);
+    startTransition(async () => {
+      const targets = await listTableMoveTargets(tableBinding.ticketId);
+      setMoveTableTargets(targets);
+      setMoveTableOpen(true);
+    });
+  }
+  function doMoveTable(elementId: string) {
+    if (!tableBinding) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await moveTicketToTable(tableBinding.ticketId, elementId);
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      setMoveTableOpen(false);
+      tableClosedRef.current = true; // the ticket now lives on another table
+      if (onExitToFloor) onExitToFloor();
     });
   }
 
@@ -1790,6 +1819,11 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                   {serverName ? serverName : "Assign server"}
                 </button>
               )}
+              {tableMode && (
+                <button type="button" onClick={openMoveTable} disabled={pending} className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent disabled:opacity-50">
+                  Move
+                </button>
+              )}
               <RegisterRefund businessName={businessName} />
               {!tableBinding && openTickets.length > 0 && (
                 <button type="button" onClick={() => setTicketsOpen(true)} className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent">
@@ -2150,6 +2184,31 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                       {m.name}
                     </button>
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* P0-7: move this check to another table */}
+          {moveTableOpen && (
+            <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setMoveTableOpen(false)}>
+              <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-xs max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="font-medium">Move to table</h3>
+                  <button type="button" onClick={() => setMoveTableOpen(false)} className="text-xs text-muted-foreground underline">Cancel</button>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">An occupied table merges the two checks.</p>
+                <div className="space-y-1">
+                  {moveTableTargets.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No other tables.</p>
+                  ) : (
+                    moveTableTargets.map((t) => (
+                      <button key={t.elementId} type="button" onClick={() => doMoveTable(t.elementId)} disabled={pending} className="w-full flex items-center justify-between px-3 py-2 rounded-md text-sm border border-border hover:bg-accent">
+                        <span>{t.label}</span>
+                        {t.occupied && <span className="text-[10px] text-amber-600">occupied · merge</span>}
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
