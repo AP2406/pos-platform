@@ -5,6 +5,7 @@ import { RegisterClient } from "./register-client";
 import { FloorClient } from "./floor-client";
 import { getActiveStaff } from "./staff-session";
 import { listFloor, listFloorPlans } from "../floor/floor-actions";
+import { listSections } from "./sections-actions";
 import { listOpenTableTickets, listOpenTogoTickets } from "./ticket-actions";
 import { listCourses } from "./courses-actions";
 import { hasFloorService } from "@/lib/modules/modes";
@@ -242,11 +243,13 @@ export default async function PosPage() {
   let openTables: Awaited<ReturnType<typeof listOpenTableTickets>> = [];
   let openTogo: Awaited<ReturnType<typeof listOpenTogoTickets>> = [];
   let serverStaff: { id: string; name: string }[] = [];
+  let sections: { id: string; name: string; color: string | null; server: string | null }[] = [];
   if (showFloor) {
     floorPlans = await listFloorPlans();
     if (floorPlans[0]) floorElements = (await listFloor(floorPlans[0].id)).elements;
     openTables = await listOpenTableTickets();
     openTogo = await listOpenTogoTickets();
+    sections = (await listSections()).map((s) => ({ id: s.id, name: s.name, color: s.color, server: s.server ? s.server.name : null }));
     const { data: staffData } = await supabase
       .from("staff_members")
       .select("id, name")
@@ -284,6 +287,7 @@ export default async function PosPage() {
             initialOpen={openTables}
             initialTogo={openTogo}
             staff={serverStaff}
+            sections={sections}
           />
         ) : (
           <RegisterClient {...registerProps} />
