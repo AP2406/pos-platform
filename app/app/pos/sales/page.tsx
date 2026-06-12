@@ -3,6 +3,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { getTodayBoundsUTC } from "@/lib/utils/dates";
 import { VoidButton } from "./void-button";
 import { RefundButton } from "./refund-button";
+import { ReopenButton } from "./reopen-button";
 import { EmailReceiptButton } from "./email-receipt-button";
 import { VOID_REASONS, reasonLabel } from "../reason-codes";
 
@@ -146,6 +147,8 @@ export default async function SalesPage() {
   }
 
   const emailedIds = new Set<string>();
+  // P0-8: net append-only adjustments into each order's shown total.
+  const adjNet: Record<string, number> = {};
   if (list.length > 0) {
     const allIds = list.map((r) => r.id);
     const { data: emails } = await supabase
@@ -156,6 +159,15 @@ export default async function SalesPage() {
       .in("order_id", allIds);
     for (const e of emails ?? []) {
       emailedIds.add(e.order_id as string);
+    }
+    const { data: adjustments } = await supabase
+      .from("order_adjustments")
+      .select("order_id, amount")
+      .eq("business_id", business.id)
+      .in("order_id", allIds);
+    for (const a of adjustments ?? []) {
+      const oid = a.order_id as string;
+      adjNet[oid] = Math.round(((adjNet[oid] ?? 0) + (Number(a.amount) || 0)) * 100) / 100;
     }
   }
 
@@ -248,7 +260,10 @@ export default async function SalesPage() {
               >
                 <div className="min-w-0">
                   <div className="text-sm font-medium">
-                    {money(o.total)}
+                    {money(adjNet[o.id] !== undefined ? o.total + adjNet[o.id] : o.total)}
+                    {adjNet[o.id] !== undefined && (
+                      <span className="ml-2 text-xs text-sky-600">Reopened · was {money(o.total)}</span>
+                    )}
                     {voided && (
                       <span className="ml-2 text-xs text-red-600">Voided</span>
                     )}
@@ -302,6 +317,7 @@ export default async function SalesPage() {
                         )}
                         <EmailReceiptButton orderId={o.id} />
                         {o.status === "paid" && <VoidButton orderId={o.id} />}
+                        <ReopenButton orderId={o.id} saleNumber={o.sale_number ?? 0} total={o.total} />
                       </div>
                       {emailedIds.has(o.id) && (
                         <span className="text-xs text-emerald-500">Emailed</span>
