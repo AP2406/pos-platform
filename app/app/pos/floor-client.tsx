@@ -104,6 +104,10 @@ export function FloorClient({
   const [togoPhone, setTogoPhone] = useState("");
   const [tabOpen, setTabOpen] = useState(false);
   const [tabName, setTabName] = useState("");
+  // P1-21: handheld mode — a large-tap-target list of tables instead of the
+  // scaled spatial map, which is hard to tap on a phone. Defaults to list on
+  // small screens; the server can flip back to the map any time.
+  const [view, setView] = useState<"map" | "list">("map");
   const [find, setFind] = useState("");
 
   // Server handoff (transfer all of one server's open tickets to another).
@@ -158,6 +162,11 @@ export function FloorClient({
     ro.observe(node);
     return () => ro.disconnect();
   }, [canvasW, canvasH]);
+
+  // Default to the handheld list view on phone-width screens (one-time, on mount).
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 640) setView("list");
+  }, []);
 
   async function refreshOpen() {
     const [rows, togoRows, tabRows] = await Promise.all([listOpenTableTickets(), listOpenTogoTickets(), listOpenBarTabs()]);
@@ -480,6 +489,13 @@ export function FloorClient({
           </span>
         )}
         <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded-lg bg-muted p-0.5">
+            {(["map", "list"] as const).map((v) => (
+              <button key={v} type="button" onClick={() => setView(v)} className={"text-xs rounded-md px-2.5 py-1 capitalize transition-colors " + (view === v ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground")}>
+                {v}
+              </button>
+            ))}
+          </div>
           <Input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a check" className="h-9 w-40 sm:w-48" />
           {serversWithOpen.length > 0 && staff.length > 1 && (
             <Button variant="outline" className="h-9 hidden sm:inline-flex" onClick={openHandoff}>Handoff</Button>
@@ -498,6 +514,45 @@ export function FloorClient({
 
       {/* Floor + takeout column */}
       <div className="flex-1 min-h-0 flex">
+        {view === "list" ? (
+        <div className="flex-1 min-h-0 overflow-y-auto bg-background p-2">
+          {ringableCount === 0 ? (
+            <div className="p-6 text-center text-sm text-muted-foreground">
+              Your floor is empty. Design it in Settings &rarr; Floor.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+              {ordered
+                .filter((el) => isRingable(el.kind) && matchesFind(el))
+                .sort((a, b) => (a.label ?? "").localeCompare(b.label ?? "", undefined, { numeric: true }))
+                .map((el) => {
+                  const open = openByElement[el.id];
+                  const status = tableStatus(open);
+                  return (
+                    <button
+                      key={el.id}
+                      type="button"
+                      disabled={pending}
+                      onClick={() => tapElement(el)}
+                      className={"rounded-lg border p-3 text-left active:scale-[0.98] transition-transform disabled:opacity-60 " + statusClass(status)}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold truncate">{el.label ?? "Table"}</span>
+                        {open && <span className="tabular-nums text-sm font-medium">{"$" + open.subtotal.toFixed(2)}</span>}
+                      </div>
+                      <div className="text-[11px] mt-0.5 truncate opacity-80">
+                        {open
+                          ? minutesOpen(open.opened_at) + "m" + (open.server_name ? " · " + open.server_name : "") + (open.child_count && open.child_count > 0 ? " · split" : "")
+                          : "Available"}
+                      </div>
+                    </button>
+                  );
+                })}
+            </div>
+          )}
+          {error && <p className="text-sm text-red-600 p-2">{error}</p>}
+        </div>
+        ) : (
         <div ref={mapRef} className="flex-1 min-h-0 relative overflow-hidden bg-background">
           {ringableCount === 0 ? (
             <div className="absolute inset-0 flex items-center justify-center p-6">
@@ -573,6 +628,7 @@ export function FloorClient({
           )}
           {error && <p className="text-sm text-red-600 absolute bottom-2 left-3 z-10">{error}</p>}
         </div>
+        )}
 
         {/* Takeout side column */}
         {(visibleTogo.length > 0 || visibleTabs.length > 0) && (
