@@ -57,6 +57,63 @@ export default async function CustomerDetailPage({
     .maybeSingle();
   const storeCreditBalance = scAcct ? (scAcct.balance_cents as number) / 100 : 0;
 
+  // P2-35: POS purchase history + spend (orders-based, for non-transportation
+  // businesses). Net of refunds; also surfaces the loyalty balance on the
+  // profile, feeding loyalty/marketing.
+  const isTransport = business.industry === "transportation";
+  let purchase = {
+    visits: 0,
+    spend: 0,
+    avg: 0,
+    lastVisit: null as string | null,
+    loyaltyPoints: 0,
+    recent: [] as { id: string; total: number; created_at: string; status: string }[],
+  };
+  if (!isTransport) {
+    const [ordersRes, loyaltyRes] = await Promise.all([
+      supabase
+        .from("orders")
+        .select("id, total, created_at, status")
+        .eq("business_id", business.id)
+        .eq("customer_id", id)
+        .neq("status", "voided")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("loyalty_accounts")
+        .select("points")
+        .eq("business_id", business.id)
+        .eq("customer_id", id)
+        .maybeSingle(),
+    ]);
+    const orders = ordersRes.data ?? [];
+    const orderIds = orders.map((o) => o.id as string);
+    let refundTotal = 0;
+    if (orderIds.length > 0) {
+      const { data: refs } = await supabase
+        .from("refunds")
+        .select("amount")
+        .eq("business_id", business.id)
+        .in("order_id", orderIds);
+      for (const r of refs ?? []) refundTotal += Number(r.amount) || 0;
+    }
+    const gross = orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+    const visits = orders.length;
+    const spend = Math.round((gross - refundTotal) * 100) / 100;
+    purchase = {
+      visits,
+      spend,
+      avg: visits > 0 ? Math.round((spend / visits) * 100) / 100 : 0,
+      lastVisit: (orders[0]?.created_at as string | undefined) ?? null,
+      loyaltyPoints: loyaltyRes.data ? (loyaltyRes.data.points as number) : 0,
+      recent: orders.slice(0, 10).map((o) => ({
+        id: o.id as string,
+        total: Number(o.total) || 0,
+        created_at: o.created_at as string,
+        status: (o.status as string | null) ?? "paid",
+      })),
+    };
+  }
+
   const [customerResult, tripsResult, attachedTagsResult, allTagsResult] =
     await Promise.all([
       supabase.from("customers").select("*").eq("id", id).maybeSingle(),
@@ -158,29 +215,42 @@ export default async function CustomerDetailPage({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard
-          label="Total trips"
-          value={trips.length.toString()}
-          hint={`${completedTrips.length} completed`}
-        />
-        <StatCard
-          label="Lifetime value"
-          value={formatCurrency(lifetimeValue)}
-          hint="Your revenue"
-        />
-        <StatCard
-          label="Outstanding"
-          value={formatCurrency(outstanding)}
-          hint="Unpaid"
-          tone={outstanding > 0 ? "warning" : "neutral"}
-        />
-        <StatCard
-          label="Avg per trip"
-          value={formatCurrency(avgPerTrip)}
-          hint="When completed"
-        />
-      </div>
+      {isTransport ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <StatCard
+            label="Total trips"
+            value={trips.length.toString()}
+            hint={`${completedTrips.length} completed`}
+          />
+          <StatCard
+            label="Lifetime value"
+            value={formatCurrency(lifetimeValue)}
+            hint="Your revenue"
+          />
+          <StatCard
+            label="Outstanding"
+            value={formatCurrency(outstanding)}
+            hint="Unpaid"
+            tone={outstanding > 0 ? "warning" : "neutral"}
+          />
+          <StatCard
+            label="Avg per trip"
+            value={formatCurrency(avgPerTrip)}
+            hint="When completed"
+          />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <StatCard label="Visits" value={purchase.visits.toString()} hint="Paid sales" />
+          <StatCard label="Lifetime spend" value={formatCurrency(purchase.spend)} hint="Net of refunds" />
+          <StatCard label="Avg ticket" value={formatCurrency(purchase.avg)} hint="Per visit" />
+          <StatCard
+            label="Last visit"
+            value={purchase.lastVisit ? new Date(purchase.lastVisit).toLocaleDateString() : "—"}
+            hint={purchase.loyaltyPoints > 0 ? purchase.loyaltyPoints.toLocaleString() + " loyalty pts" : "No points yet"}
+          />
+        </div>
+      )}
 
       {/* Store credit */}
       <div className="bg-card border border-border rounded-lg p-6 mb-4">
@@ -212,7 +282,35 @@ export default async function CustomerDetailPage({
         />
       </div>
 
-      {/* Trip history */}
+      {/* Purchase history (POS businesses) */}
+      {!isTransport && (
+        <>
+          <SectionHeader className="mt-6">Recent purchases</SectionHeader>
+          {purchase.recent.length === 0 ? (
+            <div className="bg-card border border-dashed border-border rounded-lg p-8 text-center text-sm text-muted-foreground">
+              No purchases yet for this customer.
+            </div>
+          ) : (
+            <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
+              {purchase.recent.map((o) => (
+                <div key={o.id} className="flex items-center justify-between gap-4 p-4">
+                  <div className="min-w-0">
+                    <div className="text-sm text-foreground">{new Date(o.created_at).toLocaleString()}</div>
+                    {o.status !== "paid" && (
+                      <div className="text-xs text-amber-600 capitalize">{o.status.replace("_", " ")}</div>
+                    )}
+                  </div>
+                  <div className="font-semibold tabular-nums shrink-0">{formatCurrency(o.total)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Trip history (transportation) */}
+      {isTransport && (
+        <>
       <SectionHeader className="mt-6">Trip history</SectionHeader>
       {trips.length === 0 ? (
         <div className="bg-card border border-dashed border-border rounded-lg p-8 text-center text-sm text-muted-foreground">
@@ -257,6 +355,8 @@ export default async function CustomerDetailPage({
             </Link>
           ))}
         </div>
+      )}
+        </>
       )}
     </div>
   );
