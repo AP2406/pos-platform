@@ -74,7 +74,7 @@ type ServiceChargeCfg = { enabled: boolean; pct: number; autoParty: number; post
 type SplitCfg = { settlementMode: "separate" | "informational"; allowUnits: boolean };
 type StaffMember = { id: string; name: string };
 type Customer = { id: string; name: string; taxExempt?: boolean };
-type Tender = { method: "cash" | "card" | "other"; amount: number; tendered: number | null; change: number | null };
+type Tender = { method: "cash" | "card" | "other" | "gift_card"; amount: number; tendered: number | null; change: number | null; gift_card_code?: string | null };
 type PaymentLine = { method: string; amount: number; tendered: number | null; change: number | null };
 type Receipt = {
   id: string;
@@ -1485,7 +1485,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     startTransition(async () => {
       const res = await createOrder({
         ...commonOrderFields(),
-        payments: tenders.map((p) => ({ method: p.method, amount: p.amount, tendered: p.tendered })),
+        payments: tenders.map((p) => ({ method: p.method, amount: p.amount, tendered: p.tendered, gift_card_code: p.method === "gift_card" ? p.gift_card_code ?? null : null })),
       });
       if ("error" in res) {
         setError(res.error);
