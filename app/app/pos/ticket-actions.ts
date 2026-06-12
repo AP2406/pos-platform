@@ -414,6 +414,63 @@ const DINING_KDS_LABELS: Record<string, string> = {
   pickup: "Pickup",
 };
 
+type FiredItem = { name: string; quantity: number; note?: string | null; seat?: number | null; catalog_item_id?: string | null };
+
+// P1-14: split the just-fired items into one kitchen_tickets row per prep
+// station. Each item's station comes from catalog_items.station_id; items with
+// no mapped station (or businesses with no stations defined) collapse into a
+// single station_id-null ticket — byte-identical to pre-station behaviour.
+async function insertFiredByStation(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  elementId: string | null,
+  baseLabel: string | null,
+  fired: FiredItem[],
+  createdBy: string | null
+) {
+  const catIds = Array.from(
+    new Set(fired.map((f) => f.catalog_item_id).filter((x): x is string => !!x))
+  );
+  const stationByItem: Record<string, string> = {};
+  if (catIds.length) {
+    const { data } = await supabase
+      .from("catalog_items")
+      .select("id, station_id")
+      .eq("business_id", businessId)
+      .in("id", catIds);
+    for (const r of data ?? []) if (r.station_id) stationByItem[r.id as string] = r.station_id as string;
+  }
+
+  // Group fired items by station ("" = no station / default ticket).
+  const groups: Record<string, FiredItem[]> = {};
+  for (const f of fired) {
+    const sid = (f.catalog_item_id && stationByItem[f.catalog_item_id]) || "";
+    (groups[sid] ||= []).push({ name: f.name, quantity: f.quantity, note: f.note ?? null, seat: f.seat ?? null });
+  }
+
+  // Resolve station names for the ticket label suffix.
+  const sids = Object.keys(groups).filter(Boolean);
+  const stationName: Record<string, string> = {};
+  if (sids.length) {
+    const { data } = await supabase
+      .from("kitchen_stations")
+      .select("id, name")
+      .eq("business_id", businessId)
+      .in("id", sids);
+    for (const r of data ?? []) stationName[r.id as string] = r.name as string;
+  }
+
+  const rows = Object.keys(groups).map((sid) => ({
+    business_id: businessId,
+    element_id: elementId,
+    label: sid ? (baseLabel ? baseLabel + " · " : "") + (stationName[sid] || "Station") : baseLabel,
+    items: groups[sid],
+    station_id: sid || null,
+    created_by: createdBy,
+  }));
+  return supabase.from("kitchen_tickets").insert(rows);
+}
+
 export async function sendTableTicket(
   ticketId: string,
   cart: TableCart,
@@ -455,12 +512,12 @@ export async function sendTableTicket(
   }
 
   // Items to fire = quantity beyond what was already sent.
-  const fired: { name: string; quantity: number; note?: string | null; seat?: number | null }[] = [];
+  const fired: FiredItem[] = [];
   const updatedItems = parsed.data.items.map((it) => {
     const qty = Number(it.quantity) || 0;
     const sent = Number(it.sent_qty) || 0;
     const delta = qty - sent;
-    if (delta > 0) fired.push({ name: it.name, quantity: delta, note: it.note ?? null, seat: it.seat ?? null });
+    if (delta > 0) fired.push({ name: it.name, quantity: delta, note: it.note ?? null, seat: it.seat ?? null, catalog_item_id: it.catalog_item_id ?? null });
     return { ...it, sent_qty: qty };
   });
 
@@ -474,13 +531,7 @@ export async function sendTableTicket(
     return { ok: true, fired: 0 };
   }
 
-  const { error: insErr } = await supabase.from("kitchen_tickets").insert({
-    business_id: business.id,
-    element_id: elementId,
-    label: label,
-    items: fired,
-    created_by: user ? user.id : null,
-  });
+  const { error: insErr } = await insertFiredByStation(supabase, business.id, elementId, label, fired, user ? user.id : null);
   if (insErr) {
     console.error("sendTableTicket insert:", insErr);
     return { error: "Could not send to the kitchen. Please try again." };
@@ -546,14 +597,14 @@ export async function fireCourse(
   if (courseName) label = (label ? label + " · " : "") + courseName;
 
   const nowIso = new Date().toISOString();
-  const fired: { name: string; quantity: number; note?: string | null; seat?: number | null }[] = [];
+  const fired: FiredItem[] = [];
   const updatedItems = parsed.data.items.map((it) => {
     if ((it.course_id ?? null) !== courseId) return it;
     const qty = Number(it.quantity) || 0;
     const sent = Number(it.sent_qty) || 0;
     const delta = qty - sent;
     if (delta <= 0) return it;
-    fired.push({ name: it.name, quantity: delta, note: it.note ?? null, seat: it.seat ?? null });
+    fired.push({ name: it.name, quantity: delta, note: it.note ?? null, seat: it.seat ?? null, catalog_item_id: it.catalog_item_id ?? null });
     return { ...it, sent_qty: qty, fired_at: nowIso };
   });
 
@@ -566,13 +617,7 @@ export async function fireCourse(
     return { ok: true, fired: 0 };
   }
 
-  const { error: insErr } = await supabase.from("kitchen_tickets").insert({
-    business_id: business.id,
-    element_id: elementId,
-    label: label,
-    items: fired,
-    created_by: user ? user.id : null,
-  });
+  const { error: insErr } = await insertFiredByStation(supabase, business.id, elementId, label, fired, user ? user.id : null);
   if (insErr) {
     console.error("fireCourse insert:", insErr);
     return { error: "Could not send to the kitchen. Please try again." };

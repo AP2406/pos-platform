@@ -12,6 +12,8 @@ import { FloorCard } from "./floor-card";
 import { SectionsCard } from "./sections-card";
 import { listSections, listAssignableTables } from "../pos/sections-actions";
 import { TableAgingCard } from "./table-aging-card";
+import { StationsCard } from "./stations-card";
+import { listKitchenStations } from "../kitchen/stations-actions";
 import { ServiceChargeCard } from "./service-charge-card";
 import { SplitCard } from "./split-card";
 import { hasFloorService } from "@/lib/modules/modes";
@@ -115,6 +117,7 @@ export default async function SettingsPage() {
   let floorElements: Awaited<ReturnType<typeof listFloor>>["elements"] = [];
   let sectionsList: Awaited<ReturnType<typeof listSections>> = [];
   let assignableTables: Awaited<ReturnType<typeof listAssignableTables>> = [];
+  let stationsList: Awaited<ReturnType<typeof listKitchenStations>> = [];
   const chairMode: "follow" | "editable" =
     (business as { floor_chair_mode?: string }).floor_chair_mode === "editable" ? "editable" : "follow";
   if (showFloor) {
@@ -122,6 +125,7 @@ export default async function SettingsPage() {
     if (floorPlans[0]) floorElements = (await listFloor(floorPlans[0].id)).elements;
     sectionsList = await listSections();
     assignableTables = await listAssignableTables();
+    stationsList = await listKitchenStations();
   }
 
   let receiptSettings: Partial<ReceiptSettings> | null = null;
@@ -279,9 +283,13 @@ export default async function SettingsPage() {
             <SectionHeader>Server sections</SectionHeader>
             <SectionsCard initialSections={sectionsList} tables={assignableTables} staff={staffList.filter((s) => s.is_active).map((s) => ({ id: s.id, name: s.name }))} />
           </div>
-          <div className="bg-card border border-border rounded-lg p-6">
+          <div className="bg-card border border-border rounded-lg p-6 mb-4">
             <SectionHeader>Table timers</SectionHeader>
             <TableAgingCard initial={tableAging} />
+          </div>
+          <div className="bg-card border border-border rounded-lg p-6">
+            <SectionHeader>Kitchen stations</SectionHeader>
+            <StationsCard initial={stationsList} />
           </div>
         </>
       ),

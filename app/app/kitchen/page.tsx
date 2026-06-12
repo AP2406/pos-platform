@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { KitchenClient } from "./kitchen-client";
+import { listKitchenStations } from "./stations-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,7 @@ export default async function KitchenPage() {
       ? customerNames[o.customer_id as string] ?? null
       : null,
     tableLabel: null as string | null,
+    stationId: null as string | null,
     items: itemsByOrder[o.id as string] ?? [],
   }));
 
@@ -64,7 +66,7 @@ export default async function KitchenPage() {
   // they never count as revenue; the KDS shows both.
   const { data: kts } = await supabase
     .from("kitchen_tickets")
-    .select("id, label, items, fired_at")
+    .select("id, label, items, fired_at, station_id")
     .eq("business_id", business.id)
     .is("fulfilled_at", null)
     .order("fired_at", { ascending: true });
@@ -75,10 +77,13 @@ export default async function KitchenPage() {
     createdAt: (k.fired_at as string) ?? new Date().toISOString(),
     customerName: null as string | null,
     tableLabel: (k.label as string | null) ?? null,
+    stationId: (k.station_id as string | null) ?? null,
     items: Array.isArray(k.items)
       ? (k.items as { name: string; quantity: number; note?: string | null }[])
       : [],
   }));
+
+  const stations = await listKitchenStations();
 
   const initialOrders = [...orderCards, ...kitchenCards].sort((a, b) =>
     a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0
@@ -92,7 +97,7 @@ export default async function KitchenPage() {
           New orders appear here automatically. Tap Done when an order is ready.
         </p>
       </div>
-      <KitchenClient businessId={business.id} initialOrders={initialOrders} />
+      <KitchenClient businessId={business.id} initialOrders={initialOrders} stations={stations} />
     </div>
   );
 }

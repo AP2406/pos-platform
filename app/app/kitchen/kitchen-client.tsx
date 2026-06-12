@@ -28,23 +28,28 @@ function esc(s: string): string {
 }
 
 type KitchenItem = { name: string; quantity: number; note?: string | null; seat?: number | null };
+type KitchenStation = { id: string; name: string; sort_order: number };
 type KitchenOrder = {
   id: string;
   kind: "order" | "kitchen";
   createdAt: string;
   customerName: string | null;
   tableLabel: string | null;
+  stationId: string | null;
   items: KitchenItem[];
 };
 
 export function KitchenClient({
   businessId,
   initialOrders,
+  stations,
 }: {
   businessId: string;
   initialOrders: KitchenOrder[];
+  stations: KitchenStation[];
 }) {
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders);
+  const [stationFilter, setStationFilter] = useState<string>("all");
   const [pending, startTransition] = useTransition();
 
   const refresh = useCallback(async () => {
@@ -97,12 +102,13 @@ export function KitchenClient({
       createdAt: (o.created_at as string) ?? new Date().toISOString(),
       customerName: o.customer_id ? customerNames[o.customer_id as string] ?? null : null,
       tableLabel: null,
+      stationId: null,
       items: itemsByOrder[o.id as string] ?? [],
     }));
 
     const { data: kts } = await supabase
       .from("kitchen_tickets")
-      .select("id, label, items, fired_at")
+      .select("id, label, items, fired_at, station_id")
       .eq("business_id", businessId)
       .is("fulfilled_at", null)
       .order("fired_at", { ascending: true });
@@ -113,6 +119,7 @@ export function KitchenClient({
       createdAt: (k.fired_at as string) ?? new Date().toISOString(),
       customerName: null,
       tableLabel: (k.label as string | null) ?? null,
+      stationId: (k.station_id as string | null) ?? null,
       items: Array.isArray(k.items) ? (k.items as KitchenItem[]) : [],
     }));
 
@@ -183,19 +190,58 @@ export function KitchenClient({
     return h + ":" + mm + " " + ampm;
   }
 
-  if (orders.length === 0) {
+  // P1-14: a station screen sees only its own tickets. "All" shows everything
+  // (including online orders, which have no station).
+  const visible =
+    stationFilter === "all" ? orders : orders.filter((o) => o.stationId === stationFilter);
+
+  const stationStrip =
+    stations.length > 0 ? (
+      <div className="flex flex-wrap gap-2 mb-4">
+        <button
+          type="button"
+          onClick={() => setStationFilter("all")}
+          className={
+            "text-sm rounded-md px-3 py-1.5 border " +
+            (stationFilter === "all" ? "bg-foreground text-background border-foreground" : "border-border hover:bg-accent")
+          }
+        >
+          All
+        </button>
+        {stations.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setStationFilter(s.id)}
+            className={
+              "text-sm rounded-md px-3 py-1.5 border " +
+              (stationFilter === s.id ? "bg-foreground text-background border-foreground" : "border-border hover:bg-accent")
+            }
+          >
+            {s.name}
+          </button>
+        ))}
+      </div>
+    ) : null;
+
+  if (visible.length === 0) {
     return (
-      <div className="bg-card border border-border rounded-lg p-10 text-center">
-        <p className="text-sm text-muted-foreground">
-          No open orders. New sales will appear here automatically.
-        </p>
+      <div>
+        {stationStrip}
+        <div className="bg-card border border-border rounded-lg p-10 text-center">
+          <p className="text-sm text-muted-foreground">
+            No open orders. New sales will appear here automatically.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {orders.map((o) => (
+    <div>
+      {stationStrip}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {visible.map((o) => (
         <div
           key={o.id}
           className="bg-card border border-border rounded-lg p-4 flex flex-col"
@@ -252,6 +298,7 @@ export function KitchenClient({
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }

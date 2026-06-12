@@ -5,6 +5,7 @@ import { ImportMenu } from "./import-menu";
 import { CoursesCard } from "./courses-card";
 import { hasFloorService } from "@/lib/modules/modes";
 import { listCourses } from "../pos/courses-actions";
+import { listKitchenStations } from "../kitchen/stations-actions";
 
 export default async function CatalogPage() {
   const { business } = await requireBusiness();
@@ -12,7 +13,7 @@ export default async function CatalogPage() {
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, is_active, taxable, tax_rate_id, barcode, image_url, out_of_stock, default_course_id")
+    .select("id, name, price, category, is_active, taxable, tax_rate_id, barcode, image_url, out_of_stock, default_course_id, station_id")
     .eq("business_id", business.id)
     .order("created_at", { ascending: true });
 
@@ -103,6 +104,7 @@ export default async function CatalogPage() {
     image_url: (i.image_url as string | null) ?? null,
     out_of_stock: (i.out_of_stock as boolean | null) ?? false,
     default_course_id: (i.default_course_id as string | null) ?? null,
+    station_id: (i.station_id as string | null) ?? null,
     variations: varsByItem[i.id as string] ?? [],
     modifiers: modsByItem[i.id as string] ?? [],
     modifierGroups: groupsByItem[i.id as string] ?? [],
@@ -118,6 +120,10 @@ export default async function CatalogPage() {
   // and the Courses management card on this page.
   const courseRows = hasFloorService(business) ? await listCourses() : [];
   const courses = courseRows.map((c) => ({ id: c.id, name: c.name }));
+
+  // Prep stations (full-service only): drive the per-item station picker.
+  const stationRows = hasFloorService(business) ? await listKitchenStations() : [];
+  const stations = stationRows.map((s) => ({ id: s.id, name: s.name }));
 
   return (
     <div>
@@ -141,6 +147,7 @@ export default async function CatalogPage() {
         taxRates={taxRates}
         initialCategoryColors={categoryColors}
         courses={courses}
+        stations={stations}
       />
     </div>
   );
