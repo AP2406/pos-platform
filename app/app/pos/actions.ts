@@ -243,6 +243,36 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     }
   }
 
+  // P2-31b: a "loyalty_redeem" discount spends the customer's points. The final
+  // (clamped) discount dollars plus the redeem rate fully determine the points
+  // used — no separate field to trust. Validated against the live balance here;
+  // decremented after the sale settles.
+  let loyaltyRedeemPts = 0;
+  if (discount > 0 && discountReasonCode === "loyalty_redeem") {
+    if (!customerId) return { error: "Add a customer to redeem loyalty points." };
+    const { data: bizL } = await supabase
+      .from("businesses")
+      .select("loyalty_settings")
+      .eq("id", business.id)
+      .maybeSingle();
+    const ls = (bizL?.loyalty_settings ?? {}) as { enabled?: boolean; redeemPerDollar?: number };
+    const redeemPerDollar = Number(ls.redeemPerDollar);
+    if (ls.enabled !== true || !Number.isFinite(redeemPerDollar) || redeemPerDollar <= 0) {
+      return { error: "Loyalty redemption isn't available." };
+    }
+    loyaltyRedeemPts = Math.round(discount * redeemPerDollar);
+    const { data: acct } = await supabase
+      .from("loyalty_accounts")
+      .select("points")
+      .eq("business_id", business.id)
+      .eq("customer_id", customerId)
+      .maybeSingle();
+    const balance = acct ? (acct.points as number) : 0;
+    if (loyaltyRedeemPts > balance) {
+      return { error: "Not enough loyalty points for that redemption." };
+    }
+  }
+
   const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
 
   // Comp (on-the-house): a pre-tax reduction applied after any discount,
@@ -659,11 +689,46 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   // it never touches the order's money or snapshot. Skipped on idempotent replays
   // (so a retried request can't double-earn) and for training sales.
   if (customerId && !isTraining && !result.replayed) {
+    if (loyaltyRedeemPts > 0) {
+      await redeemLoyaltyPoints(supabase, business.id, customerId, result.order_id, loyaltyRedeemPts);
+    }
     await accrueLoyaltyPoints(supabase, business.id, customerId, result.order_id, netSubtotal);
   }
 
   revalidatePath("/app/pos");
   return { ok: true, id: result.order_id, sale_number: Number(result.sale_number) };
+}
+
+// Spend points at redemption: append a negative ledger row and decrement the
+// balance. Validated against the balance before the sale; best-effort here.
+async function redeemLoyaltyPoints(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  customerId: string,
+  orderId: string,
+  points: number
+): Promise<void> {
+  if (points <= 0) return;
+  try {
+    await supabase
+      .from("loyalty_transactions")
+      .insert({ business_id: businessId, customer_id: customerId, order_id: orderId, points: -points, kind: "redeem" });
+    const { data: acct } = await supabase
+      .from("loyalty_accounts")
+      .select("points")
+      .eq("business_id", businessId)
+      .eq("customer_id", customerId)
+      .maybeSingle();
+    if (acct) {
+      await supabase
+        .from("loyalty_accounts")
+        .update({ points: Math.max(0, (acct.points as number) - points), updated_at: new Date().toISOString() })
+        .eq("business_id", businessId)
+        .eq("customer_id", customerId);
+    }
+  } catch (e) {
+    console.error("redeemLoyaltyPoints:", e);
+  }
 }
 
 // Earn points = floor(net pre-tax spend × earn-per-dollar). Writes an append-only

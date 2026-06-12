@@ -8,6 +8,7 @@ import { listFloor, listFloorPlans } from "../floor/floor-actions";
 import { listSections } from "./sections-actions";
 import { listOpenTableTickets, listOpenTogoTickets, listOpenBarTabs } from "./ticket-actions";
 import { listCourses } from "./courses-actions";
+import { getLoyaltySettings } from "./loyalty-actions";
 import { hasFloorService } from "@/lib/modules/modes";
 import type { ReceiptSettings } from "./receipt-template";
 
@@ -227,6 +228,7 @@ export default async function PosPage() {
   // Coursing (P0-1) is full-service only; listCourses seeds the default four.
   const courses = isFullService ? await listCourses() : undefined;
 
+  const loyaltyCfg = await getLoyaltySettings();
   const registerProps = {
     items,
     taxRate,
@@ -240,6 +242,7 @@ export default async function PosPage() {
     serviceCharge,
     splitSettings,
     courses,
+    loyalty: { enabled: loyaltyCfg.enabled, redeemPerDollar: loyaltyCfg.redeemPerDollar },
   };
 
   // Full-service restaurants get the table floor first; every other mode (and
