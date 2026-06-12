@@ -38,6 +38,7 @@ export default async function AppLayout({
       extras.push({ href: "/app/clock", label: "Time clock" });
     }
     if (role === "owner" || role === "manager") {
+      extras.push({ href: "/app/marketing", label: "Marketing" });
       extras.push({ href: "/app/audit", label: "Activity log" });
     }
   }

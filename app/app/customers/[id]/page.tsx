@@ -7,6 +7,7 @@ import { CustomerControls } from "./customer-controls";
 import { CustomerNotes } from "./customer-notes";
 import { CustomerTags } from "./customer-tags";
 import { StoreCreditCard } from "./store-credit-card";
+import { MarketingConsent } from "./marketing-consent";
 import { StatusBadge, SectionHeader } from "../../_components/ui";
 
 function formatCurrency(amount: number | string | null | undefined): string {
@@ -188,6 +189,17 @@ export default async function CustomerDetailPage({
           customerId={customer.id}
           initialBalance={storeCreditBalance}
           canIssue={role === "owner" || role === "manager"}
+        />
+      </div>
+
+      {/* Marketing consent (CASL) */}
+      <div className="bg-card border border-border rounded-lg p-6 mb-4">
+        <SectionHeader>Marketing</SectionHeader>
+        <MarketingConsent
+          customerId={customer.id}
+          initialConsent={(customer as { marketing_consent?: boolean }).marketing_consent === true}
+          hasEmail={!!(customer.email as string | null)}
+          canEdit={role === "owner" || role === "manager"}
         />
       </div>
 
