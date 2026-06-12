@@ -59,6 +59,9 @@ export default async function KitchenPage() {
       : null,
     tableLabel: null as string | null,
     stationId: null as string | null,
+    stationName: null as string | null,
+    elementId: null as string | null,
+    tableName: null as string | null,
     items: itemsByOrder[o.id as string] ?? [],
   }));
 
@@ -66,24 +69,47 @@ export default async function KitchenPage() {
   // they never count as revenue; the KDS shows both.
   const { data: kts } = await supabase
     .from("kitchen_tickets")
-    .select("id, label, items, fired_at, station_id")
+    .select("id, label, items, fired_at, station_id, element_id")
     .eq("business_id", business.id)
     .is("fulfilled_at", null)
     .order("fired_at", { ascending: true });
 
-  const kitchenCards = (kts ?? []).map((k) => ({
-    id: k.id as string,
-    kind: "kitchen" as const,
-    createdAt: (k.fired_at as string) ?? new Date().toISOString(),
-    customerName: null as string | null,
-    tableLabel: (k.label as string | null) ?? null,
-    stationId: (k.station_id as string | null) ?? null,
-    items: Array.isArray(k.items)
-      ? (k.items as { name: string; quantity: number; note?: string | null }[])
-      : [],
-  }));
-
   const stations = await listKitchenStations();
+  const stationNameById: Record<string, string> = {};
+  for (const s of stations) stationNameById[s.id] = s.name;
+
+  // Clean table names for the expo view, which groups a table's station/course
+  // tickets back into one card.
+  const elementIds = Array.from(
+    new Set((kts ?? []).map((k) => k.element_id as string | null).filter((x): x is string => !!x))
+  );
+  const elementLabelById: Record<string, string> = {};
+  if (elementIds.length > 0) {
+    const { data: els } = await supabase
+      .from("floor_elements")
+      .select("id, label")
+      .in("id", elementIds);
+    for (const e of els ?? []) elementLabelById[e.id as string] = (e.label as string | null) ?? "Table";
+  }
+
+  const kitchenCards = (kts ?? []).map((k) => {
+    const elementId = (k.element_id as string | null) ?? null;
+    const stationId = (k.station_id as string | null) ?? null;
+    return {
+      id: k.id as string,
+      kind: "kitchen" as const,
+      createdAt: (k.fired_at as string) ?? new Date().toISOString(),
+      customerName: null as string | null,
+      tableLabel: (k.label as string | null) ?? null,
+      stationId,
+      stationName: stationId ? stationNameById[stationId] ?? null : null,
+      elementId,
+      tableName: elementId ? elementLabelById[elementId] ?? "Table" : (k.label as string | null) ?? "Ticket",
+      items: Array.isArray(k.items)
+        ? (k.items as { name: string; quantity: number; note?: string | null }[])
+        : [],
+    };
+  });
 
   const initialOrders = [...orderCards, ...kitchenCards].sort((a, b) =>
     a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0
