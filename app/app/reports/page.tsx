@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { hasFloorService } from "@/lib/modules/modes";
 
 type OrderRow = {
   id: string;
@@ -12,6 +13,7 @@ type OrderRow = {
   total: number;
   payment_method: string;
   status: string;
+  staff_id: string | null;
 };
 
 function round2(n: number): number {
@@ -52,7 +54,7 @@ export default async function ReportsPage({
   const cutoffIso = new Date(Date.now() - 31 * 86400000).toISOString();
   const { data: ordersData } = await supabase
     .from("orders")
-    .select("id, created_at, subtotal, discount, tax, tip, total, payment_method, status")
+    .select("id, created_at, subtotal, discount, tax, tip, total, payment_method, status, staff_id")
     .eq("business_id", business.id)
     .neq("is_training", true)
     .gte("created_at", cutoffIso)
@@ -69,6 +71,7 @@ export default async function ReportsPage({
     total: Number(o.total) || 0,
     payment_method: (o.payment_method as string | null) ?? "cash",
     status: (o.status as string | null) ?? "paid",
+    staff_id: (o.staff_id as string | null) ?? null,
   }));
 
   const now = Date.now();
@@ -183,6 +186,42 @@ export default async function ReportsPage({
   const categories = Object.keys(catAgg)
     .map((k) => ({ name: k, qty: catAgg[k].qty, revenue: catAgg[k].revenue }))
     .sort((a, b) => b.revenue - a.revenue);
+
+  // P1-23: per-server sales (full service). Each server's net sales, tips,
+  // order count and average check, from the order's attributed staff_id.
+  const showServers = hasFloorService(business);
+  type ServerAgg = { staffId: string; name: string; count: number; sales: number; tips: number };
+  let servers: ServerAgg[] = [];
+  if (showServers) {
+    const agg: Record<string, { count: number; sales: number; tips: number }> = {};
+    for (const o of orders) {
+      const sid = o.staff_id;
+      if (!sid) continue;
+      if (!agg[sid]) agg[sid] = { count: 0, sales: 0, tips: 0 };
+      agg[sid].count += 1;
+      agg[sid].sales += o.subtotal;
+      agg[sid].tips += o.tip;
+    }
+    const sids = Object.keys(agg);
+    const nameById: Record<string, string> = {};
+    if (sids.length > 0) {
+      const { data: staffRows } = await supabase
+        .from("staff_members")
+        .select("id, name")
+        .eq("business_id", business.id)
+        .in("id", sids);
+      for (const s of staffRows ?? []) nameById[s.id as string] = s.name as string;
+    }
+    servers = sids
+      .map((sid) => ({
+        staffId: sid,
+        name: nameById[sid] ?? "Server",
+        count: agg[sid].count,
+        sales: round2(agg[sid].sales),
+        tips: round2(agg[sid].tips),
+      }))
+      .sort((a, b) => b.sales - a.sales || a.name.localeCompare(b.name));
+  }
 
   const tabs: { key: string; label: string }[] = [
     { key: "today", label: "Today" },
@@ -328,6 +367,42 @@ export default async function ReportsPage({
           )}
         </div>
       </div>
+
+      {showServers && (
+        <div className="mt-4">
+          <h2 className="text-sm font-medium text-muted-foreground mb-2">By server</h2>
+          {servers.length === 0 ? (
+            <div className="bg-card border border-border rounded-lg p-6">
+              <p className="text-sm text-muted-foreground">No server-attributed sales in this period.</p>
+            </div>
+          ) : (
+            <div className="bg-card border border-border rounded-lg overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-muted-foreground border-b border-border">
+                    <th className="text-left font-medium px-4 py-2">Server</th>
+                    <th className="text-right font-medium px-4 py-2">Sales</th>
+                    <th className="text-right font-medium px-4 py-2">Checks</th>
+                    <th className="text-right font-medium px-4 py-2">Avg check</th>
+                    <th className="text-right font-medium px-4 py-2">Tips</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {servers.map((s) => (
+                    <tr key={s.staffId}>
+                      <td className="px-4 py-2.5 font-medium truncate">{s.name}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{money(s.sales)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{s.count}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{money(round2(s.count > 0 ? s.sales / s.count : 0))}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{money(s.tips)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
