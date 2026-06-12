@@ -655,8 +655,65 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
 
   const result = rpcData as { order_id: string; sale_number: number | string; replayed?: boolean };
 
+  // P2-31: accrue loyalty points for a named customer. Additive and post-settle —
+  // it never touches the order's money or snapshot. Skipped on idempotent replays
+  // (so a retried request can't double-earn) and for training sales.
+  if (customerId && !isTraining && !result.replayed) {
+    await accrueLoyaltyPoints(supabase, business.id, customerId, result.order_id, netSubtotal);
+  }
+
   revalidatePath("/app/pos");
   return { ok: true, id: result.order_id, sale_number: Number(result.sale_number) };
+}
+
+// Earn points = floor(net pre-tax spend × earn-per-dollar). Writes an append-only
+// ledger row and bumps the running balance. Best-effort: a failure here must not
+// fail the (already-recorded) sale.
+async function accrueLoyaltyPoints(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  customerId: string,
+  orderId: string,
+  netSubtotal: number
+): Promise<void> {
+  try {
+    const { data: biz } = await supabase
+      .from("businesses")
+      .select("loyalty_settings")
+      .eq("id", businessId)
+      .maybeSingle();
+    const ls = (biz?.loyalty_settings ?? {}) as { enabled?: boolean; earnPerDollar?: number };
+    if (ls.enabled !== true) return;
+    const earnPerDollar = Number(ls.earnPerDollar);
+    if (!Number.isFinite(earnPerDollar) || earnPerDollar <= 0) return;
+
+    const points = Math.floor((Number(netSubtotal) || 0) * earnPerDollar);
+    if (points <= 0) return;
+
+    await supabase
+      .from("loyalty_transactions")
+      .insert({ business_id: businessId, customer_id: customerId, order_id: orderId, points, kind: "earn" });
+
+    const { data: acct } = await supabase
+      .from("loyalty_accounts")
+      .select("points")
+      .eq("business_id", businessId)
+      .eq("customer_id", customerId)
+      .maybeSingle();
+    if (acct) {
+      await supabase
+        .from("loyalty_accounts")
+        .update({ points: (acct.points as number) + points, updated_at: new Date().toISOString() })
+        .eq("business_id", businessId)
+        .eq("customer_id", customerId);
+    } else {
+      await supabase
+        .from("loyalty_accounts")
+        .insert({ business_id: businessId, customer_id: customerId, points });
+    }
+  } catch (e) {
+    console.error("accrueLoyaltyPoints:", e);
+  }
 }
 
 export async function voidOrder(
