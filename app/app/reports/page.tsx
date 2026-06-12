@@ -92,7 +92,7 @@ export default async function ReportsPage({
   const tips = round2(orders.reduce((a, o) => a + o.tip, 0));
   const collected = round2(orders.reduce((a, o) => a + o.total, 0));
 
-  const payTotals: Record<string, number> = { cash: 0, card: 0, other: 0 };
+  const payTotals: Record<string, number> = { cash: 0, card: 0, gift_card: 0, store_credit: 0, other: 0 };
   let refunds = 0;
   const itemAgg: Record<string, { name: string; qty: number; revenue: number; catId: string | null }> = {};
   const catAgg: Record<string, { qty: number; revenue: number }> = {};
@@ -108,15 +108,13 @@ export default async function ReportsPage({
       const m = (p.method as string) || "other";
       const amt = Number(p.amount) || 0;
       paidOrderIds.add(p.order_id as string);
-      if (m === "cash") payTotals.cash += amt;
-      else if (m === "card") payTotals.card += amt;
+      if (payTotals[m] !== undefined) payTotals[m] += amt;
       else payTotals.other += amt;
     }
     for (const o of orders) {
       if (paidOrderIds.has(o.id)) continue;
       const m = o.payment_method;
-      if (m === "cash") payTotals.cash += o.total;
-      else if (m === "card") payTotals.card += o.total;
+      if (payTotals[m] !== undefined) payTotals[m] += o.total;
       else payTotals.other += o.total;
     }
 
@@ -176,6 +174,8 @@ export default async function ReportsPage({
   const net = round2(collected - refunds);
   const cash = round2(payTotals.cash);
   const card = round2(payTotals.card);
+  const giftCard = round2(payTotals.gift_card);
+  const storeCredit = round2(payTotals.store_credit);
   const other = round2(payTotals.other);
 
   const topItems = Object.keys(itemAgg)
@@ -334,6 +334,18 @@ export default async function ReportsPage({
             <div className="text-muted-foreground text-xs">Card</div>
             <div className="tabular-nums">{money(card)}</div>
           </div>
+          {giftCard > 0 && (
+            <div>
+              <div className="text-muted-foreground text-xs">Gift card</div>
+              <div className="tabular-nums">{money(giftCard)}</div>
+            </div>
+          )}
+          {storeCredit > 0 && (
+            <div>
+              <div className="text-muted-foreground text-xs">Store credit</div>
+              <div className="tabular-nums">{money(storeCredit)}</div>
+            </div>
+          )}
           <div>
             <div className="text-muted-foreground text-xs">Other</div>
             <div className="tabular-nums">{money(other)}</div>

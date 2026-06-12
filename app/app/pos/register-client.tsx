@@ -157,6 +157,8 @@ function methodLabel(m: string): string {
   if (m === "cash") return "Cash";
   if (m === "card") return "Card";
   if (m === "split") return "Split";
+  if (m === "gift_card") return "Gift card";
+  if (m === "store_credit") return "Store credit";
   return "Other";
 }
 
