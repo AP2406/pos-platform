@@ -64,6 +64,7 @@ export function FloorClient({
   initialTogo,
   staff,
   sections = [],
+  aging = { yellowMin: 30, redMin: 50 },
 }: {
   register: RegisterProps;
   plans: FloorPlan[];
@@ -72,6 +73,7 @@ export function FloorClient({
   initialTogo: TogoTicketSummary[];
   staff: StaffMember[];
   sections?: { id: string; name: string; color: string | null; server: string | null }[];
+  aging?: { yellowMin: number; redMin: number };
 }) {
   const sectionById = new Map(sections.map((s) => [s.id, s]));
   const [elements, setElements] = useState<FloorElement[]>(initialElements);
@@ -386,12 +388,13 @@ export function FloorClient({
     return "bg-transparent text-muted-foreground";
   }
 
-  // Turn-time status: seated → warn (30m+) → late (50m+).
+  // Turn-time status: seated → warn (yellow) → late (red). Thresholds are
+  // configurable in Settings (businesses.settings.table_aging).
   function tableStatus(open: TableTicketSummary | undefined): "available" | "seated" | "warn" | "late" {
     if (!open) return "available";
     const m = minutesOpen(open.opened_at);
-    if (m >= 50) return "late";
-    if (m >= 30) return "warn";
+    if (m >= aging.redMin) return "late";
+    if (m >= aging.yellowMin) return "warn";
     return "seated";
   }
   function statusClass(s: "available" | "seated" | "warn" | "late"): string {
@@ -406,9 +409,9 @@ export function FloorClient({
   // Live summary for the toolbar.
   const ringEls = elements.filter((e) => isRingable(e.kind));
   const seatedCount = ringEls.filter((e) => openByElement[e.id]).length;
-  const over45 = ringEls.filter((e) => {
+  const overdue = ringEls.filter((e) => {
     const o = openByElement[e.id];
-    return o && minutesOpen(o.opened_at) >= 45;
+    return o && minutesOpen(o.opened_at) >= aging.redMin;
   }).length;
 
   return (
@@ -427,7 +430,7 @@ export function FloorClient({
         )}
         {ringEls.length > 0 && (
           <span className="text-xs text-muted-foreground hidden md:inline tabular-nums">
-            {seatedCount + " of " + ringEls.length + " seated" + (over45 > 0 ? "  ·  " + over45 + " over 45m" : "")}
+            {seatedCount + " of " + ringEls.length + " seated" + (overdue > 0 ? "  ·  " + overdue + " over " + aging.redMin + "m" : "")}
           </span>
         )}
         <div className="ml-auto flex items-center gap-2">
