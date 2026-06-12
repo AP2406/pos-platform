@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket } from "./actions";
+import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady } from "./actions";
 import { printReceiptHtml } from "../pos/qz-print";
 
 function ticketHtml(o: { tableLabel: string | null; id: string; createdAt: string; items: { name: string; quantity: number; note?: string | null }[] }): string {
@@ -27,7 +27,7 @@ function esc(s: string): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-type KitchenItem = { name: string; quantity: number; note?: string | null; seat?: number | null };
+type KitchenItem = { name: string; quantity: number; note?: string | null; seat?: number | null; ready?: boolean };
 type KitchenStation = { id: string; name: string; sort_order: number };
 type KitchenOrder = {
   id: string;
@@ -209,6 +209,21 @@ export function KitchenClient({
     });
   }
 
+  // P1-17: toggle a single line ready as it's plated (optimistic, then persist).
+  function handleItemReady(ticketId: string, index: number, ready: boolean) {
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === ticketId
+          ? { ...o, items: o.items.map((it, i) => (i === index ? { ...it, ready } : it)) }
+          : o
+      )
+    );
+    startTransition(async () => {
+      const res = await setKitchenItemReady(ticketId, index, ready);
+      if ("error" in res) refresh();
+    });
+  }
+
   // P1-16: bump every ticket of one table from the expo view.
   function handleBumpTable(ids: string[]) {
     const set = new Set(ids);
@@ -243,6 +258,7 @@ export function KitchenClient({
     const m = new Map<string, number>();
     for (const o of visible) {
       for (const it of o.items) {
+        if (it.ready) continue; // already plated — no longer "to make"
         const base = it.name.replace(/\s*\(\+[^)]*\)\s*$/, "").trim();
         if (!base) continue;
         m.set(base, (m.get(base) ?? 0) + (Number(it.quantity) || 0));
@@ -347,15 +363,34 @@ export function KitchenClient({
           {o.items.length === 0 ? (
             <div className="text-xs text-muted-foreground">Loading items...</div>
           ) : (
-            o.items.map((it, i) => (
-              <div key={i} className="flex flex-col">
-                <div className="flex justify-between">
-                  <span className="truncate">{(it.seat ? "S" + it.seat + " · " : "") + it.name}</span>
-                  <span className="tabular-nums text-muted-foreground">{"x" + it.quantity}</span>
+            o.items.map((it, i) =>
+              // P1-17: on a fired ticket, tap a line to mark it ready as it's plated.
+              o.kind === "kitchen" ? (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => handleItemReady(o.id, i, !it.ready)}
+                  className="w-full text-left flex flex-col rounded px-1 -mx-1 hover:bg-accent"
+                >
+                  <div className="flex justify-between items-center gap-2">
+                    <span className={"truncate flex items-center gap-1.5 " + (it.ready ? "line-through text-muted-foreground" : "")}>
+                      <span className={"inline-block w-3 text-emerald-600"}>{it.ready ? "✓" : ""}</span>
+                      {(it.seat ? "S" + it.seat + " · " : "") + it.name}
+                    </span>
+                    <span className={"tabular-nums " + (it.ready ? "text-muted-foreground line-through" : "text-muted-foreground")}>{"x" + it.quantity}</span>
+                  </div>
+                  {it.note ? <span className="text-xs text-amber-600 pl-2">{"→ " + it.note}</span> : null}
+                </button>
+              ) : (
+                <div key={i} className="flex flex-col">
+                  <div className="flex justify-between">
+                    <span className="truncate">{(it.seat ? "S" + it.seat + " · " : "") + it.name}</span>
+                    <span className="tabular-nums text-muted-foreground">{"x" + it.quantity}</span>
+                  </div>
+                  {it.note ? <span className="text-xs text-amber-600 pl-2">{"→ " + it.note}</span> : null}
                 </div>
-                {it.note ? <span className="text-xs text-amber-600 pl-2">{"→ " + it.note}</span> : null}
-              </div>
-            ))
+              )
+            )
           )}
         </div>
         <div className="flex gap-2 mt-3">
@@ -423,8 +458,8 @@ export function KitchenClient({
                       {t.items.map((it, i) => (
                         <div key={i} className="flex flex-col">
                           <div className="flex justify-between">
-                            <span className="truncate">{(it.seat ? "S" + it.seat + " · " : "") + it.name}</span>
-                            <span className="tabular-nums text-muted-foreground">{"x" + it.quantity}</span>
+                            <span className={"truncate " + (it.ready ? "line-through text-muted-foreground" : "")}>{(it.seat ? "S" + it.seat + " · " : "") + it.name}</span>
+                            <span className={"tabular-nums text-muted-foreground " + (it.ready ? "line-through" : "")}>{"x" + it.quantity}</span>
                           </div>
                           {it.note ? <span className="text-xs text-amber-600 pl-2">{"→ " + it.note}</span> : null}
                         </div>

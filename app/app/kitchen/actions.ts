@@ -62,6 +62,46 @@ export async function refireKitchenTicket(
   return { ok: true };
 }
 
+// P1-17: mark a single line on a fired ticket ready (or un-ready) as the cook
+// plates it. Stored as a `ready` flag inside the items jsonb — that array is the
+// fired kitchen snapshot, never a financial record, so mutating it is safe.
+export async function setKitchenItemReady(
+  ticketId: string,
+  index: number,
+  ready: boolean
+): Promise<{ ok: true } | { error: string }> {
+  if (!ticketId) return { error: "Missing ticket." };
+
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data: t } = await supabase
+    .from("kitchen_tickets")
+    .select("items")
+    .eq("id", ticketId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!t) return { error: "That ticket is gone." };
+
+  const items = Array.isArray(t.items) ? (t.items as Record<string, unknown>[]) : [];
+  if (index < 0 || index >= items.length) return { error: "Item not found." };
+  items[index] = { ...items[index], ready };
+
+  const { error } = await supabase
+    .from("kitchen_tickets")
+    .update({ items })
+    .eq("id", ticketId)
+    .eq("business_id", business.id);
+
+  if (error) {
+    console.error("setKitchenItemReady:", error);
+    return { error: "Could not update the item." };
+  }
+
+  revalidatePath("/app/kitchen");
+  return { ok: true };
+}
+
 // P1-16: bump every open ticket for one table at once from the expo view, so the
 // expediter can send the whole table out when it's plated. Orders/revenue untouched.
 export async function markKitchenTicketsFulfilled(
