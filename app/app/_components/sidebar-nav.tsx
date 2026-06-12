@@ -18,6 +18,7 @@ import {
   Coins,
   Clock,
   Mail,
+  CalendarClock,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,6 +38,7 @@ const iconMap: Record<string, LucideIcon> = {
   "/app/tips": Coins,
   "/app/clock": Clock,
   "/app/marketing": Mail,
+  "/app/reservations": CalendarClock,
 };
 
 type NavItem = { href: string; label: string };
