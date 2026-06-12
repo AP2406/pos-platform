@@ -24,8 +24,17 @@ const paymentLineSchema = z.object({
   tendered: z.coerce.number().min(0).max(1000000).optional().nullable(),
 });
 
+const voidLineSchema = z.object({
+  name: z.string().min(1).max(120),
+  unit_price: z.coerce.number().min(0).max(1000000),
+  quantity: z.coerce.number().int().min(1).max(1000),
+  reason_code: z.string().max(60).optional(),
+  reason_note: z.string().max(500).optional(),
+});
+
 const orderSchema = z.object({
   items: z.array(lineSchema).min(1, "Add at least one item."),
+  voids: z.array(voidLineSchema).optional(),
   tip: z.coerce.number().min(0).max(1000000).optional(),
   payment_method: z.enum(["cash", "card", "other"]).optional(),
   payments: z.array(paymentLineSchema).optional(),
@@ -60,6 +69,7 @@ type OrderInput = {
     unit_price: number;
     quantity: number;
   }[];
+  voids?: { name: string; unit_price: number; quantity: number; reason_code?: string; reason_note?: string }[];
   tip?: number;
   payment_method?: "cash" | "card" | "other";
   payments?: PaymentInput[];
@@ -204,6 +214,11 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     (sum, i) => sum + i.unit_price * i.quantity,
     0
   );
+
+  // Voided items (not made): recorded for accountability but never charged or
+  // inventoried. They don't touch the totals — only void_total + the snapshot.
+  const voidLines = parsed.data.voids ?? [];
+  const voidTotal = Math.round(voidLines.reduce((s, v) => s + v.unit_price * v.quantity, 0) * 100) / 100;
 
   const discountType = parsed.data.discount_type ?? "amount";
   const discountValue = parsed.data.discount_value ?? 0;
@@ -444,6 +459,10 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       reason_code: comp > 0 ? compReasonCode : null,
       reason_note: comp > 0 && compReasonNote ? compReasonNote : null,
     },
+    voids: {
+      total: voidTotal,
+      lines: voidLines.map((v) => ({ name: v.name, unit_price: v.unit_price, quantity: v.quantity, reason_code: (v.reason_code || "").trim() || null, reason_note: (v.reason_note || "").trim() || null })),
+    },
     tax: { rate: rate, amount: tax, taxable_base: taxableBase, breakdown: taxBreakdown, exempt: taxExemptInfo },
     service_charge: {
       applied: scApplied,
@@ -504,6 +523,17 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       metadata: { amount: comp, staff_id: activeStaffId, staff_name: activeStaffName },
     });
   }
+  for (const v of voidLines) {
+    if (isTraining) break;
+    auditEvents.push({
+      actor_id: authUserId,
+      actor_role: role,
+      action: "void",
+      reason_code: (v.reason_code || "").trim() || null,
+      reason_note: (v.reason_note || "").trim() ? (v.reason_note as string).trim().slice(0, 500) : null,
+      metadata: { name: v.name, amount: Math.round(v.unit_price * v.quantity * 100) / 100, quantity: v.quantity, staff_id: activeStaffId, staff_name: activeStaffName },
+    });
+  }
   if (scWaived && !isTraining) {
     auditEvents.push({
       actor_id: authUserId,
@@ -551,6 +581,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     discount: discount,
     comp: comp,
     service_charge: serviceCharge,
+    void_total: voidTotal,
     total: total,
     payment_method: orderPaymentMethod,
     customer_id: customerId,

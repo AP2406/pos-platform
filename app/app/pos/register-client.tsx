@@ -17,6 +17,7 @@ import {
   closeTableTicket,
   sendTableTicket,
   fireCourse,
+  sendVoidNotice,
   splitTicketIntoChildren,
   listOpenTableTargets,
   transferLineToTicket,
@@ -28,7 +29,7 @@ import {
 } from "./ticket-actions";
 import { markOrderFulfilled } from "../kitchen/actions";
 import { setCatalogItemOutOfStock } from "../catalog/actions";
-import { DISCOUNT_REASONS, COMP_REASONS, SERVICE_CHARGE_WAIVE_REASONS, TAX_EXEMPT_REASONS } from "./reason-codes";
+import { DISCOUNT_REASONS, COMP_REASONS, SERVICE_CHARGE_WAIVE_REASONS, TAX_EXEMPT_REASONS, VOID_REASONS } from "./reason-codes";
 import { setActiveStaff, clearActiveStaff, type ActiveStaff } from "./staff-session";
 import { CardPaymentModal } from "./card-payment-modal";
 import { getCardConfig } from "./finix-pos-actions";
@@ -61,6 +62,8 @@ type CartLine = {
   // Coursing (P0-1): which course this line fires with, and when last fired.
   course_id?: string | null;
   fired_at?: string | null;
+  // P0-10: a voided line (not made) — kept for the record, excluded from totals.
+  void?: { reason_code?: string; reason_note?: string } | null;
 };
 // Binding when the register is opened for a specific full-service table or to-go.
 type TableBinding = { tableId: string; ticketId: string; tableLabel: string; serverName?: string | null; seatCount?: number | null; guestCount?: number | null };
@@ -97,6 +100,7 @@ type CardModalState = {
   amount: number;
   order: {
     items: CartLine[];
+    voids?: { name: string; unit_price: number; quantity: number; reason_code?: string; reason_note?: string }[];
     tip?: number;
     discount_type: "amount" | "percent";
     discount_value: number;
@@ -179,6 +183,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
       seat: it.seat ?? null,
       course_id: it.course_id ?? null,
       fired_at: it.fired_at ?? null,
+      void: it.void ?? null,
     };
   });
 }
@@ -597,6 +602,28 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setCart((prev) => prev.map((l, i) => (i === index ? { ...l, course_id: courseId } : l)));
   }
 
+  // P0-10: void a line (not made). Kept on the check for the record, excluded
+  // from totals; if it was already fired, the kitchen is told to stop.
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [voidReason, setVoidReason] = useState("");
+  function voidLine(index: number, reasonCode: string) {
+    const line = cart[index];
+    if (!line) return;
+    const firedQty = line.sent_qty ?? 0;
+    setCart((prev) => prev.map((l, i) => (i === index ? { ...l, void: { reason_code: reasonCode } } : l)));
+    if (firedQty > 0 && tableBinding) {
+      startTransition(async () => {
+        await sendVoidNotice(tableBinding.ticketId, { name: line.name, quantity: firedQty });
+      });
+    }
+    setVoidOpen(false);
+    setVoidReason("");
+    setEditLineIndex(null);
+  }
+  function unvoidLine(index: number) {
+    setCart((prev) => prev.map((l, i) => (i === index ? { ...l, void: null } : l)));
+  }
+
   // P0-6: move a line to another open check.
   const [moveTargets, setMoveTargets] = useState<{ ticketId: string; label: string }[]>([]);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -666,8 +693,8 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   function renderLine(line: CartLine, index: number) {
     return (
       <div key={index} className="flex items-center gap-2">
-        <button type="button" onClick={() => { setEditLineIndex(index); setMoveOpen(false); }} className="min-w-0 flex-1 text-left">
-          <div className="text-sm font-medium truncate">{line.name}</div>
+        <button type="button" onClick={() => { setEditLineIndex(index); setMoveOpen(false); setVoidOpen(false); }} className="min-w-0 flex-1 text-left">
+          <div className={"text-sm font-medium truncate " + (line.void ? "line-through text-muted-foreground" : "")}>{line.name}{line.void ? "  · Void" : ""}</div>
           <div className="text-xs text-muted-foreground">
             {"$" + line.unit_price.toFixed(2) + " each" + (line.taxable ? "" : "  " + "·" + "  Tax-free") + (line.note ? "  " + "·" + "  " + line.note : "")}
           </div>
@@ -685,7 +712,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
           <span className="w-6 text-center text-sm tabular-nums">{line.quantity}</span>
           <button type="button" onClick={() => changeQty(index, 1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">+</button>
         </div>
-        <div className="w-16 text-right text-sm font-semibold tabular-nums shrink-0">{"$" + (line.unit_price * line.quantity).toFixed(2)}</div>
+        <div className={"w-16 text-right text-sm font-semibold tabular-nums shrink-0 " + (line.void ? "line-through text-muted-foreground" : "")}>{"$" + (line.unit_price * line.quantity).toFixed(2)}</div>
       </div>
     );
   }
@@ -742,6 +769,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         seat: l.seat ?? null,
         course_id: l.course_id ?? null,
         fired_at: l.fired_at ?? null,
+        void: l.void ?? null,
       })),
       tip: tip,
       discount_mode: discountMode,
@@ -1091,7 +1119,10 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setCustomerResults([]);
   }
 
-  const subtotal = cart.reduce((sum, l) => sum + l.unit_price * l.quantity, 0);
+  // Voided lines are kept in the cart for the record but excluded from charge.
+  const subtotal = cart.reduce((sum, l) => sum + (l.void ? 0 : l.unit_price * l.quantity), 0);
+  const voidLines = cart.filter((l) => l.void);
+  const voidTotalAmt = Math.round(voidLines.reduce((s, l) => s + l.unit_price * l.quantity, 0) * 100) / 100;
 
   const discountInput = parseFloat(discountValue) || 0;
   let discount = discountMode === "percent" ? subtotal * (discountInput / 100) : discountInput;
@@ -1112,6 +1143,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
 
   const taxBucketsPreview: Record<string, number> = {};
   for (const l of cart) {
+    if (l.void) continue;
     if (!l.taxable) continue;
     if (l.taxFrac <= 0) continue;
     const key = l.taxFrac.toFixed(6);
@@ -1157,7 +1189,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
 
   const cashierRole = staff ? (staff as { role?: string }).role : null;
   const needsManagerApproval =
-    hasStaff && !!staff && (discount > 0 || taxExempt || comp > 0 || scWaived) && cashierRole !== "manager";
+    hasStaff && !!staff && (discount > 0 || taxExempt || comp > 0 || scWaived || voidLines.length > 0) && cashierRole !== "manager";
 
   function snapshot(): Snap {
     return {
@@ -1209,7 +1241,8 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
 
   function commonOrderFields() {
     return {
-      items: cart,
+      items: cart.filter((l) => !l.void),
+      voids: voidLines.length > 0 ? voidLines.map((l) => ({ name: l.name, unit_price: l.unit_price, quantity: l.quantity, reason_code: l.void?.reason_code, reason_note: l.void?.reason_note })) : undefined,
       tip: tipNum,
       idempotency_key: nextIdemKey(),
       discount_type: discountMode,
@@ -1349,7 +1382,8 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     setCardModal({
       amount: total,
       order: {
-        items: cart,
+        items: cart.filter((l) => !l.void),
+        voids: voidLines.length > 0 ? voidLines.map((l) => ({ name: l.name, unit_price: l.unit_price, quantity: l.quantity, reason_code: l.void?.reason_code, reason_note: l.void?.reason_note })) : undefined,
         tip: tipNum,
         discount_type: discountMode,
         discount_value: discountInput,
@@ -2176,6 +2210,28 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                         )}
                       </div>
                     )}
+                  </div>
+                )}
+                {/* P0-10: void (recorded, manager-approved at charge) vs remove. */}
+                {cart[editLineIndex].void ? (
+                  <div className="mt-3 flex items-center justify-between rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+                    <span className="text-amber-700 dark:text-amber-500">Voided</span>
+                    <button type="button" onClick={() => unvoidLine(editLineIndex)} className="text-xs underline">Undo</button>
+                  </div>
+                ) : !voidOpen ? (
+                  <Button variant="outline" className="w-full mt-3" onClick={() => { setVoidReason(""); setVoidOpen(true); }}>Void item</Button>
+                ) : (
+                  <div className="mt-3 space-y-1 rounded-md border border-border p-2">
+                    <Label className="text-xs">Void reason</Label>
+                    <select value={voidReason} onChange={(e) => setVoidReason(e.target.value)} className="w-full h-9 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
+                      <option value="">Select a reason…</option>
+                      {VOID_REASONS.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
+                    </select>
+                    <p className="text-[11px] text-muted-foreground">{(cart[editLineIndex].sent_qty ?? 0) > 0 ? "This was fired — the kitchen will be told to stop." : "Recorded but not charged."} Needs a manager at checkout.</p>
+                    <div className="flex gap-2">
+                      <Button variant="outline" className="flex-1 h-9" onClick={() => setVoidOpen(false)}>Cancel</Button>
+                      <Button className="flex-1 h-9" disabled={!voidReason} onClick={() => voidLine(editLineIndex, voidReason)}>Void</Button>
+                    </div>
                   </div>
                 )}
                 <Button variant="outline" className="w-full mt-3 text-red-600" onClick={() => removeLine(editLineIndex)}>

@@ -184,6 +184,8 @@ const tableCartLineSchema = cartLineSchema.extend({
   // it was last fired. Kitchen routing only — never affects totals.
   course_id: z.string().uuid().optional().nullable(),
   fired_at: z.string().max(40).optional().nullable(),
+  // P0-10: voided line (kept for the record, excluded from charge).
+  void: z.object({ reason_code: z.string().max(60).optional(), reason_note: z.string().max(500).optional() }).nullable().optional(),
 });
 const tableCartSchema = z.object({
   items: z.array(tableCartLineSchema).max(200),
@@ -584,6 +586,38 @@ export async function fireCourse(
   if (updErr) console.error("fireCourse update:", updErr);
 
   return { ok: true, fired: fired.reduce((s, f) => s + f.quantity, 0) };
+}
+
+// P0-10: tell the kitchen an already-fired item was voided (stop making it).
+// Posts a distinct VOID kitchen ticket; the line stays recorded on the check.
+export async function sendVoidNotice(
+  ticketId: string,
+  item: { name: string; quantity: number }
+): Promise<{ ok: true } | { error: string }> {
+  if (!ticketId) return { error: "Missing ticket." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: ticket } = await supabase
+    .from("open_tickets").select("id, element_id, label")
+    .eq("id", ticketId).eq("business_id", business.id).maybeSingle();
+  if (!ticket) return { error: "That ticket is no longer open." };
+  const elementId = (ticket.element_id as string | null) ?? null;
+  let label = (ticket.label as string | null) ?? null;
+  if (elementId) {
+    const { data: el } = await supabase.from("floor_elements").select("label").eq("id", elementId).eq("business_id", business.id).maybeSingle();
+    if (el && el.label) label = el.label as string;
+  }
+  await supabase.from("kitchen_tickets").insert({
+    business_id: business.id,
+    element_id: elementId,
+    label: "VOID · " + (label || "Ticket"),
+    items: [{ name: item.name, quantity: item.quantity, void: true }],
+    created_by: user ? user.id : null,
+  });
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------
