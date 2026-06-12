@@ -38,6 +38,7 @@ import { TenderSheet } from "./tender-sheet";
 import { getPrinterConfig, printReceiptHtml } from "./qz-print";
 import { buildReceiptHtml, type ReceiptSettings } from "./receipt-template";
 import { RegisterRefund } from "./register-refund";
+import { useOnlineStatus } from "./use-online";
 import Link from "next/link";
 import { tileClassesFor } from "./category-colors";
 
@@ -192,6 +193,30 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
 
 export function RegisterClient({ items, taxRate, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, tableBinding, initialTableCart, onExitToFloor, staffList }: { items: Item[]; taxRate: number; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[] }) {
   const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
+  const online = useOnlineStatus();
+  // P1-22: back up the quick-service cart (no table/tab — nothing server-side
+  // until it's paid) to localStorage, so a reload or crash recovers the sale.
+  // Table/to-go/tab carts already persist on the server, so they skip this.
+  const draftKey = !tableBinding && businessId ? "surge_draft_cart_" + businessId : null;
+  const draftRestored = useRef(false);
+  useEffect(() => {
+    if (!draftKey || draftRestored.current) return;
+    draftRestored.current = true;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const saved = JSON.parse(raw) as CartLine[];
+        if (Array.isArray(saved) && saved.length > 0) setCart(saved);
+      }
+    } catch {}
+  }, [draftKey]);
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      if (cart.length > 0) localStorage.setItem(draftKey, JSON.stringify(cart));
+      else localStorage.removeItem(draftKey);
+    } catch {}
+  }, [draftKey, cart]);
   const [tip, setTip] = useState(initialTableCart?.tip ?? "");
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">(initialTableCart?.discount_mode === "percent" ? "percent" : "amount");
   const [discountValue, setDiscountValue] = useState(initialTableCart?.discount_value ?? "");
@@ -1922,6 +1947,13 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         </div>
       ) : (
         <div className="h-full flex flex-col">
+          {/* P1-22: offline warning — payment and firing need a connection. */}
+          {!online && (
+            <div className="shrink-0 flex items-center gap-2 bg-amber-500/15 border-b border-amber-500/40 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+              You&apos;re offline. Keep building the check &mdash; firing and payment will resume when you&apos;re back online.
+            </div>
+          )}
           {/* Slim dark top bar */}
           <div className="shrink-0 flex items-center justify-between gap-3 h-12 px-3 bg-sidebar text-sidebar-foreground border-b border-sidebar-border">
             <div className="min-w-0 flex items-baseline gap-2">
