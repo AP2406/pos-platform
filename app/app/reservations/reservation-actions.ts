@@ -48,6 +48,44 @@ export async function listReservations(): Promise<Reservation[]> {
   return (data ?? []).map(mapRow);
 }
 
+// Compact summary for the POS floor: how many are waiting + the next booking.
+export type ReservationSummary = {
+  waitlist: number;
+  next: { name: string; at: string; party: number } | null;
+};
+
+export async function getReservationSummary(): Promise<ReservationSummary> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const nowIso = new Date().toISOString();
+  const [waitRes, nextRes] = await Promise.all([
+    supabase
+      .from("reservations")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", business.id)
+      .eq("status", "waitlisted"),
+    supabase
+      .from("reservations")
+      .select("guest_name, scheduled_at, party_size")
+      .eq("business_id", business.id)
+      .eq("status", "booked")
+      .gte("scheduled_at", nowIso)
+      .order("scheduled_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  return {
+    waitlist: waitRes.count ?? 0,
+    next: nextRes.data
+      ? {
+          name: nextRes.data.guest_name as string,
+          at: nextRes.data.scheduled_at as string,
+          party: Number(nextRes.data.party_size) || 1,
+        }
+      : null,
+  };
+}
+
 export async function createReservation(input: {
   guest_name: string;
   party_size: number;

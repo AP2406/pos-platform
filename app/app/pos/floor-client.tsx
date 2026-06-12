@@ -52,6 +52,14 @@ const RINGABLE: ElementKind[] = ["table", "booth", "counter", "station"];
 function isRingable(kind: ElementKind): boolean {
   return RINGABLE.indexOf(kind) !== -1;
 }
+function fmtClock(iso: string): string {
+  const d = new Date(iso);
+  let h = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12; if (h === 0) h = 12;
+  return h + ":" + (m < 10 ? "0" + m : m) + " " + ampm;
+}
 function zFor(kind: ElementKind): number {
   if (kind === "room") return 0;
   if (kind === "wall") return 1;
@@ -67,6 +75,7 @@ export function FloorClient({
   initialOpen,
   initialTogo,
   initialTabs,
+  reservationSummary = { waitlist: 0, next: null },
   staff,
   sections = [],
   aging = { yellowMin: 30, redMin: 50 },
@@ -77,6 +86,7 @@ export function FloorClient({
   initialOpen: TableTicketSummary[];
   initialTogo: TogoTicketSummary[];
   initialTabs: BarTabSummary[];
+  reservationSummary?: { waitlist: number; next: { name: string; at: string; party: number } | null };
   staff: StaffMember[];
   sections?: { id: string; name: string; color: string | null; server: string | null }[];
   aging?: { yellowMin: number; redMin: number };
@@ -511,6 +521,19 @@ export function FloorClient({
           )}
           {mergeableTables.length >= 2 && (
             <Button variant="outline" className="h-9 hidden sm:inline-flex" onClick={openMerge}>Merge</Button>
+          )}
+          {(reservationSummary.waitlist > 0 || reservationSummary.next) && (
+            <Link href="/app/reservations" className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-border text-sm hover:bg-accent">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+              {reservationSummary.waitlist > 0 && (
+                <span className="tabular-nums">Waitlist {reservationSummary.waitlist}</span>
+              )}
+              {reservationSummary.next && (
+                <span className="hidden md:inline text-muted-foreground truncate max-w-[140px]">
+                  {(reservationSummary.waitlist > 0 ? "· " : "") + "Next " + fmtClock(reservationSummary.next.at) + " " + reservationSummary.next.name}
+                </span>
+              )}
+            </Link>
           )}
           <Button variant="outline" className="h-9" onClick={() => { setTogoName(""); setTogoPhone(""); setTogoOpen(true); }}>New to-go</Button>
           <Button variant="outline" className="h-9" onClick={() => { setTabName(""); setTabOpen(true); }}>New tab</Button>

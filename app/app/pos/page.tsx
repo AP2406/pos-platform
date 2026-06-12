@@ -9,6 +9,7 @@ import { listSections } from "./sections-actions";
 import { listOpenTableTickets, listOpenTogoTickets, listOpenBarTabs } from "./ticket-actions";
 import { listCourses } from "./courses-actions";
 import { getLoyaltySettings } from "./loyalty-actions";
+import { getReservationSummary, type ReservationSummary } from "../reservations/reservation-actions";
 import { hasFloorService } from "@/lib/modules/modes";
 import type { ReceiptSettings } from "./receipt-template";
 
@@ -253,6 +254,7 @@ export default async function PosPage() {
   let openTables: Awaited<ReturnType<typeof listOpenTableTickets>> = [];
   let openTogo: Awaited<ReturnType<typeof listOpenTogoTickets>> = [];
   let openTabs: Awaited<ReturnType<typeof listOpenBarTabs>> = [];
+  let reservationSummary: ReservationSummary = { waitlist: 0, next: null };
   let serverStaff: { id: string; name: string }[] = [];
   let sections: { id: string; name: string; color: string | null; server: string | null }[] = [];
   if (showFloor) {
@@ -261,6 +263,7 @@ export default async function PosPage() {
     openTables = await listOpenTableTickets();
     openTogo = await listOpenTogoTickets();
     openTabs = await listOpenBarTabs();
+    reservationSummary = await getReservationSummary();
     sections = (await listSections()).map((s) => ({ id: s.id, name: s.name, color: s.color, server: s.server ? s.server.name : null }));
     const { data: staffData } = await supabase
       .from("staff_members")
@@ -299,6 +302,7 @@ export default async function PosPage() {
             initialOpen={openTables}
             initialTogo={openTogo}
             initialTabs={openTabs}
+            reservationSummary={reservationSummary}
             staff={serverStaff}
             sections={sections}
             aging={tableAging}
