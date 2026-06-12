@@ -14,6 +14,7 @@ import { listSections, listAssignableTables } from "../pos/sections-actions";
 import { TableAgingCard } from "./table-aging-card";
 import { StationsCard } from "./stations-card";
 import { listKitchenStations } from "../kitchen/stations-actions";
+import { GuestOrderingCard } from "./guest-ordering-card";
 import { ServiceChargeCard } from "./service-charge-card";
 import { SplitCard } from "./split-card";
 import { LoyaltyCard } from "./loyalty-card";
@@ -293,9 +294,17 @@ export default async function SettingsPage() {
             <SectionHeader>Table timers</SectionHeader>
             <TableAgingCard initial={tableAging} />
           </div>
-          <div className="bg-card border border-border rounded-lg p-6">
+          <div className="bg-card border border-border rounded-lg p-6 mb-4">
             <SectionHeader>Kitchen stations</SectionHeader>
             <StationsCard initial={stationsList} />
+          </div>
+          <div className="bg-card border border-border rounded-lg p-6">
+            <SectionHeader>Guest ordering (QR)</SectionHeader>
+            <GuestOrderingCard
+              businessId={business.id}
+              initialEnabled={(business as { guest_ordering_enabled?: boolean }).guest_ordering_enabled === true}
+              tables={floorElements.filter((e) => e.kind === "table" || e.kind === "booth").map((e) => ({ id: e.id, label: e.label ?? "Table" }))}
+            />
           </div>
         </>
       ),
