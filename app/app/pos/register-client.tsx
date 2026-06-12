@@ -852,6 +852,42 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     });
   }
 
+  // P1-19: "Repeat round" — re-add the most recently fired round (the lines that
+  // share the latest fired_at) as fresh, not-yet-sent lines, so another identical
+  // round can be fired with one tap. Falls back to repeating everything on the
+  // ticket if nothing has been coursed/fired with a timestamp yet.
+  const canRepeatRound =
+    tableMode && cart.some((l) => !l.void && (l.sent_qty ?? 0) > 0);
+  function repeatRound() {
+    setCart((prev) => {
+      const sent = prev.filter((l) => !l.void && (l.sent_qty ?? 0) > 0);
+      if (sent.length === 0) return prev;
+      const firedAts = sent.map((l) => l.fired_at).filter((x): x is string => !!x);
+      let round = sent;
+      if (firedAts.length > 0) {
+        const latest = firedAts.slice().sort().at(-1) ?? null;
+        round = sent.filter((l) => (l.fired_at ?? null) === latest);
+      }
+      if (round.length === 0) return prev;
+      const dupes: CartLine[] = round.map((l) => ({
+        catalog_item_id: l.catalog_item_id,
+        variation_id: l.variation_id,
+        name: l.name,
+        unit_price: l.unit_price,
+        quantity: l.quantity,
+        taxable: l.taxable,
+        taxFrac: l.taxFrac,
+        sent_qty: 0,
+        note: l.note ?? null,
+        seat: l.seat ?? null,
+        course_id: l.course_id ?? null,
+        fired_at: null,
+        void: null,
+      }));
+      return [...prev, ...dupes];
+    });
+  }
+
   // Coursing: how many items in a course still need firing, and the next course
   // with anything to fire (drives the "Fire [Course]" footer button).
   function courseUnsent(courseId: string): number {
@@ -2113,6 +2149,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                     )}
                     {coursingOn && unsentCount > 0 && (
                       <Button variant="outline" className="h-11 px-3" onClick={sendToKitchen} disabled={pending || sending} title="Fire everything now">Send all</Button>
+                    )}
+                    {canRepeatRound && (
+                      <Button variant="outline" className="h-11 px-3" onClick={repeatRound} disabled={pending || sending} title="Re-add the last round to fire again">Repeat round</Button>
                     )}
                     <Button variant="outline" className="flex-1 h-11" onClick={sendAndPay} disabled={pending}>
                       Send &amp; Pay
