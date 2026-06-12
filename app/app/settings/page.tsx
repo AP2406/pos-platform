@@ -16,6 +16,8 @@ import { StationsCard } from "./stations-card";
 import { listKitchenStations } from "../kitchen/stations-actions";
 import { ServiceChargeCard } from "./service-charge-card";
 import { SplitCard } from "./split-card";
+import { LoyaltyCard } from "./loyalty-card";
+import { getLoyaltySettings } from "../pos/loyalty-actions";
 import { hasFloorService } from "@/lib/modules/modes";
 import { listFloor, listFloorPlans } from "../floor/floor-actions";
 import { LeadInboxCard } from "./lead-inbox-card";
@@ -149,6 +151,9 @@ export default async function SettingsPage() {
       notifPrefs[r.type] = r.enabled;
     }
   }
+
+  const canLoyalty = role === "owner" || role === "manager";
+  const loyaltySettings = canLoyalty ? await getLoyaltySettings() : null;
 
   const sections: { key: string; label: string; content: ReactNode }[] = [];
 
@@ -319,6 +324,19 @@ export default async function SettingsPage() {
             </div>
           )}
         </>
+      ),
+    });
+  }
+
+  if (canLoyalty && loyaltySettings) {
+    sections.push({
+      key: "loyalty",
+      label: "Loyalty",
+      content: (
+        <div className="bg-card border border-border rounded-lg p-6">
+          <SectionHeader>Loyalty &amp; rewards</SectionHeader>
+          <LoyaltyCard initial={loyaltySettings} />
+        </div>
       ),
     });
   }
