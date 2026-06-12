@@ -9,9 +9,11 @@ import { RegisterClient } from "./register-client";
 import {
   openTableTicket,
   openTogoTicket,
+  openBarTab,
   loadTableTicket,
   listOpenTableTickets,
   listOpenTogoTickets,
+  listOpenBarTabs,
   listChildTickets,
   unsplitTicket,
   mergeTickets,
@@ -19,6 +21,7 @@ import {
   type TableCart,
   type TableTicketSummary,
   type TogoTicketSummary,
+  type BarTabSummary,
   type ChildTicket,
 } from "./ticket-actions";
 import { listFloor, type FloorElement, type ElementKind, type FloorPlan } from "../floor/floor-actions";
@@ -62,6 +65,7 @@ export function FloorClient({
   initialElements,
   initialOpen,
   initialTogo,
+  initialTabs,
   staff,
   sections = [],
   aging = { yellowMin: 30, redMin: 50 },
@@ -71,6 +75,7 @@ export function FloorClient({
   initialElements: FloorElement[];
   initialOpen: TableTicketSummary[];
   initialTogo: TogoTicketSummary[];
+  initialTabs: BarTabSummary[];
   staff: StaffMember[];
   sections?: { id: string; name: string; color: string | null; server: string | null }[];
   aging?: { yellowMin: number; redMin: number };
@@ -85,6 +90,7 @@ export function FloorClient({
     return m;
   });
   const [togo, setTogo] = useState<TogoTicketSummary[]>(initialTogo);
+  const [tabs, setTabs] = useState<BarTabSummary[]>(initialTabs);
   const [selected, setSelected] = useState<Selected | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +102,8 @@ export function FloorClient({
   const [togoOpen, setTogoOpen] = useState(false);
   const [togoName, setTogoName] = useState("");
   const [togoPhone, setTogoPhone] = useState("");
+  const [tabOpen, setTabOpen] = useState(false);
+  const [tabName, setTabName] = useState("");
   const [find, setFind] = useState("");
 
   // Server handoff (transfer all of one server's open tickets to another).
@@ -152,11 +160,12 @@ export function FloorClient({
   }, [canvasW, canvasH]);
 
   async function refreshOpen() {
-    const [rows, togoRows] = await Promise.all([listOpenTableTickets(), listOpenTogoTickets()]);
+    const [rows, togoRows, tabRows] = await Promise.all([listOpenTableTickets(), listOpenTogoTickets(), listOpenBarTabs()]);
     const m: Record<string, TableTicketSummary> = {};
     for (const t of rows) m[t.element_id] = t;
     setOpenByElement(m);
     setTogo(togoRows);
+    setTabs(tabRows);
   }
 
   function switchPlan(id: string) {
@@ -280,6 +289,39 @@ export function FloorClient({
     });
   }
 
+  // P1-20: bar tabs — table-less checks identified by a name only.
+  function startTab() {
+    setError(null);
+    const name = tabName.trim();
+    if (!name) {
+      setError("Enter a name for the tab.");
+      return;
+    }
+    setTabOpen(false);
+    startTransition(async () => {
+      const res = await openBarTab(name);
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      setSelected({ elementId: "", ticketId: res.ticketId, tableLabel: "Tab" + (res.name ? " · " + res.name : ""), cart: { items: [] }, serverName: null, seatCount: null, guestCount: null });
+      setTabName("");
+    });
+  }
+
+  function resumeTab(t: BarTabSummary) {
+    setError(null);
+    startTransition(async () => {
+      const res = await loadTableTicket(t.id);
+      if ("error" in res) {
+        setError(res.error);
+        await refreshOpen();
+        return;
+      }
+      setSelected({ elementId: "", ticketId: t.id, tableLabel: "Tab" + (t.name ? " · " + t.name : ""), cart: res.cart, serverName: t.server_name, seatCount: null, guestCount: null });
+    });
+  }
+
   function exitToFloor() {
     setSelected(null);
     refreshOpen();
@@ -371,11 +413,15 @@ export function FloorClient({
   const visibleTogo = togo.filter(
     (t) => !q || (t.name ?? "").toLowerCase().includes(q) || (t.server_name ?? "").toLowerCase().includes(q)
   );
+  const visibleTabs = tabs.filter(
+    (t) => !q || (t.name ?? "").toLowerCase().includes(q) || (t.server_name ?? "").toLowerCase().includes(q)
+  );
 
   // Open-ticket counts per server, for the handoff picker.
   const openCountByStaff: Record<string, number> = {};
   for (const t of Object.values(openByElement)) if (t.staff_id) openCountByStaff[t.staff_id] = (openCountByStaff[t.staff_id] || 0) + 1;
   for (const t of togo) if (t.staff_id) openCountByStaff[t.staff_id] = (openCountByStaff[t.staff_id] || 0) + 1;
+  for (const t of tabs) if (t.staff_id) openCountByStaff[t.staff_id] = (openCountByStaff[t.staff_id] || 0) + 1;
   const serversWithOpen = staff.filter((s) => (openCountByStaff[s.id] || 0) > 0);
 
   const ordered = [...elements].sort((a, b) => zFor(a.kind) - zFor(b.kind));
@@ -442,6 +488,7 @@ export function FloorClient({
             <Button variant="outline" className="h-9 hidden sm:inline-flex" onClick={openMerge}>Merge</Button>
           )}
           <Button variant="outline" className="h-9" onClick={() => { setTogoName(""); setTogoPhone(""); setTogoOpen(true); }}>New to-go</Button>
+          <Button variant="outline" className="h-9" onClick={() => { setTabName(""); setTabOpen(true); }}>New tab</Button>
           <Link href="/app" className="flex items-center gap-1.5 text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
             Exit
@@ -528,16 +575,32 @@ export function FloorClient({
         </div>
 
         {/* Takeout side column */}
-        {visibleTogo.length > 0 && (
+        {(visibleTogo.length > 0 || visibleTabs.length > 0) && (
           <aside className="shrink-0 w-52 border-l border-border bg-card overflow-y-auto p-2 space-y-2">
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground px-1 pt-1">Takeout</div>
-            {visibleTogo.map((t) => (
-              <button key={t.id} type="button" disabled={pending} onClick={() => resumeTogo(t)} className="w-full text-left rounded-lg border border-table-warn-border bg-table-warn-bg p-2.5 active:scale-[0.98] transition-transform">
-                <div className="font-medium text-sm truncate text-table-warn-fg">{t.name ?? "Takeout"}</div>
-                <div className="text-sm tabular-nums font-medium">{"$" + t.subtotal.toFixed(2)}</div>
-                <div className="text-[11px] text-muted-foreground truncate">{(t.phone ? t.phone + "  ·  " : "") + minutesOpen(t.opened_at) + " min"}</div>
-              </button>
-            ))}
+            {visibleTabs.length > 0 && (
+              <>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground px-1 pt-1">Bar tabs</div>
+                {visibleTabs.map((t) => (
+                  <button key={t.id} type="button" disabled={pending} onClick={() => resumeTab(t)} className="w-full text-left rounded-lg border border-border bg-accent/40 p-2.5 active:scale-[0.98] transition-transform">
+                    <div className="font-medium text-sm truncate">{t.name ?? "Tab"}</div>
+                    <div className="text-sm tabular-nums font-medium">{"$" + t.subtotal.toFixed(2)}</div>
+                    <div className="text-[11px] text-muted-foreground truncate">{(t.server_name ? t.server_name + "  ·  " : "") + minutesOpen(t.opened_at) + " min"}</div>
+                  </button>
+                ))}
+              </>
+            )}
+            {visibleTogo.length > 0 && (
+              <>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground px-1 pt-1">Takeout</div>
+                {visibleTogo.map((t) => (
+                  <button key={t.id} type="button" disabled={pending} onClick={() => resumeTogo(t)} className="w-full text-left rounded-lg border border-table-warn-border bg-table-warn-bg p-2.5 active:scale-[0.98] transition-transform">
+                    <div className="font-medium text-sm truncate text-table-warn-fg">{t.name ?? "Takeout"}</div>
+                    <div className="text-sm tabular-nums font-medium">{"$" + t.subtotal.toFixed(2)}</div>
+                    <div className="text-[11px] text-muted-foreground truncate">{(t.phone ? t.phone + "  ·  " : "") + minutesOpen(t.opened_at) + " min"}</div>
+                  </button>
+                ))}
+              </>
+            )}
           </aside>
         )}
       </div>
@@ -639,6 +702,22 @@ export function FloorClient({
               </div>
             </div>
             <Button className="w-full h-12" disabled={pending || !togoName.trim() || !togoPhone.trim()} onClick={startTogo}>Start takeout</Button>
+          </div>
+        </div>
+      )}
+
+      {tabOpen && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setTabOpen(false)}>
+          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium">New bar tab</h3>
+              <button type="button" onClick={() => setTabOpen(false)} className="text-xs text-muted-foreground underline">Cancel</button>
+            </div>
+            <div className="space-y-1 mb-3">
+              <Label className="text-xs">Tab name</Label>
+              <Input value={tabName} onChange={(e) => setTabName(e.target.value)} placeholder="Name or description" className="h-11" onKeyDown={(e) => { if (e.key === "Enter") startTab(); }} />
+            </div>
+            <Button className="w-full h-12" disabled={pending || !tabName.trim()} onClick={startTab}>Open tab</Button>
           </div>
         </div>
       )}

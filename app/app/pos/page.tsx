@@ -6,7 +6,7 @@ import { FloorClient } from "./floor-client";
 import { getActiveStaff } from "./staff-session";
 import { listFloor, listFloorPlans } from "../floor/floor-actions";
 import { listSections } from "./sections-actions";
-import { listOpenTableTickets, listOpenTogoTickets } from "./ticket-actions";
+import { listOpenTableTickets, listOpenTogoTickets, listOpenBarTabs } from "./ticket-actions";
 import { listCourses } from "./courses-actions";
 import { hasFloorService } from "@/lib/modules/modes";
 import type { ReceiptSettings } from "./receipt-template";
@@ -249,6 +249,7 @@ export default async function PosPage() {
   let floorElements: Awaited<ReturnType<typeof listFloor>>["elements"] = [];
   let openTables: Awaited<ReturnType<typeof listOpenTableTickets>> = [];
   let openTogo: Awaited<ReturnType<typeof listOpenTogoTickets>> = [];
+  let openTabs: Awaited<ReturnType<typeof listOpenBarTabs>> = [];
   let serverStaff: { id: string; name: string }[] = [];
   let sections: { id: string; name: string; color: string | null; server: string | null }[] = [];
   if (showFloor) {
@@ -256,6 +257,7 @@ export default async function PosPage() {
     if (floorPlans[0]) floorElements = (await listFloor(floorPlans[0].id)).elements;
     openTables = await listOpenTableTickets();
     openTogo = await listOpenTogoTickets();
+    openTabs = await listOpenBarTabs();
     sections = (await listSections()).map((s) => ({ id: s.id, name: s.name, color: s.color, server: s.server ? s.server.name : null }));
     const { data: staffData } = await supabase
       .from("staff_members")
@@ -293,6 +295,7 @@ export default async function PosPage() {
             initialElements={floorElements}
             initialOpen={openTables}
             initialTogo={openTogo}
+            initialTabs={openTabs}
             staff={serverStaff}
             sections={sections}
             aging={tableAging}

@@ -223,6 +223,18 @@ export type TogoTicketSummary = {
   server_name: string | null;
 };
 
+// P1-20: a bar tab is a table-less open check identified by a name — no phone
+// required (unlike to-go). It reuses the whole table cart / fire / pay pipeline.
+export type BarTabSummary = {
+  id: string;
+  name: string | null;
+  opened_at: string;
+  item_count: number;
+  subtotal: number;
+  staff_id: string | null;
+  server_name: string | null;
+};
+
 // Open a table: create its persistent ticket. If the table already has an open
 // ticket (unique index race), return that one instead of erroring.
 export async function openTableTicket(
@@ -1166,6 +1178,70 @@ export async function listOpenTogoTickets(): Promise<TogoTicketSummary[]> {
       id: t.id as string,
       name: (t.label as string | null) ?? null,
       phone: (t.customer_phone as string | null) ?? null,
+      opened_at: t.opened_at as string,
+      item_count: totals.item_count,
+      subtotal: totals.subtotal,
+      staff_id: staffId,
+      server_name: staffId ? names[staffId] ?? null : null,
+    };
+  });
+}
+
+// P1-20: open a bar tab — a table-less check identified by a name only.
+export async function openBarTab(
+  name?: string | null
+): Promise<{ ok: true; ticketId: string; name: string | null } | { error: string }> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const active = await getActiveStaff();
+
+  const label = name && name.trim() ? name.trim().slice(0, 80) : null;
+  if (!label) return { error: "Enter a name for the tab." };
+
+  const { data, error } = await supabase
+    .from("open_tickets")
+    .insert({
+      business_id: business.id,
+      ticket_type: "tab",
+      label: label,
+      staff_id: active ? active.id : null,
+      cart: { items: [] },
+      created_by: user ? user.id : null,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    console.error("openBarTab:", error);
+    return { error: "Could not open the tab. Please try again." };
+  }
+  return { ok: true, ticketId: data.id as string, name: label };
+}
+
+// Summaries of all currently-open bar tabs for the floor rail.
+export async function listOpenBarTabs(): Promise<BarTabSummary[]> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("open_tickets")
+    .select("id, label, opened_at, cart, staff_id")
+    .eq("business_id", business.id)
+    .eq("ticket_type", "tab");
+  if (error) {
+    console.error("listOpenBarTabs:", error);
+    return [];
+  }
+
+  const names = await serverNames(supabase, business.id, (data ?? []).map((t) => (t.staff_id as string | null) ?? null));
+  return (data ?? []).map((t) => {
+    const totals = cartTotals(t.cart);
+    const staffId = (t.staff_id as string | null) ?? null;
+    return {
+      id: t.id as string,
+      name: (t.label as string | null) ?? null,
       opened_at: t.opened_at as string,
       item_count: totals.item_count,
       subtotal: totals.subtotal,
