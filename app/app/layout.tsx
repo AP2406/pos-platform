@@ -4,6 +4,7 @@ import { AppShell } from "./_components/app-shell";
 import { AssistantWidget } from "./_components/assistant-widget";
 import { VocabProvider } from "./_components/vocab-provider";
 import { resolveNav, getVocab, getFields } from "@/lib/modules/resolve";
+import { hasFloorService } from "@/lib/modules/modes";
 
 export default async function AppLayout({
   children,
@@ -28,6 +29,10 @@ export default async function AppLayout({
   const extras: { href: string; label: string }[] = [];
   if (hasPos) {
     extras.push({ href: "/app/reports", label: "Reports" });
+    // Full-service tip pooling, owner/manager only.
+    if (hasFloorService(business) && (role === "owner" || role === "manager")) {
+      extras.push({ href: "/app/tips", label: "Tips" });
+    }
     if (role === "owner" || role === "manager") {
       extras.push({ href: "/app/audit", label: "Activity log" });
     }

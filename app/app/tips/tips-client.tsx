@@ -1,0 +1,209 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  saveTipPoolSettings,
+  computeTipPool,
+  type TipPoolSettings,
+  type TipPoolResult,
+  type TipSplitMethod,
+} from "./tip-actions";
+
+const money = (n: number) => "$" + (Number(n) || 0).toFixed(2);
+
+const METHOD_LABELS: Record<TipSplitMethod, string> = {
+  by_sales: "By sales (share of their net sales)",
+  by_tips: "By tips (share of tips they brought in)",
+  equal: "Equal (split evenly among servers)",
+};
+
+export function TipsClient({
+  initialSettings,
+  today,
+}: {
+  initialSettings: TipPoolSettings;
+  today: string;
+}) {
+  const [tipouts, setTipouts] = useState(initialSettings.tipouts);
+  const [method, setMethod] = useState<TipSplitMethod>(initialSettings.method);
+  const [newRole, setNewRole] = useState("");
+  const [newPct, setNewPct] = useState("");
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  const [date, setDate] = useState(today);
+  const [result, setResult] = useState<TipPoolResult | null>(null);
+  const [runErr, setRunErr] = useState<string | null>(null);
+  const [running, startRun] = useTransition();
+
+  const totalPct = tipouts.reduce((s, r) => s + r.percent, 0);
+
+  function addRule() {
+    const role = newRole.trim();
+    const pct = Number(newPct);
+    if (!role || !Number.isFinite(pct) || pct <= 0) return;
+    setTipouts((prev) => [...prev, { role, percent: Math.min(100, pct) }]);
+    setNewRole("");
+    setNewPct("");
+    setSaved(false);
+  }
+
+  function removeRule(i: number) {
+    setTipouts((prev) => prev.filter((_, idx) => idx !== i));
+    setSaved(false);
+  }
+
+  function save() {
+    setSaveErr(null);
+    startTransition(async () => {
+      const res = await saveTipPoolSettings({ tipouts, method });
+      if ("error" in res) {
+        setSaveErr(res.error);
+        return;
+      }
+      setSaved(true);
+    });
+  }
+
+  function run() {
+    setRunErr(null);
+    startRun(async () => {
+      const res = await computeTipPool(date);
+      if ("error" in res) {
+        setRunErr(res.error);
+        setResult(null);
+        return;
+      }
+      setResult(res);
+    });
+  }
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      {/* Tip-out rules */}
+      <div className="bg-card border border-border rounded-lg p-6 space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold">Tip-out rules</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Each support role takes a percentage of the day&apos;s total tips before the rest is split among servers.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          {tipouts.map((r, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="flex-1 text-sm">{r.role}</span>
+              <span className="tabular-nums text-sm w-16 text-right">{r.percent}%</span>
+              <button type="button" onClick={() => removeRule(i)} disabled={pending} className="text-xs text-red-600 underline">
+                Remove
+              </button>
+            </div>
+          ))}
+          {tipouts.length === 0 && (
+            <p className="text-xs text-muted-foreground">No tip-outs — servers keep the full pool.</p>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Role</Label>
+            <Input value={newRole} onChange={(e) => setNewRole(e.target.value)} placeholder="Kitchen" className="h-9 w-40" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Percent</Label>
+            <Input value={newPct} onChange={(e) => setNewPct(e.target.value)} placeholder="10" inputMode="decimal" className="h-9 w-24" />
+          </div>
+          <Button variant="outline" onClick={addRule} disabled={pending}>Add</Button>
+          <span className={"text-xs ml-auto " + (totalPct >= 100 ? "text-red-600" : "text-muted-foreground")}>
+            Total tip-out: {totalPct}%
+          </span>
+        </div>
+
+        <div className="space-y-1 pt-2 border-t border-border">
+          <Label className="text-xs">Split the server pool</Label>
+          <select
+            value={method}
+            onChange={(e) => { setMethod(e.target.value as TipSplitMethod); setSaved(false); }}
+            className="h-9 w-full rounded-md border border-border bg-transparent text-foreground px-2 text-sm"
+          >
+            {(Object.keys(METHOD_LABELS) as TipSplitMethod[]).map((m) => (
+              <option key={m} value={m}>{METHOD_LABELS[m]}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button onClick={save} disabled={pending}>Save rules</Button>
+          {saved && <span className="text-xs text-emerald-600">Saved.</span>}
+          {saveErr && <span className="text-xs text-red-600">{saveErr}</span>}
+        </div>
+      </div>
+
+      {/* Run the pool */}
+      <div className="bg-card border border-border rounded-lg p-6 space-y-4">
+        <h2 className="text-sm font-semibold">Calculate a day</h2>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Date</Label>
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-9 w-44" />
+          </div>
+          <Button onClick={run} disabled={running}>{running ? "Calculating…" : "Calculate"}</Button>
+          {runErr && <span className="text-xs text-red-600">{runErr}</span>}
+        </div>
+
+        {result && (
+          <div className="space-y-4 pt-2 border-t border-border">
+            <div className="flex flex-wrap gap-x-8 gap-y-1 text-sm">
+              <div><span className="text-muted-foreground">Orders:</span> <span className="tabular-nums">{result.orderCount}</span></div>
+              <div><span className="text-muted-foreground">Gross tips:</span> <span className="tabular-nums font-semibold">{money(result.grossTips)}</span></div>
+              <div><span className="text-muted-foreground">Server pool:</span> <span className="tabular-nums font-semibold">{money(result.serverPool)}</span></div>
+            </div>
+
+            {result.tipouts.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Tip-outs</div>
+                <div className="space-y-1 text-sm">
+                  {result.tipouts.map((t, i) => (
+                    <div key={i} className="flex justify-between">
+                      <span>{t.role} <span className="text-muted-foreground">({t.percent}%)</span></span>
+                      <span className="tabular-nums">{money(t.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                Servers — {METHOD_LABELS[result.method].split(" (")[0]}
+              </div>
+              {result.servers.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No server-attributed orders that day.</p>
+              ) : (
+                <div className="space-y-1 text-sm">
+                  {result.servers.map((s) => (
+                    <div key={s.staffId} className="flex justify-between gap-2">
+                      <span className="flex-1 truncate">{s.name}</span>
+                      <span className="tabular-nums text-muted-foreground w-24 text-right">sales {money(s.sales)}</span>
+                      <span className="tabular-nums font-semibold w-20 text-right">{money(s.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {result.unallocated > 0.0049 && (
+              <p className="text-xs text-amber-600">
+                {money(result.unallocated)} of the server pool is unallocated — no eligible servers for the chosen split.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
