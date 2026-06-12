@@ -13,6 +13,7 @@ import {
   setCatalogItemTaxRate,
   setCatalogItemDefaultCourse,
 } from "./actions";
+import { setCatalogItemStation } from "../kitchen/stations-actions";
 import { ModifierGroupsEditor, type ModGroup } from "./modifier-groups-editor";
 import {
   setCatalogItemBarcode,
@@ -37,11 +38,13 @@ type Item = {
   image_url: string | null;
   out_of_stock: boolean;
   default_course_id: string | null;
+  station_id: string | null;
   variations: Option[];
   modifiers: Option[];
   modifierGroups: ModGroup[];
 };
 type CourseOption = { id: string; name: string };
+type StationOption = { id: string; name: string };
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -70,11 +73,13 @@ export function CatalogClient({
   taxRates,
   initialCategoryColors,
   courses = [],
+  stations = [],
 }: {
   initialItems: Item[];
   taxRates: TaxRate[];
   initialCategoryColors: Record<string, string>;
   courses?: CourseOption[];
+  stations?: StationOption[];
 }) {
   const [items, setItems] = useState<Item[]>(initialItems);
   const [name, setName] = useState("");
@@ -144,6 +149,7 @@ export function CatalogClient({
           image_url: imageUrl || null,
           out_of_stock: false,
           default_course_id: null,
+          station_id: null,
           modifierGroups: [],
           variations: [],
           modifiers: [],
@@ -281,6 +287,17 @@ export function CatalogClient({
       if (!("error" in res)) {
         setItems((prev) =>
           prev.map((i) => (i.id === item.id ? { ...i, default_course_id: courseId } : i))
+        );
+      }
+    });
+  }
+
+  function handleSetStation(item: Item, stationId: string | null) {
+    startTransition(async () => {
+      const res = await setCatalogItemStation(item.id, stationId);
+      if (!("error" in res)) {
+        setItems((prev) =>
+          prev.map((i) => (i.id === item.id ? { ...i, station_id: stationId } : i))
         );
       }
     });
@@ -668,6 +685,27 @@ export function CatalogClient({
                               <option value="">First course</option>
                               {courses.map((c) => (
                                 <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+
+                      {stations.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground pl-3">
+                            Prep station &mdash; which kitchen screen this item prints to when fired (full-service).
+                          </p>
+                          <div className="pl-3">
+                            <select
+                              value={item.station_id ?? ""}
+                              onChange={(e) => handleSetStation(item, e.target.value || null)}
+                              disabled={pending}
+                              className="h-9 rounded-md border border-border bg-transparent text-foreground px-2 text-sm"
+                            >
+                              <option value="">No station</option>
+                              {stations.map((s) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
                               ))}
                             </select>
                           </div>
