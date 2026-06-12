@@ -1097,13 +1097,38 @@ export async function listOpenTogoTickets(): Promise<TogoTicketSummary[]> {
 }
 
 // Reassign the server on an open ticket (table or to-go).
+// P0-9: assign / transfer a table's server. Assigning an unowned table or
+// reassigning your OWN table is free; taking someone else's table as a
+// staff/trainee needs a manager PIN. The change is reason-coded into the trail.
 export async function setTicketServer(
   ticketId: string,
-  staffId: string | null
-): Promise<{ ok: true } | { error: string }> {
+  staffId: string | null,
+  approverPin?: string
+): Promise<{ ok: true } | { needs_approval: true } | { error: string }> {
   if (!ticketId) return { error: "Missing ticket." };
-  const { business } = await requireBusiness();
+  const { business, role } = await requireBusiness();
   const supabase = await createClient();
+
+  const { data: ticket } = await supabase
+    .from("open_tickets")
+    .select("id, staff_id")
+    .eq("id", ticketId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!ticket) return { error: "That ticket is no longer open." };
+  const currentOwner = (ticket.staff_id as string | null) ?? null;
+
+  const active = await getActiveStaff();
+  let approverName: string | null = null;
+  // Reassigning a table already owned by someone else, as a staff/trainee, needs
+  // a manager's approval.
+  if (active && (active.role === "staff" || active.role === "trainee") && currentOwner && currentOwner !== active.id) {
+    if (!approverPin) return { needs_approval: true };
+    const v = await verifyManagerPin(approverPin);
+    if ("error" in v) return { error: v.error };
+    approverName = v.name;
+  }
+
   const { error } = await supabase
     .from("open_tickets")
     .update({ staff_id: staffId })
@@ -1113,6 +1138,14 @@ export async function setTicketServer(
     console.error("setTicketServer:", error);
     return { error: "Could not change the server." };
   }
+
+  const { data: { user } } = await supabase.auth.getUser();
+  await supabase.from("audit_events").insert({
+    business_id: business.id, actor_id: user ? user.id : null, actor_role: role,
+    action: "table_server_change", order_id: null, reason_code: "server_transfer", reason_note: null,
+    metadata: { ticket_id: ticketId, from_staff: currentOwner, to_staff: staffId, by_staff: active?.id ?? null, approved_by: approverName },
+  });
+
   return { ok: true };
 }
 
