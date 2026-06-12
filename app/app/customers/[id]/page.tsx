@@ -6,6 +6,7 @@ import { ChevronLeft } from "lucide-react";
 import { CustomerControls } from "./customer-controls";
 import { CustomerNotes } from "./customer-notes";
 import { CustomerTags } from "./customer-tags";
+import { StoreCreditCard } from "./store-credit-card";
 import { StatusBadge, SectionHeader } from "../../_components/ui";
 
 function formatCurrency(amount: number | string | null | undefined): string {
@@ -44,8 +45,16 @@ export default async function CustomerDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { business } = await requireBusiness();
+  const { business, role } = await requireBusiness();
   const supabase = await createClient();
+
+  const { data: scAcct } = await supabase
+    .from("store_credit_accounts")
+    .select("balance_cents")
+    .eq("business_id", business.id)
+    .eq("customer_id", id)
+    .maybeSingle();
+  const storeCreditBalance = scAcct ? (scAcct.balance_cents as number) / 100 : 0;
 
   const [customerResult, tripsResult, attachedTagsResult, allTagsResult] =
     await Promise.all([
@@ -169,6 +178,16 @@ export default async function CustomerDetailPage({
           label="Avg per trip"
           value={formatCurrency(avgPerTrip)}
           hint="When completed"
+        />
+      </div>
+
+      {/* Store credit */}
+      <div className="bg-card border border-border rounded-lg p-6 mb-4">
+        <SectionHeader>Store credit</SectionHeader>
+        <StoreCreditCard
+          customerId={customer.id}
+          initialBalance={storeCreditBalance}
+          canIssue={role === "owner" || role === "manager"}
         />
       </div>
 

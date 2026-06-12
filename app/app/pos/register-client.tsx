@@ -40,6 +40,7 @@ import { buildReceiptHtml, type ReceiptSettings } from "./receipt-template";
 import { RegisterRefund } from "./register-refund";
 import { useOnlineStatus } from "./use-online";
 import { getLoyaltyBalance } from "./loyalty-actions";
+import { getStoreCreditBalance } from "./store-credit-actions";
 import Link from "next/link";
 import { tileClassesFor } from "./category-colors";
 
@@ -74,7 +75,7 @@ type ServiceChargeCfg = { enabled: boolean; pct: number; autoParty: number; post
 type SplitCfg = { settlementMode: "separate" | "informational"; allowUnits: boolean };
 type StaffMember = { id: string; name: string };
 type Customer = { id: string; name: string; taxExempt?: boolean };
-type Tender = { method: "cash" | "card" | "other" | "gift_card"; amount: number; tendered: number | null; change: number | null; gift_card_code?: string | null };
+type Tender = { method: "cash" | "card" | "other" | "gift_card" | "store_credit"; amount: number; tendered: number | null; change: number | null; gift_card_code?: string | null };
 type PaymentLine = { method: string; amount: number; tendered: number | null; change: number | null };
 type Receipt = {
   id: string;
@@ -254,6 +255,14 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     getLoyaltyBalance(customer.id).then((b) => { if (!cancelled) setLoyaltyBalance(b); }).catch(() => {});
     return () => { cancelled = true; };
   }, [customer, loyaltyOn]);
+  // P2-33: the attached customer's store-credit balance (dollars; 0 when none).
+  const [storeCreditBalance, setStoreCreditBalance] = useState(0);
+  useEffect(() => {
+    if (!customer) { setStoreCreditBalance(0); return; }
+    let cancelled = false;
+    getStoreCreditBalance(customer.id).then((b) => { if (!cancelled) setStoreCreditBalance(b); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [customer]);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [pickerItem, setPickerItem] = useState<Item | null>(null);
@@ -1863,6 +1872,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         total={total}
         pending={pending}
         cardEnabled={cardEnabled}
+        storeCreditBalance={storeCreditBalance}
         onCash={recordCash}
         onSplit={recordSplit}
         onCardManual={recordCardManual}

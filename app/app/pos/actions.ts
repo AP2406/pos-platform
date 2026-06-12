@@ -19,7 +19,7 @@ const lineSchema = z.object({
 const DINING_OPTIONS = ["dine_in", "takeout", "delivery", "pickup"] as const;
 
 const paymentLineSchema = z.object({
-  method: z.enum(["cash", "card", "other", "gift_card"]),
+  method: z.enum(["cash", "card", "other", "gift_card", "store_credit"]),
   amount: z.coerce.number().min(0).max(1000000),
   tendered: z.coerce.number().min(0).max(1000000).optional().nullable(),
   // P2-32b: which gift card backs a "gift_card" tender line.
@@ -38,7 +38,7 @@ const orderSchema = z.object({
   items: z.array(lineSchema).min(1, "Add at least one item."),
   voids: z.array(voidLineSchema).optional(),
   tip: z.coerce.number().min(0).max(1000000).optional(),
-  payment_method: z.enum(["cash", "card", "other", "gift_card"]).optional(),
+  payment_method: z.enum(["cash", "card", "other", "gift_card", "store_credit"]).optional(),
   payments: z.array(paymentLineSchema).optional(),
   discount_type: z.enum(["amount", "percent"]).optional(),
   discount_value: z.coerce.number().min(0).max(1000000).optional(),
@@ -60,7 +60,7 @@ const orderSchema = z.object({
 });
 
 type PaymentInput = {
-  method: "cash" | "card" | "other" | "gift_card";
+  method: "cash" | "card" | "other" | "gift_card" | "store_credit";
   amount: number;
   tendered?: number | null;
   gift_card_code?: string | null;
@@ -75,7 +75,7 @@ type OrderInput = {
   }[];
   voids?: { name: string; unit_price: number; quantity: number; reason_code?: string; reason_note?: string }[];
   tip?: number;
-  payment_method?: "cash" | "card" | "other" | "gift_card";
+  payment_method?: "cash" | "card" | "other" | "gift_card" | "store_credit";
   payments?: PaymentInput[];
   discount_type?: "amount" | "percent";
   discount_value?: number;
@@ -97,7 +97,7 @@ type OrderInput = {
 };
 
 type Tender = {
-  method: "cash" | "card" | "other" | "gift_card";
+  method: "cash" | "card" | "other" | "gift_card" | "store_credit";
   amount: number;
   tendered: number | null;
   change: number | null;
@@ -505,6 +505,27 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     giftRedemptions.push({ cardId: card.id as string, amountCents });
   }
 
+  // P2-33: store-credit tenders draw down the attached customer's balance. The
+  // decrement happens atomically post-settle; validate the total here.
+  let storeCreditCents = 0;
+  for (const t of tenders) {
+    if (t.method !== "store_credit") continue;
+    storeCreditCents += Math.round(t.amount * 100);
+  }
+  if (storeCreditCents > 0) {
+    if (!customerId) return { error: "Add a customer to pay with store credit." };
+    const { data: acct } = await supabase
+      .from("store_credit_accounts")
+      .select("balance_cents")
+      .eq("business_id", business.id)
+      .eq("customer_id", customerId)
+      .maybeSingle();
+    const balance = acct ? (acct.balance_cents as number) : 0;
+    if (balance < storeCreditCents) {
+      return { error: "Store credit balance is too low for that amount." };
+    }
+  }
+
   const distinctMethods = Array.from(new Set(tenders.map((t) => t.method)));
   const orderPaymentMethod =
     distinctMethods.length > 1 ? "split" : distinctMethods[0];
@@ -735,6 +756,17 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
         p_order_id: result.order_id,
       });
       if (gcErr) console.error("gift card redeem:", gcErr);
+    }
+    // P2-33: draw down store credit (atomic, overdraft-safe, order-linked).
+    if (storeCreditCents > 0 && customerId) {
+      const { error: scErr } = await supabase.rpc("apply_store_credit_delta", {
+        p_business_id: business.id,
+        p_customer_id: customerId,
+        p_delta_cents: -storeCreditCents,
+        p_kind: "redeem",
+        p_order_id: result.order_id,
+      });
+      if (scErr) console.error("store credit redeem:", scErr);
     }
   }
 

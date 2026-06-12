@@ -4,8 +4,9 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-type Tender = { method: "cash" | "card" | "other" | "gift_card"; amount: number; tendered: number | null; change: number | null; gift_card_code?: string | null };
-type SplitLine = { id: number; method: "cash" | "card" | "other" | "gift_card"; amount: string; cashGiven: string; giftCode: string };
+type TMethod = "cash" | "card" | "other" | "gift_card" | "store_credit";
+type Tender = { method: TMethod; amount: number; tendered: number | null; change: number | null; gift_card_code?: string | null };
+type SplitLine = { id: number; method: TMethod; amount: string; cashGiven: string; giftCode: string };
 
 type Props = {
   open: boolean;
@@ -13,6 +14,7 @@ type Props = {
   total: number;
   pending: boolean;
   cardEnabled: boolean;
+  storeCreditBalance?: number;
   onCash: (tenderedDollars: number) => void;
   onSplit: (tenders: Tender[]) => void;
   onCardManual: () => void;
@@ -23,6 +25,7 @@ function methodLabel(m: string): string {
   if (m === "cash") return "Cash";
   if (m === "card") return "Card";
   if (m === "gift_card") return "Gift";
+  if (m === "store_credit") return "Credit";
   return "Other";
 }
 
@@ -75,7 +78,7 @@ export function TenderSheet(props: Props) {
   const cashReady = cashCents >= totalCents && totalCents > 0;
   const quickAmounts = buildQuickAmounts(totalCents);
 
-  function newLine(m: "cash" | "card" | "other" | "gift_card"): SplitLine {
+  function newLine(m: TMethod): SplitLine {
     const id = splitIdRef.current;
     splitIdRef.current = id + 1;
     return { id: id, method: m, amount: "", cashGiven: "", giftCode: "" };
@@ -97,7 +100,7 @@ export function TenderSheet(props: Props) {
       return prev.length <= 1 ? prev : prev.filter(function (l) { return l.id !== id; });
     });
   }
-  function addLine(m: "cash" | "card" | "other" | "gift_card") {
+  function addLine(m: TMethod) {
     setSplitLines(function (prev) { return [...prev, newLine(m)]; });
   }
   function setRest(id: number) {
@@ -136,6 +139,13 @@ export function TenderSheet(props: Props) {
       .filter(function (p) { return p.amount > 0; });
     if (built.some(function (p) { return p.method === "gift_card" && !p.gift_card_code; })) {
       setSplitError("Enter the gift card code.");
+      return;
+    }
+    const scCents = built
+      .filter(function (p) { return p.method === "store_credit"; })
+      .reduce(function (s, p) { return s + Math.round(p.amount * 100); }, 0);
+    if (scCents > Math.round((props.storeCreditBalance ?? 0) * 100)) {
+      setSplitError("Not enough store credit for that amount.");
       return;
     }
     const sumCents = built.reduce(function (s, p) { return s + Math.round(p.amount * 100); }, 0);
@@ -279,7 +289,7 @@ export function TenderSheet(props: Props) {
                     <div key={l.id} className="rounded-lg border border-border p-3 space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex rounded-md border border-border overflow-hidden text-xs">
-                          {(["cash", "card", "other", "gift_card"] as const).map(function (m) {
+                          {(["cash", "card", "other", "gift_card", "store_credit"] as const).map(function (m) {
                             return (
                               <button
                                 key={m}
@@ -324,6 +334,9 @@ export function TenderSheet(props: Props) {
                 <button type="button" onClick={function () { addLine("cash"); }} className="flex-1 px-2 py-1.5 text-xs rounded-md border border-border hover:bg-accent">+ Cash</button>
                 <button type="button" onClick={function () { addLine("card"); }} className="flex-1 px-2 py-1.5 text-xs rounded-md border border-border hover:bg-accent">+ Card</button>
                 <button type="button" onClick={function () { addLine("gift_card"); }} className="flex-1 px-2 py-1.5 text-xs rounded-md border border-border hover:bg-accent">+ Gift</button>
+                {(props.storeCreditBalance ?? 0) > 0 && (
+                  <button type="button" onClick={function () { addLine("store_credit"); }} className="flex-1 px-2 py-1.5 text-xs rounded-md border border-border hover:bg-accent">{"+ Credit ($" + (props.storeCreditBalance ?? 0).toFixed(2) + ")"}</button>
+                )}
                 <button type="button" onClick={function () { addLine("other"); }} className="flex-1 px-2 py-1.5 text-xs rounded-md border border-border hover:bg-accent">+ Other</button>
               </div>
 
