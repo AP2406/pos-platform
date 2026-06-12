@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect, useRef } from "react";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,7 +44,7 @@ import { tileClassesFor } from "./category-colors";
 type Variation = { id: string; name: string; price: number };
 type ModOption = { id: string; name: string; price: number; child_group?: ModifierGroup };
 type ModifierGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; options: ModOption[] };
-type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null };
+type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null; track_inventory?: boolean; stock_qty?: number | null; reorder_point?: number | null };
 type Course = { id: string; name: string; sort_order: number };
 type CartLine = {
   catalog_item_id: string | null;
@@ -189,7 +190,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
   });
 }
 
-export function RegisterClient({ items, taxRate, businessName, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, tableBinding, initialTableCart, onExitToFloor, staffList }: { items: Item[]; taxRate: number; businessName: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[] }) {
+export function RegisterClient({ items, taxRate, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, tableBinding, initialTableCart, onExitToFloor, staffList }: { items: Item[]; taxRate: number; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[] }) {
   const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
   const [tip, setTip] = useState(initialTableCart?.tip ?? "");
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">(initialTableCart?.discount_mode === "percent" ? "percent" : "amount");
@@ -259,8 +260,37 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const [customPrice, setCustomPrice] = useState("");
   // Local 86 overrides so a long-press toggle reflects instantly.
   const [localOos, setLocalOos] = useState<Record<string, boolean>>({});
+  // P0-13: live stock for the low-stock badge, kept in sync via Realtime.
+  const [localStock, setLocalStock] = useState<Record<string, number>>({});
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lpFired = useRef(false);
+
+  // P0-13: subscribe to catalog_items so a 86/un-86 or stock change on any
+  // device (or auto-86 at zero on sale) reflects here within ~2s.
+  useEffect(() => {
+    if (!businessId) return;
+    const supabase = createBrowserClient();
+    const channel = supabase
+      .channel("pos-catalog-" + businessId)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "catalog_items", filter: "business_id=eq." + businessId },
+        (payload) => {
+          const row = payload.new as { id?: string; out_of_stock?: boolean; stock_qty?: number | null };
+          if (!row.id) return;
+          setLocalOos((p) => ({ ...p, [row.id as string]: !!row.out_of_stock }));
+          if (row.stock_qty !== undefined && row.stock_qty !== null) {
+            setLocalStock((p) => ({ ...p, [row.id as string]: Number(row.stock_qty) }));
+          }
+        }
+      )
+      .subscribe();
+    // RLS-protected realtime needs the user's token on the socket.
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) supabase.realtime.setAuth(data.session.access_token);
+    });
+    return () => { supabase.removeChannel(channel); };
+  }, [businessId]);
   // Server assigned to this table/to-go ticket (change-server).
   const [serverName, setServerName] = useState<string | null>(tableBinding?.serverName ?? null);
   const [serverSheet, setServerSheet] = useState(false);
@@ -390,6 +420,13 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
 
   function isOos(item: Item): boolean {
     return localOos[item.id] ?? item.out_of_stock;
+  }
+  // P0-13: low-stock badge once a tracked item is at/under its reorder point.
+  function isLowStock(item: Item): boolean {
+    if (!item.track_inventory || item.reorder_point == null) return false;
+    if (isOos(item)) return false;
+    const qty = localStock[item.id] ?? (item.stock_qty ?? 0);
+    return qty > 0 && qty <= item.reorder_point;
   }
 
   function toggleOos(item: Item) {
@@ -1940,11 +1977,13 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                         ? "From $" + Math.min(...item.variations.map((v) => v.price)).toFixed(2)
                         : "$" + item.price.toFixed(2);
                       const oos = isOos(item);
+                      const low = isLowStock(item);
                       if (showItemPhotos && item.image_url) {
                         return (
                           <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative min-h-[110px] rounded-lg border border-border overflow-hidden active:scale-[0.97] transition-transform " + (oos ? "opacity-50" : "")}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={item.image_url} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
+                            {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">Low</span>}
                             <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white text-left px-2 py-1.5">
                               <div className="font-semibold text-sm leading-snug line-clamp-2">{item.name}</div>
                               <div className="text-xs text-white/90">{oos ? "86'd" : priceLabel}</div>
@@ -1953,7 +1992,8 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                         );
                       }
                       return (
-                        <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"text-left p-3 min-h-[110px] rounded-lg border active:scale-[0.97] transition-all flex flex-col justify-between " + tileClassesFor(item.category, categoryColors) + (oos ? " opacity-50" : "")}>
+                        <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative text-left p-3 min-h-[110px] rounded-lg border active:scale-[0.97] transition-all flex flex-col justify-between " + tileClassesFor(item.category, categoryColors) + (oos ? " opacity-50" : "")}>
+                          {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">Low</span>}
                           <div className="font-semibold text-sm leading-snug line-clamp-3">{item.name}</div>
                           <div className="text-xs opacity-80 mt-1">{oos ? "86'd" : priceLabel}</div>
                         </button>
