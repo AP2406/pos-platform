@@ -4,8 +4,8 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-type Tender = { method: "cash" | "card" | "other"; amount: number; tendered: number | null; change: number | null };
-type SplitLine = { id: number; method: "cash" | "card" | "other"; amount: string; cashGiven: string };
+type Tender = { method: "cash" | "card" | "other" | "gift_card"; amount: number; tendered: number | null; change: number | null; gift_card_code?: string | null };
+type SplitLine = { id: number; method: "cash" | "card" | "other" | "gift_card"; amount: string; cashGiven: string; giftCode: string };
 
 type Props = {
   open: boolean;
@@ -22,6 +22,7 @@ type Props = {
 function methodLabel(m: string): string {
   if (m === "cash") return "Cash";
   if (m === "card") return "Card";
+  if (m === "gift_card") return "Gift";
   return "Other";
 }
 
@@ -74,10 +75,10 @@ export function TenderSheet(props: Props) {
   const cashReady = cashCents >= totalCents && totalCents > 0;
   const quickAmounts = buildQuickAmounts(totalCents);
 
-  function newLine(m: "cash" | "card" | "other"): SplitLine {
+  function newLine(m: "cash" | "card" | "other" | "gift_card"): SplitLine {
     const id = splitIdRef.current;
     splitIdRef.current = id + 1;
-    return { id: id, method: m, amount: "", cashGiven: "" };
+    return { id: id, method: m, amount: "", cashGiven: "", giftCode: "" };
   }
   function ensureSplit() {
     if (splitLines.length === 0) {
@@ -96,7 +97,7 @@ export function TenderSheet(props: Props) {
       return prev.length <= 1 ? prev : prev.filter(function (l) { return l.id !== id; });
     });
   }
-  function addLine(m: "cash" | "card" | "other") {
+  function addLine(m: "cash" | "card" | "other" | "gift_card") {
     setSplitLines(function (prev) { return [...prev, newLine(m)]; });
   }
   function setRest(id: number) {
@@ -129,9 +130,14 @@ export function TenderSheet(props: Props) {
         const givenRaw = l.cashGiven.trim() ? Math.round((parseFloat(l.cashGiven) || 0) * 100) / 100 : null;
         const tendered = l.method === "cash" ? givenRaw : null;
         const change = l.method === "cash" && tendered !== null ? Math.round((tendered - amt) * 100) / 100 : null;
-        return { method: l.method, amount: amt, tendered: tendered, change: change };
+        const gift_card_code = l.method === "gift_card" ? l.giftCode.trim().toUpperCase() : null;
+        return { method: l.method, amount: amt, tendered: tendered, change: change, gift_card_code: gift_card_code };
       })
       .filter(function (p) { return p.amount > 0; });
+    if (built.some(function (p) { return p.method === "gift_card" && !p.gift_card_code; })) {
+      setSplitError("Enter the gift card code.");
+      return;
+    }
     const sumCents = built.reduce(function (s, p) { return s + Math.round(p.amount * 100); }, 0);
     if (sumCents !== totalCents) {
       setSplitError("Split amounts must add up to the total.");
@@ -273,7 +279,7 @@ export function TenderSheet(props: Props) {
                     <div key={l.id} className="rounded-lg border border-border p-3 space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex rounded-md border border-border overflow-hidden text-xs">
-                          {(["cash", "card", "other"] as const).map(function (m) {
+                          {(["cash", "card", "other", "gift_card"] as const).map(function (m) {
                             return (
                               <button
                                 key={m}
@@ -300,6 +306,12 @@ export function TenderSheet(props: Props) {
                           <Input type="number" min="0" step="0.01" value={l.cashGiven} onChange={function (e) { updateLine(l.id, { cashGiven: e.target.value }); }} placeholder="optional" className="w-28 h-9 text-right" />
                         </div>
                       )}
+                      {l.method === "gift_card" && (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-muted-foreground">Gift card code</span>
+                          <Input value={l.giftCode} onChange={function (e) { updateLine(l.id, { giftCode: e.target.value }); }} placeholder="XXXX-XXXX-XXXX" className="w-44 h-9 font-mono" />
+                        </div>
+                      )}
                       {change !== null && change > 0 && (
                         <div className="flex justify-between text-xs"><span className="text-muted-foreground">Change</span><span className="tabular-nums">{"$" + change.toFixed(2)}</span></div>
                       )}
@@ -311,6 +323,7 @@ export function TenderSheet(props: Props) {
               <div className="flex gap-2 mt-2">
                 <button type="button" onClick={function () { addLine("cash"); }} className="flex-1 px-2 py-1.5 text-xs rounded-md border border-border hover:bg-accent">+ Cash</button>
                 <button type="button" onClick={function () { addLine("card"); }} className="flex-1 px-2 py-1.5 text-xs rounded-md border border-border hover:bg-accent">+ Card</button>
+                <button type="button" onClick={function () { addLine("gift_card"); }} className="flex-1 px-2 py-1.5 text-xs rounded-md border border-border hover:bg-accent">+ Gift</button>
                 <button type="button" onClick={function () { addLine("other"); }} className="flex-1 px-2 py-1.5 text-xs rounded-md border border-border hover:bg-accent">+ Other</button>
               </div>
 

@@ -19,9 +19,11 @@ const lineSchema = z.object({
 const DINING_OPTIONS = ["dine_in", "takeout", "delivery", "pickup"] as const;
 
 const paymentLineSchema = z.object({
-  method: z.enum(["cash", "card", "other"]),
+  method: z.enum(["cash", "card", "other", "gift_card"]),
   amount: z.coerce.number().min(0).max(1000000),
   tendered: z.coerce.number().min(0).max(1000000).optional().nullable(),
+  // P2-32b: which gift card backs a "gift_card" tender line.
+  gift_card_code: z.string().max(24).optional().nullable(),
 });
 
 const voidLineSchema = z.object({
@@ -36,7 +38,7 @@ const orderSchema = z.object({
   items: z.array(lineSchema).min(1, "Add at least one item."),
   voids: z.array(voidLineSchema).optional(),
   tip: z.coerce.number().min(0).max(1000000).optional(),
-  payment_method: z.enum(["cash", "card", "other"]).optional(),
+  payment_method: z.enum(["cash", "card", "other", "gift_card"]).optional(),
   payments: z.array(paymentLineSchema).optional(),
   discount_type: z.enum(["amount", "percent"]).optional(),
   discount_value: z.coerce.number().min(0).max(1000000).optional(),
@@ -58,9 +60,10 @@ const orderSchema = z.object({
 });
 
 type PaymentInput = {
-  method: "cash" | "card" | "other";
+  method: "cash" | "card" | "other" | "gift_card";
   amount: number;
   tendered?: number | null;
+  gift_card_code?: string | null;
 };
 
 type OrderInput = {
@@ -72,7 +75,7 @@ type OrderInput = {
   }[];
   voids?: { name: string; unit_price: number; quantity: number; reason_code?: string; reason_note?: string }[];
   tip?: number;
-  payment_method?: "cash" | "card" | "other";
+  payment_method?: "cash" | "card" | "other" | "gift_card";
   payments?: PaymentInput[];
   discount_type?: "amount" | "percent";
   discount_value?: number;
@@ -94,10 +97,11 @@ type OrderInput = {
 };
 
 type Tender = {
-  method: "cash" | "card" | "other";
+  method: "cash" | "card" | "other" | "gift_card";
   amount: number;
   tendered: number | null;
   change: number | null;
+  gift_card_code?: string | null;
 };
 
 type CreateOrderResult =
@@ -451,6 +455,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
           p.tendered === null || p.tendered === undefined
             ? null
             : Math.round((Number(p.tendered) || 0) * 100) / 100,
+        gift_card_code: p.gift_card_code ?? null,
       }))
       .filter((p) => p.amount > 0);
 
@@ -473,9 +478,31 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
         p.method === "cash" && p.tendered !== null
           ? Math.round((p.tendered - p.amount) * 100) / 100
           : null,
+      gift_card_code: p.method === "gift_card" ? p.gift_card_code ?? null : null,
     }));
   } else {
     tenders = [{ method: paymentMethod, amount: total, tendered: null, change: null }];
+  }
+
+  // P2-32b: validate gift-card tenders against live balances before settling.
+  // The actual decrement happens atomically after the sale records (post-settle).
+  const giftRedemptions: { cardId: string; amountCents: number }[] = [];
+  for (const t of tenders) {
+    if (t.method !== "gift_card") continue;
+    const code = (t.gift_card_code || "").toUpperCase().replace(/[^A-Z0-9-]/g, "");
+    if (!code) return { error: "Enter the gift card code." };
+    const { data: card } = await supabase
+      .from("gift_cards")
+      .select("id, balance_cents, is_active")
+      .eq("business_id", business.id)
+      .eq("code", code)
+      .maybeSingle();
+    if (!card || card.is_active !== true) return { error: "Gift card not found." };
+    const amountCents = Math.round(t.amount * 100);
+    if ((card.balance_cents as number) < amountCents) {
+      return { error: "Gift card balance is too low for that amount." };
+    }
+    giftRedemptions.push({ cardId: card.id as string, amountCents });
   }
 
   const distinctMethods = Array.from(new Set(tenders.map((t) => t.method)));
@@ -693,6 +720,22 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       await redeemLoyaltyPoints(supabase, business.id, customerId, result.order_id, loyaltyRedeemPts);
     }
     await accrueLoyaltyPoints(supabase, business.id, customerId, result.order_id, netSubtotal);
+  }
+
+  // P2-32b: decrement the gift cards used as tenders. Atomic + overdraft-safe via
+  // the RPC; validated above, skipped on idempotent replay. Real money, so a
+  // failure is logged (the sale is already recorded) but never fails the sale.
+  if (!result.replayed) {
+    for (const g of giftRedemptions) {
+      const { error: gcErr } = await supabase.rpc("apply_gift_card_delta", {
+        p_business_id: business.id,
+        p_gift_card_id: g.cardId,
+        p_delta_cents: -g.amountCents,
+        p_kind: "redeem",
+        p_order_id: result.order_id,
+      });
+      if (gcErr) console.error("gift card redeem:", gcErr);
+    }
   }
 
   revalidatePath("/app/pos");
