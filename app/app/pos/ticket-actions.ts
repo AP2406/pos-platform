@@ -186,6 +186,8 @@ const tableCartLineSchema = cartLineSchema.extend({
   fired_at: z.string().max(40).optional().nullable(),
   // P0-10: voided line (kept for the record, excluded from charge).
   void: z.object({ reason_code: z.string().max(60).optional(), reason_note: z.string().max(500).optional() }).nullable().optional(),
+  // P2-27: added by a guest via QR ordering (vs. rung in by staff).
+  guest: z.boolean().optional(),
 });
 const tableCartSchema = z.object({
   items: z.array(tableCartLineSchema).max(200),
@@ -210,6 +212,8 @@ export type TableTicketSummary = {
   // P0-4: when this table has been split, how many child checks are still unpaid.
   split_kind: string | null;
   child_count: number;
+  // P2-27: a guest added items via QR that haven't been fired yet.
+  new_guest_items: boolean;
 };
 
 export type TogoTicketSummary = {
@@ -1101,6 +1105,13 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
     const staffId = (t.staff_id as string | null) ?? null;
     const id = t.id as string;
     const kids = childCount[id] ?? 0;
+    // P2-27: a guest added items via QR that staff hasn't fired yet.
+    const cartItems = ((t.cart as { items?: unknown[] } | null)?.items ?? []) as {
+      guest?: boolean; quantity?: number; sent_qty?: number; void?: unknown;
+    }[];
+    const newGuestItems = cartItems.some(
+      (i) => i.guest === true && !i.void && (Number(i.quantity) || 0) - (Number(i.sent_qty) || 0) > 0
+    );
     return {
       id: id,
       element_id: t.element_id as string,
@@ -1113,6 +1124,7 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
       server_name: staffId ? names[staffId] ?? null : null,
       split_kind: (t.split_kind as string | null) ?? null,
       child_count: kids,
+      new_guest_items: newGuestItems,
     };
   });
 }

@@ -68,6 +68,8 @@ type CartLine = {
   fired_at?: string | null;
   // P0-10: a voided line (not made) — kept for the record, excluded from totals.
   void?: { reason_code?: string; reason_note?: string } | null;
+  // P2-27: added by a guest via QR ordering.
+  guest?: boolean;
 };
 // Binding when the register is opened for a specific full-service table or to-go.
 type TableBinding = { tableId: string; ticketId: string; tableLabel: string; serverName?: string | null; seatCount?: number | null; guestCount?: number | null };
@@ -189,6 +191,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
       course_id: it.course_id ?? null,
       fired_at: it.fired_at ?? null,
       void: it.void ?? null,
+      guest: (it as { guest?: boolean }).guest === true,
     };
   });
 }
@@ -776,7 +779,10 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     return (
       <div key={index} className="flex items-center gap-2">
         <button type="button" onClick={() => { setEditLineIndex(index); setMoveOpen(false); setVoidOpen(false); }} className="min-w-0 flex-1 text-left">
-          <div className={"text-sm font-medium truncate " + (line.void ? "line-through text-muted-foreground" : "")}>{line.name}{line.void ? "  · Void" : ""}</div>
+          <div className={"text-sm font-medium truncate flex items-center gap-1.5 " + (line.void ? "line-through text-muted-foreground" : "")}>
+            {line.guest && !line.void && <span className="shrink-0 text-[9px] font-semibold uppercase rounded bg-indigo-500/15 text-indigo-500 px-1 py-0.5">Guest</span>}
+            <span className="truncate">{line.name}{line.void ? "  · Void" : ""}</span>
+          </div>
           <div className="text-xs text-muted-foreground">
             {"$" + line.unit_price.toFixed(2) + " each" + (line.taxable ? "" : "  " + "·" + "  Tax-free") + (line.note ? "  " + "·" + "  " + line.note : "")}
           </div>
@@ -852,6 +858,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         course_id: l.course_id ?? null,
         fired_at: l.fired_at ?? null,
         void: l.void ?? null,
+        guest: l.guest === true,
       })),
       tip: tip,
       discount_mode: discountMode,

@@ -137,6 +137,14 @@ export function FloorClient({
     };
   }, []);
 
+  // P2-27: poll open tickets so guest QR orders (and other devices' changes)
+  // surface on the floor — e.g. the "New" badge — without a manual reload.
+  useEffect(() => {
+    const id = setInterval(() => { refreshOpen(); }, 20000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Designed-layout bounds (the floor is scaled to fit its container).
   let canvasW = 600;
   let canvasH = 400;
@@ -609,6 +617,13 @@ export function FloorClient({
                     className={"absolute border p-1.5 flex flex-col items-center justify-center text-center leading-tight gap-0.5 active:scale-[0.97] transition-all " + statusClass(status)}
                     style={tileStyle}
                   >
+                    {/* P2-27: a guest placed a new order via QR awaiting the server. */}
+                    {open && open.new_guest_items && (
+                      <span className="absolute top-1 right-1 flex items-center gap-0.5 rounded-full bg-indigo-500 text-white text-[9px] font-semibold px-1.5 py-0.5 leading-none">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                        New
+                      </span>
+                    )}
                     {secColor && !open && sec?.server && <span className="text-[10px] truncate max-w-full" style={{ color: secColor }}>{sec.server}</span>}
                     <span className="text-sm font-medium truncate max-w-full">{displayLabel}</span>
                     {open ? (
