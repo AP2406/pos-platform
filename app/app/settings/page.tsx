@@ -9,6 +9,8 @@ import { TrainingModeForm } from "./training-mode-form";
 import { ShowPhotosForm } from "./show-photos-form";
 import { StaffCard } from "./staff-card";
 import { FloorCard } from "./floor-card";
+import { SectionsCard } from "./sections-card";
+import { listSections, listAssignableTables } from "../pos/sections-actions";
 import { ServiceChargeCard } from "./service-charge-card";
 import { SplitCard } from "./split-card";
 import { hasFloorService } from "@/lib/modules/modes";
@@ -107,11 +109,15 @@ export default async function SettingsPage() {
     hasFloorService(business) && (role === "owner" || role === "manager");
   let floorPlans: Awaited<ReturnType<typeof listFloorPlans>> = [];
   let floorElements: Awaited<ReturnType<typeof listFloor>>["elements"] = [];
+  let sectionsList: Awaited<ReturnType<typeof listSections>> = [];
+  let assignableTables: Awaited<ReturnType<typeof listAssignableTables>> = [];
   const chairMode: "follow" | "editable" =
     (business as { floor_chair_mode?: string }).floor_chair_mode === "editable" ? "editable" : "follow";
   if (showFloor) {
     floorPlans = await listFloorPlans();
     if (floorPlans[0]) floorElements = (await listFloor(floorPlans[0].id)).elements;
+    sectionsList = await listSections();
+    assignableTables = await listAssignableTables();
   }
 
   let receiptSettings: Partial<ReceiptSettings> | null = null;
@@ -260,10 +266,16 @@ export default async function SettingsPage() {
       key: "floor",
       label: "Floor",
       content: (
-        <div className="bg-card border border-border rounded-lg p-6">
-          <SectionHeader>Floor plan</SectionHeader>
-          <FloorCard initialPlans={floorPlans} initialElements={floorElements} initialChairMode={chairMode} />
-        </div>
+        <>
+          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+            <SectionHeader>Floor plan</SectionHeader>
+            <FloorCard initialPlans={floorPlans} initialElements={floorElements} initialChairMode={chairMode} />
+          </div>
+          <div className="bg-card border border-border rounded-lg p-6">
+            <SectionHeader>Server sections</SectionHeader>
+            <SectionsCard initialSections={sectionsList} tables={assignableTables} staff={staffList.filter((s) => s.is_active).map((s) => ({ id: s.id, name: s.name }))} />
+          </div>
+        </>
       ),
     });
   }

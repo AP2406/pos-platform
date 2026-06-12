@@ -29,6 +29,7 @@ export type FloorElement = {
   seat_no: number | null;
   sort_order: number;
   is_active: boolean;
+  section_id: string | null;
 };
 
 export type FloorPlan = { id: string; name: string; sort_order: number };
@@ -165,7 +166,7 @@ export async function listFloor(planId: string): Promise<{ elements: FloorElemen
 
   const { data } = await supabase
     .from("floor_elements")
-    .select("id, kind, label, x, y, w, h, rotation, shape, parent_id, seat_no, sort_order, is_active")
+    .select("id, kind, label, x, y, w, h, rotation, shape, parent_id, seat_no, sort_order, is_active, section_id")
     .eq("business_id", business.id)
     .eq("plan_id", planId)
     .eq("is_active", true)
@@ -187,6 +188,7 @@ export async function listFloor(planId: string): Promise<{ elements: FloorElemen
       seat_no: (e.seat_no as number | null) ?? null,
       sort_order: Number(e.sort_order) || 0,
       is_active: (e.is_active as boolean | null) ?? true,
+      section_id: (e.section_id as string | null) ?? null,
     })),
   };
 }

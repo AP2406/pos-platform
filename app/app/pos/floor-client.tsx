@@ -63,6 +63,7 @@ export function FloorClient({
   initialOpen,
   initialTogo,
   staff,
+  sections = [],
 }: {
   register: RegisterProps;
   plans: FloorPlan[];
@@ -70,7 +71,9 @@ export function FloorClient({
   initialOpen: TableTicketSummary[];
   initialTogo: TogoTicketSummary[];
   staff: StaffMember[];
+  sections?: { id: string; name: string; color: string | null; server: string | null }[];
 }) {
+  const sectionById = new Map(sections.map((s) => [s.id, s]));
   const [elements, setElements] = useState<FloorElement[]>(initialElements);
   const [activePlan, setActivePlan] = useState<string>(plans[0]?.id ?? "");
   const [planLoading, setPlanLoading] = useState(false);
@@ -487,6 +490,10 @@ export function FloorClient({
                 const isTable = el.kind === "table" || el.kind === "booth";
                 const fallback = el.kind === "counter" ? "Counter" : el.kind === "station" ? "Station" : "Table";
                 const displayLabel = el.label && el.label.trim() ? el.label : fallback;
+                // P0-11: tint the table with its section color (a top band).
+                const sec = el.section_id ? sectionById.get(el.section_id) : null;
+                const secColor = sec?.color ?? null;
+                const tileStyle = secColor ? { ...baseStyle, borderTop: "3px solid " + secColor } : baseStyle;
                 return (
                   <button
                     key={el.id}
@@ -494,8 +501,9 @@ export function FloorClient({
                     disabled={pending}
                     onClick={() => tapElement(el)}
                     className={"absolute border p-1.5 flex flex-col items-center justify-center text-center leading-tight gap-0.5 active:scale-[0.97] transition-all " + statusClass(status)}
-                    style={baseStyle}
+                    style={tileStyle}
                   >
+                    {secColor && !open && sec?.server && <span className="text-[10px] truncate max-w-full" style={{ color: secColor }}>{sec.server}</span>}
                     <span className="text-sm font-medium truncate max-w-full">{displayLabel}</span>
                     {open ? (
                       <>
