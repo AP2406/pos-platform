@@ -18,7 +18,7 @@ const REASONS = [
 ];
 
 type Line = { order_item_id: string; name: string; unit_price: number; sold: number; returned: number; returnable: number };
-type OrderInfo = { id: string; sale_number: number | null; status: string; subtotal: number; discount: number; tax: number; tip: number; total: number; refunded_amount: number };
+type OrderInfo = { id: string; sale_number: number | null; status: string; subtotal: number; discount: number; tax: number; tip: number; total: number; refunded_amount: number; has_customer: boolean };
 type DoneInfo = { amount: number; fully: boolean; discount_portion: number; tax_portion: number; returned_subtotal: number; items: { name: string; quantity: number; line_subtotal: number }[]; reason: string; at: string };
 
 function round2(n: number): number {
@@ -94,6 +94,7 @@ export function RegisterRefund({ businessName }: { businessName: string }) {
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
   const [restock, setRestock] = useState(true);
+  const [toStoreCredit, setToStoreCredit] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState<DoneInfo | null>(null);
   const [pending, startTransition] = useTransition();
@@ -112,6 +113,7 @@ export function RegisterRefund({ businessName }: { businessName: string }) {
     setReason("");
     setNote("");
     setRestock(true);
+    setToStoreCredit(false);
     setErr(null);
     setDone(null);
     setEmailTo("");
@@ -192,7 +194,7 @@ export function RegisterRefund({ businessName }: { businessName: string }) {
     const selected = lines.filter((l) => (qty[l.order_item_id] || 0) > 0).map((l) => ({ order_item_id: l.order_item_id, quantity: qty[l.order_item_id] || 0 }));
     const selectedForReceipt = lines.filter((l) => (qty[l.order_item_id] || 0) > 0).map((l) => ({ name: l.name, quantity: qty[l.order_item_id] || 0, line_subtotal: round2((qty[l.order_item_id] || 0) * l.unit_price) }));
     startTransition(async () => {
-      const res = await refundItems({ order_id: oid, lines: selected, reason, note, restock, approver_pin: approverPin });
+      const res = await refundItems({ order_id: oid, lines: selected, reason, note, restock, approver_pin: approverPin, to_store_credit: toStoreCredit });
       if ("needs_approval" in res) {
         setNeedsApproval(true);
         return;
@@ -434,6 +436,12 @@ export function RegisterRefund({ businessName }: { businessName: string }) {
                   <input type="checkbox" checked={restock} onChange={(e) => setRestock(e.target.checked)} />
                   Return items to inventory
                 </label>
+                {order?.has_customer && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={toStoreCredit} onChange={(e) => setToStoreCredit(e.target.checked)} />
+                    Refund to store credit
+                  </label>
+                )}
 
                 {err && <p className="text-sm text-red-600">{err}</p>}
 

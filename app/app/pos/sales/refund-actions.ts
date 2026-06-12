@@ -48,7 +48,7 @@ async function getManagerByPin(
 
 type RefundLineInput = { order_item_id: string; quantity: number };
 
-type RefundOrderResult = { ok: true; order: { id: string; sale_number: number | null; status: string; subtotal: number; discount: number; tax: number; tip: number; total: number; refunded_amount: number }; lines: { order_item_id: string; name: string; unit_price: number; sold: number; returned: number; returnable: number }[] } | { error: string };
+type RefundOrderResult = { ok: true; order: { id: string; sale_number: number | null; status: string; subtotal: number; discount: number; tax: number; tip: number; total: number; refunded_amount: number; has_customer: boolean }; lines: { order_item_id: string; name: string; unit_price: number; sold: number; returned: number; returnable: number }[] } | { error: string };
 
 type RefundItemsResult = { ok: true; amount: number; fully: boolean; returned_subtotal: number; discount_portion: number; tax_portion: number; card_refunded: number } | { needs_approval: true } | { error: string };
 
@@ -62,7 +62,7 @@ export async function getOrderForRefund(orderId: string): Promise<RefundOrderRes
 
   const { data: order } = await supabase
     .from("orders")
-    .select("id, sale_number, status, subtotal, discount, tax, tip, total")
+    .select("id, sale_number, status, subtotal, discount, tax, tip, total, customer_id")
     .eq("id", orderId)
     .eq("business_id", business.id)
     .maybeSingle();
@@ -119,12 +119,13 @@ export async function getOrderForRefund(orderId: string): Promise<RefundOrderRes
       tip: Number(order.tip) || 0,
       total: Number(order.total) || 0,
       refunded_amount: round2(refundedAmount),
+      has_customer: !!(order.customer_id as string | null),
     },
     lines: lines,
   };
 }
 
-export async function refundItems(input: { order_id: string; lines: RefundLineInput[]; reason: string; note?: string; restock: boolean; approver_pin?: string }): Promise<RefundItemsResult> {
+export async function refundItems(input: { order_id: string; lines: RefundLineInput[]; reason: string; note?: string; restock: boolean; approver_pin?: string; to_store_credit?: boolean }): Promise<RefundItemsResult> {
   const orderId = input.order_id;
   if (!orderId) return { error: "Missing sale." };
   if (!input.reason || !REASONS.includes(input.reason)) {
@@ -148,7 +149,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
 
   const { data: order } = await supabase
     .from("orders")
-    .select("id, status, subtotal, discount, tax, total")
+    .select("id, status, subtotal, discount, tax, total, customer_id")
     .eq("id", orderId)
     .eq("business_id", business.id)
     .maybeSingle();
@@ -221,13 +222,25 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   if (amount > remaining) amount = remaining;
   if (amount < 0) amount = 0;
 
+  // P2-33b: refund to store credit instead of the original tender. The refund
+  // amount becomes spendable store credit for the sale's customer; no money goes
+  // back to the card. Requires a customer on the sale.
+  const toStoreCredit = input.to_store_credit === true && amount > 0;
+  const orderCustomerId = (order.customer_id as string | null) ?? null;
+  if (toStoreCredit && !orderCustomerId) {
+    return { error: "This sale has no customer, so it can't be refunded to store credit." };
+  }
+  let storeCreditedCents = 0;
+
   // --- Card refund: reverse the original Finix transfer(s) for this sale. ---
   // This MUST happen before we record anything, so a processor failure leaves
   // the books untouched. Cash/other sales have no Finix transfer and skip this.
+  // Skipped entirely for a store-credit refund (the money stays with the
+  // merchant as a credit).
   let finixReversedCents = 0;
   const finixReversals: { transfer_id: string; reversal_id: string; cents: number; state: string }[] = [];
 
-  if (amount > 0) {
+  if (amount > 0 && !toStoreCredit) {
     const { data: cardPayments } = await supabase
       .from("finix_payments")
       .select("finix_transfer_id, amount_cents, status")
@@ -284,6 +297,23 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     }
   }
 
+  // Issue the store credit before recording the refund row, so a failure here
+  // leaves the books untouched (mirrors the Finix-before-record rule).
+  if (toStoreCredit && orderCustomerId) {
+    const { error: scErr } = await supabase.rpc("apply_store_credit_delta", {
+      p_business_id: business.id,
+      p_customer_id: orderCustomerId,
+      p_delta_cents: Math.round(amount * 100),
+      p_kind: "refund",
+      p_order_id: orderId,
+    });
+    if (scErr) {
+      console.error("refundItems store credit:", scErr);
+      return { error: "Could not issue the store credit, so nothing was changed. Please try again." };
+    }
+    storeCreditedCents = Math.round(amount * 100);
+  }
+
   let restocked = false;
   if (input.restock) {
     const qtyByItem: Record<string, number> = {};
@@ -320,6 +350,8 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     discount_portion: discountPortion,
     tax_portion: taxPortion,
     amount: amount,
+    method: toStoreCredit ? "store_credit" : null,
+    store_credit: toStoreCredit ? { cents: storeCreditedCents, customer_id: orderCustomerId } : null,
     finix: finixReversals.length > 0 ? { reversed_cents: finixReversedCents, reversals: finixReversals } : null,
     reason: input.reason,
     staff: active ? { id: active.id, name: active.name, role: active.role } : null,
@@ -358,6 +390,8 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     // the money DID go back to the customer; this needs manual reconciliation.
     if (finixReversedCents > 0) {
       console.error("refundItems: Finix reversal of " + finixReversedCents + " cents SUCCEEDED but refund row failed to save (order " + orderId + "). Reconcile manually.", refundError);
+    } else if (storeCreditedCents > 0) {
+      console.error("refundItems: store credit of " + storeCreditedCents + " cents was ISSUED but the refund row failed to save (order " + orderId + "). Reconcile manually.", refundError);
     } else {
       console.error("refundItems insert:", refundError);
     }
