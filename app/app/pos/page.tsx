@@ -17,7 +17,7 @@ export default async function PosPage() {
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, taxable, tax_rate_id, image_url, out_of_stock, default_course_id")
+    .select("id, name, price, category, taxable, tax_rate_id, image_url, out_of_stock, default_course_id, track_inventory, stock_qty, reorder_point")
     .eq("business_id", business.id)
     .eq("is_active", true)
     .order("name", { ascending: true });
@@ -179,6 +179,9 @@ export default async function PosPage() {
       image_url: (i.image_url as string | null) ?? null,
       out_of_stock: (i.out_of_stock as boolean | null) ?? false,
       default_course_id: (i.default_course_id as string | null) ?? null,
+      track_inventory: (i.track_inventory as boolean | null) ?? false,
+      stock_qty: (i.stock_qty as number | null) ?? null,
+      reorder_point: (i.reorder_point as number | null) ?? null,
       variations: varsByItem[i.id as string] ?? [],
       modifiers: modsByItem[i.id as string] ?? [],
       modifierGroups: modifierGroupsFor(i.id as string),
@@ -228,6 +231,7 @@ export default async function PosPage() {
     items,
     taxRate,
     businessName: business.name,
+    businessId: business.id,
     hasStaff,
     activeStaff,
     receiptSettings,
