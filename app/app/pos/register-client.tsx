@@ -39,6 +39,7 @@ import { getPrinterConfig, printReceiptHtml } from "./qz-print";
 import { buildReceiptHtml, type ReceiptSettings } from "./receipt-template";
 import { RegisterRefund } from "./register-refund";
 import { useOnlineStatus } from "./use-online";
+import { getLoyaltyBalance } from "./loyalty-actions";
 import Link from "next/link";
 import { tileClassesFor } from "./category-colors";
 
@@ -191,7 +192,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
   });
 }
 
-export function RegisterClient({ items, taxRate, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, tableBinding, initialTableCart, onExitToFloor, staffList }: { items: Item[]; taxRate: number; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[] }) {
+export function RegisterClient({ items, taxRate, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList }: { items: Item[]; taxRate: number; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[] }) {
   const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
   const online = useOnlineStatus();
   // P1-22: back up the quick-service cart (no table/tab — nothing server-side
@@ -244,6 +245,15 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const [customer, setCustomer] = useState<Customer | null>(initialTableCart?.customer ? { id: initialTableCart.customer.id, name: initialTableCart.customer.name } : null);
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<{ id: string; name: string; phone: string | null; tax_exempt: boolean }[]>([]);
+  // P2-31b: the attached customer's loyalty balance (0 when none / loyalty off).
+  const loyaltyOn = loyalty?.enabled === true && (loyalty?.redeemPerDollar ?? 0) > 0;
+  const [loyaltyBalance, setLoyaltyBalance] = useState(0);
+  useEffect(() => {
+    if (!loyaltyOn || !customer) { setLoyaltyBalance(0); return; }
+    let cancelled = false;
+    getLoyaltyBalance(customer.id).then((b) => { if (!cancelled) setLoyaltyBalance(b); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [customer, loyaltyOn]);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [pickerItem, setPickerItem] = useState<Item | null>(null);
@@ -1231,6 +1241,26 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
 
   const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
 
+  // P2-31b: loyalty redemption is applied as a discount with the "loyalty_redeem"
+  // reason. The most a customer can redeem is the lesser of their points (in $)
+  // and the bill. The server re-derives points used from the final discount.
+  const loyaltyApplied = loyaltyOn && discountReason === "loyalty_redeem" && discount > 0;
+  const loyaltyMaxDollars =
+    loyaltyOn && customer && loyaltyBalance > 0
+      ? Math.floor(Math.min(loyaltyBalance / (loyalty as { redeemPerDollar: number }).redeemPerDollar, subtotal) * 100) / 100
+      : 0;
+  function redeemLoyalty() {
+    if (loyaltyMaxDollars <= 0) return;
+    setDiscountMode("amount");
+    setDiscountValue(loyaltyMaxDollars.toFixed(2));
+    setDiscountReason("loyalty_redeem");
+    setDiscountReasonNote("");
+  }
+  function clearLoyalty() {
+    setDiscountValue("");
+    setDiscountReason("");
+  }
+
   // Comp (on-the-house): pre-tax reduction after discount, capped to remaining.
   let comp = parseFloat(compValue) || 0;
   if (comp < 0) comp = 0;
@@ -2188,6 +2218,23 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                     <Button variant="outline" className="flex-1 h-11" onClick={sendAndPay} disabled={pending}>
                       Send &amp; Pay
                     </Button>
+                  </div>
+                )}
+                {loyaltyOn && customer && cart.length > 0 && (
+                  <div className="flex items-center justify-between gap-2 px-2 py-2 border-b border-border text-sm">
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-amber-500">★</span>
+                      <span className="truncate">{loyaltyBalance.toLocaleString() + " pts"}</span>
+                    </span>
+                    {loyaltyApplied ? (
+                      <button type="button" onClick={clearLoyalty} className="shrink-0 text-xs rounded-md border border-foreground px-2.5 py-1.5 hover:bg-accent">
+                        {"Redeemed -$" + discount.toFixed(2)} · Clear
+                      </button>
+                    ) : (
+                      <button type="button" onClick={redeemLoyalty} disabled={loyaltyMaxDollars <= 0} className="shrink-0 text-xs rounded-md border border-border px-2.5 py-1.5 hover:bg-accent disabled:opacity-40">
+                        {loyaltyMaxDollars > 0 ? "Redeem $" + loyaltyMaxDollars.toFixed(2) : "No points to redeem"}
+                      </button>
+                    )}
                   </div>
                 )}
                 {cart.length > 0 && (

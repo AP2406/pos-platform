@@ -12,6 +12,7 @@ export const VOID_REASONS: ReasonCode[] = [
 export const DISCOUNT_REASONS: ReasonCode[] = [
   { code: "promotion", label: "Promotion / sale" },
   { code: "loyalty", label: "Loyalty / regular customer" },
+  { code: "loyalty_redeem", label: "Loyalty points" },
   { code: "price_match", label: "Price match" },
   { code: "damaged", label: "Damaged item" },
   { code: "employee", label: "Employee discount" },

@@ -40,6 +40,7 @@ type RegisterProps = {
   receiptSettings: Partial<ReceiptSettings> | null;
   showItemPhotos: boolean;
   categoryColors: Record<string, string>;
+  loyalty?: { enabled: boolean; redeemPerDollar: number };
 };
 
 type StaffMember = { id: string; name: string };
