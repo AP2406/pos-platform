@@ -62,6 +62,32 @@ export async function refireKitchenTicket(
   return { ok: true };
 }
 
+// P1-16: bump every open ticket for one table at once from the expo view, so the
+// expediter can send the whole table out when it's plated. Orders/revenue untouched.
+export async function markKitchenTicketsFulfilled(
+  ticketIds: string[]
+): Promise<{ ok: true } | { error: string }> {
+  const ids = (ticketIds || []).filter((x) => typeof x === "string" && x.length > 0);
+  if (ids.length === 0) return { error: "Nothing to bump." };
+
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("kitchen_tickets")
+    .update({ fulfilled_at: new Date().toISOString() })
+    .in("id", ids)
+    .eq("business_id", business.id);
+
+  if (error) {
+    console.error("markKitchenTicketsFulfilled:", error);
+    return { error: "Could not bump the table." };
+  }
+
+  revalidatePath("/app/kitchen");
+  return { ok: true };
+}
+
 export async function markKitchenTicketFulfilled(
   ticketId: string
 ): Promise<{ ok: true } | { error: string }> {

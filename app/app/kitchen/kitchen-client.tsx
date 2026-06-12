@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { markOrderFulfilled, markKitchenTicketFulfilled, refireKitchenTicket } from "./actions";
+import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket } from "./actions";
 import { printReceiptHtml } from "../pos/qz-print";
 
 function ticketHtml(o: { tableLabel: string | null; id: string; createdAt: string; items: { name: string; quantity: number; note?: string | null }[] }): string {
@@ -36,6 +36,9 @@ type KitchenOrder = {
   customerName: string | null;
   tableLabel: string | null;
   stationId: string | null;
+  stationName: string | null;
+  elementId: string | null;
+  tableName: string | null;
   items: KitchenItem[];
 };
 
@@ -51,6 +54,7 @@ export function KitchenClient({
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders);
   const [stationFilter, setStationFilter] = useState<string>("all");
   const [showAllDay, setShowAllDay] = useState(true);
+  const [view, setView] = useState<"stations" | "expo">("stations");
   const [pending, startTransition] = useTransition();
 
   const refresh = useCallback(async () => {
@@ -104,32 +108,57 @@ export function KitchenClient({
       customerName: o.customer_id ? customerNames[o.customer_id as string] ?? null : null,
       tableLabel: null,
       stationId: null,
+      stationName: null,
+      elementId: null,
+      tableName: null,
       items: itemsByOrder[o.id as string] ?? [],
     }));
 
     const { data: kts } = await supabase
       .from("kitchen_tickets")
-      .select("id, label, items, fired_at, station_id")
+      .select("id, label, items, fired_at, station_id, element_id")
       .eq("business_id", businessId)
       .is("fulfilled_at", null)
       .order("fired_at", { ascending: true });
 
-    const kitchenCards: KitchenOrder[] = (kts ?? []).map((k) => ({
+    const stationNameById: Record<string, string> = {};
+    for (const s of stations) stationNameById[s.id] = s.name;
+
+    const elementIds = Array.from(
+      new Set((kts ?? []).map((k) => k.element_id as string | null).filter((x): x is string => !!x))
+    );
+    const elementLabelById: Record<string, string> = {};
+    if (elementIds.length > 0) {
+      const { data: els } = await supabase
+        .from("floor_elements")
+        .select("id, label")
+        .in("id", elementIds);
+      for (const e of els ?? []) elementLabelById[e.id as string] = (e.label as string | null) ?? "Table";
+    }
+
+    const kitchenCards: KitchenOrder[] = (kts ?? []).map((k) => {
+      const elementId = (k.element_id as string | null) ?? null;
+      const stationId = (k.station_id as string | null) ?? null;
+      return {
       id: k.id as string,
-      kind: "kitchen",
+      kind: "kitchen" as const,
       createdAt: (k.fired_at as string) ?? new Date().toISOString(),
       customerName: null,
       tableLabel: (k.label as string | null) ?? null,
-      stationId: (k.station_id as string | null) ?? null,
+      stationId,
+      stationName: stationId ? stationNameById[stationId] ?? null : null,
+      elementId,
+      tableName: elementId ? elementLabelById[elementId] ?? "Table" : (k.label as string | null) ?? "Ticket",
       items: Array.isArray(k.items) ? (k.items as KitchenItem[]) : [],
-    }));
+    };
+    });
 
     setOrders(
       [...orderCards, ...kitchenCards].sort((a, b) =>
         a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0
       )
     );
-  }, [businessId]);
+  }, [businessId, stations]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -177,6 +206,16 @@ export function KitchenClient({
       if ("error" in res) {
         refresh();
       }
+    });
+  }
+
+  // P1-16: bump every ticket of one table from the expo view.
+  function handleBumpTable(ids: string[]) {
+    const set = new Set(ids);
+    setOrders((prev) => prev.filter((x) => !set.has(x.id)));
+    startTransition(async () => {
+      const res = await markKitchenTicketsFulfilled(ids);
+      if ("error" in res) refresh();
     });
   }
 
@@ -267,82 +306,159 @@ export function KitchenClient({
       </div>
     ) : null;
 
-  if (visible.length === 0) {
+  const viewToggle = (
+    <div className="flex gap-2 mb-4">
+      {(["stations", "expo"] as const).map((v) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => setView(v)}
+          className={
+            "text-sm rounded-md px-3 py-1.5 border " +
+            (view === v ? "bg-foreground text-background border-foreground" : "border-border hover:bg-accent")
+          }
+        >
+          {v === "stations" ? "By station" : "Expo"}
+        </button>
+      ))}
+    </div>
+  );
+
+  // One single ticket / order card (used by the station grid and for online
+  // orders in the expo grid).
+  function card(o: KitchenOrder) {
     return (
-      <div>
-        {stationStrip}
-        <div className="bg-card border border-border rounded-lg p-10 text-center">
-          <p className="text-sm text-muted-foreground">
-            No open orders. New sales will appear here automatically.
-          </p>
+      <div key={o.id} className="bg-card border border-border rounded-lg p-4 flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-medium text-sm flex items-center gap-2">
+            {o.kind === "kitchen" ? (
+              <>
+                <span className="text-[10px] uppercase tracking-wide rounded bg-emerald-500/15 text-emerald-600 px-1.5 py-0.5">Table</span>
+                {o.tableLabel ?? "Table"}
+              </>
+            ) : (
+              "#" + o.id.slice(0, 8)
+            )}
+          </span>
+          <span className="text-xs text-muted-foreground">{timeLabel(o.createdAt)}</span>
+        </div>
+        {o.customerName && <div className="text-xs text-muted-foreground mb-2">{o.customerName}</div>}
+        <div className="space-y-1 text-sm flex-1">
+          {o.items.length === 0 ? (
+            <div className="text-xs text-muted-foreground">Loading items...</div>
+          ) : (
+            o.items.map((it, i) => (
+              <div key={i} className="flex flex-col">
+                <div className="flex justify-between">
+                  <span className="truncate">{(it.seat ? "S" + it.seat + " · " : "") + it.name}</span>
+                  <span className="tabular-nums text-muted-foreground">{"x" + it.quantity}</span>
+                </div>
+                {it.note ? <span className="text-xs text-amber-600 pl-2">{"→ " + it.note}</span> : null}
+              </div>
+            ))
+          )}
+        </div>
+        <div className="flex gap-2 mt-3">
+          <button type="button" onClick={() => handleReprint(o)} className="text-xs rounded-md border border-border px-2 py-1.5 hover:bg-accent">Reprint</button>
+          {o.kind === "kitchen" && (
+            <button type="button" onClick={() => handleRefire(o)} disabled={pending} className="text-xs rounded-md border border-border px-2 py-1.5 hover:bg-accent">Re-fire</button>
+          )}
+          <Button className="flex-1" onClick={() => handleDone(o)} disabled={pending}>Done</Button>
         </div>
       </div>
     );
   }
 
+  const emptyCard = (
+    <div className="bg-card border border-border rounded-lg p-10 text-center">
+      <p className="text-sm text-muted-foreground">No open orders. New sales will appear here automatically.</p>
+    </div>
+  );
+
+  // P1-16: expo / expediter view — re-assemble each table's station & course
+  // tickets into one card so the expediter sees the whole order, and bump the
+  // whole table out at once. Online orders stay as their own cards.
+  if (view === "expo") {
+    const orderCards = orders.filter((o) => o.kind === "order");
+    const kitchenCards = orders.filter((o) => o.kind === "kitchen");
+    type ExpoGroup = { key: string; tableName: string; firstAt: string; tickets: KitchenOrder[] };
+    const expoMap = new Map<string, ExpoGroup>();
+    for (const o of kitchenCards) {
+      const key = o.elementId ?? "kt:" + o.id;
+      const g = expoMap.get(key);
+      if (g) {
+        g.tickets.push(o);
+        if (o.createdAt < g.firstAt) g.firstAt = o.createdAt;
+      } else {
+        expoMap.set(key, { key, tableName: o.tableName ?? "Ticket", firstAt: o.createdAt, tickets: [o] });
+      }
+    }
+    const expoGroups = Array.from(expoMap.values()).sort((a, b) =>
+      a.firstAt < b.firstAt ? -1 : a.firstAt > b.firstAt ? 1 : 0
+    );
+
+    return (
+      <div>
+        {viewToggle}
+        {allDayPanel}
+        {expoGroups.length === 0 && orderCards.length === 0 ? (
+          emptyCard
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {expoGroups.map((g) => (
+              <div key={g.key} className="bg-card border border-border rounded-lg p-4 flex flex-col">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-sm flex items-center gap-2">
+                    <span className="text-[10px] uppercase tracking-wide rounded bg-indigo-500/15 text-indigo-500 px-1.5 py-0.5">Expo</span>
+                    {g.tableName}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{timeLabel(g.firstAt)}</span>
+                </div>
+                <div className="space-y-2 text-sm flex-1">
+                  {g.tickets.map((t) => (
+                    <div key={t.id}>
+                      {t.stationName && (
+                        <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-0.5">{t.stationName}</div>
+                      )}
+                      {t.items.map((it, i) => (
+                        <div key={i} className="flex flex-col">
+                          <div className="flex justify-between">
+                            <span className="truncate">{(it.seat ? "S" + it.seat + " · " : "") + it.name}</span>
+                            <span className="tabular-nums text-muted-foreground">{"x" + it.quantity}</span>
+                          </div>
+                          {it.note ? <span className="text-xs text-amber-600 pl-2">{"→ " + it.note}</span> : null}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <Button className="flex-1" onClick={() => handleBumpTable(g.tickets.map((t) => t.id))} disabled={pending}>
+                    Bump table
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {orderCards.map((o) => card(o))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // By-station view (default).
   return (
     <div>
+      {viewToggle}
       {stationStrip}
       {allDayPanel}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {visible.map((o) => (
-        <div
-          key={o.id}
-          className="bg-card border border-border rounded-lg p-4 flex flex-col"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-medium text-sm flex items-center gap-2">
-              {o.kind === "kitchen" ? (
-                <>
-                  <span className="text-[10px] uppercase tracking-wide rounded bg-emerald-500/15 text-emerald-600 px-1.5 py-0.5">Table</span>
-                  {o.tableLabel ?? "Table"}
-                </>
-              ) : (
-                "#" + o.id.slice(0, 8)
-              )}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {timeLabel(o.createdAt)}
-            </span>
-          </div>
-          {o.customerName && (
-            <div className="text-xs text-muted-foreground mb-2">
-              {o.customerName}
-            </div>
-          )}
-          <div className="space-y-1 text-sm flex-1">
-            {o.items.length === 0 ? (
-              <div className="text-xs text-muted-foreground">
-                Loading items...
-              </div>
-            ) : (
-              o.items.map((it, i) => (
-                <div key={i} className="flex flex-col">
-                  <div className="flex justify-between">
-                    <span className="truncate">{(it.seat ? "S" + it.seat + " · " : "") + it.name}</span>
-                    <span className="tabular-nums text-muted-foreground">
-                      {"x" + it.quantity}
-                    </span>
-                  </div>
-                  {it.note ? (
-                    <span className="text-xs text-amber-600 pl-2">{"→ " + it.note}</span>
-                  ) : null}
-                </div>
-              ))
-            )}
-          </div>
-          <div className="flex gap-2 mt-3">
-            <button type="button" onClick={() => handleReprint(o)} className="text-xs rounded-md border border-border px-2 py-1.5 hover:bg-accent">Reprint</button>
-            {o.kind === "kitchen" && (
-              <button type="button" onClick={() => handleRefire(o)} disabled={pending} className="text-xs rounded-md border border-border px-2 py-1.5 hover:bg-accent">Re-fire</button>
-            )}
-            <Button className="flex-1" onClick={() => handleDone(o)} disabled={pending}>
-              Done
-            </Button>
-          </div>
+      {visible.length === 0 ? (
+        emptyCard
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {visible.map((o) => card(o))}
         </div>
-      ))}
-      </div>
+      )}
     </div>
   );
 }
