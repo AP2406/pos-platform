@@ -11,6 +11,7 @@ import { StaffCard } from "./staff-card";
 import { FloorCard } from "./floor-card";
 import { SectionsCard } from "./sections-card";
 import { listSections, listAssignableTables } from "../pos/sections-actions";
+import { TableAgingCard } from "./table-aging-card";
 import { ServiceChargeCard } from "./service-charge-card";
 import { SplitCard } from "./split-card";
 import { hasFloorService } from "@/lib/modules/modes";
@@ -85,6 +86,9 @@ export default async function SettingsPage() {
     allowUnits: splitb.split_allow_units === true,
   };
   const showSplit = hasFloorService(business);
+
+  const ta = ((business as { settings?: { table_aging?: { yellow_min?: number; red_min?: number } } }).settings?.table_aging) ?? {};
+  const tableAging = { yellowMin: Number(ta.yellow_min) || 30, redMin: Number(ta.red_min) || 50 };
 
   const showItemPhotos =
     (business as { show_item_photos?: boolean }).show_item_photos !== false;
@@ -271,9 +275,13 @@ export default async function SettingsPage() {
             <SectionHeader>Floor plan</SectionHeader>
             <FloorCard initialPlans={floorPlans} initialElements={floorElements} initialChairMode={chairMode} />
           </div>
-          <div className="bg-card border border-border rounded-lg p-6">
+          <div className="bg-card border border-border rounded-lg p-6 mb-4">
             <SectionHeader>Server sections</SectionHeader>
             <SectionsCard initialSections={sectionsList} tables={assignableTables} staff={staffList.filter((s) => s.is_active).map((s) => ({ id: s.id, name: s.name }))} />
+          </div>
+          <div className="bg-card border border-border rounded-lg p-6">
+            <SectionHeader>Table timers</SectionHeader>
+            <TableAgingCard initial={tableAging} />
           </div>
         </>
       ),
