@@ -50,6 +50,7 @@ export function KitchenClient({
 }) {
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders);
   const [stationFilter, setStationFilter] = useState<string>("all");
+  const [showAllDay, setShowAllDay] = useState(true);
   const [pending, startTransition] = useTransition();
 
   const refresh = useCallback(async () => {
@@ -195,6 +196,48 @@ export function KitchenClient({
   const visible =
     stationFilter === "all" ? orders : orders.filter((o) => o.stationId === stationFilter);
 
+  // P1-15: all-day counts — total outstanding quantity of each item across every
+  // visible (unfulfilled) ticket, so the line knows how much to prep at a glance.
+  // Respects the active station filter. Modifier annotations like "(+ Medium)"
+  // are stripped so all temperatures of a Burger roll up to one count.
+  const allDay = (() => {
+    const m = new Map<string, number>();
+    for (const o of visible) {
+      for (const it of o.items) {
+        const base = it.name.replace(/\s*\(\+[^)]*\)\s*$/, "").trim();
+        if (!base) continue;
+        m.set(base, (m.get(base) ?? 0) + (Number(it.quantity) || 0));
+      }
+    }
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  })();
+
+  const allDayPanel =
+    allDay.length > 0 ? (
+      <div className="bg-card border border-border rounded-lg p-3 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">All day</span>
+          <button
+            type="button"
+            onClick={() => setShowAllDay((v) => !v)}
+            className="text-xs text-muted-foreground underline"
+          >
+            {showAllDay ? "Hide" : "Show"}
+          </button>
+        </div>
+        {showAllDay && (
+          <div className="flex flex-wrap gap-2">
+            {allDay.map(([name, qty]) => (
+              <span key={name} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-sm">
+                <span className="truncate max-w-[180px]">{name}</span>
+                <span className="tabular-nums font-semibold">{"×" + qty}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    ) : null;
+
   const stationStrip =
     stations.length > 0 ? (
       <div className="flex flex-wrap gap-2 mb-4">
@@ -240,6 +283,7 @@ export function KitchenClient({
   return (
     <div>
       {stationStrip}
+      {allDayPanel}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
       {visible.map((o) => (
         <div
