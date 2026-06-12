@@ -190,7 +190,7 @@ export default async function ReportsPage({
   // P1-23: per-server sales (full service). Each server's net sales, tips,
   // order count and average check, from the order's attributed staff_id.
   const showServers = hasFloorService(business);
-  type ServerAgg = { staffId: string; name: string; count: number; sales: number; tips: number };
+  type ServerAgg = { staffId: string; name: string; count: number; sales: number; tips: number; hours: number };
   let servers: ServerAgg[] = [];
   if (showServers) {
     const agg: Record<string, { count: number; sales: number; tips: number }> = {};
@@ -202,7 +202,31 @@ export default async function ReportsPage({
       agg[sid].sales += o.subtotal;
       agg[sid].tips += o.tip;
     }
-    const sids = Object.keys(agg);
+
+    // P1-24 labor: clocked hours per staff in the same range. A shift counts
+    // toward the range if it clocked in within it; open shifts count up to now.
+    const rangeStartMs =
+      range === "today"
+        ? new Date(todayKey + "T00:00:00").getTime() // local-ish midnight; fine for bucketing
+        : range === "7d"
+          ? now - 7 * 86400000
+          : now - 30 * 86400000;
+    const hoursByStaff: Record<string, number> = {};
+    const { data: shifts } = await supabase
+      .from("time_clock_entries")
+      .select("staff_id, clock_in, clock_out")
+      .eq("business_id", business.id)
+      .gte("clock_in", new Date(rangeStartMs).toISOString());
+    for (const sh of shifts ?? []) {
+      const sid = sh.staff_id as string;
+      const inMs = new Date(sh.clock_in as string).getTime();
+      const outMs = sh.clock_out ? new Date(sh.clock_out as string).getTime() : now;
+      const hrs = Math.max(0, (outMs - inMs) / 3600000);
+      hoursByStaff[sid] = (hoursByStaff[sid] ?? 0) + hrs;
+    }
+
+    // Include staff who clocked hours even with no attributed sales.
+    const sids = Array.from(new Set([...Object.keys(agg), ...Object.keys(hoursByStaff)]));
     const nameById: Record<string, string> = {};
     if (sids.length > 0) {
       const { data: staffRows } = await supabase
@@ -216,9 +240,10 @@ export default async function ReportsPage({
       .map((sid) => ({
         staffId: sid,
         name: nameById[sid] ?? "Server",
-        count: agg[sid].count,
-        sales: round2(agg[sid].sales),
-        tips: round2(agg[sid].tips),
+        count: agg[sid]?.count ?? 0,
+        sales: round2(agg[sid]?.sales ?? 0),
+        tips: round2(agg[sid]?.tips ?? 0),
+        hours: Math.round((hoursByStaff[sid] ?? 0) * 10) / 10,
       }))
       .sort((a, b) => b.sales - a.sales || a.name.localeCompare(b.name));
   }
@@ -385,6 +410,7 @@ export default async function ReportsPage({
                     <th className="text-right font-medium px-4 py-2">Checks</th>
                     <th className="text-right font-medium px-4 py-2">Avg check</th>
                     <th className="text-right font-medium px-4 py-2">Tips</th>
+                    <th className="text-right font-medium px-4 py-2">Hours</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -395,6 +421,7 @@ export default async function ReportsPage({
                       <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{s.count}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{money(round2(s.count > 0 ? s.sales / s.count : 0))}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums">{money(s.tips)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{s.hours > 0 ? s.hours.toFixed(1) + "h" : "—"}</td>
                     </tr>
                   ))}
                 </tbody>

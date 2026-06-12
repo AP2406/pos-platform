@@ -16,6 +16,7 @@ import {
   ScrollText,
   BarChart3,
   Coins,
+  Clock,
   type LucideIcon,
 } from "lucide-react";
 
@@ -33,6 +34,7 @@ const iconMap: Record<string, LucideIcon> = {
   "/app/audit": ScrollText,
   "/app/reports": BarChart3,
   "/app/tips": Coins,
+  "/app/clock": Clock,
 };
 
 type NavItem = { href: string; label: string };
