@@ -46,6 +46,7 @@ const orderSchema = z.object({
   comp_reason_code: z.string().max(60).optional(),
   comp_reason_note: z.string().max(500).optional(),
   service_charge: z.coerce.boolean().optional(),
+  service_charge_auto: z.coerce.boolean().optional(),
   service_charge_waive_reason_code: z.string().max(60).optional(),
   service_charge_waive_reason_note: z.string().max(500).optional(),
   tax_exempt: z.coerce.boolean().optional(),
@@ -81,6 +82,7 @@ type OrderInput = {
   comp_reason_code?: string;
   comp_reason_note?: string;
   service_charge?: boolean;
+  service_charge_auto?: boolean;
   service_charge_waive_reason_code?: string;
   service_charge_waive_reason_note?: string;
   tax_exempt?: boolean;
@@ -376,7 +378,20 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   const scLabel = ((business as { service_charge_label?: string }).service_charge_label || "Service charge").toString();
   const scApplied = scEnabled && scPct > 0 && parsed.data.service_charge === true;
   const scBase = scApplied ? (scPostTax ? Math.round((netSubtotal + tax) * 100) / 100 : netSubtotal) : 0;
-  const serviceCharge = scApplied ? Math.round(scBase * (scPct / 100) * 100) / 100 : 0;
+  const scAmount = scApplied ? Math.round(scBase * (scPct / 100) * 100) / 100 : 0;
+
+  // P0-10c: a mandatory large-party charge is an AUTO-GRATUITY — in Canada that
+  // is a service charge that IS taxable (HST applies), and it's recorded apart
+  // from a manual service charge and from a voluntary (non-taxable) tip. The
+  // client flags which one was applied.
+  const scIsAuto = scApplied && parsed.data.service_charge_auto === true;
+  const autoGratuity = scIsAuto ? scAmount : 0;
+  const serviceCharge = scIsAuto ? 0 : scAmount;
+  const autoGratTax = scIsAuto && !isExempt ? Math.round(autoGratuity * rate * 100) / 100 : 0;
+  if (autoGratTax > 0) {
+    tax = Math.round((tax + autoGratTax) * 100) / 100;
+    taxableBase = Math.round((taxableBase + autoGratuity) * 100) / 100;
+  }
 
   // Waiving an enabled service charge is the sensitive, reason-coded action.
   const scWaiveCode = (parsed.data.service_charge_waive_reason_code || "").trim();
@@ -392,7 +407,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   }
 
   const tip = parsed.data.tip ?? 0;
-  const total = Math.round((netSubtotal + tax + serviceCharge + tip) * 100) / 100;
+  const total = Math.round((netSubtotal + tax + serviceCharge + autoGratuity + tip) * 100) / 100;
   const paymentMethod = parsed.data.payment_method ?? "cash";
 
   let tenders: Tender[] = [];
@@ -465,7 +480,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     },
     tax: { rate: rate, amount: tax, taxable_base: taxableBase, breakdown: taxBreakdown, exempt: taxExemptInfo },
     service_charge: {
-      applied: scApplied,
+      applied: scApplied && !scIsAuto,
       label: scLabel,
       pct: scPct,
       post_tax: scPostTax,
@@ -474,6 +489,14 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       waived: scWaived,
       waive_reason_code: scWaived ? scWaiveCode : null,
       waive_reason_note: scWaived && scWaiveNote ? scWaiveNote : null,
+    },
+    auto_gratuity: {
+      applied: scIsAuto,
+      label: scLabel,
+      pct: scPct,
+      amount: autoGratuity,
+      taxable: true,
+      hst: autoGratTax,
     },
     tip: tip,
     total: total,
@@ -581,6 +604,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     discount: discount,
     comp: comp,
     service_charge: serviceCharge,
+    auto_gratuity: autoGratuity,
     void_total: voidTotal,
     total: total,
     payment_method: orderPaymentMethod,

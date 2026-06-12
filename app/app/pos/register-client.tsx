@@ -110,6 +110,7 @@ type CardModalState = {
     comp_reason_code?: string;
     comp_reason_note?: string;
     service_charge?: boolean;
+    service_charge_auto?: boolean;
     service_charge_waive_reason_code?: string;
     service_charge_waive_reason_note?: string;
     tax_exempt?: boolean;
@@ -1165,13 +1166,20 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
   const serviceApplied = scAvailable && serviceOn;
   const scBase = serviceApplied ? (scCfg.postTax ? Math.round((netSubtotal + tax) * 100) / 100 : netSubtotal) : 0;
   const serviceChargeAmt = serviceApplied ? Math.round(scBase * (scCfg.pct / 100) * 100) / 100 : 0;
+  // P0-10c: a large-party charge is a taxable auto-gratuity (HST added to tax);
+  // a manually-applied charge stays an untaxed service charge.
+  const scIsAuto = scAuto && serviceApplied;
+  const autoGratAmt = scIsAuto ? serviceChargeAmt : 0;
+  const manualScAmt = scIsAuto ? 0 : serviceChargeAmt;
+  const autoGratTax = scIsAuto && !effectiveExempt ? Math.round(autoGratAmt * taxRate * 100) / 100 : 0;
+  tax = Math.round((tax + autoGratTax) * 100) / 100;
   const scWaived = scAuto && !serviceOn;
   const serviceWaiveOk =
     !scWaived ||
     (serviceWaiveReason !== "" && (serviceWaiveReason !== "other" || serviceWaiveNote.trim().length > 0));
 
   const tipNum = parseFloat(tip) || 0;
-  const total = Math.round((netSubtotal + tax + serviceChargeAmt + tipNum) * 100) / 100;
+  const total = Math.round((netSubtotal + tax + manualScAmt + autoGratAmt + tipNum) * 100) / 100;
 
   const discountReasonOk =
     discount <= 0 ||
@@ -1255,6 +1263,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
       comp_reason_note:
         comp > 0 && compReason === "other" ? compReasonNote.trim() : undefined,
       service_charge: serviceApplied || undefined,
+      service_charge_auto: scIsAuto || undefined,
       service_charge_waive_reason_code: scWaived ? serviceWaiveReason : undefined,
       service_charge_waive_reason_note:
         scWaived && serviceWaiveReason === "other" ? serviceWaiveNote.trim() : undefined,
@@ -1395,6 +1404,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
         comp_reason_note:
           comp > 0 && compReason === "other" ? compReasonNote.trim() : undefined,
         service_charge: serviceApplied || undefined,
+        service_charge_auto: scIsAuto || undefined,
         service_charge_waive_reason_code: scWaived ? serviceWaiveReason : undefined,
         service_charge_waive_reason_note:
           scWaived && serviceWaiveReason === "other" ? serviceWaiveNote.trim() : undefined,
@@ -2117,7 +2127,7 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                   </div>
                   {scAvailable && (
                     <button type="button" onClick={() => setSheet("service")} className="w-full flex justify-between text-sm rounded px-1 -mx-1 hover:bg-accent/50">
-                      <span className="text-muted-foreground text-left">{scCfg.label + " (" + scCfg.pct + "%)" + (serviceApplied ? "" : " · waived")}</span>
+                      <span className="text-muted-foreground text-left">{(scIsAuto ? "Auto-gratuity" : scCfg.label) + " (" + scCfg.pct + "%)" + (serviceApplied ? (scIsAuto ? " · taxed" : "") : " · waived")}</span>
                       <span className={"tabular-nums " + (serviceApplied ? "" : "text-muted-foreground line-through")}>{serviceApplied ? "$" + serviceChargeAmt.toFixed(2) : "$0.00"}</span>
                     </button>
                   )}
