@@ -810,12 +810,27 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
     });
   }
 
+  const [serverPin, setServerPin] = useState("");
+  const [serverPinNeeded, setServerPinNeeded] = useState(false);
+  const [serverErr, setServerErr] = useState<string | null>(null);
   function changeServer(member: StaffMember) {
     if (!tableBinding) return;
-    setServerName(member.name);
-    setServerSheet(false);
+    setServerErr(null);
     startTransition(async () => {
-      await setTicketServer(tableBinding.ticketId, member.id);
+      const res = await setTicketServer(tableBinding.ticketId, member.id, serverPin || undefined);
+      if ("needs_approval" in res) {
+        setServerPinNeeded(true);
+        setServerErr("A manager PIN is needed to take another server's table.");
+        return;
+      }
+      if ("error" in res) {
+        setServerErr(res.error);
+        return;
+      }
+      setServerName(member.name);
+      setServerSheet(false);
+      setServerPin("");
+      setServerPinNeeded(false);
     });
   }
 
@@ -2185,6 +2200,14 @@ export function RegisterClient({ items, taxRate, businessName, hasStaff, activeS
                     </button>
                   ))}
                 </div>
+                {serverPinNeeded && (
+                  <div className="space-y-1 mt-3">
+                    <Label className="text-xs">Manager PIN</Label>
+                    <Input type="password" inputMode="numeric" value={serverPin} onChange={(e) => setServerPin(e.target.value)} placeholder="4–6 digits" className="h-10" />
+                    <p className="text-[11px] text-muted-foreground">Then tap the server again to confirm.</p>
+                  </div>
+                )}
+                {serverErr && <p className="text-sm text-red-600 mt-2">{serverErr}</p>}
               </div>
             </div>
           )}
