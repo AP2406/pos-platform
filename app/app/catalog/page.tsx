@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { CatalogClient } from "./catalog-client";
 import { ImportMenu } from "./import-menu";
+import { MenuBoardLink } from "./menu-board-link";
 import { CoursesCard } from "./courses-card";
 import { hasFloorService } from "@/lib/modules/modes";
 import { listCourses } from "../pos/courses-actions";
@@ -134,7 +135,10 @@ export default async function CatalogPage() {
             The products and services you sell at checkout.
           </p>
         </div>
-        <ImportMenu />
+        <div className="flex items-center gap-2">
+          <MenuBoardLink businessId={business.id} />
+          <ImportMenu />
+        </div>
       </div>
       {courseRows.length > 0 && (
         <div className="bg-card border border-border rounded-lg p-6 mb-6">
