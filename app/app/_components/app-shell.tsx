@@ -195,8 +195,8 @@ export function AppShell({
         </button>
         <div className="flex items-center gap-2 min-w-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/surge-appicon.svg" alt="Surge" className="w-6 h-6 rounded-md shrink-0" />
-          <span className="font-semibold text-sm tracking-tight">Surge</span>
+          <img src="/brand/surge-appicon.svg" alt="Surge" className="w-9 h-9 rounded-lg shrink-0" />
+          <span className="font-semibold text-base tracking-tight">Surge</span>
           {isTill && (
             <span className="text-sm text-sidebar-foreground/70 truncate hidden sm:inline">
               {"\u00B7"} {businessName}
@@ -218,8 +218,8 @@ export function AppShell({
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/brand/surge-appicon.svg" alt="Surge" className="w-7 h-7 rounded-md shrink-0 shadow-sm" />
-              <span className="font-semibold text-sm tracking-tight">Surge</span>
+              <img src="/brand/surge-appicon.svg" alt="Surge" className="w-9 h-9 rounded-lg shrink-0 shadow-sm" />
+              <span className="font-semibold text-base tracking-tight">Surge</span>
             </div>
             <button
               type="button"
