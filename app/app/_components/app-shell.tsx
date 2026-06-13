@@ -194,11 +194,8 @@ export function AppShell({
           </svg>
         </button>
         <div className="flex items-center gap-2 min-w-0">
-          <span className="w-6 h-6 rounded-md bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center shrink-0">
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
-              <path d="M13 2L3 14h7v8l10-12h-7z" />
-            </svg>
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/surge-appicon.svg" alt="Surge" className="w-6 h-6 rounded-md shrink-0" />
           <span className="font-semibold text-sm tracking-tight">Surge</span>
           {isTill && (
             <span className="text-sm text-sidebar-foreground/70 truncate hidden sm:inline">
@@ -220,11 +217,8 @@ export function AppShell({
         <div className="px-4 pt-5 pb-4 border-b border-sidebar-border">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
-              <span className="w-7 h-7 rounded-md bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center shrink-0 shadow-sm">
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                  <path d="M13 2L3 14h7v8l10-12h-7z" />
-                </svg>
-              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/brand/surge-appicon.svg" alt="Surge" className="w-7 h-7 rounded-md shrink-0 shadow-sm" />
               <span className="font-semibold text-sm tracking-tight">Surge</span>
             </div>
             <button

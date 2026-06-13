@@ -18,11 +18,8 @@ export default function Loading() {
             strokeDasharray="72 220"
           />
         </svg>
-        <span className="relative w-12 h-12 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-lg">
-          <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-            <path d="M13 2L3 14h7v8l10-12h-7z" />
-          </svg>
-        </span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/surge-appicon.svg" alt="Surge" className="relative w-12 h-12 rounded-xl shadow-lg" />
       </div>
       <p className="text-sm text-muted-foreground animate-pulse">
         Loading your workspace…

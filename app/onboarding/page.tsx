@@ -53,11 +53,8 @@ export default async function OnboardingPage({
 
         <div className="relative z-10 flex flex-col justify-between p-12 text-white w-full">
           <div className="flex items-center gap-2.5 oa-rise">
-            <span className="w-9 h-9 rounded-lg bg-white/10 ring-1 ring-white/20 flex items-center justify-center">
-              <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                <path d="M13 2L3 14h7v8l10-12h-7z" />
-              </svg>
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/surge-appicon.svg" alt="Surge" className="w-9 h-9 rounded-lg" />
             <span className="font-semibold text-lg tracking-tight">Surge</span>
           </div>
 
