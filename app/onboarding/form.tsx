@@ -81,11 +81,8 @@ export function OnboardingForm() {
   return (
     <div className="w-full max-w-lg">
       <div className="lg:hidden flex items-center gap-2 mb-8 oa-rise">
-        <span className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
-          <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-            <path d="M13 2L3 14h7v8l10-12h-7z" />
-          </svg>
-        </span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/surge-appicon.svg" alt="Surge" className="w-8 h-8 rounded-lg" />
         <span className="font-semibold text-lg tracking-tight">Surge</span>
       </div>
 
