@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { CatalogClient } from "./catalog-client";
@@ -9,7 +10,8 @@ import { listCourses } from "../pos/courses-actions";
 import { listKitchenStations } from "../kitchen/stations-actions";
 
 export default async function CatalogPage() {
-  const { business } = await requireBusiness();
+  const { business, role } = await requireBusiness();
+  const canManage = role === "owner" || role === "manager";
   const supabase = await createClient();
 
   const { data: itemsData } = await supabase
@@ -136,6 +138,14 @@ export default async function CatalogPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {canManage && (
+            <Link
+              href="/app/recipes"
+              className="text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent"
+            >
+              Recipes &amp; costing
+            </Link>
+          )}
           <MenuBoardLink businessId={business.id} />
           <ImportMenu />
         </div>
