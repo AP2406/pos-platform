@@ -9,6 +9,8 @@ import {
   updateIngredient,
   deleteIngredient,
   saveRecipe,
+  setIngredientStock,
+  adjustIngredientStock,
 } from "./actions";
 
 type Ingredient = {
@@ -17,6 +19,9 @@ type Ingredient = {
   unit: string;
   cost: number;
   is_active: boolean;
+  track_stock: boolean;
+  stock_qty: number;
+  reorder_point: number;
 };
 
 type Dish = {
@@ -146,6 +151,9 @@ function IngredientsManager({
             unit,
             cost: parseFloat(cost) || 0,
             is_active: true,
+            track_stock: false,
+            stock_qty: 0,
+            reorder_point: 0,
           },
         ].sort((a, b) => a.name.localeCompare(b.name))
       );
@@ -238,6 +246,14 @@ function IngredientsManager({
                   <span className="text-xs text-muted-foreground ml-2">
                     {fmt(ing.cost)} / {ing.unit}
                   </span>
+                  {ing.track_stock && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      {"·"} {ing.stock_qty} {ing.unit} on hand
+                      {ing.stock_qty <= ing.reorder_point && (
+                        <span className="text-red-600 font-medium ml-1">Low</span>
+                      )}
+                    </span>
+                  )}
                 </div>
                 {canManage && (
                   <div className="flex items-center gap-2 shrink-0">
@@ -290,6 +306,18 @@ function IngredientEditor({
   const [name, setName] = useState(ing.name);
   const [unit, setUnit] = useState(ing.unit);
   const [cost, setCost] = useState(String(ing.cost));
+  const [track, setTrack] = useState(ing.track_stock);
+  const [reorder, setReorder] = useState(ing.reorder_point ? String(ing.reorder_point) : "");
+  const [change, setChange] = useState("");
+  const [reason, setReason] = useState("receive");
+
+  function patchLocal(fields: Partial<Ingredient>) {
+    setIngredients((prev) =>
+      prev
+        .map((i) => (i.id === ing.id ? { ...i, ...fields } : i))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    );
+  }
 
   function save() {
     setErr(null);
@@ -303,56 +331,149 @@ function IngredientEditor({
         setErr(res.error);
         return;
       }
-      setIngredients((prev) =>
-        prev
-          .map((i) =>
-            i.id === ing.id
-              ? { ...i, name: name.trim(), unit, cost: parseFloat(cost) || 0 }
-              : i
-          )
-          .sort((a, b) => a.name.localeCompare(b.name))
-      );
+      patchLocal({ name: name.trim(), unit, cost: parseFloat(cost) || 0 });
       onDone();
     });
   }
 
+  function saveStock() {
+    setErr(null);
+    startTransition(async () => {
+      const res = await setIngredientStock(ing.id, track, parseFloat(reorder) || 0);
+      if ("error" in res) {
+        setErr(res.error);
+        return;
+      }
+      patchLocal({ track_stock: track, reorder_point: parseFloat(reorder) || 0 });
+    });
+  }
+
+  function adjust() {
+    setErr(null);
+    const chg = parseFloat(change) || 0;
+    if (chg === 0) {
+      setErr("Enter a non-zero amount (use a minus sign to remove stock).");
+      return;
+    }
+    startTransition(async () => {
+      const res = await adjustIngredientStock(ing.id, chg, reason);
+      if ("error" in res) {
+        setErr(res.error);
+        return;
+      }
+      patchLocal({ stock_qty: res.new_qty });
+      setChange("");
+    });
+  }
+
   return (
-    <div className="mt-3 border-l-2 border-border pl-3 flex flex-wrap items-end gap-2">
-      <div className="space-y-1">
-        <Label className="text-xs">Name</Label>
-        <Input value={name} onChange={(e) => setName(e.target.value)} className="h-9 w-44" />
+    <div className="mt-3 border-l-2 border-border pl-3 space-y-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Name</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} className="h-9 w-44" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Unit</Label>
+          <select
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+            className="h-9 rounded-md border border-border bg-transparent px-2 text-sm"
+          >
+            {UNITS.map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Cost / unit</Label>
+          <Input
+            type="number"
+            min="0"
+            step="0.01"
+            value={cost}
+            onChange={(e) => setCost(e.target.value)}
+            className="h-9 w-28 text-right"
+          />
+        </div>
+        <Button size="sm" onClick={save} disabled={pending}>
+          Save
+        </Button>
+        <Button variant="outline" size="sm" onClick={remove} disabled={pending}>
+          Delete
+        </Button>
       </div>
-      <div className="space-y-1">
-        <Label className="text-xs">Unit</Label>
-        <select
-          value={unit}
-          onChange={(e) => setUnit(e.target.value)}
-          className="h-9 rounded-md border border-border bg-transparent px-2 text-sm"
-        >
-          {UNITS.map((u) => (
-            <option key={u} value={u}>
-              {u}
-            </option>
-          ))}
-        </select>
+
+      <div className="pt-2 border-t border-border space-y-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setTrack((t) => !t)}
+            className={
+              "px-3 py-1 text-sm rounded-md border transition-colors " +
+              (track
+                ? "border-foreground bg-accent font-medium"
+                : "border-border hover:border-foreground/40")
+            }
+          >
+            {track ? "Stock tracking on" : "Stock tracking off"}
+          </button>
+          <span className="text-xs text-muted-foreground">
+            When on, sales deduct this ingredient via dish recipes.
+          </span>
+        </div>
+
+        {track && (
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Low-stock at</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={reorder}
+                onChange={(e) => setReorder(e.target.value)}
+                placeholder="0"
+                className="h-9 w-24 text-right"
+              />
+            </div>
+            <Button size="sm" variant="outline" onClick={saveStock} disabled={pending}>
+              Save stock settings
+            </Button>
+            <div className="space-y-1">
+              <Label className="text-xs">Receive / adjust</Label>
+              <div className="flex items-end gap-2">
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={change}
+                  onChange={(e) => setChange(e.target.value)}
+                  placeholder="e.g. 10 or -2"
+                  className="h-9 w-28 text-right"
+                />
+                <select
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  className="h-9 rounded-md border border-border bg-transparent px-2 text-sm"
+                >
+                  <option value="receive">Receive</option>
+                  <option value="adjustment">Adjustment</option>
+                  <option value="damage">Damage / loss</option>
+                  <option value="initial">Initial count</option>
+                </select>
+                <Button size="sm" onClick={adjust} disabled={pending}>
+                  Apply
+                </Button>
+              </div>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              On hand: {ing.stock_qty} {ing.unit}
+            </span>
+          </div>
+        )}
       </div>
-      <div className="space-y-1">
-        <Label className="text-xs">Cost / unit</Label>
-        <Input
-          type="number"
-          min="0"
-          step="0.01"
-          value={cost}
-          onChange={(e) => setCost(e.target.value)}
-          className="h-9 w-28 text-right"
-        />
-      </div>
-      <Button size="sm" onClick={save} disabled={pending}>
-        Save
-      </Button>
-      <Button variant="outline" size="sm" onClick={remove} disabled={pending}>
-        Delete
-      </Button>
     </div>
   );
 }

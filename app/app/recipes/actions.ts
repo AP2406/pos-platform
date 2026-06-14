@@ -115,6 +115,67 @@ export async function deleteIngredient(
   return { ok: true };
 }
 
+const STOCK_REASONS = ["receive", "adjustment", "damage", "initial", "recount"];
+
+// Turn ingredient stock tracking on/off + set its low-stock threshold.
+export async function setIngredientStock(
+  id: string,
+  track: boolean,
+  reorderPoint: number
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing ingredient." };
+  const { business, role } = await requireBusiness();
+  if (!canManage(role)) return { error: "Only an owner or manager can manage recipes." };
+  const supabase = await createClient();
+
+  const rp = Math.max(0, Math.round((Number(reorderPoint) || 0) * 10000) / 10000);
+  const { error } = await supabase
+    .from("ingredients")
+    .update({ track_stock: !!track, reorder_point: rp })
+    .eq("id", id)
+    .eq("business_id", business.id);
+
+  if (error) {
+    console.error("setIngredientStock:", error);
+    return { error: "Could not save stock settings. Please try again." };
+  }
+  revalidatePath("/app/recipes");
+  return { ok: true };
+}
+
+// Receive / adjust / count an ingredient's on-hand quantity (atomic RPC + ledger).
+export async function adjustIngredientStock(
+  id: string,
+  change: number,
+  reason: string,
+  note?: string
+): Promise<{ ok: true; new_qty: number } | { error: string }> {
+  if (!id) return { error: "Missing ingredient." };
+  const chg = Math.round((Number(change) || 0) * 10000) / 10000;
+  if (chg === 0) return { error: "Enter a non-zero amount." };
+  const r = STOCK_REASONS.includes(reason) ? reason : "adjustment";
+
+  const { business, role } = await requireBusiness();
+  if (!canManage(role)) return { error: "Only an owner or manager can manage recipes." };
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("apply_ingredient_change", {
+    p_business_id: business.id,
+    p_ingredient_id: id,
+    p_change: chg,
+    p_reason: r,
+    p_note: note && note.trim() ? note.trim().slice(0, 300) : null,
+    p_order_id: null,
+  });
+
+  if (error || data === null || data === undefined) {
+    console.error("adjustIngredientStock:", error);
+    return { error: "Could not adjust stock. Please try again." };
+  }
+  revalidatePath("/app/recipes");
+  return { ok: true, new_qty: Number(data) };
+}
+
 // Replace a dish's entire recipe with the given lines (delete-missing + upsert).
 export async function saveRecipe(
   catalogItemId: string,

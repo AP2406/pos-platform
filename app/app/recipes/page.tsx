@@ -10,7 +10,7 @@ export default async function RecipesPage() {
     await Promise.all([
       supabase
         .from("ingredients")
-        .select("id, name, unit, cost, is_active")
+        .select("id, name, unit, cost, is_active, track_stock, stock_qty, reorder_point")
         .eq("business_id", business.id)
         .order("name", { ascending: true }),
       supabase
@@ -35,6 +35,9 @@ export default async function RecipesPage() {
     unit: (i.unit as string) || "unit",
     cost: Number(i.cost) || 0,
     is_active: i.is_active as boolean,
+    track_stock: !!i.track_stock,
+    stock_qty: Number(i.stock_qty) || 0,
+    reorder_point: Number(i.reorder_point) || 0,
   }));
 
   const dishes = (dishRows ?? []).map((d) => ({
