@@ -5,6 +5,8 @@ import {
   getMonthBoundsUTC,
 } from "@/lib/utils/dates";
 import Link from "next/link";
+import { MetricCard } from "@/components/ui/metric-card";
+import { DollarSign, Receipt, TrendingUp, AlertTriangle } from "lucide-react";
 
 type Biz = {
   id: string;
@@ -156,14 +158,21 @@ export async function PosDashboard({ business }: { business: Biz }) {
 
       <SectionHeader>Today</SectionHeader>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Today's sales" value={money(today.gross)} hint={today.count + (today.count === 1 ? " sale" : " sales")} />
-        <StatCard label="Transactions" value={today.count.toString()} hint="Today" />
-        <StatCard label="Avg ticket" value={money(avgTicketToday)} hint="Today" />
-        <StatCard
+        <MetricCard
+          hero
+          label="Today's sales"
+          value={money(today.gross)}
+          hint={today.count + (today.count === 1 ? " sale" : " sales")}
+          icon={<DollarSign />}
+        />
+        <MetricCard label="Transactions" value={today.count.toString()} hint="Today" icon={<Receipt />} />
+        <MetricCard label="Avg ticket" value={money(avgTicketToday)} hint="Today" icon={<TrendingUp />} />
+        <MetricCard
           label="Low stock"
           value={lowStock.length.toString()}
           hint={lowStock.length > 0 ? "Items to reorder" : "All stocked"}
-          tone={lowStock.length > 0 ? "warning" : "neutral"}
+          tone={lowStock.length > 0 ? "warning" : "default"}
+          icon={<AlertTriangle />}
         />
       </div>
 

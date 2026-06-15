@@ -53,6 +53,12 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  /* Design-system additions: raised surface, hairline borders, card elevation. */
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --shadow-elevation: var(--elevation);
+  --shadow-elevation-sm: var(--elevation-sm);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -115,6 +121,13 @@
   --table-late-bg: oklch(0.95 0.05 25);
   --table-late-border: oklch(0.7 0.18 25);
   --table-late-fg: oklch(0.5 0.18 25);
+
+  /* Elevation + surfaces (Daylight) */
+  --surface-2: oklch(0.97 0.006 265);
+  --line: oklch(0.21 0.02 265 / 0.1);
+  --line-strong: oklch(0.21 0.02 265 / 0.18);
+  --elevation: 0 1px 2px oklch(0 0 0 / 0.06), 0 12px 28px -18px oklch(0 0 0 / 0.18);
+  --elevation-sm: 0 1px 2px oklch(0 0 0 / 0.05), 0 6px 16px -12px oklch(0 0 0 / 0.14);
 }
 
 .dark {
@@ -170,6 +183,13 @@
   --table-late-bg: oklch(0.32 0.09 25);
   --table-late-border: oklch(0.55 0.15 25);
   --table-late-fg: oklch(0.85 0.13 25);
+
+  /* Elevation + surfaces (Midnight) — lifted cards on deep ink */
+  --surface-2: oklch(0.265 0.02 265);
+  --line: oklch(1 0 0 / 0.08);
+  --line-strong: oklch(1 0 0 / 0.16);
+  --elevation: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 14px 34px -20px oklch(0 0 0 / 0.75);
+  --elevation-sm: 0 1px 0 oklch(1 0 0 / 0.03) inset, 0 8px 20px -14px oklch(0 0 0 / 0.7);
 }
 
 @layer base {
