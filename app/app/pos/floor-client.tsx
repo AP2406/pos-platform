@@ -473,10 +473,10 @@ export function FloorClient({
   }
   function statusClass(s: "available" | "seated" | "warn" | "late"): string {
     switch (s) {
-      case "seated": return "bg-table-seated-bg border-table-seated-border text-table-seated-fg shadow-sm";
-      case "warn": return "bg-table-warn-bg border-table-warn-border text-table-warn-fg shadow-sm";
-      case "late": return "bg-table-late-bg border-table-late-border text-table-late-fg shadow-sm";
-      default: return "bg-table-available-bg border-table-available-border text-foreground shadow-sm hover:border-foreground/40 hover:shadow-md";
+      case "seated": return "bg-table-seated-bg border-table-seated-border text-table-seated-fg shadow-elevation-sm";
+      case "warn": return "bg-table-warn-bg border-table-warn-border text-table-warn-fg shadow-elevation-sm";
+      case "late": return "bg-table-late-bg border-table-late-border text-table-late-fg shadow-elevation-sm";
+      default: return "bg-table-available-bg border-table-available-border text-foreground shadow-elevation-sm hover:border-foreground/40 hover:shadow-elevation";
     }
   }
 
@@ -566,10 +566,10 @@ export function FloorClient({
                       type="button"
                       disabled={pending}
                       onClick={() => tapElement(el)}
-                      className={"rounded-lg border p-3 text-left active:scale-[0.98] transition-transform disabled:opacity-60 " + statusClass(status)}
+                      className={"rounded-xl border p-3.5 min-h-[68px] text-left active:scale-[0.98] transition-transform disabled:opacity-60 " + statusClass(status)}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold truncate">{el.label ?? "Table"}</span>
+                        <span className="font-semibold text-base truncate">{el.label ?? "Table"}</span>
                         {open && <span className="tabular-nums text-sm font-medium">{"$" + open.subtotal.toFixed(2)}</span>}
                       </div>
                       <div className="text-[11px] mt-0.5 truncate opacity-80">
@@ -637,7 +637,7 @@ export function FloorClient({
                     type="button"
                     disabled={pending}
                     onClick={() => tapElement(el)}
-                    className={"absolute border p-1.5 flex flex-col items-center justify-center text-center leading-tight gap-0.5 active:scale-[0.97] transition-all " + statusClass(status)}
+                    className={"absolute overflow-hidden border p-1.5 flex flex-col items-center justify-center text-center leading-tight gap-0.5 active:scale-[0.97] transition-all " + statusClass(status)}
                     style={tileStyle}
                   >
                     {/* P2-27: a guest placed a new order via QR awaiting the server. */}

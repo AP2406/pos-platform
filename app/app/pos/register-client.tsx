@@ -5,6 +5,7 @@ import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Chip } from "@/components/ui/chip";
 import { createOrder, searchCustomers, quickCreateCustomer } from "./actions";
 import { finalizeSplitCheck, type SplitResultOrder } from "./split-actions";
 import { SplitSheet, type SplitCheck } from "./split-sheet";
@@ -2050,18 +2051,18 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                 <span className="text-xs text-sidebar-foreground/70 truncate hidden sm:inline">{businessName}</span>
               )}
               {hasStaff && (
-                <span className="text-xs text-sidebar-foreground/70 truncate hidden sm:inline">
-                  {staff ? "Ringing as " + staff.name : "No cashier set"}
-                </span>
-              )}
-              {hasStaff && (
                 staff ? (
                   <span className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-sidebar-foreground/70 truncate hidden sm:inline">
+                      Ringing as {staff.name}
+                    </span>
                     <button type="button" onClick={openStaffPin} className="text-xs text-sidebar-foreground/70 underline hover:text-sidebar-foreground">Switch</button>
                     <button type="button" onClick={signOutStaff} disabled={staffBusy} className="text-xs text-sidebar-foreground/70 underline hover:text-sidebar-foreground">Sign out</button>
                   </span>
                 ) : (
-                  <button type="button" onClick={openStaffPin} className="text-xs font-medium underline shrink-0">Enter PIN</button>
+                  <button type="button" onClick={openStaffPin} className="shrink-0">
+                    <Chip tone="warning" dot>No cashier — Enter PIN</Chip>
+                  </button>
                 )
               )}
             </div>
@@ -2126,7 +2127,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                 {visibleItems.length === 0 ? (
                   <p className="text-sm text-muted-foreground p-4">No items match. Add some in the Catalog, or clear the search.</p>
                 ) : (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+                  <div className="grid [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))] gap-2.5">
                     {visibleItems.map((item) => {
                       const hasVars = item.variations.length > 0;
                       const priceLabel = hasVars
@@ -2136,7 +2137,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                       const low = isLowStock(item);
                       if (showItemPhotos && item.image_url) {
                         return (
-                          <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative min-h-[110px] rounded-lg border border-border overflow-hidden active:scale-[0.97] transition-transform " + (oos ? "opacity-50" : "")}>
+                          <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative min-h-[124px] rounded-xl border border-line shadow-elevation-sm overflow-hidden active:scale-[0.97] transition-transform " + (oos ? "opacity-50" : "")}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={item.image_url} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
                             {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">Low</span>}
@@ -2148,10 +2149,10 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                         );
                       }
                       return (
-                        <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative text-left p-3 min-h-[110px] rounded-lg border active:scale-[0.97] transition-all flex flex-col justify-between " + tileClassesFor(item.category, categoryColors) + (oos ? " opacity-50" : "")}>
+                        <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative text-left p-3.5 min-h-[124px] rounded-xl border shadow-elevation-sm active:scale-[0.97] transition-all flex flex-col justify-between " + tileClassesFor(item.category, categoryColors) + (oos ? " opacity-50" : "")}>
                           {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">Low</span>}
-                          <div className="font-semibold text-sm leading-snug line-clamp-3">{item.name}</div>
-                          <div className="text-xs opacity-80 mt-1">{oos ? "86'd" : priceLabel}</div>
+                          <div className="font-semibold text-[15px] leading-snug line-clamp-3">{item.name}</div>
+                          <div className="text-sm opacity-80 mt-1 tabular-nums">{oos ? "86'd" : priceLabel}</div>
                         </button>
                       );
                     })}
@@ -2176,12 +2177,12 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
 
               {/* Seat selector (real tables only) */}
               {tableMode && (
-                <div className="shrink-0 flex items-center gap-1 px-2 py-2 border-b border-border overflow-x-auto">
-                  <button type="button" onClick={() => setActiveSeat(null)} className={"shrink-0 text-xs rounded-md border px-2.5 py-1.5 " + (activeSeat === null ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>Shared</button>
+                <div className="shrink-0 flex items-center gap-1.5 px-2 py-2 border-b border-border overflow-x-auto">
+                  <button type="button" onClick={() => setActiveSeat(null)} className={"shrink-0 whitespace-nowrap text-sm rounded-lg border px-3.5 py-2 transition-colors " + (activeSeat === null ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>Shared</button>
                   {Array.from({ length: seatCount }, (_, i) => i + 1).map((s) => (
-                    <button key={s} type="button" onClick={() => setActiveSeat(s)} className={"shrink-0 text-xs rounded-md border px-2.5 py-1.5 " + (activeSeat === s ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>{"Seat " + s}</button>
+                    <button key={s} type="button" onClick={() => setActiveSeat(s)} className={"shrink-0 whitespace-nowrap text-sm rounded-lg border px-3.5 py-2 transition-colors " + (activeSeat === s ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>{"Seat " + s}</button>
                   ))}
-                  <button type="button" onClick={() => setSeatCount((n) => Math.min(n + 1, 30))} className="shrink-0 text-xs rounded-md border border-dashed border-border px-2 py-1.5 text-muted-foreground hover:bg-accent/50">+ Seat</button>
+                  <button type="button" onClick={() => setSeatCount((n) => Math.min(n + 1, 30))} className="shrink-0 whitespace-nowrap text-sm rounded-lg border border-dashed border-border px-3 py-2 text-muted-foreground hover:bg-accent/50">+ Seat</button>
                 </div>
               )}
 
@@ -2341,7 +2342,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                     <span className="text-muted-foreground">{effectiveExempt ? "Tax (exempt)" : "Tax"}</span>
                     <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
                   </div>
-                  {scAvailable && (
+                  {scAvailable && (serviceApplied || scAuto) && (
                     <button type="button" onClick={() => setSheet("service")} className="w-full flex justify-between text-sm rounded px-1 -mx-1 hover:bg-accent/50">
                       <span className="text-muted-foreground text-left">{(scIsAuto ? "Auto-gratuity" : scCfg.label) + " (" + scCfg.pct + "%)" + (serviceApplied ? (scIsAuto ? " · taxed" : "") : " · waived")}</span>
                       <span className={"tabular-nums " + (serviceApplied ? "" : "text-muted-foreground line-through")}>{serviceApplied ? "$" + serviceChargeAmt.toFixed(2) : "$0.00"}</span>
@@ -2360,7 +2361,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
 
                   {error && <p className="text-sm text-red-600 pt-1">{error}</p>}
 
-                  <Button className="w-full h-14 text-base mt-2" onClick={openTender} disabled={pending || cart.length === 0 || (discount > 0 && !discountReasonOk) || (comp > 0 && !compReasonOk) || (scWaived && !serviceWaiveOk) || (taxExempt && !taxExemptOk)}>
+                  <Button variant="primary" className="w-full h-14 text-base mt-2" onClick={openTender} disabled={pending || cart.length === 0 || (discount > 0 && !discountReasonOk) || (comp > 0 && !compReasonOk) || (scWaived && !serviceWaiveOk) || (taxExempt && !taxExemptOk)}>
                     {"Charge" + (total > 0 ? " $" + total.toFixed(2) : "")}
                   </Button>
                   {splitSettings && total > 0 && (
