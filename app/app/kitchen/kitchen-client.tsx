@@ -65,10 +65,11 @@ export function KitchenClient({
     const id = setInterval(() => setNow(Date.now()), 15000);
     return () => clearInterval(id);
   }, []);
-  // Aging: fresh < 8m, warming 8–15m, late > 15m — scannable from the line.
+  // Aging vs a full-service cook-time target: fresh < 10m (green), warming
+  // 10–18m (amber), late > 18m (red) — readable across a kitchen at a glance.
   function aging(iso: string): { label: string; tone: ChipTone } {
     const mins = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000));
-    const tone: ChipTone = mins >= 15 ? "danger" : mins >= 8 ? "warning" : "success";
+    const tone: ChipTone = mins >= 18 ? "danger" : mins >= 10 ? "warning" : "success";
     return { label: formatDuration(mins), tone };
   }
 
@@ -388,12 +389,13 @@ export function KitchenClient({
                   key={i}
                   type="button"
                   onClick={() => handleItemReady(o.id, i, !it.ready)}
-                  className="w-full text-left flex flex-col rounded px-1 -mx-1 hover:bg-accent"
+                  className="w-full text-left flex flex-col justify-center rounded px-1 -mx-1 py-2 min-h-[40px] hover:bg-accent"
                 >
                   <div className="flex justify-between items-center gap-2">
-                    <span className={"truncate flex items-center gap-1.5 " + (it.ready ? "line-through text-muted-foreground" : "")}>
-                      <span className={"inline-block w-3 text-emerald-600"}>{it.ready ? "✓" : ""}</span>
-                      {(it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}
+                    <span className={"min-w-0 flex items-center gap-2 " + (it.ready ? "text-muted-foreground" : "")}>
+                      {/* Per-item bump: tap to mark this line done (round target). */}
+                      <span className={"shrink-0 w-5 h-5 rounded-full border flex items-center justify-center text-[11px] leading-none transition-colors " + (it.ready ? "bg-emerald-500 border-emerald-500 text-white" : "border-muted-foreground/40 text-transparent")}>✓</span>
+                      <span className={"truncate" + (it.ready ? " line-through" : "")}>{(it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}</span>
                     </span>
                     <span className={"tabular-nums " + (it.ready ? "text-muted-foreground line-through" : "text-muted-foreground")}>{"x" + it.quantity}</span>
                   </div>
