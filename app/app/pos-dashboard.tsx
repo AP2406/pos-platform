@@ -138,12 +138,20 @@ export async function PosDashboard({ business }: { business: Biz }) {
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground mt-1 text-sm">{dateLabel}</p>
         </div>
-        <Link
-          href="/app/pos"
-          className="shrink-0 px-3 py-1.5 text-sm rounded-md border border-foreground bg-accent font-medium"
-        >
-          New sale
-        </Link>
+        <div className="shrink-0 flex items-center gap-2">
+          <Link
+            href="/app/m"
+            className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-accent"
+          >
+            Live
+          </Link>
+          <Link
+            href="/app/pos"
+            className="px-3 py-1.5 text-sm rounded-md border border-foreground bg-accent font-medium"
+          >
+            New sale
+          </Link>
+        </div>
       </div>
 
       <SectionHeader>Today</SectionHeader>
