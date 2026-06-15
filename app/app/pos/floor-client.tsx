@@ -634,6 +634,10 @@ export function FloorClient({
                 const isTable = el.kind === "table" || el.kind === "booth";
                 const fallback = el.kind === "counter" ? "Counter" : el.kind === "station" ? "Station" : "Table";
                 const displayLabel = el.label && el.label.trim() ? el.label : fallback;
+                // Short nodes (wide bars / counters) can't stack name + status + extra
+                // lines without colliding. On those, show just the name — the node's
+                // colour already conveys the status — so labels never overlap or clip.
+                const short = el.h < 56;
                 // P0-11: tint the table with its section color (a top band).
                 const sec = el.section_id ? sectionById.get(el.section_id) : null;
                 const secColor = sec?.color ?? null;
@@ -644,7 +648,7 @@ export function FloorClient({
                     type="button"
                     disabled={pending}
                     onClick={() => tapElement(el)}
-                    className={"absolute overflow-hidden border p-1.5 flex flex-col items-center text-center leading-tight gap-0.5 active:scale-[0.97] transition-all " + (isTable ? "justify-center " : "justify-start ") + statusClass(status)}
+                    className={"absolute overflow-hidden border p-1.5 flex flex-col items-center text-center leading-tight gap-0.5 active:scale-[0.97] transition-all " + (isTable || short ? "justify-center " : "justify-start ") + statusClass(status)}
                     style={tileStyle}
                   >
                     {/* P2-27: a guest placed a new order via QR awaiting the server.
@@ -661,13 +665,15 @@ export function FloorClient({
                     {open ? (
                       <>
                         <span className="text-sm tabular-nums font-medium">{"$" + open.subtotal.toFixed(2)}</span>
-                        <span className="text-[11px] opacity-80 truncate max-w-full">{formatDuration(minutesOpen(open.opened_at)) + (open.server_name ? " · " + open.server_name : "")}</span>
+                        {!short && <span className="text-[11px] opacity-80 truncate max-w-full">{formatDuration(minutesOpen(open.opened_at)) + (open.server_name ? " · " + open.server_name : "")}</span>}
                       </>
                     ) : (
-                      <>
-                        {isTable && <span className="text-[11px] rounded-full bg-background/60 border border-border px-2 py-0.5 text-muted-foreground">{(seats > 0 ? seats : 2) + " seats"}</span>}
-                        <span className="text-[11px] text-muted-foreground">Available</span>
-                      </>
+                      !short && (
+                        <>
+                          {isTable && <span className="text-[11px] rounded-full bg-background/60 border border-border px-2 py-0.5 text-muted-foreground">{(seats > 0 ? seats : 2) + " seats"}</span>}
+                          <span className="text-[11px] text-muted-foreground">Available</span>
+                        </>
+                      )
                     )}
                   </button>
                 );

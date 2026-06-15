@@ -420,10 +420,10 @@ export default async function SettingsPage() {
   });
 
   return (
-    // Wider than the old max-w-2xl: the left sub-nav (~224px) plus a comfortable
-    // ~640px content column now fill the width instead of leaving the right half
-    // empty, while keeping form fields a readable width.
-    <div className="max-w-4xl">
+    // Capped width + centered so the sub-nav (~224px) and a comfortable ~640px
+    // content column read balanced on wide screens instead of being pinned left
+    // with the right half empty.
+    <div className="max-w-4xl mx-auto">
       <PageHeader
         title="Settings"
         subtitle="Manage your business profile and account."
