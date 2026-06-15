@@ -8,6 +8,7 @@ import Link from "next/link";
 import { MetricCard } from "@/components/ui/metric-card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { displayItemName, formatPaymentMethod } from "@/lib/format";
 import {
   DollarSign,
   Receipt,
@@ -16,7 +17,22 @@ import {
   CalendarRange,
   ShoppingBag,
   Inbox,
+  Banknote,
+  CreditCard,
+  Gift,
+  Wallet,
+  SplitSquareHorizontal,
 } from "lucide-react";
+
+// Small payment-type glyph for the Recent sales list.
+function payIcon(method: string | null | undefined) {
+  const m = (method ?? "").toLowerCase();
+  if (m === "cash") return <Banknote />;
+  if (m === "gift_card") return <Gift />;
+  if (m === "store_credit") return <Wallet />;
+  if (m === "split") return <SplitSquareHorizontal />;
+  return <CreditCard />;
+}
 
 type Biz = {
   id: string;
@@ -114,7 +130,8 @@ export async function PosDashboard({ business }: { business: Biz }) {
     const snap = o.snapshot as { items?: Row[] } | null;
     const items = snap && Array.isArray(snap.items) ? snap.items : [];
     for (const it of items) {
-      const name = (it.name || "Item").toString();
+      // "Shared" is split metadata, not a product — collapse "X (shared)" into "X".
+      const name = displayItemName((it.name || "Item").toString());
       const qty = num(it.quantity);
       const rev = num(it.unit_price) * qty;
       if (!itemAgg[name]) itemAgg[name] = { qty: 0, revenue: 0 };
@@ -187,7 +204,7 @@ export async function PosDashboard({ business }: { business: Biz }) {
       </div>
 
       <SectionHeader>This period</SectionHeader>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <MetricCard label="This week" value={money(week.gross)} hint={week.count + (week.count === 1 ? " sale" : " sales")} icon={<CalendarRange />} />
         <MetricCard label="This month" value={money(month.gross)} hint={month.count + (month.count === 1 ? " sale" : " sales")} icon={<CalendarRange />} />
         <MetricCard label="Avg ticket" value={money(avgTicketMonth)} hint="This month" icon={<TrendingUp />} />
@@ -199,7 +216,7 @@ export async function PosDashboard({ business }: { business: Biz }) {
       ) : (
         <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl divide-y divide-line overflow-hidden">
           {topItems.map((it) => (
-            <div key={it.name} className="p-3 flex items-center justify-between">
+            <div key={it.name} className="p-3 flex items-center justify-between hover:bg-surface-2 transition-colors">
               <div className="flex-1 min-w-0">
                 <div className="font-medium truncate">{it.name}</div>
                 <div className="text-xs text-muted-foreground">
@@ -228,22 +245,27 @@ export async function PosDashboard({ business }: { business: Biz }) {
             const refunded =
               o.status === "refunded" || o.status === "partially_refunded";
             return (
-              <div key={o.id} className="p-3 flex items-center justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium">
-                    {label}
-                    {refunded && (
-                      <span className="ml-2 text-xs text-amber-600">
-                        {o.status === "refunded" ? "Refunded" : "Partial refund"}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {timeOf(o.created_at) +
-                      "  \u00b7  " +
-                      itemCount +
-                      (itemCount === 1 ? " item  \u00b7  " : " items  \u00b7  ") +
-                      String(o.payment_method || "")}
+              <div key={o.id} className="p-3 flex items-center justify-between gap-4 hover:bg-surface-2 transition-colors">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="shrink-0 w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground [&_svg]:size-4">
+                    {payIcon(o.payment_method)}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="font-medium">
+                      {label}
+                      {refunded && (
+                        <span className="ml-2 text-xs text-amber-600">
+                          {o.status === "refunded" ? "Refunded" : "Partial refund"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {timeOf(o.created_at) +
+                        "  \u00b7  " +
+                        itemCount +
+                        (itemCount === 1 ? " item  \u00b7  " : " items  \u00b7  ") +
+                        formatPaymentMethod(o.payment_method)}
+                    </div>
                   </div>
                 </div>
                 <div className="font-semibold tabular-nums">{money(num(o.total))}</div>

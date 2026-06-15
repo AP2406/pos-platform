@@ -29,22 +29,23 @@ function MetricCard({
     <div
       data-slot="metric-card"
       className={cn(
+        // Every card shares the same surface + hairline border. The hero is set
+        // apart by its accent value, never by a different border.
         "flex flex-col rounded-xl bg-card ring-1 ring-line shadow-elevation p-5",
-        hero && "ring-primary/25",
         className
       )}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-[13px] font-medium text-muted-foreground">{label}</span>
         {icon && (
-          <span className={cn("shrink-0 [&_svg]:size-4", hero ? "text-primary" : "text-muted-foreground/60")}>
+          <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary [&_svg]:size-4">
             {icon}
           </span>
         )}
       </div>
       <div
         className={cn(
-          "mt-2 font-bold tabular-nums tracking-tight leading-none",
+          "mt-3 font-bold tabular-nums tracking-tight leading-none",
           hero ? "text-3xl" : "text-2xl",
           hero
             ? "bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent"
