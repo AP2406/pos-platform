@@ -16,6 +16,7 @@ import { StationsCard } from "./stations-card";
 import { listKitchenStations } from "../kitchen/stations-actions";
 import { GuestOrderingCard } from "./guest-ordering-card";
 import { KioskCard } from "./kiosk-card";
+import { CfdCard } from "./cfd-card";
 import { ServiceChargeCard } from "./service-charge-card";
 import { SplitCard } from "./split-card";
 import { LoyaltyCard } from "./loyalty-card";
@@ -313,6 +314,10 @@ export default async function SettingsPage() {
               businessId={business.id}
               initialEnabled={(business as { kiosk_ordering_enabled?: boolean }).kiosk_ordering_enabled === true}
             />
+          </div>
+          <div className="bg-card border border-border rounded-lg p-6">
+            <SectionHeader>Customer display</SectionHeader>
+            <CfdCard businessId={business.id} />
           </div>
         </>
       ),

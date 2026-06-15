@@ -1327,6 +1327,45 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const tipNum = parseFloat(tip) || 0;
   const total = Math.round((netSubtotal + tax + manualScAmt + autoGratAmt + tipNum) * 100) / 100;
 
+  // P3-45 customer-facing display: mirror the live cart to /cfd/<businessId> over a
+  // Realtime broadcast channel. Display-only; no DB writes, no money-path coupling.
+  const cfdChannelRef = useRef<ReturnType<ReturnType<typeof createBrowserClient>["channel"]> | null>(null);
+  useEffect(() => {
+    if (!businessId) return;
+    const supabase = createBrowserClient();
+    const ch = supabase.channel("cfd-" + businessId, { config: { broadcast: { self: false } } });
+    ch.subscribe();
+    cfdChannelRef.current = ch;
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) supabase.realtime.setAuth(data.session.access_token);
+    });
+    return () => {
+      cfdChannelRef.current = null;
+      supabase.removeChannel(ch);
+    };
+  }, [businessId]);
+  useEffect(() => {
+    const ch = cfdChannelRef.current;
+    if (!ch || !businessId) return;
+    const visible = cart.filter((l) => !l.void);
+    const status = receipt && cart.length === 0 ? "paid" : visible.length > 0 ? "cart" : "idle";
+    ch.send({
+      type: "broadcast",
+      event: "state",
+      payload: {
+        businessName,
+        status,
+        items: visible.map((l) => ({ name: l.name, quantity: l.quantity, unit_price: l.unit_price })),
+        subtotal,
+        tax,
+        total,
+        customerName: customer?.name ?? null,
+        paidTotal: receipt?.total ?? null,
+        saleNumber: receipt?.saleNumber ?? null,
+      },
+    });
+  }, [cart, subtotal, tax, total, receipt, customer, businessId, businessName]);
+
   const discountReasonOk =
     discount <= 0 ||
     (discountReason !== "" && (discountReason !== "other" || discountReasonNote.trim().length > 0));
