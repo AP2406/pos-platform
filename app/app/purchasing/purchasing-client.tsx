@@ -12,6 +12,7 @@ import {
   updatePurchaseOrder,
   deletePurchaseOrder,
   sendPurchaseOrder,
+  receivePurchaseOrder,
   type POLineInput,
 } from "./actions";
 
@@ -46,6 +47,15 @@ type Order = {
 };
 type Ingredient = { id: string; name: string; unit: string; cost: number };
 type Item = { id: string; name: string };
+type Suggestion = {
+  ingredient_id: string | null;
+  catalog_item_id: string | null;
+  description: string;
+  unit: string;
+  unit_cost: number;
+  suggested_qty: number;
+  on_hand: number;
+};
 
 type DraftLine = Line & { key: string };
 
@@ -54,6 +64,7 @@ export function PurchasingClient({
   orders: initialOrders,
   ingredients,
   items,
+  suggestions,
   currency,
   canManage,
 }: {
@@ -61,6 +72,7 @@ export function PurchasingClient({
   orders: Order[];
   ingredients: Ingredient[];
   items: Item[];
+  suggestions: Suggestion[];
   currency: string;
   canManage: boolean;
 }) {
@@ -69,7 +81,19 @@ export function PurchasingClient({
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [building, setBuilding] = useState<null | { editId?: string }>(null);
+  const [building, setBuilding] = useState<null | { editId?: string; seedLines?: Line[] }>(null);
+  const [receivingId, setReceivingId] = useState<string | null>(null);
+
+  function seedFromSuggestions(): Line[] {
+    return suggestions.map((s) => ({
+      ingredient_id: s.ingredient_id,
+      catalog_item_id: s.catalog_item_id,
+      description: s.description,
+      unit: s.unit,
+      quantity: s.suggested_qty,
+      unit_cost: s.unit_cost,
+    }));
+  }
 
   const fmt = useMemo(
     () => (n: number) =>
@@ -100,15 +124,27 @@ export function PurchasingClient({
             <p className="text-xs text-muted-foreground">Raise, send, and track orders.</p>
           </div>
           {canManage && !building && (
-            <Button size="sm" onClick={() => { setErr(null); setMsg(null); setBuilding({}); }}>
-              New order
-            </Button>
+            <div className="flex items-center gap-2">
+              {suggestions.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => { setErr(null); setMsg(null); setBuilding({ seedLines: seedFromSuggestions() }); }}
+                >
+                  Suggested order ({suggestions.length})
+                </Button>
+              )}
+              <Button size="sm" onClick={() => { setErr(null); setMsg(null); setBuilding({}); }}>
+                New order
+              </Button>
+            </div>
           )}
         </div>
 
         {building && (
           <POBuilder
             editOrder={building.editId ? orders.find((o) => o.id === building.editId) ?? null : null}
+            seedLines={building.seedLines ?? null}
             vendors={vendors}
             ingredients={ingredients}
             items={items}
@@ -179,6 +215,14 @@ export function PurchasingClient({
                             </Button>
                           </>
                         )}
+                        {po.status === "sent" && (
+                          <Button
+                            size="sm"
+                            onClick={() => { setErr(null); setMsg(null); setReceivingId((p) => (p === po.id ? null : po.id)); }}
+                          >
+                            {receivingId === po.id ? "Close" : "Receive"}
+                          </Button>
+                        )}
                         {po.status !== "received" && (
                           <Button
                             variant="ghost"
@@ -201,17 +245,47 @@ export function PurchasingClient({
                       </div>
                     )}
                   </div>
-                  {po.lines.length > 0 && (
+                  {po.lines.length > 0 && receivingId !== po.id && (
                     <div className="mt-2 border-l-2 border-border pl-3 text-xs text-muted-foreground space-y-0.5">
                       {po.lines.map((l, i) => (
                         <div key={l.id ?? i} className="flex justify-between gap-3">
                           <span className="truncate">
                             {l.description} {"·"} {l.quantity} {l.unit}
+                            {po.status === "received" && (
+                              <span className="ml-1">(received {l.received_qty ?? 0})</span>
+                            )}
                           </span>
                           <span className="tabular-nums">{fmt(l.unit_cost * l.quantity)}</span>
                         </div>
                       ))}
                     </div>
+                  )}
+
+                  {receivingId === po.id && (
+                    <ReceivePanel
+                      po={po}
+                      pending={pending}
+                      startTransition={startTransition}
+                      setErr={setErr}
+                      onReceived={(receipts) => {
+                        setOrders((prev) =>
+                          prev.map((o) =>
+                            o.id === po.id
+                              ? {
+                                  ...o,
+                                  status: "received",
+                                  lines: o.lines.map((l) => ({
+                                    ...l,
+                                    received_qty: l.id && receipts[l.id] !== undefined ? receipts[l.id] : l.quantity,
+                                  })),
+                                }
+                              : o
+                          )
+                        );
+                        setReceivingId(null);
+                        setMsg("Stock received.");
+                      }}
+                    />
                   )}
                 </div>
               );
@@ -413,6 +487,7 @@ function newKey(): string {
 
 function POBuilder({
   editOrder,
+  seedLines,
   vendors,
   ingredients,
   items,
@@ -424,6 +499,7 @@ function POBuilder({
   onSaved,
 }: {
   editOrder: Order | null;
+  seedLines: Line[] | null;
   vendors: Vendor[];
   ingredients: Ingredient[];
   items: Item[];
@@ -438,7 +514,7 @@ function POBuilder({
   const [expected, setExpected] = useState<string>(editOrder?.expected_at ?? "");
   const [notes, setNotes] = useState<string>(editOrder?.notes ?? "");
   const [lines, setLines] = useState<DraftLine[]>(
-    (editOrder?.lines ?? []).map((l) => ({ ...l, key: newKey() }))
+    (editOrder?.lines ?? seedLines ?? []).map((l) => ({ ...l, key: newKey() }))
   );
 
   const total = lines.reduce((s, l) => s + l.unit_cost * l.quantity, 0);
@@ -646,6 +722,71 @@ function POBuilder({
           {editOrder ? "Save order" : "Create order"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------ Receive panel ------------------------------ */
+
+function ReceivePanel({
+  po,
+  pending,
+  startTransition,
+  setErr,
+  onReceived,
+}: {
+  po: Order;
+  pending: boolean;
+  startTransition: React.TransitionStartFunction;
+  setErr: (s: string | null) => void;
+  onReceived: (receipts: Record<string, number>) => void;
+}) {
+  const [qty, setQty] = useState<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const l of po.lines) if (l.id) m[l.id] = String(l.quantity);
+    return m;
+  });
+
+  function confirm() {
+    setErr(null);
+    const receipts: Record<string, number> = {};
+    for (const l of po.lines) {
+      if (!l.id) continue;
+      receipts[l.id] = Math.max(0, parseFloat(qty[l.id] ?? "0") || 0);
+    }
+    startTransition(async () => {
+      const res = await receivePurchaseOrder(po.id, receipts);
+      if ("error" in res) { setErr(res.error); return; }
+      onReceived(receipts);
+    });
+  }
+
+  return (
+    <div className="mt-2 border-l-2 border-foreground/30 pl-3 space-y-2">
+      <p className="text-xs text-muted-foreground">
+        Confirm the quantity received for each line — stock is added to inventory.
+      </p>
+      {po.lines.map((l) =>
+        l.id ? (
+          <div key={l.id} className="flex items-center gap-2">
+            <span className="text-sm w-48 truncate">{l.description}</span>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={qty[l.id] ?? ""}
+              onChange={(e) => setQty((p) => ({ ...p, [l.id as string]: e.target.value }))}
+              className="h-8 w-24 text-right"
+            />
+            <span className="text-xs text-muted-foreground">
+              {l.unit} {"·"} ordered {l.quantity}
+            </span>
+          </div>
+        ) : null
+      )}
+      <Button size="sm" onClick={confirm} disabled={pending}>
+        Confirm receipt
+      </Button>
     </div>
   );
 }

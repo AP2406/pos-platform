@@ -30,13 +30,13 @@ export default async function PurchasingPage() {
       .eq("business_id", business.id),
     supabase
       .from("ingredients")
-      .select("id, name, unit, cost")
+      .select("id, name, unit, cost, track_stock, stock_qty, reorder_point")
       .eq("business_id", business.id)
       .eq("is_active", true)
       .order("name", { ascending: true }),
     supabase
       .from("catalog_items")
-      .select("id, name")
+      .select("id, name, track_inventory, stock_qty, reorder_point")
       .eq("business_id", business.id)
       .eq("is_active", true)
       .order("name", { ascending: true }),
@@ -96,6 +96,36 @@ export default async function PurchasingPage() {
   const items = (itemRows ?? []).map((i) => ({ id: i.id as string, name: i.name as string }));
   const currency = ((bizRow?.currency as string) || "USD").toUpperCase();
 
+  // Suggested ordering: tracked ingredients/items at or below their reorder point.
+  // Suggested qty brings stock back up to the reorder point (min 1).
+  const suggestions = [
+    ...(ingRows ?? [])
+      .filter((i) => i.track_stock && Number(i.stock_qty) <= Number(i.reorder_point))
+      .map((i) => ({
+        ingredient_id: i.id as string,
+        catalog_item_id: null as string | null,
+        description: i.name as string,
+        unit: (i.unit as string) || "unit",
+        unit_cost: Number(i.cost) || 0,
+        suggested_qty: Math.max(
+          1,
+          Math.round((Number(i.reorder_point) - Number(i.stock_qty)) * 100) / 100
+        ),
+        on_hand: Number(i.stock_qty) || 0,
+      })),
+    ...(itemRows ?? [])
+      .filter((i) => i.track_inventory && Number(i.stock_qty) <= Number(i.reorder_point))
+      .map((i) => ({
+        ingredient_id: null as string | null,
+        catalog_item_id: i.id as string,
+        description: i.name as string,
+        unit: "unit",
+        unit_cost: 0,
+        suggested_qty: Math.max(1, Math.round(Number(i.reorder_point) - Number(i.stock_qty))),
+        on_hand: Number(i.stock_qty) || 0,
+      })),
+  ];
+
   return (
     <div>
       <div className="mb-6">
@@ -110,6 +140,7 @@ export default async function PurchasingPage() {
         orders={orders}
         ingredients={ingredients}
         items={items}
+        suggestions={suggestions}
         currency={currency}
         canManage={role === "owner" || role === "manager"}
       />

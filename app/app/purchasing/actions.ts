@@ -292,6 +292,41 @@ function escapeHtml(s: string): string {
   );
 }
 
+// Receive a sent PO into stock. `receipts` maps po_line id -> received qty
+// (omit a line to receive its full ordered quantity). Atomic via the RPC.
+export async function receivePurchaseOrder(
+  id: string,
+  receipts: Record<string, number>
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing order." };
+  const { business, role } = await requireBusiness();
+  if (!canManage(role)) return { error: "Only an owner or manager can manage purchasing." };
+  const supabase = await createClient();
+
+  const clean: Record<string, number> = {};
+  for (const [k, v] of Object.entries(receipts || {})) {
+    const n = Math.max(0, num(v));
+    clean[k] = n;
+  }
+
+  const { error } = await supabase.rpc("receive_purchase_order", {
+    p_po_id: id,
+    p_business_id: business.id,
+    p_receipts: clean,
+  });
+
+  if (error) {
+    const m = error.message || "";
+    if (m.includes("already_received")) return { error: "This order has already been received." };
+    if (m.includes("po_cancelled")) return { error: "This order was cancelled." };
+    if (m.includes("po_not_found")) return { error: "Order not found." };
+    console.error("receivePurchaseOrder:", error);
+    return { error: "Could not receive the order. Please try again." };
+  }
+  revalidatePath("/app/purchasing");
+  return { ok: true };
+}
+
 // Mark a draft PO as sent; email the vendor if they have an address + email is configured.
 export async function sendPurchaseOrder(
   id: string
