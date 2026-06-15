@@ -146,6 +146,14 @@ export default async function CatalogPage() {
               Recipes &amp; costing
             </Link>
           )}
+          {canManage && (
+            <Link
+              href="/app/purchasing"
+              className="text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent"
+            >
+              Purchasing
+            </Link>
+          )}
           <MenuBoardLink businessId={business.id} />
           <ImportMenu />
         </div>
