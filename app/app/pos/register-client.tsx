@@ -2198,11 +2198,11 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
               {/* Seat selector (real tables only) */}
               {tableMode && (
                 <div className="shrink-0 flex items-center gap-1.5 px-2 py-2 border-b border-border overflow-x-auto [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)]">
-                  <button type="button" onClick={() => setActiveSeat(null)} className={"shrink-0 whitespace-nowrap text-sm rounded-lg border px-3.5 py-2 transition-colors " + (activeSeat === null ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>Shared</button>
+                  <button type="button" onClick={() => setActiveSeat(null)} className={"shrink-0 whitespace-nowrap text-sm rounded-lg border px-3.5 min-h-[44px] inline-flex items-center justify-center transition-colors" + (activeSeat === null ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>Shared</button>
                   {Array.from({ length: seatCount }, (_, i) => i + 1).map((s) => (
-                    <button key={s} type="button" onClick={() => setActiveSeat(s)} className={"shrink-0 whitespace-nowrap text-sm rounded-lg border px-3.5 py-2 transition-colors " + (activeSeat === s ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>{"Seat " + s}</button>
+                    <button key={s} type="button" onClick={() => setActiveSeat(s)} className={"shrink-0 whitespace-nowrap text-sm rounded-lg border px-3.5 min-h-[44px] inline-flex items-center justify-center transition-colors" + (activeSeat === s ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>{"Seat " + s}</button>
                   ))}
-                  <button type="button" onClick={() => setSeatCount((n) => Math.min(n + 1, 30))} className="shrink-0 whitespace-nowrap text-sm rounded-lg border border-dashed border-border px-3 py-2 text-muted-foreground hover:bg-accent/50">+ Seat</button>
+                  <button type="button" onClick={() => setSeatCount((n) => Math.min(n + 1, 30))} className="shrink-0 whitespace-nowrap text-sm rounded-lg border border-dashed border-border px-3 min-h-[44px] inline-flex items-center text-muted-foreground hover:bg-accent/50">+ Seat</button>
                 </div>
               )}
 

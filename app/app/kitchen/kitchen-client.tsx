@@ -389,7 +389,7 @@ export function KitchenClient({
                   key={i}
                   type="button"
                   onClick={() => handleItemReady(o.id, i, !it.ready)}
-                  className="w-full text-left flex flex-col justify-center rounded px-1 -mx-1 py-2 min-h-[40px] hover:bg-accent"
+                  className="w-full text-left flex flex-col justify-center rounded px-1 -mx-1 py-2 min-h-[44px] hover:bg-accent"
                 >
                   <div className="flex justify-between items-center gap-2">
                     <span className={"min-w-0 flex items-center gap-2 " + (it.ready ? "text-muted-foreground" : "")}>
