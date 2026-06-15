@@ -154,6 +154,14 @@ export default async function CatalogPage() {
               Purchasing
             </Link>
           )}
+          {canManage && (
+            <Link
+              href="/app/waste"
+              className="text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent"
+            >
+              Waste
+            </Link>
+          )}
           <MenuBoardLink businessId={business.id} />
           <ImportMenu />
         </div>
