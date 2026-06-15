@@ -465,15 +465,20 @@ export function FloorClient({
 
   // Turn-time status: seated → warn (yellow) → late (red). Thresholds are
   // configurable in Settings (businesses.settings.table_aging).
-  function tableStatus(open: TableTicketSummary | undefined): "available" | "seated" | "warn" | "late" {
+  function tableStatus(open: TableTicketSummary | undefined): "available" | "noorder" | "seated" | "warn" | "late" {
     if (!open) return "available";
+    // Seated but nothing ordered yet — don't let the turn-time clock flag it
+    // critical. Aging is meaningful only once there's an order on the check.
+    if (open.item_count <= 0 || open.subtotal <= 0) return "noorder";
     const m = minutesOpen(open.opened_at);
     if (m >= aging.redMin) return "late";
     if (m >= aging.yellowMin) return "warn";
     return "seated";
   }
-  function statusClass(s: "available" | "seated" | "warn" | "late"): string {
+  function statusClass(s: "available" | "noorder" | "seated" | "warn" | "late"): string {
     switch (s) {
+      // Occupied, no order: neutral fill + teal outline — clearly seated, never critical.
+      case "noorder": return "bg-table-available-bg border-table-seated-border text-foreground shadow-elevation-sm";
       case "seated": return "bg-table-seated-bg border-table-seated-border text-table-seated-fg shadow-elevation-sm";
       case "warn": return "bg-table-warn-bg border-table-warn-border text-table-warn-fg shadow-elevation-sm";
       case "late": return "bg-table-late-bg border-table-late-border text-table-late-fg shadow-elevation-sm";
@@ -486,7 +491,8 @@ export function FloorClient({
   const seatedCount = ringEls.filter((e) => openByElement[e.id]).length;
   const overdue = ringEls.filter((e) => {
     const o = openByElement[e.id];
-    return o && minutesOpen(o.opened_at) >= aging.redMin;
+    // Only count tables with an actual order as overdue (matches tableStatus).
+    return o && o.item_count > 0 && minutesOpen(o.opened_at) >= aging.redMin;
   }).length;
 
   return (
@@ -638,11 +644,13 @@ export function FloorClient({
                     type="button"
                     disabled={pending}
                     onClick={() => tapElement(el)}
-                    className={"absolute overflow-hidden border p-1.5 flex flex-col items-center justify-center text-center leading-tight gap-0.5 active:scale-[0.97] transition-all " + statusClass(status)}
+                    className={"absolute overflow-hidden border p-1.5 flex flex-col items-center text-center leading-tight gap-0.5 active:scale-[0.97] transition-all " + (isTable ? "justify-center " : "justify-start ") + statusClass(status)}
                     style={tileStyle}
                   >
-                    {/* P2-27: a guest placed a new order via QR awaiting the server. */}
-                    {open && open.new_guest_items && (
+                    {/* P2-27: a guest placed a new order via QR awaiting the server.
+                        Auto-expire the badge after a few minutes so it can't go stale
+                        (there's no per-order timestamp; use the check's open time). */}
+                    {open && open.new_guest_items && minutesOpen(open.opened_at) < 15 && (
                       <span className="absolute top-1 right-1 flex items-center gap-0.5 rounded-full bg-indigo-500 text-white text-[9px] font-semibold px-1.5 py-0.5 leading-none">
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                         New
