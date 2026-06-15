@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { requireBusiness } from "@/lib/services/tenancy";
+import { requireBusiness, listBusinesses } from "@/lib/services/tenancy";
 import { CatalogClient } from "./catalog-client";
 import { ImportMenu } from "./import-menu";
 import { MenuBoardLink } from "./menu-board-link";
@@ -12,6 +12,11 @@ import { listKitchenStations } from "../kitchen/stations-actions";
 export default async function CatalogPage() {
   const { business, role } = await requireBusiness();
   const canManage = role === "owner" || role === "manager";
+  const hasOtherLocations =
+    canManage &&
+    (await listBusinesses()).some(
+      (b) => (b.role === "owner" || b.role === "manager") && b.id !== business.id
+    );
   const supabase = await createClient();
 
   const { data: itemsData } = await supabase
@@ -160,6 +165,14 @@ export default async function CatalogPage() {
               className="text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent"
             >
               Waste
+            </Link>
+          )}
+          {hasOtherLocations && (
+            <Link
+              href="/app/catalog/push"
+              className="text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent"
+            >
+              Push to locations
             </Link>
           )}
           <MenuBoardLink businessId={business.id} />
