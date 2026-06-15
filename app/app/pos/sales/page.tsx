@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { getTodayBoundsUTC } from "@/lib/utils/dates";
+import { formatPaymentMethod } from "@/lib/format";
 import { VoidButton } from "./void-button";
 import { RefundButton } from "./refund-button";
 import { ReopenButton } from "./reopen-button";
@@ -246,9 +247,7 @@ export default async function SalesPage() {
             const voided = o.status === "voided";
             const refunded = o.status === "refunded";
             const partiallyRefunded = o.status === "partially_refunded";
-            const method =
-              o.payment_method.charAt(0).toUpperCase() +
-              o.payment_method.slice(1);
+            const method = formatPaymentMethod(o.payment_method);
             const numberPrefix =
               o.sale_number != null
                 ? "#" + o.sale_number + "  " + "\u00b7" + "  "

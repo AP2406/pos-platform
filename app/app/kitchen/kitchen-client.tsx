@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Chip, type ChipTone } from "@/components/ui/chip";
+import { displayItemName, formatDuration } from "@/lib/format";
 import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady } from "./actions";
 import { printReceiptHtml } from "../pos/qz-print";
 
@@ -13,7 +14,7 @@ function ticketHtml(o: { tableLabel: string | null; id: string; createdAt: strin
     .map(
       (it) =>
         "<div style='display:flex;justify-content:space-between'><span>" +
-        it.quantity + "x " + esc(it.name) + "</span></div>" +
+        it.quantity + "x " + esc(displayItemName(it.name)) + "</span></div>" +
         (it.note ? "<div style='font-size:11px;padding-left:8px'>&rarr; " + esc(it.note) + "</div>" : "")
     )
     .join("");
@@ -68,7 +69,7 @@ export function KitchenClient({
   function aging(iso: string): { label: string; tone: ChipTone } {
     const mins = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000));
     const tone: ChipTone = mins >= 15 ? "danger" : mins >= 8 ? "warning" : "success";
-    return { label: mins + "m", tone };
+    return { label: formatDuration(mins), tone };
   }
 
   const refresh = useCallback(async () => {
@@ -273,7 +274,9 @@ export function KitchenClient({
     for (const o of visible) {
       for (const it of o.items) {
         if (it.ready) continue; // already plated — no longer "to make"
-        const base = it.name.replace(/\s*\(\+[^)]*\)\s*$/, "").trim();
+        // Strip modifier annotations ("(+ Medium)") AND the split "(shared)"
+        // marker so all variants of one item roll up to a single count.
+        const base = displayItemName(it.name.replace(/\s*\(\+[^)]*\)\s*$/, ""));
         if (!base) continue;
         m.set(base, (m.get(base) ?? 0) + (Number(it.quantity) || 0));
       }
@@ -390,7 +393,7 @@ export function KitchenClient({
                   <div className="flex justify-between items-center gap-2">
                     <span className={"truncate flex items-center gap-1.5 " + (it.ready ? "line-through text-muted-foreground" : "")}>
                       <span className={"inline-block w-3 text-emerald-600"}>{it.ready ? "✓" : ""}</span>
-                      {(it.seat ? "S" + it.seat + " · " : "") + it.name}
+                      {(it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}
                     </span>
                     <span className={"tabular-nums " + (it.ready ? "text-muted-foreground line-through" : "text-muted-foreground")}>{"x" + it.quantity}</span>
                   </div>
@@ -399,7 +402,7 @@ export function KitchenClient({
               ) : (
                 <div key={i} className="flex flex-col">
                   <div className="flex justify-between">
-                    <span className="truncate">{(it.seat ? "S" + it.seat + " · " : "") + it.name}</span>
+                    <span className="truncate">{(it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}</span>
                     <span className="tabular-nums text-muted-foreground">{"x" + it.quantity}</span>
                   </div>
                   {it.note ? <span className="text-xs text-amber-600 pl-2">{"→ " + it.note}</span> : null}
@@ -475,7 +478,7 @@ export function KitchenClient({
                       {t.items.map((it, i) => (
                         <div key={i} className="flex flex-col">
                           <div className="flex justify-between">
-                            <span className={"truncate " + (it.ready ? "line-through text-muted-foreground" : "")}>{(it.seat ? "S" + it.seat + " · " : "") + it.name}</span>
+                            <span className={"truncate " + (it.ready ? "line-through text-muted-foreground" : "")}>{(it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}</span>
                             <span className={"tabular-nums text-muted-foreground " + (it.ready ? "line-through" : "")}>{"x" + it.quantity}</span>
                           </div>
                           {it.note ? <span className="text-xs text-amber-600 pl-2">{"→ " + it.note}</span> : null}

@@ -89,8 +89,7 @@ export function SectionHeader({
   return (
     <h2
       className={
-        "text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-3 " +
-        className
+        "text-sm font-semibold tracking-tight text-foreground mb-3 " + className
       }
     >
       {children}

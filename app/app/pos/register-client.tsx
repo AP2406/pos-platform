@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Chip } from "@/components/ui/chip";
+import { formatPaymentMethod } from "@/lib/format";
 import { createOrder, searchCustomers, quickCreateCustomer } from "./actions";
 import { finalizeSplitCheck, type SplitResultOrder } from "./split-actions";
 import { SplitSheet, type SplitCheck } from "./split-sheet";
@@ -155,12 +156,8 @@ type Snap = {
 };
 
 function methodLabel(m: string): string {
-  if (m === "cash") return "Cash";
-  if (m === "card") return "Card";
-  if (m === "split") return "Split";
-  if (m === "gift_card") return "Gift card";
-  if (m === "store_credit") return "Store credit";
-  return "Other";
+  // Single shared formatter so receipts match Recent sales / Reports exactly.
+  return formatPaymentMethod(m);
 }
 
 function printReceipt(r: Receipt, settings: Partial<ReceiptSettings> | null, widthMm: number) {

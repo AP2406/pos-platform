@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatDuration } from "@/lib/format";
 import { RegisterClient } from "./register-client";
 import {
   openTableTicket,
@@ -574,7 +575,7 @@ export function FloorClient({
                       </div>
                       <div className="text-[11px] mt-0.5 truncate opacity-80">
                         {open
-                          ? minutesOpen(open.opened_at) + "m" + (open.server_name ? " · " + open.server_name : "") + (open.child_count && open.child_count > 0 ? " · split" : "")
+                          ? formatDuration(minutesOpen(open.opened_at)) + (open.server_name ? " · " + open.server_name : "") + (open.child_count && open.child_count > 0 ? " · split" : "")
                           : "Available"}
                       </div>
                     </button>
@@ -652,7 +653,7 @@ export function FloorClient({
                     {open ? (
                       <>
                         <span className="text-sm tabular-nums font-medium">{"$" + open.subtotal.toFixed(2)}</span>
-                        <span className="text-[11px] opacity-80 truncate max-w-full">{minutesOpen(open.opened_at) + "m" + (open.server_name ? " · " + open.server_name : "")}</span>
+                        <span className="text-[11px] opacity-80 truncate max-w-full">{formatDuration(minutesOpen(open.opened_at)) + (open.server_name ? " · " + open.server_name : "")}</span>
                       </>
                     ) : (
                       <>
@@ -679,7 +680,7 @@ export function FloorClient({
                   <button key={t.id} type="button" disabled={pending} onClick={() => resumeTab(t)} className="w-full text-left rounded-lg border border-border bg-accent/40 p-2.5 active:scale-[0.98] transition-transform">
                     <div className="font-medium text-sm truncate">{t.name ?? "Tab"}</div>
                     <div className="text-sm tabular-nums font-medium">{"$" + t.subtotal.toFixed(2)}</div>
-                    <div className="text-[11px] text-muted-foreground truncate">{(t.server_name ? t.server_name + "  ·  " : "") + minutesOpen(t.opened_at) + " min"}</div>
+                    <div className="text-[11px] text-muted-foreground truncate">{(t.server_name ? t.server_name + "  ·  " : "") + formatDuration(minutesOpen(t.opened_at))}</div>
                   </button>
                 ))}
               </>
@@ -691,7 +692,7 @@ export function FloorClient({
                   <button key={t.id} type="button" disabled={pending} onClick={() => resumeTogo(t)} className="w-full text-left rounded-lg border border-table-warn-border bg-table-warn-bg p-2.5 active:scale-[0.98] transition-transform">
                     <div className="font-medium text-sm truncate text-table-warn-fg">{t.name ?? "Takeout"}</div>
                     <div className="text-sm tabular-nums font-medium">{"$" + t.subtotal.toFixed(2)}</div>
-                    <div className="text-[11px] text-muted-foreground truncate">{(t.phone ? t.phone + "  ·  " : "") + minutesOpen(t.opened_at) + " min"}</div>
+                    <div className="text-[11px] text-muted-foreground truncate">{(t.phone ? t.phone + "  ·  " : "") + formatDuration(minutesOpen(t.opened_at))}</div>
                   </button>
                 ))}
               </>

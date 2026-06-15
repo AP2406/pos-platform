@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness, listBusinesses } from "@/lib/services/tenancy";
 import { hasFloorService } from "@/lib/modules/modes";
+import { displayItemName } from "@/lib/format";
 
 type OrderRow = {
   id: string;
@@ -160,7 +161,8 @@ export default async function ReportsPage({
 
     for (const l of lines) {
       const cid = (l.catalog_item_id as string | null) ?? null;
-      const name = (l.name as string) || "Item";
+      // Collapse split "X (shared)" into "X" so product mix shows one row per item.
+      const name = displayItemName(l.name as string);
       const qty = Number(l.quantity) || 0;
       const revenue = (Number(l.unit_price) || 0) * qty;
       const key = cid ? "id:" + cid : "name:" + name;
