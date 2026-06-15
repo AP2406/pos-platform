@@ -345,9 +345,11 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const tableMode = !!(tableBinding && tableBinding.tableId);
   const [seatCount, setSeatCount] = useState<number>(() => {
     if (!tableMode) return 0;
-    let m = tableBinding?.seatCount || 0;
+    // Default the seat tabs to the table's chairs / guest count (not a hardcoded
+    // 4). Staff add more with "+ Seat". Never go below seats already used or 1.
+    let m = tableBinding?.seatCount || tableBinding?.guestCount || 0;
     for (const it of initialTableCart?.items ?? []) m = Math.max(m, Number(it.seat) || 0);
-    return Math.max(m, 4);
+    return Math.max(m, 1);
   });
   const [activeSeat, setActiveSeat] = useState<number | null>(tableMode ? 1 : null);
 
@@ -377,6 +379,20 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     if (t && !i.name.toLowerCase().includes(t)) return false;
     return true;
   });
+  // Group the visible items under category headers so even a small menu reads as
+  // organized sections rather than a few oversized tiles in a sea of empty space.
+  const groupedItems = (() => {
+    const byCat = new Map<string, typeof items>();
+    for (const it of visibleItems) {
+      const c = it.category && it.category.trim() ? it.category : "Other";
+      const arr = byCat.get(c) ?? [];
+      arr.push(it);
+      byCat.set(c, arr);
+    }
+    return [...categories, "Other"]
+      .filter((c) => byCat.has(c))
+      .map((c) => ({ cat: c, list: byCat.get(c) as typeof items }));
+  })();
 
   useEffect(() => {
     if (customer) return;
@@ -2120,40 +2136,47 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                 </div>
               </div>
 
-              <div className="flex-1 min-h-0 overflow-y-auto p-3">
+              <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-5">
                 {visibleItems.length === 0 ? (
                   <p className="text-sm text-muted-foreground p-4">No items match. Add some in the Catalog, or clear the search.</p>
                 ) : (
-                  <div className="grid [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))] gap-2.5">
-                    {visibleItems.map((item) => {
-                      const hasVars = item.variations.length > 0;
-                      const priceLabel = hasVars
-                        ? "From $" + Math.min(...item.variations.map((v) => v.price)).toFixed(2)
-                        : "$" + item.price.toFixed(2);
-                      const oos = isOos(item);
-                      const low = isLowStock(item);
-                      if (showItemPhotos && item.image_url) {
-                        return (
-                          <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative min-h-[124px] rounded-xl border border-line shadow-elevation-sm overflow-hidden active:scale-[0.97] transition-transform " + (oos ? "opacity-50" : "")}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={item.image_url} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
-                            {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">Low</span>}
-                            <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white text-left px-2 py-1.5">
-                              <div className="font-semibold text-sm leading-snug line-clamp-2">{item.name}</div>
-                              <div className="text-xs text-white/90">{oos ? "86'd" : priceLabel}</div>
-                            </div>
-                          </button>
-                        );
-                      }
-                      return (
-                        <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative text-left p-3.5 min-h-[124px] rounded-xl border shadow-elevation-sm active:scale-[0.97] transition-all flex flex-col justify-between " + tileClassesFor(item.category, categoryColors) + (oos ? " opacity-50" : "")}>
-                          {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">Low</span>}
-                          <div className="font-semibold text-[15px] leading-snug line-clamp-3">{item.name}</div>
-                          <div className="text-sm opacity-80 mt-1 tabular-nums">{oos ? "86'd" : priceLabel}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  groupedItems.map(({ cat, list }) => (
+                    <div key={cat}>
+                      <div className="text-xs font-semibold tracking-tight text-muted-foreground mb-2 px-0.5">{cat}</div>
+                      {/* Fixed responsive columns cap the tile size so a few items
+                          stay normal-sized (no oversized auto-fit stretch). */}
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
+                        {list.map((item) => {
+                          const hasVars = item.variations.length > 0;
+                          const priceLabel = hasVars
+                            ? "From $" + Math.min(...item.variations.map((v) => v.price)).toFixed(2)
+                            : "$" + item.price.toFixed(2);
+                          const oos = isOos(item);
+                          const low = isLowStock(item);
+                          if (showItemPhotos && item.image_url) {
+                            return (
+                              <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative min-h-[110px] rounded-xl border border-line shadow-elevation-sm overflow-hidden active:scale-[0.97] transition-transform " + (oos ? "opacity-50" : "")}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={item.image_url} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
+                                {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">Low</span>}
+                                <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white text-left px-2 py-1.5">
+                                  <div className="font-semibold text-sm leading-snug line-clamp-2">{item.name}</div>
+                                  <div className="text-xs text-white/90">{oos ? "86'd" : priceLabel}</div>
+                                </div>
+                              </button>
+                            );
+                          }
+                          return (
+                            <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative text-left p-3 min-h-[110px] rounded-xl border shadow-elevation-sm active:scale-[0.97] transition-all flex flex-col justify-between " + tileClassesFor(item.category, categoryColors) + (oos ? " opacity-50" : "")}>
+                              {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">Low</span>}
+                              <div className="font-semibold text-sm leading-snug line-clamp-3">{item.name}</div>
+                              <div className="text-sm opacity-80 mt-1 tabular-nums">{oos ? "86'd" : priceLabel}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
             </div>
@@ -2174,7 +2197,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
 
               {/* Seat selector (real tables only) */}
               {tableMode && (
-                <div className="shrink-0 flex items-center gap-1.5 px-2 py-2 border-b border-border overflow-x-auto">
+                <div className="shrink-0 flex items-center gap-1.5 px-2 py-2 border-b border-border overflow-x-auto [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)]">
                   <button type="button" onClick={() => setActiveSeat(null)} className={"shrink-0 whitespace-nowrap text-sm rounded-lg border px-3.5 py-2 transition-colors " + (activeSeat === null ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>Shared</button>
                   {Array.from({ length: seatCount }, (_, i) => i + 1).map((s) => (
                     <button key={s} type="button" onClick={() => setActiveSeat(s)} className={"shrink-0 whitespace-nowrap text-sm rounded-lg border px-3.5 py-2 transition-colors " + (activeSeat === s ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>{"Seat " + s}</button>

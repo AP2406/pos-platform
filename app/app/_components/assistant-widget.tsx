@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { askAssistant, runAssistantAction } from "../assistant/actions";
 import { useVocab } from "./vocab-provider";
 
@@ -24,6 +25,10 @@ export function AssistantWidget() {
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const vocab = useVocab();
+  // The full-screen POS (floor + register) owns the bottom-right corner with its
+  // Charge / action bar — keep the FAB out of those screens so it can't overlap.
+  const pathname = usePathname();
+  const onPos = pathname === "/app/pos" || pathname?.startsWith("/app/pos/");
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -86,6 +91,8 @@ export function AssistantWidget() {
       send();
     }
   }
+
+  if (onPos) return null;
 
   return (
     <>

@@ -40,15 +40,23 @@ for (const p of CATEGORY_PALETTE) SWATCH_BY_KEY[p.key] = p.swatch;
 
 // Tile classes for a category given the merchant's color map. Returns neutral
 // classes when the category is empty or has no assigned color.
+function autoIndex(name: string): number {
+  // Stable hash so an un-assigned category always maps to the same color.
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  return Math.abs(h) % CATEGORY_PALETTE.length;
+}
+
 export function tileClassesFor(
   category: string | null | undefined,
   colorMap: Record<string, string> | null | undefined
 ): string {
   const name = (category || "").trim();
-  if (!name || !colorMap) return NEUTRAL_TILE;
-  const key = colorMap[name];
+  if (!name) return NEUTRAL_TILE;
+  const key = colorMap?.[name];
   if (key && TILE_BY_KEY[key]) return TILE_BY_KEY[key];
-  return NEUTRAL_TILE;
+  // No explicit color → deterministic palette color so EVERY category is accented.
+  return CATEGORY_PALETTE[autoIndex(name)].tile;
 }
 
 // Solid swatch class for an assigned key, or empty string when unset.
