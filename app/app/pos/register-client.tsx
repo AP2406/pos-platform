@@ -345,9 +345,13 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const tableMode = !!(tableBinding && tableBinding.tableId);
   const [seatCount, setSeatCount] = useState<number>(() => {
     if (!tableMode) return 0;
-    // Default the seat tabs to the table's chairs / guest count (not a hardcoded
-    // 4). Staff add more with "+ Seat". Never go below seats already used or 1.
-    let m = tableBinding?.seatCount || tableBinding?.guestCount || 0;
+    // Seat tabs follow the party: the ticket's guest count first, else the table's
+    // drawn chairs, else a sensible default of 2 — never a hardcoded 4. Plus any
+    // seat already used by an item, so assigning "Seat 5" survives a reload.
+    // "+ Seat" adds more in-memory only: we deliberately never write guest_count
+    // from the seat row, because guest count feeds the auto-gratuity threshold and
+    // the seat tabs must never move the bill.
+    let m = tableBinding?.guestCount || tableBinding?.seatCount || 2;
     for (const it of initialTableCart?.items ?? []) m = Math.max(m, Number(it.seat) || 0);
     return Math.max(m, 1);
   });
