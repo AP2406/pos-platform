@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Chip, type ChipTone } from "@/components/ui/chip";
 import { displayItemName, formatDuration } from "@/lib/format";
-import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady } from "./actions";
+import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady, setOrderItemPrepared } from "./actions";
 import { printReceiptHtml } from "../pos/qz-print";
 
 function ticketHtml(o: { tableLabel: string | null; id: string; createdAt: string; items: { name: string; quantity: number; note?: string | null }[] }): string {
@@ -29,7 +29,7 @@ function esc(s: string): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-type KitchenItem = { name: string; quantity: number; note?: string | null; seat?: number | null; ready?: boolean };
+type KitchenItem = { id?: string; name: string; quantity: number; note?: string | null; seat?: number | null; ready?: boolean };
 type KitchenStation = { id: string; name: string; sort_order: number };
 type KitchenOrder = {
   id: string;
@@ -78,7 +78,7 @@ export function KitchenClient({
 
     const { data: orderRows } = await supabase
       .from("orders")
-      .select("id, customer_id, created_at")
+      .select("id, customer_id, created_at, kds_prepared")
       .eq("business_id", businessId)
       .eq("status", "paid")
       .is("fulfilled_at", null)
@@ -87,18 +87,28 @@ export function KitchenClient({
     const rows = orderRows ?? [];
     const ids = rows.map((o) => o.id as string);
 
-    const itemsByOrder: Record<string, { name: string; quantity: number }[]> = {};
+    // Per-order set of prepared order_item ids (online/takeout per-item bump).
+    const preparedByOrder: Record<string, Set<string>> = {};
+    for (const o of rows) {
+      const arr = Array.isArray(o.kds_prepared) ? (o.kds_prepared as string[]) : [];
+      preparedByOrder[o.id as string] = new Set(arr);
+    }
+
+    const itemsByOrder: Record<string, KitchenItem[]> = {};
     if (ids.length > 0) {
       const { data: items } = await supabase
         .from("order_items")
-        .select("order_id, name, quantity")
+        .select("id, order_id, name, quantity")
         .in("order_id", ids);
       for (const it of items ?? []) {
         const oid = it.order_id as string;
+        const iid = it.id as string;
         if (!itemsByOrder[oid]) itemsByOrder[oid] = [];
         itemsByOrder[oid].push({
+          id: iid,
           name: it.name as string,
           quantity: Number(it.quantity),
+          ready: preparedByOrder[oid]?.has(iid) ?? false,
         });
       }
     }
@@ -240,6 +250,22 @@ export function KitchenClient({
     });
   }
 
+  // Per-item bump for online/takeout/delivery "order" tickets (keyed by the
+  // order_item id, persisted in orders.kds_prepared). Optimistic, then persist.
+  function handleOrderItemPrepared(orderId: string, itemId: string, ready: boolean) {
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === orderId
+          ? { ...o, items: o.items.map((it) => (it.id === itemId ? { ...it, ready } : it)) }
+          : o
+      )
+    );
+    startTransition(async () => {
+      const res = await setOrderItemPrepared(orderId, itemId, ready);
+      if ("error" in res) refresh();
+    });
+  }
+
   // P1-16: bump every ticket of one table from the expo view.
   function handleBumpTable(ids: string[]) {
     const set = new Set(ids);
@@ -266,15 +292,16 @@ export function KitchenClient({
   const visible =
     stationFilter === "all" ? orders : orders.filter((o) => o.stationId === stationFilter);
 
-  // P1-15: all-day counts — total outstanding quantity of each item across every
-  // visible (unfulfilled) ticket, so the line knows how much to prep at a glance.
-  // Respects the active station filter. Modifier annotations like "(+ Medium)"
+  // P1-15: all-day counts — total ORDERED quantity of each item across every
+  // visible (unfulfilled) ticket, so the line sees full demand at a glance.
+  // Reflects ordered quantities, NOT per-item prep state — bumping a line never
+  // changes these counts (a ticket only leaves all-day when it's marked Done).
+  // Respects the active station filter; modifier annotations like "(+ Medium)"
   // are stripped so all temperatures of a Burger roll up to one count.
   const allDay = (() => {
     const m = new Map<string, number>();
     for (const o of visible) {
       for (const it of o.items) {
-        if (it.ready) continue; // already plated — no longer "to make"
         // Strip modifier annotations ("(+ Medium)") AND the split "(shared)"
         // marker so all variants of one item roll up to a single count.
         const base = displayItemName(it.name.replace(/\s*\(\+[^)]*\)\s*$/, ""));
@@ -362,12 +389,14 @@ export function KitchenClient({
   // orders in the expo grid).
   function card(o: KitchenOrder) {
     const age = aging(o.createdAt);
+    // Subtle "ready" cue once every line is bumped (does NOT auto-complete).
+    const allReady = o.items.length > 0 && o.items.every((it) => it.ready);
     return (
       <div key={o.id} className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 flex flex-col">
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="min-w-0">
             {o.kind === "kitchen" ? (
-              <div className="text-lg font-bold leading-tight truncate">{o.tableLabel ?? "Table"}</div>
+              <div className="text-lg font-bold leading-tight truncate">{o.tableName ?? o.tableLabel ?? "Table"}</div>
             ) : (
               <div className="text-lg font-bold leading-tight truncate">Online</div>
             )}
@@ -402,13 +431,23 @@ export function KitchenClient({
                   {it.note ? <span className="text-xs text-amber-600 pl-2">{"→ " + it.note}</span> : null}
                 </button>
               ) : (
-                <div key={i} className="flex flex-col">
-                  <div className="flex justify-between">
-                    <span className="truncate">{(it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}</span>
-                    <span className="tabular-nums text-muted-foreground">{"x" + it.quantity}</span>
+                // Online/takeout/delivery line — per-item bump via order_item id.
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => { if (it.id) handleOrderItemPrepared(o.id, it.id, !it.ready); }}
+                  disabled={!it.id}
+                  className="w-full text-left flex flex-col justify-center rounded px-1 -mx-1 py-2 min-h-[44px] hover:bg-accent disabled:hover:bg-transparent"
+                >
+                  <div className="flex justify-between items-center gap-2">
+                    <span className={"min-w-0 flex items-center gap-2 " + (it.ready ? "text-muted-foreground" : "")}>
+                      <span className={"shrink-0 w-5 h-5 rounded-full border flex items-center justify-center text-[11px] leading-none transition-colors " + (it.ready ? "bg-emerald-500 border-emerald-500 text-white" : "border-muted-foreground/40 text-transparent")}>✓</span>
+                      <span className={"truncate" + (it.ready ? " line-through" : "")}>{(it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}</span>
+                    </span>
+                    <span className={"tabular-nums " + (it.ready ? "text-muted-foreground line-through" : "text-muted-foreground")}>{"x" + it.quantity}</span>
                   </div>
                   {it.note ? <span className="text-xs text-amber-600 pl-2">{"→ " + it.note}</span> : null}
-                </div>
+                </button>
               )
             )
           )}
@@ -418,7 +457,7 @@ export function KitchenClient({
           {o.kind === "kitchen" && (
             <Button variant="outline" size="touch" onClick={() => handleRefire(o)} disabled={pending}>Re-fire</Button>
           )}
-          <Button variant="primary" size="touch" className="flex-1" onClick={() => handleDone(o)} disabled={pending}>Done</Button>
+          <Button variant="primary" size="touch" className={"flex-1" + (allReady ? " ring-2 ring-emerald-400/80 ring-offset-2 ring-offset-card" : "")} onClick={() => handleDone(o)} disabled={pending}>{allReady ? "Done · ready" : "Done"}</Button>
         </div>
       </div>
     );

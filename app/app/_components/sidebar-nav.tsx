@@ -30,7 +30,7 @@ const iconMap: Record<string, LucideIcon> = {
   "/app/vehicles": Car,
   "/app/settings": Settings,
   "/app/pos": CreditCard,
-  "/app/orders": ShoppingBag,
+  "/app/pos/sales": ShoppingBag,
   "/app/catalog": Package,
   "/app/staff": UserCog,
   "/app/audit": ScrollText,
@@ -43,17 +43,27 @@ const iconMap: Record<string, LucideIcon> = {
 
 type NavItem = { href: string; label: string };
 
+function matchesHref(href: string, pathname: string): boolean {
+  return href === "/app"
+    ? pathname === "/app"
+    : pathname === href || pathname.startsWith(href + "/");
+}
+
 export function SidebarNav({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
+
+  // Highlight only the single best (longest) matching item, so a nested route
+  // like /app/pos/sales lights "Tickets" — not also "POS" (/app/pos is a prefix).
+  const activeHref = items.reduce((best, it) => {
+    if (!matchesHref(it.href, pathname)) return best;
+    return it.href.length > best.length ? it.href : best;
+  }, "");
 
   return (
     <nav className="flex-1 p-2 space-y-0.5">
       {items.map((item) => {
         const Icon = iconMap[item.href] ?? LayoutDashboard;
-        const isActive =
-          item.href === "/app"
-            ? pathname === "/app"
-            : pathname === item.href || pathname.startsWith(item.href + "/");
+        const isActive = item.href === activeHref;
 
         return (
           // No entrance animation — the full nav must paint on the first frame

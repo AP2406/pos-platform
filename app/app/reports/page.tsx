@@ -170,7 +170,9 @@ export default async function ReportsPage({
       itemAgg[key].qty += qty;
       itemAgg[key].revenue += revenue;
 
-      const catLabel = (cid && catById[cid]) || "Uncategorized";
+      // No catalog_item_id = a Custom (one-off) line; show it as "Custom" rather
+      // than "Uncategorized" (which is reserved for catalog items lacking a category).
+      const catLabel = cid ? catById[cid] || "Uncategorized" : "Custom";
       if (!catAgg[catLabel]) catAgg[catLabel] = { qty: 0, revenue: 0 };
       catAgg[catLabel].qty += qty;
       catAgg[catLabel].revenue += revenue;
@@ -201,9 +203,11 @@ export default async function ReportsPage({
   let servers: ServerAgg[] = [];
   if (showServers) {
     const agg: Record<string, { count: number; sales: number; tips: number }> = {};
+    // Sales with no attributed staff_id are bucketed as "Unassigned" rather than
+    // dropped, so the totals reconcile and unattributed sales are visible.
+    const UNASSIGNED = "__unassigned__";
     for (const o of orders) {
-      const sid = o.staff_id;
-      if (!sid) continue;
+      const sid = o.staff_id || UNASSIGNED;
       if (!agg[sid]) agg[sid] = { count: 0, sales: 0, tips: 0 };
       agg[sid].count += 1;
       agg[sid].sales += o.subtotal;
@@ -234,13 +238,15 @@ export default async function ReportsPage({
 
     // Include staff who clocked hours even with no attributed sales.
     const sids = Array.from(new Set([...Object.keys(agg), ...Object.keys(hoursByStaff)]));
-    const nameById: Record<string, string> = {};
-    if (sids.length > 0) {
+    const nameById: Record<string, string> = { [UNASSIGNED]: "Unassigned" };
+    // Only real UUIDs go to the staff lookup (never the synthetic Unassigned key).
+    const realSids = sids.filter((s) => s !== UNASSIGNED);
+    if (realSids.length > 0) {
       const { data: staffRows } = await supabase
         .from("staff_members")
         .select("id, name")
         .eq("business_id", business.id)
-        .in("id", sids);
+        .in("id", realSids);
       for (const s of staffRows ?? []) nameById[s.id as string] = s.name as string;
     }
     servers = sids
@@ -252,7 +258,12 @@ export default async function ReportsPage({
         tips: round2(agg[sid]?.tips ?? 0),
         hours: Math.round((hoursByStaff[sid] ?? 0) * 10) / 10,
       }))
-      .sort((a, b) => b.sales - a.sales || a.name.localeCompare(b.name));
+      // Real servers first (by sales), Unassigned always pinned last.
+      .sort((a, b) =>
+        (a.staffId === UNASSIGNED ? 1 : 0) - (b.staffId === UNASSIGNED ? 1 : 0) ||
+        b.sales - a.sales ||
+        a.name.localeCompare(b.name)
+      );
   }
 
   const tabs: { key: string; label: string }[] = [

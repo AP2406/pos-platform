@@ -614,7 +614,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     return (
       <div key={g.id} className={"space-y-2 mb-3 " + (depth > 0 ? "ml-2 pl-3 border-l border-border" : "")}>
         <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">{g.name}</span>
+          <span className="text-xs text-muted-foreground">{g.name}</span>
           <span className={"text-[10px] " + (unmet ? "text-red-600" : "text-muted-foreground")}>{(g.required ? "Required · " : "") + hint}</span>
         </div>
         {g.options.map((m) => {
@@ -1485,6 +1485,15 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       setError("Add at least one item.");
       return;
     }
+    // Full-service: a sale must be attributed to a cashier/server before it can
+    // close, so By-server reporting is never blank. Gated to table service so
+    // quick-service / retail / transportation close flows are unchanged. The
+    // order's staff_id comes from the signed-in staff (surge_active_staff cookie).
+    if (tableMode && hasStaff && !staff) {
+      setError("Enter your cashier PIN to close this sale.");
+      openStaffPin();
+      return;
+    }
     if (total < 0) {
       setError("Total can't be negative.");
       return;
@@ -1830,7 +1839,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
 
             {pickerItem.variations.length > 0 && (
               <div className="space-y-2 mb-3">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Choose one</div>
+                <div className="text-xs text-muted-foreground">Choose one</div>
                 {pickerItem.variations.map((v) => {
                   const selected = pickerVariationId === v.id;
                   return (
@@ -2225,7 +2234,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                       return (
                         <div key={course.id} className="space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{course.name}</span>
+                            <span className="text-xs font-semibold text-muted-foreground">{course.name}</span>
                             {unsent > 0 ? (
                               <button type="button" onClick={() => fireCourseClient(course)} disabled={sending || pending} className="text-[11px] rounded-md border border-foreground px-2 py-0.5 hover:bg-accent disabled:opacity-50">{"Fire " + unsent}</button>
                             ) : (
@@ -2241,7 +2250,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                       if (orphan.length === 0) return null;
                       return (
                         <div className="space-y-1.5">
-                          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">No course</span>
+                          <span className="text-xs font-semibold text-muted-foreground">No course</span>
                           {orphan.map((e) => renderLine(e.l, e.i))}
                         </div>
                       );
@@ -2256,7 +2265,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                       return (
                         <div key={seat === null ? "shared" : "s" + seat} className="space-y-1.5">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{seat === null ? "Shared" : "Seat " + seat}</span>
+                            <span className="text-xs font-semibold text-muted-foreground">{seat === null ? "Shared" : "Seat " + seat}</span>
                             {entries.length > 0 && <span className="text-xs tabular-nums text-muted-foreground">{"$" + sub.toFixed(2)}</span>}
                           </div>
                           {entries.length === 0 ? (
@@ -2323,23 +2332,23 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                 {cart.length > 0 && (
                   <div className="flex gap-1 p-2 border-b border-border overflow-x-auto">
                     <button type="button" onClick={() => setSheet("discount")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (discount > 0 ? "border-foreground" : "border-border")}>
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Discount</div>
+                      <div className="text-[10px] text-muted-foreground">Discount</div>
                       <div className="text-xs font-medium truncate">{discount > 0 ? "-$" + discount.toFixed(2) : "Add"}</div>
                     </button>
                     <button type="button" onClick={() => { setCompValue(""); setSheet("comp"); }} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (comp > 0 ? "border-foreground" : "border-border")}>
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Comp</div>
+                      <div className="text-[10px] text-muted-foreground">Comp</div>
                       <div className="text-xs font-medium truncate">{comp > 0 ? "-$" + comp.toFixed(2) : "Add"}</div>
                     </button>
                     <button type="button" onClick={() => setSheet("tip")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (tipNum > 0 ? "border-foreground" : "border-border")}>
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Tip</div>
+                      <div className="text-[10px] text-muted-foreground">Tip</div>
                       <div className="text-xs font-medium truncate">{tipNum > 0 ? "$" + tipNum.toFixed(2) : "Add"}</div>
                     </button>
                     <button type="button" onClick={() => setSheet("tax")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (effectiveExempt ? "border-emerald-600" : "border-border")}>
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Tax</div>
+                      <div className="text-[10px] text-muted-foreground">Tax</div>
                       <div className={"text-xs font-medium truncate " + (effectiveExempt ? "text-emerald-600" : "")}>{effectiveExempt ? "Exempt" : "Applied"}</div>
                     </button>
                     <button type="button" onClick={() => setSheet("customer")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (customer ? "border-foreground" : "border-border")}>
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Customer</div>
+                      <div className="text-[10px] text-muted-foreground">Customer</div>
                       <div className="text-xs font-medium truncate">{customer ? customer.name : "Add"}</div>
                     </button>
                   </div>

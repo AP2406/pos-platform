@@ -638,10 +638,11 @@ export function FloorClient({
                 // lines without colliding. On those, show just the name — the node's
                 // colour already conveys the status — so labels never overlap or clip.
                 const short = el.h < 56;
-                // P0-11: tint the table with its section color (a top band).
+                // P0-11: the table's section is shown as a small CORNER DOT (not a
+                // full-edge band, which read like a status colour) so section ≠ status.
                 const sec = el.section_id ? sectionById.get(el.section_id) : null;
                 const secColor = sec?.color ?? null;
-                const tileStyle = secColor ? { ...baseStyle, borderTop: "3px solid " + secColor } : baseStyle;
+                const tileStyle = baseStyle;
                 return (
                   <button
                     key={el.id}
@@ -651,6 +652,10 @@ export function FloorClient({
                     className={"absolute overflow-hidden border p-1.5 flex flex-col items-center text-center leading-tight gap-0.5 active:scale-[0.97] transition-all " + (isTable || short ? "justify-center " : "justify-start ") + statusClass(status)}
                     style={tileStyle}
                   >
+                    {/* Section color = a corner dot (a tag), never a status edge. */}
+                    {secColor && (
+                      <span className="absolute top-1 left-1 w-2 h-2 rounded-full ring-1 ring-black/30" style={{ backgroundColor: secColor }} aria-hidden="true" />
+                    )}
                     {/* P2-27: a guest placed a new order via QR awaiting the server.
                         Auto-expire the badge after a few minutes so it can't go stale
                         (there's no per-order timestamp; use the check's open time). */}
@@ -681,6 +686,14 @@ export function FloorClient({
             </div>
           )}
           {error && <p className="text-sm text-red-600 absolute bottom-2 left-3 z-10">{error}</p>}
+          {/* Status-color legend key — one unambiguous mapping; section is a dot. */}
+          <div className="absolute bottom-2 right-2 z-10 hidden sm:flex items-center gap-3 rounded-lg border border-border bg-card/90 backdrop-blur px-3 py-1.5 text-[10px] text-muted-foreground shadow-elevation-sm">
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm border bg-table-available-bg border-table-available-border" />Available</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm border bg-table-seated-bg border-table-seated-border" />Occupied</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm border bg-table-warn-bg border-table-warn-border" />Warning</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm border bg-table-late-bg border-table-late-border" />Late</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-foreground/40" />Section</span>
+          </div>
         </div>
         )}
 

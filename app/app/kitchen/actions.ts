@@ -102,6 +102,48 @@ export async function setKitchenItemReady(
   return { ok: true };
 }
 
+// Per-line prep state for online/takeout/delivery "order" tickets (which have no
+// kitchen_tickets row). Stored as the set of prepared order_item ids in
+// orders.kds_prepared — a non-financial column the settled-order guard permits,
+// never read by any pricing/total/refund logic. KDS display state only.
+export async function setOrderItemPrepared(
+  orderId: string,
+  orderItemId: string,
+  prepared: boolean
+): Promise<{ ok: true } | { error: string }> {
+  if (!orderId || !orderItemId) return { error: "Missing order item." };
+
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data: o } = await supabase
+    .from("orders")
+    .select("kds_prepared")
+    .eq("id", orderId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!o) return { error: "That order is gone." };
+
+  const cur = Array.isArray(o.kds_prepared) ? (o.kds_prepared as string[]) : [];
+  const set = new Set(cur);
+  if (prepared) set.add(orderItemId);
+  else set.delete(orderItemId);
+
+  const { error } = await supabase
+    .from("orders")
+    .update({ kds_prepared: [...set] })
+    .eq("id", orderId)
+    .eq("business_id", business.id);
+
+  if (error) {
+    console.error("setOrderItemPrepared:", error);
+    return { error: "Could not update the item." };
+  }
+
+  revalidatePath("/app/kitchen");
+  return { ok: true };
+}
+
 // P1-16: bump every open ticket for one table at once from the expo view, so the
 // expediter can send the whole table out when it's plated. Orders/revenue untouched.
 export async function markKitchenTicketsFulfilled(
