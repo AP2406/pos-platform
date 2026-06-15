@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Chip, type ChipTone } from "@/components/ui/chip";
 import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady } from "./actions";
 import { printReceiptHtml } from "../pos/qz-print";
 
@@ -56,6 +57,19 @@ export function KitchenClient({
   const [showAllDay, setShowAllDay] = useState(true);
   const [view, setView] = useState<"stations" | "expo">("stations");
   const [pending, startTransition] = useTransition();
+
+  // Ticks every 15s so the aging timers/colours stay current (display only).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(id);
+  }, []);
+  // Aging: fresh < 8m, warming 8–15m, late > 15m — scannable from the line.
+  function aging(iso: string): { label: string; tone: ChipTone } {
+    const mins = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000));
+    const tone: ChipTone = mins >= 15 ? "danger" : mins >= 8 ? "warning" : "success";
+    return { label: mins + "m", tone };
+  }
 
   const refresh = useCallback(async () => {
     const supabase = createClient();
@@ -269,7 +283,7 @@ export function KitchenClient({
 
   const allDayPanel =
     allDay.length > 0 ? (
-      <div className="bg-card border border-border rounded-lg p-3 mb-4">
+      <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-3 mb-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">All day</span>
           <button
@@ -343,20 +357,21 @@ export function KitchenClient({
   // One single ticket / order card (used by the station grid and for online
   // orders in the expo grid).
   function card(o: KitchenOrder) {
+    const age = aging(o.createdAt);
     return (
-      <div key={o.id} className="bg-card border border-border rounded-lg p-4 flex flex-col">
-        <div className="flex items-center justify-between mb-2">
-          <span className="font-medium text-sm flex items-center gap-2">
+      <div key={o.id} className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 flex flex-col">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="min-w-0">
             {o.kind === "kitchen" ? (
-              <>
-                <span className="text-[10px] uppercase tracking-wide rounded bg-emerald-500/15 text-emerald-600 px-1.5 py-0.5">Table</span>
-                {o.tableLabel ?? "Table"}
-              </>
+              <div className="text-lg font-bold leading-tight truncate">{o.tableLabel ?? "Table"}</div>
             ) : (
-              "#" + o.id.slice(0, 8)
+              <div className="text-lg font-bold leading-tight truncate">Online</div>
             )}
-          </span>
-          <span className="text-xs text-muted-foreground">{timeLabel(o.createdAt)}</span>
+            <div className="text-[11px] text-muted-foreground tabular-nums mt-0.5">
+              {(o.kind === "kitchen" ? "" : "#" + o.id.slice(0, 8) + " · ") + timeLabel(o.createdAt)}
+            </div>
+          </div>
+          <Chip tone={age.tone} dot className="shrink-0">{age.label}</Chip>
         </div>
         {o.customerName && <div className="text-xs text-muted-foreground mb-2">{o.customerName}</div>}
         <div className="space-y-1 text-sm flex-1">
@@ -394,18 +409,18 @@ export function KitchenClient({
           )}
         </div>
         <div className="flex gap-2 mt-3">
-          <button type="button" onClick={() => handleReprint(o)} className="text-xs rounded-md border border-border px-2 py-1.5 hover:bg-accent">Reprint</button>
+          <Button variant="outline" size="touch" onClick={() => handleReprint(o)}>Reprint</Button>
           {o.kind === "kitchen" && (
-            <button type="button" onClick={() => handleRefire(o)} disabled={pending} className="text-xs rounded-md border border-border px-2 py-1.5 hover:bg-accent">Re-fire</button>
+            <Button variant="outline" size="touch" onClick={() => handleRefire(o)} disabled={pending}>Re-fire</Button>
           )}
-          <Button className="flex-1" onClick={() => handleDone(o)} disabled={pending}>Done</Button>
+          <Button variant="primary" size="touch" className="flex-1" onClick={() => handleDone(o)} disabled={pending}>Done</Button>
         </div>
       </div>
     );
   }
 
   const emptyCard = (
-    <div className="bg-card border border-border rounded-lg p-10 text-center">
+    <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-10 text-center">
       <p className="text-sm text-muted-foreground">No open orders. New sales will appear here automatically.</p>
     </div>
   );
@@ -440,14 +455,16 @@ export function KitchenClient({
           emptyCard
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {expoGroups.map((g) => (
-              <div key={g.key} className="bg-card border border-border rounded-lg p-4 flex flex-col">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-sm flex items-center gap-2">
-                    <span className="text-[10px] uppercase tracking-wide rounded bg-indigo-500/15 text-indigo-500 px-1.5 py-0.5">Expo</span>
-                    {g.tableName}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{timeLabel(g.firstAt)}</span>
+            {expoGroups.map((g) => {
+              const gAge = aging(g.firstAt);
+              return (
+              <div key={g.key} className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 flex flex-col">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="min-w-0">
+                    <div className="text-lg font-bold leading-tight truncate">{g.tableName}</div>
+                    <div className="text-[11px] text-muted-foreground tabular-nums mt-0.5">{timeLabel(g.firstAt)}</div>
+                  </div>
+                  <Chip tone={gAge.tone} dot className="shrink-0">{gAge.label}</Chip>
                 </div>
                 <div className="space-y-2 text-sm flex-1">
                   {g.tickets.map((t) => (
@@ -468,12 +485,13 @@ export function KitchenClient({
                   ))}
                 </div>
                 <div className="flex gap-2 mt-3">
-                  <Button className="flex-1" onClick={() => handleBumpTable(g.tickets.map((t) => t.id))} disabled={pending}>
+                  <Button variant="primary" size="touch" className="flex-1" onClick={() => handleBumpTable(g.tickets.map((t) => t.id))} disabled={pending}>
                     Bump table
                   </Button>
                 </div>
               </div>
-            ))}
+              );
+            })}
             {orderCards.map((o) => card(o))}
           </div>
         )}
