@@ -89,7 +89,7 @@ export function ReceiptSettingsForm({ initial, businessName }: { initial: Partia
         </div>
 
         <div className="space-y-3">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Header</div>
+          <div className="text-xs text-muted-foreground">Header</div>
           <div>
             <Label className="text-xs">Business name on receipt</Label>
             <Input value={s.headerName} onChange={(e) => set("headerName", e.target.value)} placeholder={businessName} className="h-9 mt-1" />
@@ -101,7 +101,7 @@ export function ReceiptSettingsForm({ initial, businessName }: { initial: Partia
         </div>
 
         <div className="space-y-3">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Contact details</div>
+          <div className="text-xs text-muted-foreground">Contact details</div>
           <div className="space-y-2">
             <Toggle checked={s.showAddress} onChange={(v) => set("showAddress", v)}>Show address</Toggle>
             {s.showAddress && (
@@ -129,7 +129,7 @@ export function ReceiptSettingsForm({ initial, businessName }: { initial: Partia
         </div>
 
         <div className="space-y-3">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Body</div>
+          <div className="text-xs text-muted-foreground">Body</div>
           <div className="space-y-2">
             <Toggle checked={s.showSaleNumber} onChange={(v) => set("showSaleNumber", v)}>Show sale number</Toggle>
             <Toggle checked={s.showDateTime} onChange={(v) => set("showDateTime", v)}>Show date and time</Toggle>
@@ -142,7 +142,7 @@ export function ReceiptSettingsForm({ initial, businessName }: { initial: Partia
         </div>
 
         <div className="space-y-3">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Footer</div>
+          <div className="text-xs text-muted-foreground">Footer</div>
           <div>
             <Label className="text-xs">Thank-you message</Label>
             <textarea value={s.footerMessage} onChange={(e) => set("footerMessage", e.target.value)} rows={2} placeholder="Thank you!" className="w-full rounded-md border border-border bg-transparent text-foreground px-2 py-1.5 text-sm mt-1" />
@@ -166,7 +166,7 @@ export function ReceiptSettingsForm({ initial, businessName }: { initial: Partia
       </div>
 
       <div className="lg:sticky lg:top-4 self-start">
-        <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Live preview</div>
+        <div className="text-xs text-muted-foreground mb-2">Live preview</div>
         <div className="rounded-lg border border-border bg-muted/40 p-3 flex justify-center">
           <iframe
             title="Receipt preview"

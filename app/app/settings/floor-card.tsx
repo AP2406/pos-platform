@@ -393,7 +393,7 @@ export function FloorCard({
       {/* Selected-element panel */}
       {selected && (
         <div className="flex flex-wrap items-end gap-2 mb-3 p-3 rounded-md border border-border bg-card">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground self-center capitalize">{selected.kind}</span>
+          <span className="text-xs text-muted-foreground self-center capitalize">{selected.kind}</span>
           {NAMEABLE.includes(selected.kind) && (
             <div className="space-y-1">
               <Label className="text-xs">Name</Label>

@@ -51,7 +51,7 @@ export function KioskCard({
 
       {enabled && (
         <div className="space-y-2 pt-1">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kiosk link</div>
+          <div className="text-xs font-semibold text-muted-foreground">Kiosk link</div>
           <p className="text-xs text-muted-foreground">
             Open this on a tablet in kiosk/guided-access mode. Bookmark it for one-tap launch.
           </p>
