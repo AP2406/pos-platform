@@ -15,6 +15,7 @@ import { TableAgingCard } from "./table-aging-card";
 import { StationsCard } from "./stations-card";
 import { listKitchenStations } from "../kitchen/stations-actions";
 import { GuestOrderingCard } from "./guest-ordering-card";
+import { KioskCard } from "./kiosk-card";
 import { ServiceChargeCard } from "./service-charge-card";
 import { SplitCard } from "./split-card";
 import { LoyaltyCard } from "./loyalty-card";
@@ -304,6 +305,13 @@ export default async function SettingsPage() {
               businessId={business.id}
               initialEnabled={(business as { guest_ordering_enabled?: boolean }).guest_ordering_enabled === true}
               tables={floorElements.filter((e) => e.kind === "table" || e.kind === "booth").map((e) => ({ id: e.id, label: e.label ?? "Table" }))}
+            />
+          </div>
+          <div className="bg-card border border-border rounded-lg p-6">
+            <SectionHeader>Self-ordering kiosk</SectionHeader>
+            <KioskCard
+              businessId={business.id}
+              initialEnabled={(business as { kiosk_ordering_enabled?: boolean }).kiosk_ordering_enabled === true}
             />
           </div>
         </>
