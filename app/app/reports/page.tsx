@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { requireBusiness } from "@/lib/services/tenancy";
+import { requireBusiness, listBusinesses } from "@/lib/services/tenancy";
 import { hasFloorService } from "@/lib/modules/modes";
 
 type OrderRow = {
@@ -44,6 +44,11 @@ export default async function ReportsPage({
 
   const sp = await searchParams;
   const range = sp.range === "today" || sp.range === "30d" ? sp.range : "7d";
+
+  // Show the cross-location link only to owners/managers of more than one business.
+  const myBusinesses = await listBusinesses();
+  const multiLocation =
+    myBusinesses.filter((b) => b.role === "owner" || b.role === "manager").length > 1;
 
   const rangeLabels: Record<string, string> = {
     today: "Today",
@@ -256,11 +261,21 @@ export default async function ReportsPage({
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Reports</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {"Sales for " + rangeLabels[range].toLowerCase() + ". Voided sales are excluded."}
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Reports</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            {"Sales for " + rangeLabels[range].toLowerCase() + ". Voided sales are excluded."}
+          </p>
+        </div>
+        {multiLocation && (
+          <Link
+            href="/app/locations"
+            className="shrink-0 text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent"
+          >
+            All locations
+          </Link>
+        )}
       </div>
 
       <div className="flex gap-2 mb-4">
