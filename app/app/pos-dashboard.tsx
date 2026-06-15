@@ -6,7 +6,17 @@ import {
 } from "@/lib/utils/dates";
 import Link from "next/link";
 import { MetricCard } from "@/components/ui/metric-card";
-import { DollarSign, Receipt, TrendingUp, AlertTriangle } from "lucide-react";
+import { SectionHeader } from "@/components/ui/section-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  DollarSign,
+  Receipt,
+  TrendingUp,
+  AlertTriangle,
+  CalendarRange,
+  ShoppingBag,
+  Inbox,
+} from "lucide-react";
 
 type Biz = {
   id: string;
@@ -178,16 +188,16 @@ export async function PosDashboard({ business }: { business: Biz }) {
 
       <SectionHeader>This period</SectionHeader>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="This week" value={money(week.gross)} hint={week.count + (week.count === 1 ? " sale" : " sales")} />
-        <StatCard label="This month" value={money(month.gross)} hint={month.count + (month.count === 1 ? " sale" : " sales")} />
-        <StatCard label="Avg ticket" value={money(avgTicketMonth)} hint="This month" />
+        <MetricCard label="This week" value={money(week.gross)} hint={week.count + (week.count === 1 ? " sale" : " sales")} icon={<CalendarRange />} />
+        <MetricCard label="This month" value={money(month.gross)} hint={month.count + (month.count === 1 ? " sale" : " sales")} icon={<CalendarRange />} />
+        <MetricCard label="Avg ticket" value={money(avgTicketMonth)} hint="This month" icon={<TrendingUp />} />
       </div>
 
       <SectionHeader>Top items this month</SectionHeader>
       {topItems.length === 0 ? (
-        <EmptyState message="No sales yet this month." />
+        <EmptyState icon={<ShoppingBag />} title="No sales yet this month" description="Your best sellers will appear here once you start ringing up orders." />
       ) : (
-        <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl divide-y divide-line overflow-hidden">
           {topItems.map((it) => (
             <div key={it.name} className="p-3 flex items-center justify-between">
               <div className="flex-1 min-w-0">
@@ -204,9 +214,9 @@ export async function PosDashboard({ business }: { business: Biz }) {
 
       <SectionHeader>Recent sales</SectionHeader>
       {recent.length === 0 ? (
-        <EmptyState message="No sales recorded yet." />
+        <EmptyState icon={<Inbox />} title="No sales recorded yet" description="New sales show up here as they're rung up." />
       ) : (
-        <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl divide-y divide-line overflow-hidden">
           {recent.map((o) => {
             const snap = o.snapshot as { items?: Row[] } | null;
             const itemCount =
@@ -246,15 +256,15 @@ export async function PosDashboard({ business }: { business: Biz }) {
       {lowStock.length > 0 && (
         <>
           <SectionHeader>Low stock</SectionHeader>
-          <div className="bg-amber-50/30 border border-amber-200 rounded-lg divide-y divide-amber-100 overflow-hidden">
+          <div className="bg-amber-500/5 ring-1 ring-amber-500/20 rounded-xl divide-y divide-amber-500/10 overflow-hidden">
             {lowStock.slice(0, 8).map((i) => (
               <Link
                 key={i.id}
                 href="/app/inventory"
-                className="block p-3 hover:bg-white/60 transition-colors flex items-center justify-between"
+                className="block p-3 hover:bg-amber-500/10 transition-colors flex items-center justify-between"
               >
                 <span className="font-medium truncate">{i.name}</span>
-                <span className="text-sm text-amber-700 tabular-nums">
+                <span className="text-sm font-medium text-amber-500 tabular-nums">
                   {num(i.stock_qty) + " left"}
                 </span>
               </Link>
@@ -266,47 +276,3 @@ export async function PosDashboard({ business }: { business: Biz }) {
   );
 }
 
-function SectionHeader({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-3 mt-8">
-      {children}
-    </h2>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="bg-card border border-dashed border-border rounded-lg p-8 text-center">
-      <p className="text-muted-foreground text-sm">{message}</p>
-    </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "warning" | "neutral";
-}) {
-  return (
-    <div className="group bg-card border border-border rounded-lg p-5 transition-all duration-200 hover:border-foreground/15 hover:shadow-[0_2px_8px_rgb(0_0_0_/_0.04)]">
-      <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold">
-        {label}
-      </div>
-      <div
-        className={
-          "text-2xl font-semibold mt-2 tabular-nums tracking-tight " +
-          (tone === "warning" ? "text-amber-600" : "text-foreground")
-        }
-      >
-        {value}
-      </div>
-      {hint && <div className="text-xs text-muted-foreground mt-1">{hint}</div>}
-    </div>
-  );
-}

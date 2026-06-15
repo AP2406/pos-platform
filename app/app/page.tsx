@@ -314,7 +314,8 @@ export default async function DashboardPage() {
       <MiniCalendar timezone={tz} />
 
       <SectionHeader>Revenue this week</SectionHeader>
-      <div className="bg-card border border-border rounded-lg p-5 transition-shadow hover:shadow-sm">
+      {weekGross > 0 ? (
+      <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-5">
         <svg
           viewBox="0 0 700 200"
           className="w-full"
@@ -361,6 +362,11 @@ export default async function DashboardPage() {
           })}
         </svg>
       </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-line bg-card/40 px-6 py-10 text-center text-sm text-muted-foreground">
+          No revenue logged this week yet.
+        </div>
+      )}
 
       {needsAttention.length > 0 && (
         <>
