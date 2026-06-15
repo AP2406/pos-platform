@@ -166,14 +166,14 @@ export default async function SettingsPage() {
     label: "General",
     content: (
       <>
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
           <SectionHeader>Business profile</SectionHeader>
           <SettingsForm
             initialName={business.name}
             initialTimezone={business.timezone || "America/Toronto"}
           />
         </div>
-        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
           <SectionHeader>Details</SectionHeader>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between">
@@ -188,7 +188,7 @@ export default async function SettingsPage() {
             </div>
           </dl>
         </div>
-        <div className="bg-card border border-border rounded-lg p-6">
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
           <SectionHeader>Account</SectionHeader>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between">
@@ -207,25 +207,25 @@ export default async function SettingsPage() {
       label: "Tax",
       content: (
         <>
-          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Tax and currency</SectionHeader>
             <TaxCurrencyForm
               initialTaxPercent={taxPercent}
               initialCurrency={business.currency || "CAD"}
             />
           </div>
-          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Additional tax rates</SectionHeader>
             <TaxRatesCard initialRates={taxRates} />
           </div>
           {showServiceCharge && (
-            <div className="bg-card border border-border rounded-lg p-6 mb-4">
+            <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
               <SectionHeader>Service charge</SectionHeader>
               <ServiceChargeCard initial={serviceChargeSettings} />
             </div>
           )}
           {showSplit && (
-            <div className="bg-card border border-border rounded-lg p-6">
+            <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
               <SectionHeader>Check splitting</SectionHeader>
               <SplitCard initial={splitSettings} />
             </div>
@@ -240,7 +240,7 @@ export default async function SettingsPage() {
       key: "receipts",
       label: "Receipts",
       content: (
-        <div className="bg-card border border-border rounded-lg p-6">
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
           <SectionHeader>Receipt design</SectionHeader>
           <p className="text-sm text-muted-foreground mb-4">
             Brand your printed receipts. Changes apply to every register for this business.
@@ -255,7 +255,7 @@ export default async function SettingsPage() {
     key: "printer",
     label: "Printer",
     content: (
-      <div className="bg-card border border-border rounded-lg p-6">
+      <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
         <SectionHeader>Receipt printer</SectionHeader>
         <p className="text-sm text-muted-foreground mb-4">
           Connect this device to a receipt printer. This setting is saved on this computer and stays connected until you disconnect it.
@@ -270,7 +270,7 @@ export default async function SettingsPage() {
       key: "team",
       label: "Team",
       content: (
-        <div className="bg-card border border-border rounded-lg p-6">
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
           <SectionHeader>Staff and PINs</SectionHeader>
           <StaffCard initialStaff={staffList} />
         </div>
@@ -284,23 +284,23 @@ export default async function SettingsPage() {
       label: "Floor",
       content: (
         <>
-          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Floor plan</SectionHeader>
             <FloorCard initialPlans={floorPlans} initialElements={floorElements} initialChairMode={chairMode} />
           </div>
-          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Server sections</SectionHeader>
             <SectionsCard initialSections={sectionsList} tables={assignableTables} staff={staffList.filter((s) => s.is_active).map((s) => ({ id: s.id, name: s.name }))} />
           </div>
-          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Table timers</SectionHeader>
             <TableAgingCard initial={tableAging} />
           </div>
-          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Kitchen stations</SectionHeader>
             <StationsCard initial={stationsList} />
           </div>
-          <div className="bg-card border border-border rounded-lg p-6">
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
             <SectionHeader>Guest ordering (QR)</SectionHeader>
             <GuestOrderingCard
               businessId={business.id}
@@ -308,14 +308,14 @@ export default async function SettingsPage() {
               tables={floorElements.filter((e) => e.kind === "table" || e.kind === "booth").map((e) => ({ id: e.id, label: e.label ?? "Table" }))}
             />
           </div>
-          <div className="bg-card border border-border rounded-lg p-6">
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
             <SectionHeader>Self-ordering kiosk</SectionHeader>
             <KioskCard
               businessId={business.id}
               initialEnabled={(business as { kiosk_ordering_enabled?: boolean }).kiosk_ordering_enabled === true}
             />
           </div>
-          <div className="bg-card border border-border rounded-lg p-6">
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
             <SectionHeader>Customer display</SectionHeader>
             <CfdCard businessId={business.id} />
           </div>
@@ -330,16 +330,16 @@ export default async function SettingsPage() {
       label: "Operations",
       content: (
         <>
-          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Training mode</SectionHeader>
             <TrainingModeForm initialEnabled={trainingMode} />
           </div>
-          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Register</SectionHeader>
             <ShowPhotosForm initialEnabled={showItemPhotos} />
           </div>
           {business.industry === "transportation" && (
-            <div className="bg-card border border-border rounded-lg p-6">
+            <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
               <SectionHeader>Features</SectionHeader>
               <DriversSettingCard
                 initialEnabled={business.drivers_enabled !== false}
@@ -357,11 +357,11 @@ export default async function SettingsPage() {
       label: "Loyalty",
       content: (
         <>
-          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Loyalty &amp; rewards</SectionHeader>
             <LoyaltyCard initial={loyaltySettings} />
           </div>
-          <div className="bg-card border border-border rounded-lg p-6">
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
             <SectionHeader>Gift cards</SectionHeader>
             <GiftCardsCard />
           </div>
@@ -376,7 +376,7 @@ export default async function SettingsPage() {
     content: (
       <>
         {role === "owner" && (
-          <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Square</SectionHeader>
             <div className="flex items-center justify-between gap-4">
               <div>

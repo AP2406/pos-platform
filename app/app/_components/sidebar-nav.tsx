@@ -48,7 +48,7 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
 
   return (
     <nav className="flex-1 p-2 space-y-0.5">
-      {items.map((item, index) => {
+      {items.map((item) => {
         const Icon = iconMap[item.href] ?? LayoutDashboard;
         const isActive =
           item.href === "/app"
@@ -56,19 +56,12 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
             : pathname === item.href || pathname.startsWith(item.href + "/");
 
         return (
-          <motion.div
-            key={item.href}
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{
-              delay: index * 0.04,
-              duration: 0.28,
-              ease: [0.22, 1, 0.36, 1],
-            }}
-          >
+          // No entrance animation — the full nav must paint on the first frame
+          // (server-rendered), or it flashes an incomplete list on every load.
+          <div key={item.href}>
             <Link
               href={item.href}
-              className="relative flex items-center gap-3 px-3 py-2 text-sm rounded-md group"
+              className="relative flex items-center gap-3 px-3 py-2.5 text-sm rounded-md group"
             >
               {isActive && (
                 <>
@@ -92,7 +85,7 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
                 }`}
               >
                 <Icon
-                  className={`w-4 h-4 shrink-0 transition-colors ${
+                  className={`w-[18px] h-[18px] shrink-0 transition-colors ${
                     isActive ? "text-sidebar-primary" : ""
                   }`}
                   strokeWidth={2}
@@ -100,7 +93,7 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
                 <span>{item.label}</span>
               </span>
             </Link>
-          </motion.div>
+          </div>
         );
       })}
     </nav>
