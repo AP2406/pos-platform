@@ -3,12 +3,17 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
+type Notice = { title: string; body: React.ReactNode };
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [loading, setLoading] = useState(false); // password sign-in / sign-up
+  const [magicLoading, setMagicLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
 
   async function handleGoogleSignIn() {
     setGoogleLoading(true);
@@ -26,25 +31,116 @@ export default function LoginPage() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
     const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithOtp({
+
+    if (mode === "signup") {
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: window.location.origin + "/auth/callback" },
+      });
+      setLoading(false);
+      if (signUpError) {
+        setError(signUpError.message);
+        return;
+      }
+      // If email confirmation is required, Supabase returns no session yet.
+      if (!data.session) {
+        setNotice({
+          title: "Confirm your email",
+          body: (
+            <>
+              We sent a confirmation link to{" "}
+              <span className="font-medium text-foreground">{email}</span>. Click
+              it to activate your account, then sign in.
+            </>
+          ),
+        });
+        return;
+      }
+      // Confirmation disabled — session is live; full reload so the server sees it.
+      window.location.href = "/app";
+      return;
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    setLoading(false);
+    if (signInError) {
+      setError(signInError.message);
+      return;
+    }
+    window.location.href = "/app";
+  }
+
+  async function handleMagicLink() {
+    if (!email) {
+      setError("Enter your email above, then tap the magic link option.");
+      return;
+    }
+    setMagicLoading(true);
+    setError(null);
+    const supabase = createClient();
+    const { error: otpError } = await supabase.auth.signInWithOtp({
       email,
       options: {
         emailRedirectTo: window.location.origin + "/auth/callback",
         shouldCreateUser: true,
       },
     });
-    setLoading(false);
-    if (signInError) {
-      setError(signInError.message);
-    } else {
-      setSent(true);
+    setMagicLoading(false);
+    if (otpError) {
+      setError(otpError.message);
+      return;
     }
+    setNotice({
+      title: "Check your inbox",
+      body: (
+        <>
+          We sent a sign-in link to{" "}
+          <span className="font-medium text-foreground">{email}</span>. Click it
+          to come back here.
+        </>
+      ),
+    });
   }
+
+  async function handleForgotPassword() {
+    if (!email) {
+      setError("Enter your email above first, then tap Forgot password.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const supabase = createClient();
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+      email,
+      { redirectTo: window.location.origin + "/auth/callback?next=/auth/reset" }
+    );
+    setLoading(false);
+    if (resetError) {
+      setError(resetError.message);
+      return;
+    }
+    setNotice({
+      title: "Check your inbox",
+      body: (
+        <>
+          We sent a password reset link to{" "}
+          <span className="font-medium text-foreground">{email}</span>. Open it
+          to set a new password.
+        </>
+      ),
+    });
+  }
+
+  const busy = loading || magicLoading || googleLoading;
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -134,7 +230,7 @@ export default function LoginPage() {
             <span className="font-semibold text-lg tracking-tight">Surge</span>
           </div>
 
-          {sent ? (
+          {notice ? (
             <div className="oa-rise text-center">
               <div className="mx-auto w-14 h-14 rounded-2xl bg-primary/10 ring-1 ring-primary/20 flex items-center justify-center text-primary">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
@@ -142,30 +238,30 @@ export default function LoginPage() {
                 </svg>
               </div>
               <h1 className="text-xl font-semibold tracking-tight mt-5">
-                Check your inbox
+                {notice.title}
               </h1>
-              <p className="text-sm text-muted-foreground mt-2">
-                We sent a sign-in link to{" "}
-                <span className="font-medium text-foreground">{email}</span>. Click
-                it to come back here.
-              </p>
+              <p className="text-sm text-muted-foreground mt-2">{notice.body}</p>
               <button
                 type="button"
                 onClick={() => {
-                  setSent(false);
-                  setEmail("");
+                  setNotice(null);
+                  setError(null);
                 }}
                 className="text-xs text-muted-foreground hover:text-foreground underline mt-6"
               >
-                Use a different email
+                Back to sign in
               </button>
             </div>
           ) : (
             <>
               <div className="oa-rise">
-                <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
+                <h1 className="text-2xl font-semibold tracking-tight">
+                  {mode === "signup" ? "Create your account" : "Sign in"}
+                </h1>
                 <p className="text-muted-foreground text-sm mt-1.5">
-                  Continue with Google, or use a magic link.
+                  {mode === "signup"
+                    ? "Use your work email and a password."
+                    : "Use your email and password to continue."}
                 </p>
               </div>
 
@@ -173,7 +269,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={handleGoogleSignIn}
-                  disabled={googleLoading || loading}
+                  disabled={busy}
                   className="flex items-center justify-center gap-2.5 w-full h-11 rounded-lg bg-white text-[#3c4043] text-sm font-medium border border-black/10 shadow-sm transition-colors hover:bg-gray-50 disabled:opacity-60"
                 >
                   {googleLoading ? (
@@ -192,7 +288,7 @@ export default function LoginPage() {
                         <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                         <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                       </svg>
-                      Sign in with Google
+                      Continue with Google
                     </>
                   )}
                 </button>
@@ -210,7 +306,7 @@ export default function LoginPage() {
               </div>
 
               <form
-                onSubmit={handleSubmit}
+                onSubmit={handlePasswordSubmit}
                 className="oa-rise space-y-4"
                 style={{ animationDelay: "0.24s" }}
               >
@@ -222,17 +318,54 @@ export default function LoginPage() {
                     id="email"
                     type="email"
                     required
+                    autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@yourbusiness.com"
                     className="mt-2 flex h-11 w-full rounded-lg border border-input bg-card px-3.5 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                   />
                 </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="password" className="text-sm font-medium">
+                      Password
+                    </label>
+                    {mode === "signin" && (
+                      <button
+                        type="button"
+                        onClick={handleForgotPassword}
+                        disabled={busy}
+                        className="text-xs text-muted-foreground hover:text-foreground underline disabled:opacity-60"
+                      >
+                        Forgot password?
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    id="password"
+                    type="password"
+                    required
+                    minLength={8}
+                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="mt-2 flex h-11 w-full rounded-lg border border-input bg-card px-3.5 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                  />
+                  {mode === "signup" && (
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      At least 8 characters.
+                    </p>
+                  )}
+                </div>
+
                 {error && <p className="text-sm text-destructive">{error}</p>}
+
                 <button
                   type="submit"
-                  disabled={loading || googleLoading}
-                  className="flex items-center justify-center gap-2 w-full h-11 rounded-lg border border-border bg-secondary text-secondary-foreground text-sm font-medium transition-colors hover:bg-accent disabled:opacity-60"
+                  disabled={busy}
+                  className="flex items-center justify-center gap-2 w-full h-11 rounded-lg bg-primary text-primary-foreground text-sm font-medium transition-colors hover:bg-primary/90 disabled:opacity-60"
                 >
                   {loading ? (
                     <>
@@ -240,13 +373,60 @@ export default function LoginPage() {
                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
                         <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                       </svg>
-                      Sending…
+                      {mode === "signup" ? "Creating account…" : "Signing in…"}
                     </>
+                  ) : mode === "signup" ? (
+                    "Create account"
                   ) : (
-                    "Send magic link"
+                    "Sign in"
                   )}
                 </button>
               </form>
+
+              <div
+                className="oa-rise mt-5 text-center text-sm text-muted-foreground space-y-3"
+                style={{ animationDelay: "0.32s" }}
+              >
+                <div>
+                  {mode === "signin" ? (
+                    <>
+                      New to Surge?{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMode("signup");
+                          setError(null);
+                        }}
+                        className="font-medium text-foreground hover:underline"
+                      >
+                        Create an account
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      Already have an account?{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMode("signin");
+                          setError(null);
+                        }}
+                        className="font-medium text-foreground hover:underline"
+                      >
+                        Sign in
+                      </button>
+                    </>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleMagicLink}
+                  disabled={busy}
+                  className="text-xs text-muted-foreground hover:text-foreground underline disabled:opacity-60"
+                >
+                  {magicLoading ? "Sending magic link…" : "Email me a magic link instead"}
+                </button>
+              </div>
             </>
           )}
         </div>
