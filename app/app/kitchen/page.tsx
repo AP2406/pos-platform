@@ -11,7 +11,7 @@ export default async function KitchenPage() {
 
   const { data: orders } = await supabase
     .from("orders")
-    .select("id, total, customer_id, created_at")
+    .select("id, total, customer_id, created_at, kds_prepared")
     .eq("business_id", business.id)
     .eq("status", "paid")
     .is("fulfilled_at", null)
@@ -20,18 +20,29 @@ export default async function KitchenPage() {
   const orderRows = orders ?? [];
   const ids = orderRows.map((o) => o.id as string);
 
-  const itemsByOrder: Record<string, { name: string; quantity: number }[]> = {};
+  // Set of prepared order_item ids per order (online/takeout per-item bump). Must
+  // match the client refresh() so online lines are tappable on the FIRST paint.
+  const preparedByOrder: Record<string, Set<string>> = {};
+  for (const o of orderRows) {
+    const arr = Array.isArray(o.kds_prepared) ? (o.kds_prepared as string[]) : [];
+    preparedByOrder[o.id as string] = new Set(arr);
+  }
+
+  const itemsByOrder: Record<string, { id: string; name: string; quantity: number; ready: boolean }[]> = {};
   if (ids.length > 0) {
     const { data: items } = await supabase
       .from("order_items")
-      .select("order_id, name, quantity")
+      .select("id, order_id, name, quantity")
       .in("order_id", ids);
     for (const it of items ?? []) {
       const oid = it.order_id as string;
+      const iid = it.id as string;
       if (!itemsByOrder[oid]) itemsByOrder[oid] = [];
       itemsByOrder[oid].push({
+        id: iid,
         name: it.name as string,
         quantity: Number(it.quantity),
+        ready: preparedByOrder[oid]?.has(iid) ?? false,
       });
     }
   }

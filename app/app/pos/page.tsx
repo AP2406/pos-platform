@@ -196,7 +196,7 @@ export default async function PosPage() {
     (business as { training_mode?: boolean }).training_mode === true;
 
   const tap = ((business as { settings?: { table_aging?: { yellow_min?: number; red_min?: number } } }).settings?.table_aging) ?? {};
-  const tableAging = { yellowMin: Number(tap.yellow_min) || 30, redMin: Number(tap.red_min) || 50 };
+  const tableAging = { yellowMin: Number(tap.yellow_min) || 45, redMin: Number(tap.red_min) || 90 };
 
   // Service charge + check splitting are full-service features. For QSR / retail
   // / the transportation register, leave these undefined so the register renders

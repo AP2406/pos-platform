@@ -79,7 +79,7 @@ export function FloorClient({
   reservationSummary = { waitlist: 0, next: null },
   staff,
   sections = [],
-  aging = { yellowMin: 30, redMin: 50 },
+  aging = { yellowMin: 45, redMin: 90 },
 }: {
   register: RegisterProps;
   plans: FloorPlan[];
@@ -467,12 +467,13 @@ export function FloorClient({
   // configurable in Settings (businesses.settings.table_aging).
   function tableStatus(open: TableTicketSummary | undefined): "available" | "noorder" | "seated" | "warn" | "late" {
     if (!open) return "available";
-    // Seated but nothing ordered yet — don't let the turn-time clock flag it
-    // critical. Aging is meaningful only once there's an order on the check.
-    if (open.item_count <= 0 || open.subtotal <= 0) return "noorder";
     const m = minutesOpen(open.opened_at);
+    // Elapsed time wins: a genuinely stale check escalates to Warning/Late no
+    // matter its order state, so a multi-hour/day-old check can never sit blue.
     if (m >= aging.redMin) return "late";
     if (m >= aging.yellowMin) return "warn";
+    // Only a *fresh* check with nothing ordered yet stays neutral (not flagged).
+    if (open.item_count <= 0 || open.subtotal <= 0) return "noorder";
     return "seated";
   }
   function statusClass(s: "available" | "noorder" | "seated" | "warn" | "late"): string {

@@ -96,7 +96,7 @@ export default async function SettingsPage() {
   const showSplit = hasFloorService(business);
 
   const ta = ((business as { settings?: { table_aging?: { yellow_min?: number; red_min?: number } } }).settings?.table_aging) ?? {};
-  const tableAging = { yellowMin: Number(ta.yellow_min) || 30, redMin: Number(ta.red_min) || 50 };
+  const tableAging = { yellowMin: Number(ta.yellow_min) || 45, redMin: Number(ta.red_min) || 90 };
 
   const showItemPhotos =
     (business as { show_item_photos?: boolean }).show_item_photos !== false;
