@@ -122,6 +122,21 @@ function WorkspaceSwitcher({
   );
 }
 
+function DemoBanner() {
+  return (
+    <div className="mb-5 flex items-start gap-3 rounded-lg border border-amber-300/60 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 shrink-0 mt-0.5">
+        <path d="M9 3h6M10 3v5.5L5.5 17a2 2 0 0 0 1.8 3h9.4a2 2 0 0 0 1.8-3L14 8.5V3" />
+      </svg>
+      <p className="text-sm leading-relaxed">
+        <span className="font-semibold">Demo mode.</span> You&rsquo;re exploring a
+        sandbox — take orders and run the floor freely. The menu, floor plan and
+        settings are locked, and no real payments are processed.
+      </p>
+    </div>
+  );
+}
+
 export function AppShell({
   businessName,
   industry,
@@ -130,6 +145,7 @@ export function AppShell({
   activeBusinessId,
   nav,
   showOnboarding,
+  isDemo,
   children,
 }: {
   businessName: string;
@@ -139,6 +155,7 @@ export function AppShell({
   activeBusinessId: string;
   nav: NavItem[];
   showOnboarding?: boolean;
+  isDemo?: boolean;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -257,6 +274,7 @@ export function AppShell({
           <div className="h-[100dvh] pt-14 overflow-hidden">{children}</div>
         ) : (
           <div className="max-w-7xl mx-auto px-5 md:px-8 pt-20 md:pt-8 pb-10">
+            {isDemo && <DemoBanner />}
             {showOnboarding && <OnboardingNudge />}
             <PageTransition>{children}</PageTransition>
           </div>

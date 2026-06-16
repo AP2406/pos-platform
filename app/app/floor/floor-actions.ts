@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireBusiness } from "@/lib/services/tenancy";
+import { requireBusiness, DEMO_LOCKED_MESSAGE } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -40,6 +40,9 @@ type FloorGate =
 
 async function requireFloorManager(): Promise<FloorGate> {
   const ctx = await requireBusiness();
+  if (ctx.business.is_demo) {
+    return { ok: false, error: DEMO_LOCKED_MESSAGE };
+  }
   if (ctx.role !== "owner" && ctx.role !== "manager") {
     return { ok: false, error: "Only an owner or manager can edit the floor." };
   }

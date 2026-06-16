@@ -48,7 +48,8 @@ export default async function AppLayout({
   let showOnboarding = false;
   const onboarding =
     (business as { onboarding?: { dismissed?: boolean } }).onboarding ?? {};
-  if (hasPos && !(onboarding && onboarding.dismissed === true)) {
+  const isDemo = (business as { is_demo?: boolean }).is_demo === true;
+  if (!isDemo && hasPos && !(onboarding && onboarding.dismissed === true)) {
     const supabase = await createClient();
     const { count } = await supabase
       .from("orders")
@@ -71,6 +72,7 @@ export default async function AppLayout({
         activeBusinessId={business.id}
         nav={finalNav}
         showOnboarding={showOnboarding}
+        isDemo={isDemo}
       >
         {children}
       </AppShell>

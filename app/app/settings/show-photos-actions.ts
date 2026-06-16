@@ -1,13 +1,14 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireBusiness } from "@/lib/services/tenancy";
+import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 
 export async function setShowItemPhotos(
   enabled: boolean
 ): Promise<{ ok: true } | { error: string }> {
   const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
   if (role !== "owner") {
     return { error: "Only an owner can change this setting." };
   }

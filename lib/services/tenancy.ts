@@ -30,12 +30,39 @@ export type BusinessContext = {
     timezone: string;
     drivers_enabled: boolean;
     access_status?: string;
+    // True for sandbox/demo businesses: fully usable for taking orders but
+    // locked against any config change and unable to process real money.
+    is_demo?: boolean;
+    training_mode?: boolean;
     // Stored onboarding config (modules + mode). Present at runtime because
     // getCurrentBusiness selects businesses(*); typed here so mode-gated
     // features (e.g. full-service floor) can read business.config.mode.
     config?: { mode?: string } | null;
   };
 };
+
+export const DEMO_LOCKED_MESSAGE =
+  "This is a demo account — the menu, floor plan and settings are locked.";
+
+/**
+ * Thrown by config-mutation server actions when invoked on a demo business.
+ * The UI also disables the relevant controls, so this is a server-side
+ * backstop that guarantees no demo config write ever lands.
+ */
+export class DemoLockedError extends Error {
+  constructor() {
+    super(DEMO_LOCKED_MESSAGE);
+    this.name = "DemoLockedError";
+  }
+}
+
+/**
+ * Guards every business-configuration write (menu, floor, settings, staff).
+ * No-op for real businesses; throws for demo/sandbox businesses.
+ */
+export function assertConfigEditable(business: { is_demo?: boolean }): void {
+  if (business.is_demo) throw new DemoLockedError();
+}
 
 export type BusinessSummary = {
   id: string;
@@ -121,7 +148,31 @@ export async function getCurrentBusiness(): Promise<BusinessContext | null> {
     console.error("getCurrentBusiness:", error);
     return null;
   }
-  if (!data || data.length === 0) return null;
+  if (!data || data.length === 0) {
+    // Demo users are provisioned in the Supabase dashboard and flagged via
+    // app_metadata.demo. On first sign-in they have no membership yet, so we
+    // auto-join the shared demo business (RPC is SECURITY DEFINER + verifies
+    // the admin-set JWT claim, so it can't be abused).
+    const isDemoUser =
+      (user.app_metadata as { demo?: boolean } | undefined)?.demo === true;
+    if (isDemoUser) {
+      const { data: joinedId } = await supabase.rpc("join_demo_business");
+      if (joinedId) {
+        const { data: biz } = await supabase
+          .from("businesses")
+          .select("*")
+          .eq("id", joinedId as string)
+          .single();
+        if (biz) {
+          return {
+            role: "manager",
+            business: biz as BusinessContext["business"],
+          };
+        }
+      }
+    }
+    return null;
+  }
 
   const cookieStore = await cookies();
   const activeId = cookieStore.get(ACTIVE_BUSINESS_COOKIE)?.value;

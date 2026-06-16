@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireBusiness } from "@/lib/services/tenancy";
+import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 
 // Service charge / auto-gratuity configuration (owner/manager only). The amount
@@ -19,6 +19,7 @@ export async function setServiceCharge(
   input: ServiceChargeSettings
 ): Promise<{ ok: true } | { error: string }> {
   const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
   if (role !== "owner" && role !== "manager") {
     return { error: "Only an owner or manager can change this." };
   }

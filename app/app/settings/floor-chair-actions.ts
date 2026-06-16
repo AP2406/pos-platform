@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireBusiness } from "@/lib/services/tenancy";
+import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 
 // How chairs behave in the floor editor: 'follow' (chairs auto-arrange and move
@@ -11,6 +11,7 @@ export async function setFloorChairMode(
 ): Promise<{ ok: true } | { error: string }> {
   if (mode !== "follow" && mode !== "editable") return { error: "Invalid option." };
   const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
   if (role !== "owner" && role !== "manager") {
     return { error: "Only an owner or manager can change this." };
   }

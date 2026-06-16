@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": ["Bash(*)"],
+    "deny": [
+      "Read(./.env.local)",
+      "Edit(./.env.local)",
+      "Bash(git push --force *)",
+      "Bash(git push * --force)"
+    ]
+  }
+}

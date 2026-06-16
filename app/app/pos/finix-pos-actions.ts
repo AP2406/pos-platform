@@ -57,6 +57,11 @@ type CardOrderResult =
 export async function getCardConfig(): Promise<CardConfig> {
   const { business } = await requireBusiness();
 
+  // Demo/sandbox businesses never process real money.
+  if ((business as { is_demo?: boolean }).is_demo) {
+    return { enabled: false, reason: "demo" };
+  }
+
   if (!isFinixConfigured()) {
     return { enabled: false, reason: "not_configured" };
   }

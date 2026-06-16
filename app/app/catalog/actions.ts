@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireBusiness } from "@/lib/services/tenancy";
+import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -37,6 +37,7 @@ export async function createCatalogItem(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
 
   const code = cleanBarcode(parsed.data.barcode);
@@ -82,6 +83,7 @@ export async function updateCatalogItem(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
 
   const updateData: Record<string, unknown> = {
@@ -118,6 +120,7 @@ export async function setCatalogItemOutOfStock(
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing item." };
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
   const { error } = await supabase
     .from("catalog_items")
@@ -137,7 +140,8 @@ export async function setCatalogItemActive(
   id: string,
   active: boolean
 ): Promise<{ ok: true } | { error: string }> {
-  await requireBusiness();
+  const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
   const { error } = await supabase
     .from("catalog_items")
@@ -157,6 +161,7 @@ export async function setCatalogItemTaxable(
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing item." };
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
   const { error } = await supabase
     .from("catalog_items")
@@ -177,6 +182,7 @@ export async function setCatalogItemBarcode(
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing item." };
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
 
   const code = cleanBarcode(barcode);
@@ -212,6 +218,7 @@ export async function setCatalogItemImage(
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing item." };
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
 
   let url: string | null = null;
@@ -238,6 +245,7 @@ export async function saveCategoryColors(
   map: Record<string, string>
 ): Promise<{ ok: true } | { error: string }> {
   const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
   if (role !== "owner" && role !== "manager") {
     return { error: "Only an owner or manager can change category colors." };
   }
@@ -285,6 +293,7 @@ export async function createVariation(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
 
   const { data: item } = await supabase
@@ -318,6 +327,7 @@ export async function deleteVariation(
 ): Promise<{ ok: true } | { error: string }> {
   if (!variationId) return { error: "Missing variation." };
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
   const { error } = await supabase
     .from("catalog_item_variations")
@@ -353,6 +363,7 @@ export async function createModifier(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
 
   const { data: item } = await supabase
@@ -401,6 +412,7 @@ export async function setModifierChildGroup(
 ): Promise<{ ok: true } | { error: string }> {
   if (!modifierId) return { error: "Missing option." };
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
   if (childGroupId) {
     const { data: grp } = await supabase
@@ -439,6 +451,7 @@ export async function createModifierGroup(
   const parsed = groupSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
   const { data: item } = await supabase
     .from("catalog_items")
@@ -483,6 +496,7 @@ export async function updateModifierGroup(
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing group." };
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
   const patch: Record<string, unknown> = {};
   if (input.name !== undefined) patch.name = input.name.trim().slice(0, 60) || "Group";
@@ -507,6 +521,7 @@ export async function deleteModifierGroup(
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing group." };
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
   // Options cascade-delete via the FK.
   const { error } = await supabase
@@ -527,6 +542,7 @@ export async function deleteModifier(
 ): Promise<{ ok: true } | { error: string }> {
   if (!modifierId) return { error: "Missing add-on." };
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
   const { error } = await supabase
     .from("catalog_item_modifiers")
@@ -547,6 +563,7 @@ export async function setCatalogItemTaxRate(
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing item." };
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
 
   if (taxRateId) {
@@ -579,6 +596,7 @@ export async function setCatalogItemDefaultCourse(
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing item." };
   const { business } = await requireBusiness();
+  assertConfigEditable(business);
   const supabase = await createClient();
 
   if (courseId) {

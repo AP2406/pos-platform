@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireBusiness } from "@/lib/services/tenancy";
+import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 
 // P3-44 toggle self-ordering kiosk for the business (owner/manager). Off by default;
@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 // fires to the kitchen. No online payment — staff charge at the counter.
 export async function setKioskOrdering(enabled: boolean): Promise<{ ok: true } | { error: string }> {
   const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
   if (role !== "owner" && role !== "manager") {
     return { error: "Only an owner or manager can change this." };
   }

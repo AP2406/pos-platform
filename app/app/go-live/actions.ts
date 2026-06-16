@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireBusiness } from "@/lib/services/tenancy";
+import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 
 const ALLOWED_KEYS = ["legal_accepted", "tax_free", "cash_only"];
@@ -15,6 +15,7 @@ export async function setGoLiveFlag(formData: FormData): Promise<void> {
   if (!ALLOWED_KEYS.includes(key)) return;
 
   const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
   if (role !== "owner" && role !== "manager") return;
 
   const supabase = await createClient();

@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireBusiness } from "@/lib/services/tenancy";
+import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -18,6 +18,7 @@ export async function createTaxRate(name: string, rate: number): Promise<RateRes
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
   const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
   if (role !== "owner" && role !== "manager") {
     return { error: "Only an owner or manager can manage tax rates." };
   }
@@ -43,6 +44,7 @@ export async function createTaxRate(name: string, rate: number): Promise<RateRes
 export async function deleteTaxRate(id: string): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing tax rate." };
   const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
   if (role !== "owner" && role !== "manager") {
     return { error: "Only an owner or manager can manage tax rates." };
   }

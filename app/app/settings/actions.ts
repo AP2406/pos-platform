@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireBusiness } from "@/lib/services/tenancy";
+import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 
 export async function updateBusinessSettings(input: {
@@ -9,6 +9,7 @@ export async function updateBusinessSettings(input: {
   timezone: string;
 }): Promise<{ ok: true } | { error: string }> {
   const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
 
   if (role !== "owner") {
     return { error: "Only owners can change settings." };
@@ -40,6 +41,7 @@ export async function updateTaxAndCurrency(input: {
   currency: string;
 }): Promise<{ ok: true } | { error: string }> {
   const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
 
   if (role !== "owner") {
     return { error: "Only owners can change settings." };

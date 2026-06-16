@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireBusiness } from "@/lib/services/tenancy";
+import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 
 const ROLES = ["manager", "staff", "trainee"];
@@ -27,6 +27,7 @@ export async function createStaff(
   if (!/^[0-9]{4,6}$/.test(pin)) return { error: "PIN must be 4 to 6 digits." };
 
   const { business, role: myRole } = await requireBusiness();
+  assertConfigEditable(business);
   if (!canManage(myRole)) return { error: "Only an owner or manager can add staff." };
 
   const supabase = await createClient();
@@ -56,6 +57,7 @@ export async function updateStaff(
   if (!ROLES.includes(role)) return { error: "Choose a role." };
 
   const { business, role: myRole } = await requireBusiness();
+  assertConfigEditable(business);
   if (!canManage(myRole)) return { error: "Only an owner or manager can edit staff." };
 
   const supabase = await createClient();
@@ -79,7 +81,8 @@ export async function setStaffPin(
   if (!id) return { error: "Missing staff." };
   if (!/^[0-9]{4,6}$/.test(pin)) return { error: "PIN must be 4 to 6 digits." };
 
-  const { role: myRole } = await requireBusiness();
+  const { business, role: myRole } = await requireBusiness();
+  assertConfigEditable(business);
   if (!canManage(myRole)) return { error: "Only an owner or manager can change PINs." };
 
   const supabase = await createClient();
@@ -99,6 +102,7 @@ export async function setStaffActive(
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing staff." };
   const { business, role: myRole } = await requireBusiness();
+  assertConfigEditable(business);
   if (!canManage(myRole)) return { error: "Only an owner or manager can change staff." };
 
   const supabase = await createClient();
