@@ -8,9 +8,7 @@ type Notice = { title: string; body: React.ReactNode };
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [loading, setLoading] = useState(false); // password sign-in / sign-up
-  const [magicLoading, setMagicLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // password sign-in
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -36,37 +34,6 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     const supabase = createClient();
-
-    if (mode === "signup") {
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: window.location.origin + "/auth/callback" },
-      });
-      setLoading(false);
-      if (signUpError) {
-        setError(signUpError.message);
-        return;
-      }
-      // If email confirmation is required, Supabase returns no session yet.
-      if (!data.session) {
-        setNotice({
-          title: "Confirm your email",
-          body: (
-            <>
-              We sent a confirmation link to{" "}
-              <span className="font-medium text-foreground">{email}</span>. Click
-              it to activate your account, then sign in.
-            </>
-          ),
-        });
-        return;
-      }
-      // Confirmation disabled — session is live; full reload so the server sees it.
-      window.location.href = "/app";
-      return;
-    }
-
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -76,39 +43,8 @@ export default function LoginPage() {
       setError(signInError.message);
       return;
     }
+    // Full reload so the SSR server picks up the new session cookie.
     window.location.href = "/app";
-  }
-
-  async function handleMagicLink() {
-    if (!email) {
-      setError("Enter your email above, then tap the magic link option.");
-      return;
-    }
-    setMagicLoading(true);
-    setError(null);
-    const supabase = createClient();
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: window.location.origin + "/auth/callback",
-        shouldCreateUser: true,
-      },
-    });
-    setMagicLoading(false);
-    if (otpError) {
-      setError(otpError.message);
-      return;
-    }
-    setNotice({
-      title: "Check your inbox",
-      body: (
-        <>
-          We sent a sign-in link to{" "}
-          <span className="font-medium text-foreground">{email}</span>. Click it
-          to come back here.
-        </>
-      ),
-    });
   }
 
   async function handleForgotPassword() {
@@ -140,7 +76,7 @@ export default function LoginPage() {
     });
   }
 
-  const busy = loading || magicLoading || googleLoading;
+  const busy = loading || googleLoading;
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -255,13 +191,9 @@ export default function LoginPage() {
           ) : (
             <>
               <div className="oa-rise">
-                <h1 className="text-2xl font-semibold tracking-tight">
-                  {mode === "signup" ? "Create your account" : "Sign in"}
-                </h1>
+                <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
                 <p className="text-muted-foreground text-sm mt-1.5">
-                  {mode === "signup"
-                    ? "Use your work email and a password."
-                    : "Use your email and password to continue."}
+                  Use your email and password to continue.
                 </p>
               </div>
 
@@ -331,33 +263,25 @@ export default function LoginPage() {
                     <label htmlFor="password" className="text-sm font-medium">
                       Password
                     </label>
-                    {mode === "signin" && (
-                      <button
-                        type="button"
-                        onClick={handleForgotPassword}
-                        disabled={busy}
-                        className="text-xs text-muted-foreground hover:text-foreground underline disabled:opacity-60"
-                      >
-                        Forgot password?
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={handleForgotPassword}
+                      disabled={busy}
+                      className="text-xs text-muted-foreground hover:text-foreground underline disabled:opacity-60"
+                    >
+                      Forgot password?
+                    </button>
                   </div>
                   <input
                     id="password"
                     type="password"
                     required
-                    minLength={8}
-                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     className="mt-2 flex h-11 w-full rounded-lg border border-input bg-card px-3.5 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                   />
-                  {mode === "signup" && (
-                    <p className="text-xs text-muted-foreground mt-1.5">
-                      At least 8 characters.
-                    </p>
-                  )}
                 </div>
 
                 {error && <p className="text-sm text-destructive">{error}</p>}
@@ -373,60 +297,27 @@ export default function LoginPage() {
                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
                         <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                       </svg>
-                      {mode === "signup" ? "Creating account…" : "Signing in…"}
+                      Signing in…
                     </>
-                  ) : mode === "signup" ? (
-                    "Create account"
                   ) : (
                     "Sign in"
                   )}
                 </button>
               </form>
 
-              <div
-                className="oa-rise mt-5 text-center text-sm text-muted-foreground space-y-3"
+              <p
+                className="oa-rise mt-6 text-center text-xs text-muted-foreground"
                 style={{ animationDelay: "0.32s" }}
               >
-                <div>
-                  {mode === "signin" ? (
-                    <>
-                      New to Surge?{" "}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMode("signup");
-                          setError(null);
-                        }}
-                        className="font-medium text-foreground hover:underline"
-                      >
-                        Create an account
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      Already have an account?{" "}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMode("signin");
-                          setError(null);
-                        }}
-                        className="font-medium text-foreground hover:underline"
-                      >
-                        Sign in
-                      </button>
-                    </>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleMagicLink}
-                  disabled={busy}
-                  className="text-xs text-muted-foreground hover:text-foreground underline disabled:opacity-60"
+                Accounts are set up by Surge. Need access?{" "}
+                <a
+                  href="mailto:hello@surgetechpos.com"
+                  className="font-medium text-foreground hover:underline"
                 >
-                  {magicLoading ? "Sending magic link…" : "Email me a magic link instead"}
-                </button>
-              </div>
+                  Contact us
+                </a>
+                .
+              </p>
             </>
           )}
         </div>
