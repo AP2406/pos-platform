@@ -41,3 +41,5 @@ yarn-error.log*
 next-env.d.ts
 API-key-for-Auto-capture-leads.txt
    *.key.txt
+# Local Claude Code agent settings
+.claude/
