@@ -232,6 +232,17 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const [compValue, setCompValue] = useState("");
   const [compReason, setCompReason] = useState("");
   const [compReasonNote, setCompReasonNote] = useState("");
+  // P0: comp/discount only count toward the total once AUTHORIZED (the cashier's
+  // role permits + within cap, or a manager PIN approved). A persisted table-cart
+  // discount was authorized when it was applied, so it loads authorized.
+  const [compAuthorized, setCompAuthorized] = useState(false);
+  const [discountAuthorized, setDiscountAuthorized] = useState(
+    !!(initialTableCart?.discount_value && Number(initialTableCart.discount_value) > 0)
+  );
+  // The manager who authorized a sensitive action via PIN (recorded in the audit).
+  const [approver, setApprover] = useState<{ id: string; name: string } | null>(null);
+  // The action to run once a manager PIN authorizes it (set by authorizeAction).
+  const pendingCommitRef = useRef<(() => void) | null>(null);
   // Service charge / auto-gratuity. Auto-applies for large parties; turning it
   // off (a waiver) is the sensitive, reason-coded action.
   const scCfg: ServiceChargeCfg = serviceCharge ?? { enabled: false, pct: 0, autoParty: 0, postTax: false, label: "Service charge" };
@@ -244,7 +255,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const splitCfg: SplitCfg = splitSettings ?? { settlementMode: "separate", allowUnits: false };
   const [splitOpen, setSplitOpen] = useState(false);
   const [splitResult, setSplitResult] = useState<{ mode: "separate" | "informational"; orders: SplitResultOrder[] } | null>(null);
-  const [mgrIntent, setMgrIntent] = useState<"tender" | "split">("tender");
+  const [mgrIntent, setMgrIntent] = useState<"tender" | "split" | "action">("tender");
   const [taxExempt, setTaxExempt] = useState(false);
   const [taxExemptReason, setTaxExemptReason] = useState("");
   const [taxExemptNote, setTaxExemptNote] = useState("");
@@ -695,6 +706,18 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     setEditLineIndex(null);
   }
 
+  // P1: removing a line branches on fired state.
+  //  - UNFIRED line → a delete (needs the `delete_item_prepay` permission).
+  //  - FIRED line → not a delete; it must go through the void flow (needs `void`
+  //    + a reason + KDS notice). The Remove button is hidden for fired lines, so
+  //    this is the unfired path; we still gate it and guard against fired items.
+  function deleteUnfiredLine(index: number) {
+    const line = cart[index];
+    if (!line) return;
+    if ((line.sent_qty ?? 0) > 0 || line.fired_at) return; // fired → use Void
+    authorizeAction("delete_item_prepay", false, () => removeLine(index));
+  }
+
   function setLineNote(index: number, note: string) {
     setCart((prev) => prev.map((l, i) => (i === index ? { ...l, note: note } : l)));
   }
@@ -717,7 +740,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   // from totals; if it was already fired, the kitchen is told to stop.
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("");
-  function voidLine(index: number, reasonCode: string) {
+  function commitVoid(index: number, reasonCode: string) {
     const line = cart[index];
     if (!line) return;
     const firedQty = line.sent_qty ?? 0;
@@ -730,6 +753,11 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     setVoidOpen(false);
     setVoidReason("");
     setEditLineIndex(null);
+  }
+  // P0: voiding a line requires the `void` permission; otherwise a manager PIN
+  // must authorize it (the void doesn't apply until approved).
+  function voidLine(index: number, reasonCode: string) {
+    authorizeAction("void", false, () => commitVoid(index, reasonCode));
   }
   function unvoidLine(index: number) {
     setCart((prev) => prev.map((l, i) => (i === index ? { ...l, void: null } : l)));
@@ -888,9 +916,11 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       })),
       tip: tip,
       discount_mode: discountMode,
-      discount_value: discountValue,
-      discount_reason: discountReason,
-      discount_reason_note: discountReasonNote,
+      // P0: on a staffed till only an AUTHORIZED discount is persisted, so an
+      // unauthorized draft can't be staged and silently auto-applied on reload.
+      discount_value: !hasStaff || discountAuthorized ? discountValue : "",
+      discount_reason: !hasStaff || discountAuthorized ? discountReason : "",
+      discount_reason_note: !hasStaff || discountAuthorized ? discountReasonNote : "",
       customer: customer ? { id: customer.id, name: customer.name } : null,
     };
   }
@@ -904,7 +934,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     }, 600);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tableBinding, cart, tip, discountMode, discountValue, discountReason, discountReasonNote, customer]);
+  }, [tableBinding, cart, tip, discountMode, discountValue, discountReason, discountReasonNote, discountAuthorized, customer]);
 
   // Count of items not yet fired to the kitchen (table mode).
   const unsentCount = cart.reduce(
@@ -1059,6 +1089,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     setCustomerQuery("");
     setCustomerResults([]);
     setApproved(false);
+    setApprover(null);
+    setCompAuthorized(false);
+    setDiscountAuthorized(false);
     idemKeyRef.current = null;
   }
 
@@ -1111,12 +1144,20 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   // an unattended till can't ring under the last person's name. Only runs when a
   // staffed business actually has someone signed in.
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // P2: kept fresh so the idle timeout can tell whether a check is open without
+  // re-running the effect (which would lose the timer) on every cart change.
+  const cartLenRef = useRef(cart.length);
+  cartLenRef.current = cart.length;
   useEffect(() => {
     if (!hasStaff || !staff) return;
     const IDLE_LOGOUT_MS = 90_000;
     const reset = () => {
       if (idleTimer.current) clearTimeout(idleTimer.current);
       idleTimer.current = setTimeout(() => {
+        // P2: NEVER blank the cashier while a check is open — that drops
+        // attribution mid-sale (and would disable the permission gate). An open
+        // check keeps its cashier until it closes or they explicitly sign out.
+        if (cartLenRef.current > 0) return;
         clearActiveStaff();
         setStaff(null);
       }, IDLE_LOGOUT_MS);
@@ -1152,9 +1193,21 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       setMgrPin("");
       return;
     }
-    setApproved(true);
+    // Record the approving manager for the audit trail (logged with the sale).
+    setApprover({ id: res.id, name: res.name });
     setMgrOpen(false);
     setMgrPin("");
+    setMgrErr(null);
+    // P0: a per-action authorization (comp/discount/void) runs its pending commit
+    // and does NOT proceed to tender.
+    if (mgrIntent === "action") {
+      const commit = pendingCommitRef.current;
+      pendingCommitRef.current = null;
+      setMgrIntent("tender");
+      commit?.();
+      return;
+    }
+    setApproved(true);
     if (mgrIntent === "split") {
       setSplitOpen(true);
     } else {
@@ -1298,7 +1351,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const voidLines = cart.filter((l) => l.void);
   const voidTotalAmt = Math.round(voidLines.reduce((s, l) => s + l.unit_price * l.quantity, 0) * 100) / 100;
 
-  const discountInput = parseFloat(discountValue) || 0;
+  // P0: on a staffed till an unauthorized discount does NOT reduce the total (or
+  // reach the payload). Non-staffed tills (QSR/retail) apply live, as before.
+  const discountInput = !hasStaff || discountAuthorized ? parseFloat(discountValue) || 0 : 0;
   let discount = discountMode === "percent" ? subtotal * (discountInput / 100) : discountInput;
   if (discount < 0) discount = 0;
   if (discount > subtotal) discount = subtotal;
@@ -1320,14 +1375,20 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     setDiscountValue(loyaltyMaxDollars.toFixed(2));
     setDiscountReason("loyalty_redeem");
     setDiscountReasonNote("");
+    // Loyalty redemption is the customer spending their own points, not a
+    // discretionary discount — it self-authorizes (no manager needed).
+    setDiscountAuthorized(true);
   }
   function clearLoyalty() {
     setDiscountValue("");
     setDiscountReason("");
+    setDiscountAuthorized(false);
   }
 
   // Comp (on-the-house): pre-tax reduction after discount, capped to remaining.
-  let comp = parseFloat(compValue) || 0;
+  // P0: on a staffed till an unauthorized comp does NOT reduce the total (or
+  // reach the payload). Non-staffed tills (QSR/retail) apply live, as before.
+  let comp = !hasStaff || compAuthorized ? parseFloat(compValue) || 0 : 0;
   if (comp < 0) comp = 0;
   if (comp > discountedSubtotal) comp = discountedSubtotal;
   comp = Math.round(comp * 100) / 100;
@@ -1432,23 +1493,76 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const cashierCan = (p: string) => cashierPerms.includes(p);
   const compCap = staff ? (staff as { compCap?: number | null }).compCap ?? null : null;
   const discountCap = staff ? (staff as { discountCap?: number | null }).discountCap ?? null : null;
-  // An adjustment needs a manager's PIN only if the cashier's role doesn't grant
-  // it. discount/comp/void are permission-keyed (so a Server granted `comp` can
-  // self-serve); tax-exempt + service-charge waive stay manager-gated (no direct
-  // permission key, and Manager's default set excludes change_tax). Per-role $
-  // CAPS also force approval when the comp/discount exceeds the cap (null cap =
-  // unlimited = unchanged).
-  const overCompCap = comp > 0 && compCap != null && comp > compCap;
-  const overDiscountCap = discount > 0 && discountCap != null && discount > discountCap;
+
+  // P0: comp / discount / void are authorized AT THE ACTION (authorizeAction),
+  // so by close they're already approved with the approver recorded. The close
+  // gate only covers tax-exempt + service-charge waive (no direct permission
+  // key) — and FAILS CLOSED: an unknown/null cashier always needs a manager PIN,
+  // never default-allow.
   const needsManagerApproval =
-    hasStaff &&
-    !!staff &&
-    ((discount > 0 && !cashierCan("discount")) ||
-      (comp > 0 && !cashierCan("comp")) ||
-      (voidLines.length > 0 && !cashierCan("void")) ||
-      overCompCap ||
-      overDiscountCap ||
-      ((taxExempt || scWaived) && cashierRole !== "manager"));
+    (taxExempt || scWaived) && (!staff || cashierRole !== "manager");
+
+  // The single authorization chokepoint for a sensitive register action. Fails
+  // closed: a null/unknown cashier is never authorized. If the cashier's role
+  // grants the permission and the amount is within cap, it commits immediately;
+  // otherwise a manager PIN must authorize it first (the action does not apply
+  // until then), and that manager is recorded as the approver.
+  function authorizeAction(permission: string, overCap: boolean, commit: () => void) {
+    // Businesses that don't use staff PINs (QSR / retail / transportation) have
+    // no register permission system — apply directly, exactly as before. The
+    // gate only engages for staffed full-service tills.
+    if (!hasStaff) {
+      commit();
+      return;
+    }
+    const authorized = !!staff && cashierCan(permission) && !overCap;
+    if (authorized) {
+      commit();
+      return;
+    }
+    pendingCommitRef.current = commit;
+    setMgrIntent("action");
+    setMgrErr(null);
+    setMgrPin("");
+    setMgrOpen(true);
+  }
+
+  function applyComp() {
+    const amt = parseFloat(compValue) || 0;
+    if (amt <= 0) {
+      setCompAuthorized(false);
+      setSheet(null);
+      return;
+    }
+    if (!compReasonOk) {
+      setError("Choose a reason for the comp.");
+      return;
+    }
+    const overCap = compCap != null && amt > compCap;
+    authorizeAction("comp", overCap, () => {
+      setCompAuthorized(true);
+      setSheet(null);
+    });
+  }
+
+  function applyDiscount() {
+    const amt = parseFloat(discountValue) || 0;
+    if (amt <= 0) {
+      setDiscountAuthorized(false);
+      setSheet(null);
+      return;
+    }
+    if (!discountReasonOk) {
+      setError("Choose a reason for the discount.");
+      return;
+    }
+    const dollar = discountMode === "percent" ? Math.round(subtotal * (amt / 100) * 100) / 100 : amt;
+    const overCap = discountCap != null && dollar > discountCap;
+    authorizeAction("discount", overCap, () => {
+      setDiscountAuthorized(true);
+      setSheet(null);
+    });
+  }
 
   function snapshot(): Snap {
     return {
@@ -1524,6 +1638,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         taxExempt && taxExemptReason === "other" ? taxExemptNote.trim() : undefined,
       customer_id: customer ? customer.id : null,
       dining_option: diningOption,
+      approver: approver ?? undefined,
     };
   }
 
@@ -2548,9 +2663,11 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                     </div>
                   </div>
                 )}
-                <Button variant="outline" className="w-full mt-3 text-red-600" onClick={() => removeLine(editLineIndex)}>
-                  Remove from sale
-                </Button>
+                {(cart[editLineIndex].sent_qty ?? 0) === 0 && !cart[editLineIndex].fired_at && (
+                  <Button variant="outline" className="w-full mt-3 text-red-600" onClick={() => deleteUnfiredLine(editLineIndex)}>
+                    Remove from sale
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -2638,16 +2755,16 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
               <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-medium">Discount</h3>
-                  <button type="button" onClick={() => setSheet(null)} className="text-xs text-muted-foreground underline">Done</button>
+                  <button type="button" onClick={applyDiscount} className="text-xs font-semibold underline">Apply</button>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="flex rounded-md border border-border overflow-hidden text-sm">
-                    <button type="button" onClick={() => setDiscountMode("amount")} className={"px-3 py-2 " + (discountMode === "amount" ? "bg-accent font-medium" : "hover:bg-accent/50")}>$</button>
-                    <button type="button" onClick={() => setDiscountMode("percent")} className={"px-3 py-2 border-l border-border " + (discountMode === "percent" ? "bg-accent font-medium" : "hover:bg-accent/50")}>%</button>
+                    <button type="button" onClick={() => { setDiscountMode("amount"); setDiscountAuthorized(false); }} className={"px-3 py-2 " + (discountMode === "amount" ? "bg-accent font-medium" : "hover:bg-accent/50")}>$</button>
+                    <button type="button" onClick={() => { setDiscountMode("percent"); setDiscountAuthorized(false); }} className={"px-3 py-2 border-l border-border " + (discountMode === "percent" ? "bg-accent font-medium" : "hover:bg-accent/50")}>%</button>
                   </div>
-                  <Input type="number" min="0" step="0.01" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} placeholder="0" className="flex-1 h-11 text-right" />
+                  <Input type="number" min="0" step="0.01" value={discountValue} onChange={(e) => { setDiscountValue(e.target.value); setDiscountAuthorized(false); }} placeholder="0" className="flex-1 h-11 text-right" />
                 </div>
-                {discount > 0 && (
+                {(parseFloat(discountValue) || 0) > 0 && (
                   <div className="space-y-1 mt-3">
                     <Label className="text-xs">Discount reason</Label>
                     <select value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} className="w-full h-10 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
@@ -2671,14 +2788,14 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
               <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-medium">Comp (on the house)</h3>
-                  <button type="button" onClick={() => setSheet(null)} className="text-xs text-muted-foreground underline">Done</button>
+                  <button type="button" onClick={applyComp} className="text-xs font-semibold underline">Apply</button>
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">A comp removes the cost of items as a courtesy. It is recorded separately from a discount and may require a manager.</p>
                 <div className="flex items-center gap-2">
-                  <Input type="number" min="0" step="0.01" value={compValue} onChange={(e) => setCompValue(e.target.value)} placeholder="0.00" className="flex-1 h-11 text-right" />
-                  <Button type="button" variant="outline" className="h-11 shrink-0" onClick={() => setCompValue(discountedSubtotal.toFixed(2))}>Whole check</Button>
+                  <Input type="number" min="0" step="0.01" value={compValue} onChange={(e) => { setCompValue(e.target.value); setCompAuthorized(false); }} placeholder="0.00" className="flex-1 h-11 text-right" />
+                  <Button type="button" variant="outline" className="h-11 shrink-0" onClick={() => { setCompValue(discountedSubtotal.toFixed(2)); setCompAuthorized(false); }}>Whole check</Button>
                 </div>
-                {comp > 0 && (
+                {(parseFloat(compValue) || 0) > 0 && (
                   <div className="space-y-1 mt-3">
                     <Label className="text-xs">Comp reason</Label>
                     <select value={compReason} onChange={(e) => setCompReason(e.target.value)} className="w-full h-10 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">

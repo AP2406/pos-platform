@@ -62,6 +62,9 @@ const orderSchema = z.object({
   customer_id: z.string().uuid().optional().nullable(),
   idempotency_key: z.string().uuid().optional(),
   dining_option: z.enum(DINING_OPTIONS).optional().nullable(),
+  // The manager who authorized a sensitive action (comp/discount/void) at the
+  // register via PIN, when the cashier's own role lacked the permission/cap.
+  approver: z.object({ id: z.string().max(64), name: z.string().max(120) }).optional().nullable(),
 });
 
 type PaymentInput = {
@@ -99,6 +102,7 @@ type OrderInput = {
   customer_id?: string | null;
   idempotency_key?: string;
   dining_option?: "dine_in" | "takeout" | "delivery" | "pickup" | null;
+  approver?: { id: string; name: string } | null;
 };
 
 type Tender = {
@@ -637,6 +641,13 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   } = await supabase.auth.getUser();
   const authUserId = user ? user.id : null;
 
+  // Manager who authorized any sensitive action via PIN at the register (P0).
+  const approver = parsed.data.approver ?? null;
+  const approverMeta = {
+    approved_by: approver ? approver.id : null,
+    approver_name: approver ? approver.name : null,
+  };
+
   const auditEvents: {
     actor_id: string | null;
     actor_role: string | null;
@@ -652,7 +663,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       action: "discount",
       reason_code: discountReasonCode,
       reason_note: discountReasonNote ? discountReasonNote.slice(0, 500) : null,
-      metadata: { type: discountType, value: discountValue, amount: discount, staff_id: activeStaffId, staff_name: activeStaffName },
+      metadata: { type: discountType, value: discountValue, amount: discount, staff_id: activeStaffId, staff_name: activeStaffName, ...approverMeta },
     });
   }
   if (comp > 0 && !isTraining) {
@@ -662,7 +673,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       action: "comp",
       reason_code: compReasonCode,
       reason_note: compReasonNote ? compReasonNote.slice(0, 500) : null,
-      metadata: { amount: comp, staff_id: activeStaffId, staff_name: activeStaffName },
+      metadata: { amount: comp, staff_id: activeStaffId, staff_name: activeStaffName, ...approverMeta },
     });
   }
   for (const v of voidLines) {
@@ -673,7 +684,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       action: "void",
       reason_code: (v.reason_code || "").trim() || null,
       reason_note: (v.reason_note || "").trim() ? (v.reason_note as string).trim().slice(0, 500) : null,
-      metadata: { name: v.name, amount: Math.round(v.unit_price * v.quantity * 100) / 100, quantity: v.quantity, staff_id: activeStaffId, staff_name: activeStaffName },
+      metadata: { name: v.name, amount: Math.round(v.unit_price * v.quantity * 100) / 100, quantity: v.quantity, staff_id: activeStaffId, staff_name: activeStaffName, ...approverMeta },
     });
   }
   if (scWaived && !isTraining) {
@@ -683,7 +694,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       action: "service_charge_waived",
       reason_code: scWaiveCode,
       reason_note: scWaiveNote ? scWaiveNote.slice(0, 500) : null,
-      metadata: { pct: scPct, staff_id: activeStaffId, staff_name: activeStaffName },
+      metadata: { pct: scPct, staff_id: activeStaffId, staff_name: activeStaffName, ...approverMeta },
     });
   }
   if (manualExempt && !isTraining) {
@@ -693,7 +704,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       action: "tax_exempt",
       reason_code: exemptCode,
       reason_note: exemptNote ? exemptNote.slice(0, 500) : null,
-      metadata: { staff_id: activeStaffId, staff_name: activeStaffName, taxable_base: taxableBase },
+      metadata: { staff_id: activeStaffId, staff_name: activeStaffName, taxable_base: taxableBase, ...approverMeta },
     });
   }
 

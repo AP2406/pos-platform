@@ -5,7 +5,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 
 export async function verifyManagerPin(
   pin: string
-): Promise<{ ok: true; name: string } | { error: string }> {
+): Promise<{ ok: true; id: string; name: string } | { error: string }> {
   if (!pin || !/^[0-9]{4,6}$/.test(pin)) {
     return { error: "Enter a 4 to 6 digit PIN." };
   }
@@ -19,5 +19,5 @@ export async function verifyManagerPin(
   if (!row || row.role !== "manager") {
     return { error: "Manager PIN not recognized." };
   }
-  return { ok: true, name: row.name as string };
+  return { ok: true, id: row.id as string, name: row.name as string };
 }
