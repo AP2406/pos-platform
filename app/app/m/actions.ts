@@ -15,12 +15,21 @@ export type LocationLive = {
 
 export type RecentSale = { id: string; location: string; label: string; total: number; at: string };
 
+export type Alerts = {
+  voids: { n: number; amt: number };
+  unassigned: number;
+  openDrawers: number;
+  staleChecks: number;
+  oldestCheckMin: number;
+};
+
 export type Snapshot = {
   currency: string;
   locations: LocationLive[];
   totals: { net: number; orders: number; openChecks: number; openValue: number };
   avgTicket: number;
   recent: RecentSale[];
+  alerts: Alerts;
 };
 
 function num(v: unknown): number {
@@ -48,28 +57,43 @@ export async function liveSnapshot(): Promise<Snapshot> {
   const ids = mine.map((b) => b.id);
   const nameById = new Map(mine.map((b) => [b.id, b.name]));
 
-  const [{ data: orders }, { data: refunds }, { data: tickets }, { data: recentRows }] =
-    await Promise.all([
-      supabase
-        .from("orders")
-        .select("business_id, total, status")
-        .in("business_id", ids)
-        .gte("created_at", startIso)
-        .neq("status", "voided"),
-      supabase
-        .from("refunds")
-        .select("business_id, amount, status")
-        .in("business_id", ids)
-        .gte("created_at", startIso),
-      supabase.from("open_tickets").select("business_id, cart").in("business_id", ids),
-      supabase
-        .from("orders")
-        .select("id, business_id, total, sale_number, created_at, status")
-        .in("business_id", ids)
-        .neq("status", "voided")
-        .order("created_at", { ascending: false })
-        .limit(8),
-    ]);
+  const [
+    { data: orders },
+    { data: refunds },
+    { data: tickets },
+    { data: recentRows },
+    { data: voidEvents },
+    { data: openDrawerRows },
+    { data: staffCounts },
+  ] = await Promise.all([
+    supabase
+      .from("orders")
+      .select("business_id, total, status, staff_id")
+      .in("business_id", ids)
+      .gte("created_at", startIso)
+      .neq("status", "voided"),
+    supabase
+      .from("refunds")
+      .select("business_id, amount, status")
+      .in("business_id", ids)
+      .gte("created_at", startIso),
+    supabase.from("open_tickets").select("business_id, cart, opened_at").in("business_id", ids),
+    supabase
+      .from("orders")
+      .select("id, business_id, total, sale_number, created_at, status")
+      .in("business_id", ids)
+      .neq("status", "voided")
+      .order("created_at", { ascending: false })
+      .limit(8),
+    supabase
+      .from("audit_events")
+      .select("metadata")
+      .in("business_id", ids)
+      .eq("action", "void")
+      .gte("created_at", startIso),
+    supabase.from("drawer_sessions").select("business_id").in("business_id", ids).eq("status", "open"),
+    supabase.from("staff_members").select("business_id").in("business_id", ids).eq("is_active", true),
+  ]);
 
   const agg: Record<string, LocationLive> = {};
   for (const b of mine) agg[b.id] = { id: b.id, name: b.name, net: 0, orders: 0, openChecks: 0, openValue: 0 };
@@ -114,11 +138,43 @@ export async function liveSnapshot(): Promise<Snapshot> {
     at: o.created_at as string,
   }));
 
+  // Manager alert signals.
+  const staffedBiz = new Set((staffCounts ?? []).map((s) => s.business_id as string));
+  let unassigned = 0;
+  for (const o of orders ?? []) {
+    if (!o.staff_id && staffedBiz.has(o.business_id as string)) unassigned++;
+  }
+  let voidN = 0;
+  let voidAmt = 0;
+  for (const v of voidEvents ?? []) {
+    voidN++;
+    const m = v.metadata as { amount?: number } | null;
+    if (m && typeof m.amount === "number") voidAmt += m.amount;
+  }
+  const nowMs = Date.now();
+  let staleChecks = 0;
+  let oldestMin = 0;
+  for (const t of tickets ?? []) {
+    const opened = t.opened_at as string | null;
+    if (!opened) continue;
+    const mins = Math.floor((nowMs - new Date(opened).getTime()) / 60000);
+    if (mins >= 90) staleChecks++;
+    if (mins > oldestMin) oldestMin = mins;
+  }
+  const alerts: Alerts = {
+    voids: { n: voidN, amt: Math.round(voidAmt * 100) / 100 },
+    unassigned,
+    openDrawers: (openDrawerRows ?? []).length,
+    staleChecks,
+    oldestCheckMin: oldestMin,
+  };
+
   return {
     currency,
     locations,
     totals,
     avgTicket: totals.orders > 0 ? Math.round((totals.net / totals.orders) * 100) / 100 : 0,
     recent,
+    alerts,
   };
 }

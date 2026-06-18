@@ -71,6 +71,39 @@ export function MobileManagerClient({ initial }: { initial: Snapshot }) {
         />
       </div>
 
+      {(snap.alerts.voids.n > 0 ||
+        snap.alerts.unassigned > 0 ||
+        snap.alerts.staleChecks > 0 ||
+        snap.alerts.openDrawers > 0) && (
+        <>
+          <SectionHeader>Needs attention</SectionHeader>
+          <div className="grid grid-cols-2 gap-3">
+            {snap.alerts.voids.n > 0 && (
+              <Alert label="Voids today" value={String(snap.alerts.voids.n)} hint={fmt(snap.alerts.voids.amt)} tone="red" />
+            )}
+            {snap.alerts.unassigned > 0 && (
+              <Alert label="Unassigned sales" value={String(snap.alerts.unassigned)} tone="amber" />
+            )}
+            {snap.alerts.staleChecks > 0 && (
+              <Alert
+                label="Stale checks (90m+)"
+                value={String(snap.alerts.staleChecks)}
+                hint={snap.alerts.oldestCheckMin > 0 ? "oldest " + snap.alerts.oldestCheckMin + "m" : undefined}
+                tone="amber"
+              />
+            )}
+            {snap.alerts.openDrawers > 0 && (
+              <Alert label="Open drawers" value={String(snap.alerts.openDrawers)} tone="muted" />
+            )}
+          </div>
+          <div className="mt-2">
+            <Link href="/app/exceptions" className="text-xs text-muted-foreground underline hover:text-foreground">
+              Exceptions by employee →
+            </Link>
+          </div>
+        </>
+      )}
+
       {multi && (
         <>
           <SectionHeader>By location</SectionHeader>
@@ -120,6 +153,18 @@ export function MobileManagerClient({ initial }: { initial: Snapshot }) {
           Reports
         </Link>
       </div>
+    </div>
+  );
+}
+
+function Alert({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone: "red" | "amber" | "muted" }) {
+  const ring = tone === "red" ? "border-red-500/40 bg-red-500/5" : tone === "amber" ? "border-amber-500/40 bg-amber-500/5" : "border-border";
+  const txt = tone === "red" ? "text-red-600" : tone === "amber" ? "text-amber-600" : "";
+  return (
+    <div className={"rounded-lg border p-3 " + ring}>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={"text-2xl font-semibold tabular-nums mt-0.5 " + txt}>{value}</div>
+      {hint && <div className="text-xs text-muted-foreground mt-0.5">{hint}</div>}
     </div>
   );
 }
