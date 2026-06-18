@@ -9,12 +9,15 @@ import { setDayClose } from "./day-close-actions";
 export function DayCloseCard({
   cutoff: initCutoff,
   emails: initEmails,
+  blind: initBlind = false,
 }: {
   cutoff: string;
   emails: string[];
+  blind?: boolean;
 }) {
   const [cutoff, setCutoff] = useState(initCutoff || "00:00");
   const [emails, setEmails] = useState((initEmails || []).join(", "));
+  const [blind, setBlind] = useState(initBlind);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -23,7 +26,7 @@ export function DayCloseCard({
     setErr(null);
     setMsg(null);
     start(async () => {
-      const res = await setDayClose({ cutoff, emails });
+      const res = await setDayClose({ cutoff, emails, blind });
       if ("error" in res) {
         setErr(res.error);
         return;
@@ -62,6 +65,21 @@ export function DayCloseCard({
           {pending ? "Saving..." : "Save"}
         </Button>
       </div>
+      <label className="mt-3 flex items-start gap-2 text-sm select-none">
+        <input
+          type="checkbox"
+          checked={blind}
+          onChange={(e) => setBlind(e.target.checked)}
+          className="h-4 w-4 mt-0.5"
+        />
+        <span>
+          <span className="font-medium">Blind close by default</span>
+          <span className="block text-xs text-muted-foreground">
+            Hide the expected till total until the cashier has counted, so the count
+            isn&apos;t influenced by what the system expects. They can still toggle it per close.
+          </span>
+        </span>
+      </label>
       {err && <p className="text-sm text-red-600 mt-2">{err}</p>}
       {msg && <p className="text-sm text-green-600 mt-2">{msg}</p>}
     </div>

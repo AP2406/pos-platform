@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 export async function setDayClose(input: {
   cutoff: string;
   emails: string;
+  blind?: boolean;
 }): Promise<{ ok: true } | { error: string }> {
   const { business, role } = await requireBusiness();
   assertConfigEditable(business);
@@ -32,7 +33,12 @@ export async function setDayClose(input: {
 
   const supabase = await createClient();
   const current = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
-  const next = { ...current, business_day_cutoff: normalized, z_report_emails: emails };
+  const next = {
+    ...current,
+    business_day_cutoff: normalized,
+    z_report_emails: emails,
+    blind_close: !!input.blind,
+  };
   const { error } = await supabase.from("businesses").update({ settings: next }).eq("id", business.id);
   if (error) {
     console.error("setDayClose:", error);

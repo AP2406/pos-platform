@@ -131,6 +131,7 @@ export default async function SettingsPage() {
   const dayEmails = Array.isArray(daySettings.z_report_emails)
     ? (daySettings.z_report_emails as unknown[]).filter((e): e is string => typeof e === "string")
     : [];
+  const dayBlind = daySettings.blind_close === true;
   const exTh = parseThresholds(daySettings);
 
   const showFloor =
@@ -366,7 +367,7 @@ export default async function SettingsPage() {
           {hasFloorService(business) && (
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
               <SectionHeader>Day close &amp; Z-report</SectionHeader>
-              <DayCloseCard cutoff={dayCutoff} emails={dayEmails} />
+              <DayCloseCard cutoff={dayCutoff} emails={dayEmails} blind={dayBlind} />
             </div>
           )}
           {hasFloorService(business) && (

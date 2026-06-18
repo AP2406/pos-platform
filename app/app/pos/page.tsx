@@ -293,6 +293,16 @@ export default async function PosPage() {
         </div>
       )}
 
+      {!trainingMode && drawerOpen && (
+        <div className="shrink-0 flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-700 dark:text-emerald-500 font-medium">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+          The day is open.
+          <Link href="/app/pos/drawer" className="underline underline-offset-2 hover:opacity-80">
+            End day / Z-report
+          </Link>
+        </div>
+      )}
+
       <div className="flex-1 min-h-0">
         {showFloor ? (
           <FloorClient

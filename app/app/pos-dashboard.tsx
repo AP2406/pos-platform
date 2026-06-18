@@ -117,6 +117,15 @@ export async function PosDashboard({ business }: { business: Biz }) {
     return { gross: gross, count: count };
   }
 
+  // Is the cash day open? Drives the Start/End-day card below.
+  const { data: openDrawer } = await supabase
+    .from("drawer_sessions")
+    .select("id")
+    .eq("business_id", business.id)
+    .eq("status", "open")
+    .maybeSingle();
+  const dayOpen = !!openDrawer;
+
   const today = totals((todayRes.data ?? []) as Row[]);
   const week = totals((weekRes.data ?? []) as Row[]);
   const month = totals((monthRes.data ?? []) as Row[]);
@@ -182,6 +191,38 @@ export async function PosDashboard({ business }: { business: Biz }) {
           </Link>
         </div>
       </div>
+
+      <Link
+        href="/app/pos/drawer"
+        className={
+          "mt-4 flex items-center justify-between gap-3 rounded-xl px-4 py-3 ring-1 transition-colors " +
+          (dayOpen
+            ? "bg-emerald-500/5 ring-emerald-500/25 hover:bg-emerald-500/10"
+            : "bg-amber-500/5 ring-amber-500/25 hover:bg-amber-500/10")
+        }
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span
+            className={
+              "shrink-0 w-8 h-8 rounded-lg flex items-center justify-center [&_svg]:size-4 " +
+              (dayOpen ? "bg-emerald-500/15 text-emerald-600" : "bg-amber-500/15 text-amber-600")
+            }
+          >
+            <Banknote />
+          </span>
+          <div className="min-w-0">
+            <div className="font-medium">{dayOpen ? "The day is open" : "Start the day"}</div>
+            <div className="text-xs text-muted-foreground">
+              {dayOpen
+                ? "Count the till and file the Z-report when you close."
+                : "Open the till with your starting cash to track cash sales."}
+            </div>
+          </div>
+        </div>
+        <span className="shrink-0 text-sm font-medium">
+          {dayOpen ? "End day / Z-report" : "Open till"}
+        </span>
+      </Link>
 
       <SectionHeader>Today</SectionHeader>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

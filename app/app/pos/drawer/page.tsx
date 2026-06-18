@@ -32,6 +32,7 @@ type OpenSession = {
   refunds: number;
   pay_ins: number;
   pay_outs: number;
+  drops: number;
   expected: number;
   count: number;
   movements: Movement[];
@@ -121,12 +122,15 @@ export default async function DrawerPage() {
     }));
     let payIns = 0;
     let payOuts = 0;
+    let drops = 0;
     for (const m of movements) {
       if (m.kind === "pay_in") payIns += m.amount;
       else if (m.kind === "pay_out") payOuts += m.amount;
+      else if (m.kind === "drop") drops += m.amount;
     }
     payIns = round2(payIns);
     payOuts = round2(payOuts);
+    drops = round2(drops);
 
     const startingCash = Number(sessionData.starting_cash) || 0;
     open = {
@@ -139,7 +143,8 @@ export default async function DrawerPage() {
       refunds: refundsTotal,
       pay_ins: payIns,
       pay_outs: payOuts,
-      expected: round2(startingCash + cash - refundsTotal + payIns - payOuts),
+      drops,
+      expected: round2(startingCash + cash - refundsTotal + payIns - payOuts - drops),
       count,
       movements,
     };
@@ -166,6 +171,10 @@ export default async function DrawerPage() {
     closeout: (s.closeout as Closeout | null) ?? null,
   }));
 
+  // Blind-count default comes from Operations settings (managers can flip it).
+  const settings = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
+  const blindDefault = settings.blind_close === true;
+
   return (
     <div>
       <div className="mb-6">
@@ -175,7 +184,7 @@ export default async function DrawerPage() {
           and see over/short.
         </p>
       </div>
-      <DrawerClient open={open} closed={closed} />
+      <DrawerClient open={open} closed={closed} blindDefault={blindDefault} />
     </div>
   );
 }
