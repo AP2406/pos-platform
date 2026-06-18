@@ -117,7 +117,7 @@ export default async function KitchenPage() {
       elementId,
       tableName: elementId ? elementLabelById[elementId] ?? "Table" : (k.label as string | null) ?? "Ticket",
       items: Array.isArray(k.items)
-        ? (k.items as { name: string; quantity: number; note?: string | null; seat?: number | null; allergens?: string[] | null; allergy?: string | null; prep_minutes?: number | null }[])
+        ? (k.items as { name: string; quantity: number; note?: string | null; seat?: number | null; allergens?: string[] | null; allergy?: string | null; prep_minutes?: number | null; void?: boolean }[])
         : [],
     };
   });
@@ -169,6 +169,20 @@ export default async function KitchenPage() {
     .sort((a, b) => (a.fulfilledAt < b.fulfilledAt ? 1 : -1))
     .slice(0, 12);
 
+  // Menu for the KDS-side 86 board (chef/expo can 86/un-86 during service).
+  const { data: menuRows } = await supabase
+    .from("catalog_items")
+    .select("id, name, category, out_of_stock")
+    .eq("business_id", business.id)
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+  const menu = (menuRows ?? []).map((m) => ({
+    id: m.id as string,
+    name: m.name as string,
+    category: (m.category as string | null) ?? null,
+    out_of_stock: (m.out_of_stock as boolean | null) ?? false,
+  }));
+
   return (
     <div>
       <div className="mb-6">
@@ -177,7 +191,7 @@ export default async function KitchenPage() {
           New orders appear here automatically. Tap Done when an order is ready.
         </p>
       </div>
-      <KitchenClient businessId={business.id} initialOrders={initialOrders} stations={stations} recent={recent} />
+      <KitchenClient businessId={business.id} initialOrders={initialOrders} stations={stations} recent={recent} menu={menu} />
     </div>
   );
 }

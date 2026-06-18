@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Chip, type ChipTone } from "@/components/ui/chip";
 import { displayItemName, formatDuration } from "@/lib/format";
 import { allergenLabels } from "@/lib/allergens";
+import { setCatalogItemOutOfStock } from "../catalog/actions";
 import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady, setOrderItemPrepared, recallKitchenTicket, recallOrder } from "./actions";
 import { printReceiptHtml } from "../pos/qz-print";
 
@@ -39,7 +40,7 @@ function esc(s: string): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-type KitchenItem = { id?: string; name: string; quantity: number; note?: string | null; seat?: number | null; ready?: boolean; allergens?: string[] | null; allergy?: string | null; prep_minutes?: number | null };
+type KitchenItem = { id?: string; name: string; quantity: number; note?: string | null; seat?: number | null; ready?: boolean; allergens?: string[] | null; allergy?: string | null; prep_minutes?: number | null; void?: boolean };
 type KitchenStation = { id: string; name: string; sort_order: number };
 type KitchenOrder = {
   id: string;
@@ -55,17 +56,20 @@ type KitchenOrder = {
 };
 
 type RecentTicket = { id: string; kind: "kitchen" | "order"; label: string; fulfilledAt: string };
+type MenuItem = { id: string; name: string; category: string | null; out_of_stock: boolean };
 
 export function KitchenClient({
   businessId,
   initialOrders,
   stations,
   recent,
+  menu,
 }: {
   businessId: string;
   initialOrders: KitchenOrder[];
   stations: KitchenStation[];
   recent?: RecentTicket[];
+  menu?: MenuItem[];
 }) {
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders);
   const [stationFilter, setStationFilter] = useState<string>("all");
@@ -74,6 +78,23 @@ export function KitchenClient({
   const [pending, startTransition] = useTransition();
   const [recentList, setRecentList] = useState<RecentTicket[]>(recent ?? []);
   useEffect(() => { setRecentList(recent ?? []); }, [recent]);
+
+  // KDS-side 86 board.
+  const [menuList, setMenuList] = useState<MenuItem[]>(menu ?? []);
+  useEffect(() => { setMenuList(menu ?? []); }, [menu]);
+  const [show86, setShow86] = useState(false);
+  const [q86, setQ86] = useState("");
+  function toggle86(m: MenuItem) {
+    const next = !m.out_of_stock;
+    setMenuList((prev) => prev.map((x) => (x.id === m.id ? { ...x, out_of_stock: next } : x)));
+    startTransition(async () => {
+      const res = await setCatalogItemOutOfStock(m.id, next);
+      if ("error" in res) {
+        // revert on failure
+        setMenuList((prev) => prev.map((x) => (x.id === m.id ? { ...x, out_of_stock: !next } : x)));
+      }
+    });
+  }
 
   // Audible alerts (per-device, off by default). Web Audio beeps — no files.
   const [soundOn, setSoundOn] = useState(false);
@@ -149,14 +170,21 @@ export function KitchenClient({
     return { label: formatDuration(mins), tone };
   }
 
-  // New-ticket chime: any id not seen before triggers one chime (seeded on mount,
-  // so the initial board is silent).
+  // New-ticket chime (seeded on mount, so the initial board is silent). A new
+  // void/86 notice sounds the distinct alarm tone instead of the chime.
   useEffect(() => {
-    let fresh = false;
-    for (const o of orders) if (!seenIds.current.has(o.id)) { fresh = true; break; }
+    let freshNormal = false;
+    let freshVoid = false;
+    for (const o of orders) {
+      if (!seenIds.current.has(o.id)) {
+        if (o.items.some((it) => it.void === true)) freshVoid = true;
+        else freshNormal = true;
+      }
+    }
     seenIds.current = new Set(orders.map((o) => o.id));
-    if (fresh) chime();
-  }, [orders, chime]);
+    if (freshVoid) alarm();
+    else if (freshNormal) chime();
+  }, [orders, chime, alarm]);
 
   // Late alarm: a ticket crossing 18m sounds once.
   useEffect(() => {
@@ -512,17 +540,74 @@ export function KitchenClient({
       </div>
     ) : null;
 
+  const eightySixed = menuList.filter((m) => m.out_of_stock);
+  const board86 =
+    menuList.length > 0 ? (
+      <div className="mb-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setShow86((v) => !v)}
+            className="text-sm rounded-md px-3 py-1.5 border border-border hover:bg-accent"
+          >
+            {show86 ? "Close 86 board" : "86 board"}
+          </button>
+          {eightySixed.length > 0 && !show86 && (
+            <span className="text-xs text-red-600 font-semibold truncate">
+              {"86'd: " + eightySixed.slice(0, 6).map((m) => m.name).join(", ") + (eightySixed.length > 6 ? "…" : "")}
+            </span>
+          )}
+        </div>
+        {show86 && (
+          <div className="mt-2 bg-card ring-1 ring-line shadow-elevation rounded-xl p-3">
+            <input
+              value={q86}
+              onChange={(e) => setQ86(e.target.value)}
+              placeholder="Search the menu to 86…"
+              className="w-full h-9 rounded-md border border-border bg-transparent px-3 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <div className="max-h-64 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1">
+              {menuList
+                .filter((m) => !q86 || m.name.toLowerCase().includes(q86.toLowerCase()))
+                .slice(0, 100)
+                .map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => toggle86(m)}
+                    disabled={pending}
+                    className={
+                      "flex items-center justify-between gap-2 text-left text-sm rounded-md border px-2.5 py-2 min-h-[40px] disabled:opacity-60 " +
+                      (m.out_of_stock
+                        ? "border-red-500/50 bg-red-500/10 text-red-600 font-medium"
+                        : "border-border hover:bg-accent")
+                    }
+                  >
+                    <span className="truncate">{m.name}</span>
+                    <span className="text-xs shrink-0">{m.out_of_stock ? "un-86" : "86"}</span>
+                  </button>
+                ))}
+            </div>
+          </div>
+        )}
+      </div>
+    ) : null;
+
   // One single ticket / order card (used by the station grid and for online
   // orders in the expo grid).
   function card(o: KitchenOrder) {
     const age = aging(o.createdAt, o.items);
     // Subtle "ready" cue once every line is bumped (does NOT auto-complete).
     const allReady = o.items.length > 0 && o.items.every((it) => it.ready);
+    // A void/86 notice fired to the kitchen — loud red so the line can't miss it.
+    const isVoid = o.items.some((it) => it.void === true);
     return (
-      <div key={o.id} className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 flex flex-col">
+      <div key={o.id} className={"bg-card shadow-elevation rounded-xl p-4 flex flex-col " + (isVoid ? "ring-2 ring-red-500/70 bg-red-500/5" : "ring-1 ring-line")}>
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="min-w-0">
-            {o.kind === "kitchen" ? (
+            {isVoid ? (
+              <div className="text-lg font-bold leading-tight truncate text-red-600">⚠ VOID — {o.tableName ?? o.tableLabel ?? "Table"}</div>
+            ) : o.kind === "kitchen" ? (
               <div className="text-lg font-bold leading-tight truncate">{o.tableName ?? o.tableLabel ?? "Table"}</div>
             ) : (
               <div className="text-lg font-bold leading-tight truncate">Online</div>
@@ -551,7 +636,7 @@ export function KitchenClient({
                     <span className={"min-w-0 flex items-center gap-2 " + (it.ready ? "text-muted-foreground" : "")}>
                       {/* Per-item bump: tap to mark this line done (round target). */}
                       <span className={"shrink-0 w-5 h-5 rounded-full border flex items-center justify-center text-[11px] leading-none transition-colors " + (it.ready ? "bg-emerald-500 border-emerald-500 text-white" : "border-muted-foreground/40 text-transparent")}>✓</span>
-                      <span className={"truncate" + (it.ready ? " line-through" : "")}>{(it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}</span>
+                      <span className={"truncate" + (it.ready ? " line-through" : "") + (it.void ? " line-through text-red-600 font-semibold" : "")}>{(it.void ? "✗ " : "") + (it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}</span>
                     </span>
                     <span className={"tabular-nums " + (it.ready ? "text-muted-foreground line-through" : "text-muted-foreground")}>{"x" + it.quantity}</span>
                   </div>
@@ -570,7 +655,7 @@ export function KitchenClient({
                   <div className="flex justify-between items-center gap-2">
                     <span className={"min-w-0 flex items-center gap-2 " + (it.ready ? "text-muted-foreground" : "")}>
                       <span className={"shrink-0 w-5 h-5 rounded-full border flex items-center justify-center text-[11px] leading-none transition-colors " + (it.ready ? "bg-emerald-500 border-emerald-500 text-white" : "border-muted-foreground/40 text-transparent")}>✓</span>
-                      <span className={"truncate" + (it.ready ? " line-through" : "")}>{(it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}</span>
+                      <span className={"truncate" + (it.ready ? " line-through" : "") + (it.void ? " line-through text-red-600 font-semibold" : "")}>{(it.void ? "✗ " : "") + (it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}</span>
                     </span>
                     <span className={"tabular-nums " + (it.ready ? "text-muted-foreground line-through" : "text-muted-foreground")}>{"x" + it.quantity}</span>
                   </div>
@@ -622,6 +707,7 @@ export function KitchenClient({
     return (
       <div>
         {viewToggle}
+        {board86}
         {recallStrip}
         {allDayPanel}
         {expoGroups.length === 0 && orderCards.length === 0 ? (
@@ -676,6 +762,7 @@ export function KitchenClient({
   return (
     <div>
       {viewToggle}
+      {board86}
       {recallStrip}
       {stationStrip}
       {allDayPanel}
