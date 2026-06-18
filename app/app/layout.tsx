@@ -39,6 +39,9 @@ export default async function AppLayout({
       extras.push({ href: "/app/reservations", label: "Reservations" });
     }
     if (role === "owner" || role === "manager") {
+      if (hasFloorService(business)) {
+        extras.push({ href: "/app/exceptions", label: "Exceptions" });
+      }
       extras.push({ href: "/app/marketing", label: "Marketing" });
       extras.push({ href: "/app/audit", label: "Activity log" });
     }
