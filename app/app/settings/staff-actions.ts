@@ -146,6 +146,30 @@ export async function setStaffPin(
   return { ok: true };
 }
 
+export async function setStaffPayRate(
+  id: string,
+  rate: number | null
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing staff." };
+  const { business, role: myRole } = await requireBusiness();
+  assertConfigEditable(business);
+  if (!canManage(myRole)) return { error: "Only an owner or manager can set pay rates." };
+  let v: number | null = null;
+  if (rate != null && Number.isFinite(rate) && rate > 0) v = Math.min(10000, Math.round(rate * 100) / 100);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("staff_members")
+    .update({ pay_rate: v })
+    .eq("id", id)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("setStaffPayRate:", error);
+    return { error: "Could not save the pay rate." };
+  }
+  revalidatePath("/app/settings");
+  return { ok: true };
+}
+
 export async function setStaffActive(
   id: string,
   active: boolean

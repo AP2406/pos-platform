@@ -15,7 +15,7 @@ export default async function StaffPage() {
   const supabase = await createClient();
   const { data } = await supabase
     .from("staff_members")
-    .select("id, name, role, role_id, is_active, pin_hash")
+    .select("id, name, role, role_id, is_active, pin_hash, pay_rate")
     .eq("business_id", business.id)
     .order("created_at", { ascending: true });
   const staffList = (data ?? []).map((s) => ({
@@ -25,6 +25,7 @@ export default async function StaffPage() {
     role_id: (s.role_id as string | null) ?? null,
     is_active: s.is_active as boolean,
     has_pin: !!s.pin_hash,
+    pay_rate: (s.pay_rate as number | null) ?? null,
   }));
   const rolesList = await listRoles();
 

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createStaff, updateStaff, setStaffPin, setStaffActive } from "./staff-actions";
+import { createStaff, updateStaff, setStaffPin, setStaffActive, setStaffPayRate } from "./staff-actions";
 
 type Staff = {
   id: string;
@@ -13,6 +13,7 @@ type Staff = {
   role_id: string | null;
   is_active: boolean;
   has_pin: boolean;
+  pay_rate: number | null;
 };
 type RolePick = { id: string; name: string; key: string | null };
 
@@ -45,6 +46,7 @@ export function StaffCard({
   const [manageId, setManageId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editRoleId, setEditRoleId] = useState(defaultRoleId);
+  const [editPayRate, setEditPayRate] = useState("");
   const [newPin, setNewPin] = useState("");
   const [rowError, setRowError] = useState<string | null>(null);
 
@@ -76,7 +78,7 @@ export function StaffCard({
       }
       setStaff((prev) => [
         ...prev,
-        { id: res.id, name: name.trim(), role: "staff", role_id: roleId, is_active: true, has_pin: true },
+        { id: res.id, name: name.trim(), role: "staff", role_id: roleId, is_active: true, has_pin: true, pay_rate: null },
       ]);
       setName("");
       setRoleId(defaultRoleId);
@@ -88,6 +90,7 @@ export function StaffCard({
     setRowError(null);
     setEditName(s.name);
     setEditRoleId(s.role_id ?? defaultRoleId);
+    setEditPayRate(s.pay_rate != null ? String(s.pay_rate) : "");
     setNewPin("");
     setManageId((prev) => (prev === s.id ? null : s.id));
   }
@@ -98,15 +101,23 @@ export function StaffCard({
       setRowError("Name is required.");
       return;
     }
+    const rate = editPayRate.trim() === "" ? null : Number(editPayRate);
     startTransition(async () => {
       const res = await updateStaff(s.id, editName.trim(), editRoleId);
       if ("error" in res) {
         setRowError(res.error);
         return;
       }
+      const rateRes = await setStaffPayRate(s.id, rate != null && rate > 0 ? rate : null);
+      if ("error" in rateRes) {
+        setRowError(rateRes.error);
+        return;
+      }
       setStaff((prev) =>
         prev.map((x) =>
-          x.id === s.id ? { ...x, name: editName.trim(), role_id: editRoleId } : x
+          x.id === s.id
+            ? { ...x, name: editName.trim(), role_id: editRoleId, pay_rate: rate != null && rate > 0 ? rate : null }
+            : x
         )
       );
     });
@@ -182,6 +193,10 @@ export function StaffCard({
                             <option key={r.id} value={r.id}>{r.name}</option>
                           ))}
                         </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Pay rate ($/hr)</Label>
+                        <Input type="number" min="0" value={editPayRate} onChange={(e) => setEditPayRate(e.target.value)} placeholder="—" className="h-9 w-24" />
                       </div>
                       <Button size="sm" onClick={() => handleSaveDetails(s)} disabled={pending}>
                         Save
