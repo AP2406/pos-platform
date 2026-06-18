@@ -430,7 +430,7 @@ const DINING_KDS_LABELS: Record<string, string> = {
   pickup: "Pickup",
 };
 
-type FiredItem = { name: string; quantity: number; note?: string | null; seat?: number | null; catalog_item_id?: string | null };
+type FiredItem = { name: string; quantity: number; note?: string | null; seat?: number | null; catalog_item_id?: string | null; allergens?: string[]; allergy?: string | null };
 
 // P1-14: split the just-fired items into one kitchen_tickets row per prep
 // station. Each item's station comes from catalog_items.station_id; items with
@@ -443,25 +443,52 @@ async function insertFiredByStation(
   baseLabel: string | null,
   fired: FiredItem[],
   createdBy: string | null
-) {
+): Promise<{ error?: string }> {
   const catIds = Array.from(
     new Set(fired.map((f) => f.catalog_item_id).filter((x): x is string => !!x))
   );
   const stationByItem: Record<string, string> = {};
+  const allergensByItem: Record<string, string[]> = {};
+  const nameById: Record<string, string> = {};
+  const eightySixed = new Set<string>();
   if (catIds.length) {
     const { data } = await supabase
       .from("catalog_items")
-      .select("id, station_id")
+      .select("id, name, station_id, out_of_stock, allergens")
       .eq("business_id", businessId)
       .in("id", catIds);
-    for (const r of data ?? []) if (r.station_id) stationByItem[r.id as string] = r.station_id as string;
+    for (const r of data ?? []) {
+      const id = r.id as string;
+      if (r.station_id) stationByItem[id] = r.station_id as string;
+      if (Array.isArray(r.allergens) && r.allergens.length > 0) allergensByItem[id] = r.allergens as string[];
+      if (r.out_of_stock === true) eightySixed.add(id);
+      nameById[id] = r.name as string;
+    }
   }
 
-  // Group fired items by station ("" = no station / default ticket).
+  // 86 guard: never fire an item that's currently out of stock.
+  const blocked = fired.filter((f) => f.catalog_item_id && eightySixed.has(f.catalog_item_id));
+  if (blocked.length > 0) {
+    const names = Array.from(
+      new Set(blocked.map((b) => nameById[b.catalog_item_id as string] || b.name))
+    );
+    return { error: "Can't fire — 86'd: " + names.join(", ") + ". Remove or un-86 first." };
+  }
+
+  // Group fired items by station ("" = no station / default ticket). Item-level
+  // allergens ride along on the fired item so the KDS can flag them.
   const groups: Record<string, FiredItem[]> = {};
   for (const f of fired) {
     const sid = (f.catalog_item_id && stationByItem[f.catalog_item_id]) || "";
-    (groups[sid] ||= []).push({ name: f.name, quantity: f.quantity, note: f.note ?? null, seat: f.seat ?? null });
+    const allergens = f.catalog_item_id ? allergensByItem[f.catalog_item_id] : undefined;
+    (groups[sid] ||= []).push({
+      name: f.name,
+      quantity: f.quantity,
+      note: f.note ?? null,
+      seat: f.seat ?? null,
+      ...(allergens && allergens.length > 0 ? { allergens } : {}),
+      ...(f.allergy ? { allergy: f.allergy } : {}),
+    });
   }
 
   // Resolve station names for the ticket label suffix.
@@ -484,7 +511,8 @@ async function insertFiredByStation(
     station_id: sid || null,
     created_by: createdBy,
   }));
-  return supabase.from("kitchen_tickets").insert(rows);
+  const { error } = await supabase.from("kitchen_tickets").insert(rows);
+  return { error: error ? "Could not send to the kitchen. Please try again." : undefined };
 }
 
 export async function sendTableTicket(
@@ -547,10 +575,9 @@ export async function sendTableTicket(
     return { ok: true, fired: 0 };
   }
 
-  const { error: insErr } = await insertFiredByStation(supabase, business.id, elementId, label, fired, user ? user.id : null);
-  if (insErr) {
-    console.error("sendTableTicket insert:", insErr);
-    return { error: "Could not send to the kitchen. Please try again." };
+  const ins = await insertFiredByStation(supabase, business.id, elementId, label, fired, user ? user.id : null);
+  if (ins.error) {
+    return { error: ins.error };
   }
 
   const { error: updErr } = await supabase
@@ -633,10 +660,9 @@ export async function fireCourse(
     return { ok: true, fired: 0 };
   }
 
-  const { error: insErr } = await insertFiredByStation(supabase, business.id, elementId, label, fired, user ? user.id : null);
-  if (insErr) {
-    console.error("fireCourse insert:", insErr);
-    return { error: "Could not send to the kitchen. Please try again." };
+  const ins = await insertFiredByStation(supabase, business.id, elementId, label, fired, user ? user.id : null);
+  if (ins.error) {
+    return { error: ins.error };
   }
 
   const { error: updErr } = await supabase

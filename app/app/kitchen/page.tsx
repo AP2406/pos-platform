@@ -117,7 +117,7 @@ export default async function KitchenPage() {
       elementId,
       tableName: elementId ? elementLabelById[elementId] ?? "Table" : (k.label as string | null) ?? "Ticket",
       items: Array.isArray(k.items)
-        ? (k.items as { name: string; quantity: number; note?: string | null }[])
+        ? (k.items as { name: string; quantity: number; note?: string | null; seat?: number | null; allergens?: string[] | null; allergy?: string | null }[])
         : [],
     };
   });

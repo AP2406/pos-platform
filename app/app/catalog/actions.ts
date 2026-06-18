@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
+import { cleanAllergens } from "@/lib/allergens";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -116,20 +117,47 @@ export async function updateCatalogItem(
 
 export async function setCatalogItemOutOfStock(
   id: string,
-  outOfStock: boolean
-): Promise<{ ok: true } | { error: string }> {
+  outOfStock: boolean,
+  reason?: string
+): Promise<{ ok: true; at: string | null } | { error: string }> {
   if (!id) return { error: "Missing item." };
   const { business } = await requireBusiness();
   assertConfigEditable(business);
   const supabase = await createClient();
+  const at = outOfStock ? new Date().toISOString() : null;
+  const note =
+    outOfStock && reason && reason.trim() ? reason.trim().slice(0, 120) : null;
   const { error } = await supabase
     .from("catalog_items")
-    .update({ out_of_stock: outOfStock })
+    .update({ out_of_stock: outOfStock, out_of_stock_at: at, out_of_stock_note: note })
     .eq("id", id)
     .eq("business_id", business.id);
   if (error) {
     console.error("setCatalogItemOutOfStock:", error);
     return { error: "Could not update the item." };
+  }
+  revalidatePath("/app/catalog");
+  revalidatePath("/app/pos");
+  return { ok: true, at };
+}
+
+export async function setCatalogItemAllergens(
+  id: string,
+  allergens: string[]
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing item." };
+  const { business } = await requireBusiness();
+  assertConfigEditable(business);
+  const supabase = await createClient();
+  const clean = cleanAllergens(allergens);
+  const { error } = await supabase
+    .from("catalog_items")
+    .update({ allergens: clean })
+    .eq("id", id)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("setCatalogItemAllergens:", error);
+    return { error: "Could not update allergens. Please try again." };
   }
   revalidatePath("/app/catalog");
   revalidatePath("/app/pos");

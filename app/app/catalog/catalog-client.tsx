@@ -19,10 +19,12 @@ import {
   setCatalogItemBarcode,
   setCatalogItemImage,
   setCatalogItemOutOfStock,
+  setCatalogItemAllergens,
   saveCategoryColors,
   createVariation,
   deleteVariation,
 } from "./actions";
+import { ALLERGENS } from "@/lib/allergens";
 
 type Option = { id: string; name: string; price: number };
 type TaxRate = { id: string; name: string; rate: number };
@@ -37,6 +39,8 @@ type Item = {
   barcode: string | null;
   image_url: string | null;
   out_of_stock: boolean;
+  out_of_stock_at?: string | null;
+  allergens?: string[] | null;
   default_course_id: string | null;
   station_id: string | null;
   variations: Option[];
@@ -244,13 +248,29 @@ export function CatalogClient({
 
   function handleToggleOos(item: Item) {
     startTransition(async () => {
-      const res = await setCatalogItemOutOfStock(item.id, !item.out_of_stock);
+      const next = !item.out_of_stock;
+      const res = await setCatalogItemOutOfStock(item.id, next);
       if (!("error" in res)) {
         setItems((prev) =>
           prev.map((i) =>
-            i.id === item.id ? { ...i, out_of_stock: !i.out_of_stock } : i
+            i.id === item.id
+              ? { ...i, out_of_stock: next, out_of_stock_at: next ? res.at : null }
+              : i
           )
         );
+      }
+    });
+  }
+
+  function toggleAllergen(item: Item, key: string) {
+    const current = item.allergens ?? [];
+    const next = current.includes(key)
+      ? current.filter((a) => a !== key)
+      : [...current, key];
+    startTransition(async () => {
+      const res = await setCatalogItemAllergens(item.id, next);
+      if (!("error" in res)) {
+        setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, allergens: next } : i)));
       }
     });
   }
@@ -590,7 +610,9 @@ export function CatalogClient({
                       >
                         {item.name}
                         {item.out_of_stock && (
-                          <span className="ml-2 text-xs text-red-600 font-semibold">86&apos;d</span>
+                          <span className="ml-2 text-xs text-red-600 font-semibold">
+                            {"86'd" + (item.out_of_stock_at ? " · " + new Date(item.out_of_stock_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "")}
+                          </span>
                         )}
                         {!item.taxable && (
                           <span className="ml-2 text-xs text-amber-500">Tax-free</span>
@@ -711,6 +733,27 @@ export function CatalogClient({
                           </div>
                         </div>
                       )}
+
+                      {/* Allergens */}
+                      <div className="space-y-2 pt-3 border-t border-border">
+                        <p className="text-xs text-muted-foreground pl-3">
+                          Allergens &mdash; shown bold red on the kitchen screen and printed chit when this item is fired.
+                        </p>
+                        <div className="pl-3 flex flex-wrap gap-x-4 gap-y-1.5">
+                          {ALLERGENS.map((a) => (
+                            <label key={a.key} className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={(item.allergens ?? []).includes(a.key)}
+                                onChange={() => toggleAllergen(item, a.key)}
+                                disabled={pending}
+                                className="h-4 w-4"
+                              />
+                              {a.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
 
                       {/* Code / barcode */}
                       <div className="space-y-2 pt-3 border-t border-border">

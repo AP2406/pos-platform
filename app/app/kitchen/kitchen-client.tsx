@@ -5,18 +5,28 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Chip, type ChipTone } from "@/components/ui/chip";
 import { displayItemName, formatDuration } from "@/lib/format";
+import { allergenLabels } from "@/lib/allergens";
 import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady, setOrderItemPrepared } from "./actions";
 import { printReceiptHtml } from "../pos/qz-print";
 
-function ticketHtml(o: { tableLabel: string | null; id: string; createdAt: string; items: { name: string; quantity: number; note?: string | null }[] }): string {
+function allergenText(it: { allergens?: string[] | null; allergy?: string | null }): string {
+  return [...allergenLabels(it.allergens), it.allergy ? it.allergy.trim() : ""]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function ticketHtml(o: { tableLabel: string | null; id: string; createdAt: string; items: { name: string; quantity: number; note?: string | null; allergens?: string[] | null; allergy?: string | null }[] }): string {
   const title = o.tableLabel ? o.tableLabel : "#" + o.id.slice(0, 8);
   const rows = o.items
-    .map(
-      (it) =>
+    .map((it) => {
+      const allergens = allergenText(it);
+      return (
         "<div style='display:flex;justify-content:space-between'><span>" +
         it.quantity + "x " + esc(displayItemName(it.name)) + "</span></div>" +
-        (it.note ? "<div style='font-size:11px;padding-left:8px'>&rarr; " + esc(it.note) + "</div>" : "")
-    )
+        (it.note ? "<div style='font-size:11px;padding-left:8px'>&rarr; " + esc(it.note) + "</div>" : "") +
+        (allergens ? "<div style='font-size:12px;padding-left:8px;font-weight:bold;color:#c00'>⚠ ALLERGEN: " + esc(allergens) + "</div>" : "")
+      );
+    })
     .join("");
   return (
     "<html><head><meta name='viewport' content='width=device-width,initial-scale=1'>" +
@@ -29,7 +39,7 @@ function esc(s: string): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-type KitchenItem = { id?: string; name: string; quantity: number; note?: string | null; seat?: number | null; ready?: boolean };
+type KitchenItem = { id?: string; name: string; quantity: number; note?: string | null; seat?: number | null; ready?: boolean; allergens?: string[] | null; allergy?: string | null };
 type KitchenStation = { id: string; name: string; sort_order: number };
 type KitchenOrder = {
   id: string;
@@ -429,6 +439,7 @@ export function KitchenClient({
                     <span className={"tabular-nums " + (it.ready ? "text-muted-foreground line-through" : "text-muted-foreground")}>{"x" + it.quantity}</span>
                   </div>
                   {it.note ? <span className="text-xs text-amber-600 pl-2">{"→ " + it.note}</span> : null}
+                  {allergenText(it) ? <span className="text-xs font-bold text-red-600 pl-2">{"⚠ ALLERGEN: " + allergenText(it)}</span> : null}
                 </button>
               ) : (
                 // Online/takeout/delivery line — per-item bump via order_item id.
