@@ -1,0 +1,108 @@
+import { redirect } from "next/navigation";
+import { requireBusiness } from "@/lib/services/tenancy";
+import { createClient } from "@/lib/supabase/server";
+import { hasFloorService } from "@/lib/modules/modes";
+import { ScheduleClient } from "./schedule-client";
+import { todayKey, mondayOf, localMidnightUtc, weekDays, addDays } from "./week";
+
+export const dynamic = "force-dynamic";
+
+export default async function SchedulePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ week?: string }>;
+}) {
+  const { business, role } = await requireBusiness();
+  if (role !== "owner" && role !== "manager") redirect("/app");
+  if (!hasFloorService(business)) redirect("/app/reports");
+
+  const sp = await searchParams;
+  const tz = (business as { timezone?: string }).timezone || "America/Toronto";
+  const anchor = sp.week && /^\d{4}-\d{2}-\d{2}$/.test(sp.week) ? sp.week : todayKey(tz);
+  const monday = mondayOf(anchor);
+  const days = weekDays(monday);
+  const nextMonday = addDays(monday, 7);
+  const startIso = localMidnightUtc(monday, tz);
+  const endIso = localMidnightUtc(nextMonday, tz);
+
+  const supabase = await createClient();
+  const [{ data: staffRows }, { data: shiftRows }, { data: clocks }] = await Promise.all([
+    supabase.from("staff_members").select("id, name, is_active").eq("business_id", business.id).order("name"),
+    supabase
+      .from("shifts")
+      .select("id, staff_id, starts_at, ends_at, role_label, note, published")
+      .eq("business_id", business.id)
+      .gte("starts_at", startIso)
+      .lt("starts_at", endIso)
+      .order("starts_at", { ascending: true }),
+    supabase
+      .from("time_clock_entries")
+      .select("staff_id, clock_in, clock_out")
+      .eq("business_id", business.id)
+      .gte("clock_in", startIso)
+      .lt("clock_in", endIso),
+  ]);
+
+  const staff = (staffRows ?? []).map((s) => ({ id: s.id as string, name: (s.name as string) || "Staff", active: s.is_active !== false }));
+  const nameById = new Map(staff.map((s) => [s.id, s.name]));
+
+  const shifts = (shiftRows ?? []).map((s) => {
+    const start = s.starts_at as string;
+    const end = s.ends_at as string;
+    const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(start));
+    const t = (iso: string) => new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+    const hours = Math.max(0, (new Date(end).getTime() - new Date(start).getTime()) / 3600000);
+    return {
+      id: s.id as string,
+      staffId: (s.staff_id as string | null) ?? "",
+      staffName: s.staff_id ? nameById.get(s.staff_id as string) ?? "Staff" : "—",
+      dayKey,
+      timeLabel: t(start) + " – " + t(end),
+      roleLabel: (s.role_label as string | null) ?? null,
+      note: (s.note as string | null) ?? null,
+      published: !!s.published,
+      hours: Math.round(hours * 100) / 100,
+    };
+  });
+
+  // Scheduled vs actual hours per staff for the week.
+  const sched = new Map<string, number>();
+  for (const s of shifts) sched.set(s.staffId, (sched.get(s.staffId) ?? 0) + s.hours);
+  const actual = new Map<string, number>();
+  const nowMs = Date.now();
+  for (const c of clocks ?? []) {
+    const ci = c.clock_in as string;
+    const end = c.clock_out ? new Date(c.clock_out as string).getTime() : nowMs;
+    const hrs = Math.max(0, (end - new Date(ci).getTime()) / 3600000);
+    actual.set(c.staff_id as string, (actual.get(c.staff_id as string) ?? 0) + hrs);
+  }
+  const variance = staff
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      scheduled: Math.round((sched.get(s.id) ?? 0) * 10) / 10,
+      actual: Math.round((actual.get(s.id) ?? 0) * 10) / 10,
+    }))
+    .filter((v) => v.scheduled > 0 || v.actual > 0);
+
+  const anyUnpublished = shifts.some((s) => !s.published);
+  const dayLabels = days.map((d) => ({
+    key: d,
+    label: new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }).format(new Date(d + "T12:00:00Z")),
+  }));
+
+  return (
+    <ScheduleClient
+      staff={staff}
+      shifts={shifts}
+      days={dayLabels}
+      variance={variance}
+      monday={monday}
+      prevWeek={addDays(monday, -7)}
+      nextWeek={nextMonday}
+      startIso={startIso}
+      endIso={endIso}
+      anyUnpublished={anyUnpublished}
+    />
+  );
+}
