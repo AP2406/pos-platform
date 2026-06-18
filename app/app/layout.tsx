@@ -42,6 +42,7 @@ export default async function AppLayout({
       if (hasFloorService(business)) {
         extras.push({ href: "/app/approvals", label: "Approvals" });
         extras.push({ href: "/app/exceptions", label: "Exceptions" });
+        extras.push({ href: "/app/accounting", label: "Accounting" });
       }
       extras.push({ href: "/app/marketing", label: "Marketing" });
       extras.push({ href: "/app/audit", label: "Activity log" });
