@@ -432,7 +432,7 @@ const DINING_KDS_LABELS: Record<string, string> = {
   pickup: "Pickup",
 };
 
-type FiredItem = { name: string; quantity: number; note?: string | null; seat?: number | null; catalog_item_id?: string | null; allergens?: string[]; allergy?: string | null };
+type FiredItem = { name: string; quantity: number; note?: string | null; seat?: number | null; catalog_item_id?: string | null; allergens?: string[]; allergy?: string | null; prep_minutes?: number | null };
 
 // P1-14: split the just-fired items into one kitchen_tickets row per prep
 // station. Each item's station comes from catalog_items.station_id; items with
@@ -451,18 +451,20 @@ async function insertFiredByStation(
   );
   const stationByItem: Record<string, string> = {};
   const allergensByItem: Record<string, string[]> = {};
+  const prepByItem: Record<string, number> = {};
   const nameById: Record<string, string> = {};
   const eightySixed = new Set<string>();
   if (catIds.length) {
     const { data } = await supabase
       .from("catalog_items")
-      .select("id, name, station_id, out_of_stock, allergens")
+      .select("id, name, station_id, out_of_stock, allergens, prep_minutes")
       .eq("business_id", businessId)
       .in("id", catIds);
     for (const r of data ?? []) {
       const id = r.id as string;
       if (r.station_id) stationByItem[id] = r.station_id as string;
       if (Array.isArray(r.allergens) && r.allergens.length > 0) allergensByItem[id] = r.allergens as string[];
+      if (r.prep_minutes != null) prepByItem[id] = Number(r.prep_minutes);
       if (r.out_of_stock === true) eightySixed.add(id);
       nameById[id] = r.name as string;
     }
@@ -483,6 +485,7 @@ async function insertFiredByStation(
   for (const f of fired) {
     const sid = (f.catalog_item_id && stationByItem[f.catalog_item_id]) || "";
     const allergens = f.catalog_item_id ? allergensByItem[f.catalog_item_id] : undefined;
+    const prep = f.catalog_item_id ? prepByItem[f.catalog_item_id] : undefined;
     (groups[sid] ||= []).push({
       name: f.name,
       quantity: f.quantity,
@@ -490,6 +493,7 @@ async function insertFiredByStation(
       seat: f.seat ?? null,
       ...(allergens && allergens.length > 0 ? { allergens } : {}),
       ...(f.allergy ? { allergy: f.allergy } : {}),
+      ...(prep != null ? { prep_minutes: prep } : {}),
     });
   }
 

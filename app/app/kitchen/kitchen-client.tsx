@@ -39,7 +39,7 @@ function esc(s: string): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-type KitchenItem = { id?: string; name: string; quantity: number; note?: string | null; seat?: number | null; ready?: boolean; allergens?: string[] | null; allergy?: string | null };
+type KitchenItem = { id?: string; name: string; quantity: number; note?: string | null; seat?: number | null; ready?: boolean; allergens?: string[] | null; allergy?: string | null; prep_minutes?: number | null };
 type KitchenStation = { id: string; name: string; sort_order: number };
 type KitchenOrder = {
   id: string;
@@ -132,11 +132,20 @@ export function KitchenClient({
     const id = setInterval(() => setNow(Date.now()), 15000);
     return () => clearInterval(id);
   }, []);
-  // Aging vs a full-service cook-time target: fresh < 10m (green), warming
-  // 10–18m (amber), late > 18m (red) — readable across a kitchen at a glance.
-  function aging(iso: string): { label: string; tone: ChipTone } {
+  // Aging vs the ticket's prep target = the slowest item's prep_minutes. Amber at
+  // the target, red at 1.5×. Tickets with no prep set fall back to the fixed
+  // 10m/18m thresholds, so existing behaviour is unchanged.
+  function ticketTarget(items: KitchenItem[]): number | null {
+    let max = 0;
+    for (const it of items) if (it.prep_minutes != null && it.prep_minutes > max) max = it.prep_minutes;
+    return max > 0 ? max : null;
+  }
+  function aging(iso: string, items?: KitchenItem[]): { label: string; tone: ChipTone } {
     const mins = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000));
-    const tone: ChipTone = mins >= 18 ? "danger" : mins >= 10 ? "warning" : "success";
+    const target = items ? ticketTarget(items) : null;
+    const warnAt = target ?? 10;
+    const lateAt = target ? Math.round(target * 1.5) : 18;
+    const tone: ChipTone = mins >= lateAt ? "danger" : mins >= warnAt ? "warning" : "success";
     return { label: formatDuration(mins), tone };
   }
 
@@ -506,7 +515,7 @@ export function KitchenClient({
   // One single ticket / order card (used by the station grid and for online
   // orders in the expo grid).
   function card(o: KitchenOrder) {
-    const age = aging(o.createdAt);
+    const age = aging(o.createdAt, o.items);
     // Subtle "ready" cue once every line is bumped (does NOT auto-complete).
     const allReady = o.items.length > 0 && o.items.every((it) => it.ready);
     return (
@@ -620,7 +629,7 @@ export function KitchenClient({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {expoGroups.map((g) => {
-              const gAge = aging(g.firstAt);
+              const gAge = aging(g.firstAt, g.tickets.flatMap((t) => t.items));
               return (
               <div key={g.key} className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 flex flex-col">
                 <div className="flex items-start justify-between gap-2 mb-2">

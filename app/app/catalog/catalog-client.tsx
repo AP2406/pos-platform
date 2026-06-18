@@ -20,6 +20,7 @@ import {
   setCatalogItemImage,
   setCatalogItemOutOfStock,
   setCatalogItemAllergens,
+  setCatalogItemPrepMinutes,
   saveCategoryColors,
   createVariation,
   deleteVariation,
@@ -41,6 +42,7 @@ type Item = {
   out_of_stock: boolean;
   out_of_stock_at?: string | null;
   allergens?: string[] | null;
+  prep_minutes?: number | null;
   default_course_id: string | null;
   station_id: string | null;
   variations: Option[];
@@ -258,6 +260,15 @@ export function CatalogClient({
               : i
           )
         );
+      }
+    });
+  }
+
+  function handleSetPrepMinutes(item: Item, prep: number | null) {
+    startTransition(async () => {
+      const res = await setCatalogItemPrepMinutes(item.id, prep);
+      if (!("error" in res)) {
+        setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, prep_minutes: prep } : i)));
       }
     });
   }
@@ -733,6 +744,31 @@ export function CatalogClient({
                           </div>
                         </div>
                       )}
+
+                      {/* Prep time */}
+                      <div className="space-y-2 pt-3 border-t border-border">
+                        <p className="text-xs text-muted-foreground pl-3">
+                          Prep time &mdash; target minutes for the kitchen. The KDS aging colour turns amber at the target and red at 1.5&times; it. Leave blank for the default.
+                        </p>
+                        <div className="pl-3 flex items-end gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Minutes</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              max="240"
+                              defaultValue={item.prep_minutes ?? ""}
+                              onBlur={(e) => {
+                                const v = e.target.value.trim() === "" ? null : Number(e.target.value);
+                                if ((item.prep_minutes ?? null) !== (v && v > 0 ? v : null)) handleSetPrepMinutes(item, v);
+                              }}
+                              disabled={pending}
+                              className="h-9 w-24"
+                              placeholder="default"
+                            />
+                          </div>
+                        </div>
+                      </div>
 
                       {/* Allergens */}
                       <div className="space-y-2 pt-3 border-t border-border">

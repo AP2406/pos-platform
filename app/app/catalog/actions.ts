@@ -141,6 +141,32 @@ export async function setCatalogItemOutOfStock(
   return { ok: true, at };
 }
 
+export async function setCatalogItemPrepMinutes(
+  id: string,
+  prepMinutes: number | null
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing item." };
+  const { business } = await requireBusiness();
+  assertConfigEditable(business);
+  let v: number | null = null;
+  if (prepMinutes != null && Number.isFinite(prepMinutes)) {
+    v = Math.max(0, Math.min(240, Math.round(prepMinutes)));
+    if (v === 0) v = null;
+  }
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("catalog_items")
+    .update({ prep_minutes: v })
+    .eq("id", id)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("setCatalogItemPrepMinutes:", error);
+    return { error: "Could not update prep time. Please try again." };
+  }
+  revalidatePath("/app/catalog");
+  return { ok: true };
+}
+
 export async function setCatalogItemAllergens(
   id: string,
   allergens: string[]
