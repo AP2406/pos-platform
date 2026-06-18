@@ -49,6 +49,7 @@ const splitSchema = z.object({
   customer_id: z.string().uuid().optional().nullable(),
   dining_option: z.enum(["dine_in", "takeout", "delivery", "pickup"]).optional().nullable(),
   idempotency_key: z.string().uuid().optional(),
+  approver: z.object({ id: z.string().max(64), name: z.string().max(120) }).optional().nullable(),
 });
 
 type SplitInput = z.infer<typeof splitSchema>;
@@ -280,6 +281,38 @@ export async function finalizeSplitCheck(
 
   const discountCents = c(discount);
   const compCents = c(comp);
+
+  // Whole-check sensitive-action audit (P0): the split path previously logged
+  // NONE. Build it once and attach to the single informational order / the first
+  // separate sub-check — with the manager approver when one authorized it.
+  const splitApprover = data.approver ?? null;
+  const splitApproverMeta = {
+    approved_by: splitApprover ? splitApprover.id : null,
+    approver_name: splitApprover ? splitApprover.name : null,
+  };
+  const {
+    data: { user: splitUser },
+  } = await supabase.auth.getUser();
+  const splitActorId = splitUser ? splitUser.id : null;
+  const splitAudit: {
+    actor_id: string | null;
+    actor_role: string | null;
+    action: string;
+    reason_code: string | null;
+    reason_note: string | null;
+    metadata: Record<string, unknown>;
+  }[] = [];
+  if (!isTraining) {
+    if (discount > 0) {
+      splitAudit.push({ actor_id: splitActorId, actor_role: role, action: "discount", reason_code: discountReasonCode || null, reason_note: discountReasonNote || null, metadata: { amount: discount, staff_id: activeStaffId, staff_name: activeStaffName, ...splitApproverMeta } });
+    }
+    if (comp > 0) {
+      splitAudit.push({ actor_id: splitActorId, actor_role: role, action: "comp", reason_code: compReasonCode || null, reason_note: compReasonNote || null, metadata: { amount: comp, staff_id: activeStaffId, staff_name: activeStaffName, ...splitApproverMeta } });
+    }
+    if (manualExempt) {
+      splitAudit.push({ actor_id: splitActorId, actor_role: role, action: "tax_exempt", reason_code: exemptCode || null, reason_note: exemptNote || null, metadata: { staff_id: activeStaffId, staff_name: activeStaffName, ...splitApproverMeta } });
+    }
+  }
   const scCents = c(serviceCharge);
 
   // --- partition: per-check item subtotal + per-bucket base ---
@@ -401,7 +434,7 @@ export async function finalizeSplitCheck(
       },
       items: data.items.map((i) => ({ catalog_item_id: i.catalog_item_id ?? null, name: i.name, unit_price: i.unit_price, quantity: i.quantity })),
       payments: [{ method: data.checks[0].payment_method ?? "cash", amount: total, tendered: null, change_given: null, tender_type: data.checks[0].payment_method ?? "cash", finix_transfer_id: null, finix_state: null }],
-      audit_events: [],
+      audit_events: splitAudit,
     };
     const { data: rpcData, error: rpcError } = await supabase.rpc("create_pos_order", { payload });
     if (rpcError || !rpcData) {
@@ -476,7 +509,8 @@ export async function finalizeSplitCheck(
       },
       items: ck.lines.map((l) => ({ catalog_item_id: l.catalog_item_id ?? null, name: l.name, unit_price: l.unit_price, quantity: l.quantity })),
       payments: [{ method: pm, amount: total, tendered: null, change_given: null, tender_type: pm, finix_transfer_id: null, finix_state: null }],
-      audit_events: [],
+      // Whole-check audit attaches to the first sub-check only (not per child).
+      audit_events: ci === 0 ? splitAudit : [],
     };
 
     const { data: rpcData, error: rpcError } = await supabase.rpc("create_pos_order", { payload });

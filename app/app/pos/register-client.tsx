@@ -1284,6 +1284,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         customer_id: customer ? customer.id : null,
         dining_option: diningOption,
         idempotency_key: nextIdemKey(),
+        approver: approver ?? undefined,
       });
       if ("error" in res) {
         setError(res.error);
