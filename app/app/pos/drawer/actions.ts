@@ -5,6 +5,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { getActiveStaff } from "../staff-session";
 import { actorCan, approverByPin } from "@/lib/services/permissions-server";
+import { businessDateFor, parseCutoff } from "@/lib/services/business-day";
 import { CASH_MOVEMENT_REASONS, isValidReason } from "../reason-codes";
 
 // No Sale / Pay In / Pay Out. Recorded in cash_movements and folded into the
@@ -126,57 +127,54 @@ export async function openDrawerSession(
   return { ok: true };
 }
 
-type CloseResult =
-  | {
-      ok: true;
-      expected: number;
-      counted: number;
-      over_short: number;
-      cash_sales: number;
-      card_sales: number;
-      other_sales: number;
-      refunds: number;
-      pay_ins: number;
-      pay_outs: number;
-      sale_count: number;
-    }
-  | { error: string };
+export type DayTotals = {
+  starting_cash: number;
+  gross_sales: number;
+  net_sales: number;
+  tax: number;
+  tips: number;
+  discounts: number;
+  comps: number;
+  void_count: number;
+  void_amount: number;
+  cash_sales: number;
+  card_sales: number;
+  other_sales: number;
+  refunds: number;
+  pay_ins: number;
+  pay_outs: number;
+  sale_count: number;
+  expected_cash: number;
+};
 
-export async function closeDrawerSession(input: {
-  counted_cash: number;
-  note?: string;
-}): Promise<CloseResult> {
-  const { business } = await requireBusiness();
-  const supabase = await createClient();
+const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
-  const { data: session } = await supabase
-    .from("drawer_sessions")
-    .select("id, starting_cash")
-    .eq("business_id", business.id)
-    .eq("status", "open")
-    .maybeSingle();
-  if (!session) {
-    return { error: "There is no open day to end." };
-  }
-
+// Shared totals for a drawer session — used by both the X-report (read) and the
+// Z-report (close). Cash reconciliation math is identical to the original close.
+async function computeDayTotals(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  sessionId: string,
+  startingCash: number
+): Promise<DayTotals> {
   const { data: sessionOrders } = await supabase
     .from("orders")
-    .select("id, total, payment_method, status")
-    .eq("business_id", business.id)
-    .eq("drawer_session_id", session.id)
+    .select("id, total, subtotal, tax, tip, discount, comp, payment_method, status")
+    .eq("business_id", businessId)
+    .eq("drawer_session_id", sessionId)
     .neq("is_training", true);
 
-  const liveOrders = (sessionOrders ?? []).filter(
-    (o) => (o.status as string) !== "voided"
-  );
-  const orderIds = liveOrders.map((o) => o.id as string);
+  const all = sessionOrders ?? [];
+  const live = all.filter((o) => (o.status as string) !== "voided");
+  const voided = all.filter((o) => (o.status as string) === "voided");
+  const orderIds = live.map((o) => o.id as string);
 
   let payments: { order_id: string; method: string; amount: number }[] = [];
   if (orderIds.length > 0) {
     const { data: payData } = await supabase
       .from("payments")
       .select("order_id, method, amount")
-      .eq("business_id", business.id)
+      .eq("business_id", businessId)
       .in("order_id", orderIds);
     payments = (payData ?? []).map((p) => ({
       order_id: p.order_id as string,
@@ -184,74 +182,156 @@ export async function closeDrawerSession(input: {
       amount: Number(p.amount) || 0,
     }));
   }
-  const ordersWithPayments = new Set(payments.map((p) => p.order_id));
+  const withPay = new Set(payments.map((p) => p.order_id));
 
-  let cashSales = 0;
-  let cardSales = 0;
-  let otherSales = 0;
+  let cash = 0, card = 0, other = 0;
   for (const p of payments) {
-    if (p.method === "cash") cashSales += p.amount;
-    else if (p.method === "card") cardSales += p.amount;
-    else otherSales += p.amount;
+    if (p.method === "cash") cash += p.amount;
+    else if (p.method === "card") card += p.amount;
+    else other += p.amount;
   }
-  for (const o of liveOrders) {
-    if (ordersWithPayments.has(o.id as string)) continue;
+  for (const o of live) {
+    if (withPay.has(o.id as string)) continue;
     const t = Number(o.total) || 0;
     const m = (o.payment_method as string) || "cash";
-    if (m === "cash") cashSales += t;
-    else if (m === "card") cardSales += t;
-    else otherSales += t;
+    if (m === "cash") cash += t;
+    else if (m === "card") card += t;
+    else other += t;
   }
-  cashSales = Math.round(cashSales * 100) / 100;
-  cardSales = Math.round(cardSales * 100) / 100;
-  otherSales = Math.round(otherSales * 100) / 100;
 
-  // Refunds processed during this session take cash back out of the till.
-  // Until card refunds go live, every refund is treated as cash out.
+  let gross = 0, net = 0, tax = 0, tips = 0, disc = 0, comp = 0;
+  for (const o of live) {
+    gross += Number(o.total) || 0;
+    net += Number(o.subtotal) || 0;
+    tax += Number(o.tax) || 0;
+    tips += Number(o.tip) || 0;
+    disc += Number(o.discount) || 0;
+    comp += Number(o.comp) || 0;
+  }
+  let voidAmt = 0;
+  for (const o of voided) voidAmt += Number(o.total) || 0;
+
   const { data: refundData } = await supabase
     .from("refunds")
     .select("amount")
-    .eq("business_id", business.id)
-    .eq("drawer_session_id", session.id);
-  let refundsTotal = 0;
-  for (const r of refundData ?? []) refundsTotal += Number(r.amount) || 0;
-  refundsTotal = Math.round(refundsTotal * 100) / 100;
+    .eq("business_id", businessId)
+    .eq("drawer_session_id", sessionId);
+  let refunds = 0;
+  for (const r of refundData ?? []) refunds += Number(r.amount) || 0;
 
-  // Cash paid in / out of the till during the session.
   const { data: moveData } = await supabase
     .from("cash_movements")
     .select("kind, amount")
-    .eq("business_id", business.id)
-    .eq("drawer_session_id", session.id);
-  let payIns = 0;
-  let payOuts = 0;
+    .eq("business_id", businessId)
+    .eq("drawer_session_id", sessionId);
+  let payIns = 0, payOuts = 0;
   for (const m of moveData ?? []) {
     const a = Number(m.amount) || 0;
     if (m.kind === "pay_in") payIns += a;
     else if (m.kind === "pay_out") payOuts += a;
   }
-  payIns = Math.round(payIns * 100) / 100;
-  payOuts = Math.round(payOuts * 100) / 100;
+
+  const expected = r2(startingCash + r2(cash) - r2(refunds) + r2(payIns) - r2(payOuts));
+  return {
+    starting_cash: r2(startingCash),
+    gross_sales: r2(gross),
+    net_sales: r2(net),
+    tax: r2(tax),
+    tips: r2(tips),
+    discounts: r2(disc),
+    comps: r2(comp),
+    void_count: voided.length,
+    void_amount: r2(voidAmt),
+    cash_sales: r2(cash),
+    card_sales: r2(card),
+    other_sales: r2(other),
+    refunds: r2(refunds),
+    pay_ins: r2(payIns),
+    pay_outs: r2(payOuts),
+    sale_count: live.length,
+    expected_cash: expected,
+  };
+}
+
+// X-report: a mid-day read of the open session. Does NOT finalize anything.
+export async function getXReport(): Promise<
+  { ok: true; totals: DayTotals; open_check_count: number } | { error: string }
+> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { data: session } = await supabase
+    .from("drawer_sessions")
+    .select("id, starting_cash")
+    .eq("business_id", business.id)
+    .eq("status", "open")
+    .maybeSingle();
+  if (!session) return { error: "No open day to read." };
+  const totals = await computeDayTotals(
+    supabase,
+    business.id,
+    session.id as string,
+    Number(session.starting_cash) || 0
+  );
+  const { count } = await supabase
+    .from("open_tickets")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", business.id);
+  return { ok: true, totals, open_check_count: count ?? 0 };
+}
+
+type CloseResult =
+  | ({ ok: true; counted: number; over_short: number; z_business_date: string } & DayTotals)
+  | { needs_open_check_confirm: true; open_checks: { id: string; label: string | null }[] }
+  | { error: string };
+
+export async function closeDrawerSession(input: {
+  counted_cash: number;
+  note?: string;
+  blind?: boolean;
+  confirm_open_checks?: boolean;
+}): Promise<CloseResult> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data: session } = await supabase
+    .from("drawer_sessions")
+    .select("id, starting_cash, opened_at")
+    .eq("business_id", business.id)
+    .eq("status", "open")
+    .maybeSingle();
+  if (!session) {
+    return { error: "There is no open day to end." };
+  }
+
+  // Open-check guard: don't let the day close over unpaid checks unless the
+  // manager has seen the list and confirmed.
+  if (!input.confirm_open_checks) {
+    const { data: openChecks } = await supabase
+      .from("open_tickets")
+      .select("id, label")
+      .eq("business_id", business.id)
+      .order("opened_at", { ascending: true });
+    if (openChecks && openChecks.length > 0) {
+      return {
+        needs_open_check_confirm: true,
+        open_checks: openChecks.map((c) => ({
+          id: c.id as string,
+          label: (c.label as string | null) ?? null,
+        })),
+      };
+    }
+  }
 
   const startingCash = Number(session.starting_cash) || 0;
-  const expected =
-    Math.round((startingCash + cashSales - refundsTotal + payIns - payOuts) * 100) / 100;
-  const counted = Math.round((Number(input.counted_cash) || 0) * 100) / 100;
-  const overShort = Math.round((counted - expected) * 100) / 100;
-  const saleCount = liveOrders.length;
+  const totals = await computeDayTotals(supabase, business.id, session.id as string, startingCash);
+  const counted = r2(Number(input.counted_cash) || 0);
+  const overShort = r2(counted - totals.expected_cash);
 
   const closeout = {
-    starting_cash: startingCash,
-    cash_sales: cashSales,
-    card_sales: cardSales,
-    other_sales: otherSales,
-    refunds: refundsTotal,
-    pay_ins: payIns,
-    pay_outs: payOuts,
-    sale_count: saleCount,
-    expected_cash: expected,
+    ...totals,
     counted_cash: counted,
     over_short: overShort,
+    blind: !!input.blind,
   };
 
   const {
@@ -265,12 +345,9 @@ export async function closeDrawerSession(input: {
       closed_at: new Date().toISOString(),
       closed_by: user ? user.id : null,
       counted_cash: counted,
-      expected_cash: expected,
+      expected_cash: totals.expected_cash,
       over_short: overShort,
-      note:
-        input.note && input.note.trim()
-          ? input.note.trim().slice(0, 500)
-          : null,
+      note: input.note && input.note.trim() ? input.note.trim().slice(0, 500) : null,
       closeout: closeout,
     })
     .eq("id", session.id)
@@ -282,19 +359,26 @@ export async function closeDrawerSession(input: {
     return { error: "Could not end the day. Please try again." };
   }
 
+  // File the immutable Z-report for the business day (cutoff-aware). Non-fatal
+  // if it can't be written (the drawer is already closed); a duplicate day is
+  // ignored by the unique(business_id, business_date) constraint.
+  const cutoff = parseCutoff((business as { settings?: Record<string, unknown> }).settings);
+  const tz = (business as { timezone?: string }).timezone || "UTC";
+  const openedAt = (session.opened_at as string) || new Date().toISOString();
+  const businessDate = businessDateFor(openedAt, cutoff, tz);
+  const { error: zErr } = await supabase.from("z_reports").insert({
+    business_id: business.id,
+    business_date: businessDate,
+    opened_at: openedAt,
+    drawer_session_id: session.id as string,
+    totals: closeout,
+    created_by: user ? user.id : null,
+  });
+  if (zErr && (zErr as { code?: string }).code !== "23505") {
+    console.error("z_report insert:", zErr);
+  }
+
   revalidatePath("/app/pos/drawer");
   revalidatePath("/app/pos");
-  return {
-    ok: true,
-    expected,
-    counted,
-    over_short: overShort,
-    cash_sales: cashSales,
-    card_sales: cardSales,
-    other_sales: otherSales,
-    refunds: refundsTotal,
-    pay_ins: payIns,
-    pay_outs: payOuts,
-    sale_count: saleCount,
-  };
+  return { ok: true, ...totals, counted, over_short: overShort, z_business_date: businessDate };
 }

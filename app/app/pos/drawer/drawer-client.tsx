@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { openDrawerSession, closeDrawerSession, recordCashMovement } from "./actions";
+import { openDrawerSession, closeDrawerSession, recordCashMovement, getXReport, type DayTotals } from "./actions";
 import { CASH_MOVEMENT_REASONS } from "../reason-codes";
 
 function money(n: number): string {
@@ -69,6 +69,15 @@ type CloseResult = {
 
 const MOVE_LABEL: Record<string, string> = { pay_in: "Pay in", pay_out: "Pay out", no_sale: "No sale" };
 
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="tabular-nums">{value}</span>
+    </div>
+  );
+}
+
 export function DrawerClient({
   open,
   closed,
@@ -83,6 +92,10 @@ export function DrawerClient({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CloseResult | null>(null);
   const [pending, startTransition] = useTransition();
+  const [blind, setBlind] = useState(false);
+  const [openChecks, setOpenChecks] = useState<{ id: string; label: string | null }[] | null>(null);
+  const [xReport, setXReport] = useState<DayTotals | null>(null);
+  const [xOpenChecks, setXOpenChecks] = useState(0);
 
   // Cash movement modal.
   const [cashKind, setCashKind] = useState<"pay_in" | "pay_out" | "no_sale" | null>(null);
@@ -153,19 +166,39 @@ export function DrawerClient({
     });
   }
 
-  function handleClose() {
+  function runXReport() {
+    setError(null);
+    startTransition(async () => {
+      const res = await getXReport();
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      setXReport(res.totals);
+      setXOpenChecks(res.open_check_count);
+    });
+  }
+
+  function handleClose(confirmOpenChecks = false) {
     setError(null);
     startTransition(async () => {
       const res = await closeDrawerSession({
         counted_cash: parseFloat(countedCash) || 0,
         note,
+        blind,
+        confirm_open_checks: confirmOpenChecks,
       });
+      if ("needs_open_check_confirm" in res) {
+        setOpenChecks(res.open_checks);
+        return;
+      }
       if ("error" in res) {
         setError(res.error);
         return;
       }
+      setOpenChecks(null);
       setResult({
-        expected: res.expected,
+        expected: res.expected_cash,
         counted: res.counted,
         over_short: res.over_short,
         cash_sales: res.cash_sales,
@@ -284,16 +317,18 @@ export function DrawerClient({
             </div>
           )}
 
-          <div className="flex justify-between text-sm pt-3 border-t border-border">
-            <span className="text-muted-foreground">
-              {"Expected cash in till (" +
-                open.count +
-                (open.count === 1 ? " sale)" : " sales)")}
-            </span>
-            <span className="tabular-nums font-semibold">
-              {money(open.expected)}
-            </span>
-          </div>
+          {!blind && (
+            <div className="flex justify-between text-sm pt-3 border-t border-border">
+              <span className="text-muted-foreground">
+                {"Expected cash in till (" +
+                  open.count +
+                  (open.count === 1 ? " sale)" : " sales)")}
+              </span>
+              <span className="tabular-nums font-semibold">
+                {money(open.expected)}
+              </span>
+            </div>
+          )}
 
           {/* Cash management */}
           <div className="pt-3 border-t border-border space-y-2">
@@ -301,6 +336,7 @@ export function DrawerClient({
               <Button variant="outline" size="sm" onClick={() => openCash("pay_in")}>Pay in</Button>
               <Button variant="outline" size="sm" onClick={() => openCash("pay_out")}>Pay out</Button>
               <Button variant="outline" size="sm" onClick={() => openCash("no_sale")}>No sale</Button>
+              <Button variant="outline" size="sm" onClick={runXReport} disabled={pending}>X-report</Button>
             </div>
             {open.movements.length > 0 && (
               <div className="text-xs text-muted-foreground space-y-0.5">
@@ -314,7 +350,50 @@ export function DrawerClient({
             )}
           </div>
 
+          {xReport && (
+            <div className="pt-3 border-t border-border text-sm space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">X-report · read only</span>
+                <button type="button" onClick={() => setXReport(null)} className="text-xs text-muted-foreground underline">Hide</button>
+              </div>
+              <Row label="Gross sales" value={money(xReport.gross_sales)} />
+              <Row label="Net (pre-tax)" value={money(xReport.net_sales)} />
+              <Row label="Tax" value={money(xReport.tax)} />
+              <Row label="Tips" value={money(xReport.tips)} />
+              <Row label="Discounts" value={money(xReport.discounts)} />
+              <Row label="Comps" value={money(xReport.comps)} />
+              <Row label="Voids" value={xReport.void_count + " · " + money(xReport.void_amount)} />
+              <Row label="Cash / Card / Other" value={money(xReport.cash_sales) + " / " + money(xReport.card_sales) + " / " + money(xReport.other_sales)} />
+              {xOpenChecks > 0 && <Row label="Open checks" value={String(xOpenChecks)} />}
+            </div>
+          )}
+
+          {openChecks && openChecks.length > 0 && (
+            <div className="pt-3 border-t border-border">
+              <div className="rounded-md border border-amber-300/60 bg-amber-50 dark:bg-amber-400/10 p-3 text-sm">
+                <p className="font-medium text-amber-900 dark:text-amber-200">
+                  {openChecks.length} open check{openChecks.length === 1 ? "" : "s"} still unpaid
+                </p>
+                <ul className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80 list-disc pl-4">
+                  {openChecks.slice(0, 8).map((c) => (
+                    <li key={c.id}>{c.label || "Untitled check"}</li>
+                  ))}
+                </ul>
+                <div className="mt-2 flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => handleClose(true)} disabled={pending}>
+                    Close day anyway
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setOpenChecks(null)}>Cancel</Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="pt-2 space-y-2">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground select-none">
+              <input type="checkbox" checked={blind} onChange={(e) => setBlind(e.target.checked)} className="h-4 w-4" />
+              Blind count (hide expected until counted)
+            </label>
             <Label htmlFor="counted" className="text-xs">
               Count the till
             </Label>
@@ -332,7 +411,7 @@ export function DrawerClient({
               onChange={(e) => setNote(e.target.value)}
               placeholder="Note (optional)"
             />
-            <Button onClick={handleClose} disabled={pending}>
+            <Button onClick={() => handleClose(false)} disabled={pending}>
               {pending ? "Ending..." : "End day"}
             </Button>
           </div>
