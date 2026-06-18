@@ -11,6 +11,8 @@ export type RoleRow = {
   key: string | null;
   is_system: boolean;
   permissions: string[];
+  compCap: number | null;
+  discountCap: number | null;
   sort_order: number;
 };
 
@@ -28,7 +30,7 @@ export async function listRoles(): Promise<RoleRow[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("roles")
-    .select("id, name, key, is_system, permissions, sort_order")
+    .select("id, name, key, is_system, permissions, comp_cap, discount_cap, sort_order")
     .eq("business_id", business.id)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
@@ -38,6 +40,8 @@ export async function listRoles(): Promise<RoleRow[]> {
     key: (r.key as string | null) ?? null,
     is_system: !!r.is_system,
     permissions: Array.isArray(r.permissions) ? (r.permissions as string[]) : [],
+    compCap: r.comp_cap != null ? Number(r.comp_cap) : null,
+    discountCap: r.discount_cap != null ? Number(r.discount_cap) : null,
     sort_order: Number(r.sort_order) || 0,
   }));
 }
@@ -60,6 +64,34 @@ export async function updateRolePermissions(
   if (error) {
     console.error("updateRolePermissions:", error);
     return { error: "Could not save the role. Please try again." };
+  }
+  revalidatePath("/app/settings");
+  return { ok: true };
+}
+
+export async function setRoleCaps(
+  roleId: string,
+  compCap: number | null,
+  discountCap: number | null
+): Promise<{ ok: true } | { error: string }> {
+  if (!roleId) return { error: "Missing role." };
+  const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
+  if (!canManage(role)) return { error: "Only an owner or manager can edit roles." };
+
+  const clamp = (v: number | null): number | null => {
+    if (v == null || !Number.isFinite(v) || v <= 0) return null; // 0/blank = unlimited
+    return Math.min(100000, Math.round(v * 100) / 100);
+  };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("roles")
+    .update({ comp_cap: clamp(compCap), discount_cap: clamp(discountCap) })
+    .eq("id", roleId)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("setRoleCaps:", error);
+    return { error: "Could not save the caps." };
   }
   revalidatePath("/app/settings");
   return { ok: true };

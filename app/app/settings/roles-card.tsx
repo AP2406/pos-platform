@@ -11,6 +11,7 @@ import {
 } from "@/lib/services/permissions";
 import {
   updateRolePermissions,
+  setRoleCaps,
   createRole,
   deleteRole,
   type RoleRow,
@@ -20,6 +21,8 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
   const [roles, setRoles] = useState<RoleRow[]>(initialRoles);
   const [openId, setOpenId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Set<PermissionKey>>(new Set());
+  const [draftCompCap, setDraftCompCap] = useState("");
+  const [draftDiscountCap, setDraftDiscountCap] = useState("");
   const [rowError, setRowError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +36,8 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
     }
     setOpenId(r.id);
     setDraft(new Set(r.permissions as PermissionKey[]));
+    setDraftCompCap(r.compCap != null ? String(r.compCap) : "");
+    setDraftDiscountCap(r.discountCap != null ? String(r.discountCap) : "");
   }
 
   function toggle(p: PermissionKey) {
@@ -47,14 +52,23 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
   function save(r: RoleRow) {
     setRowError(null);
     const perms = Array.from(draft);
+    const cc = draftCompCap.trim() === "" ? null : Number(draftCompCap);
+    const dc = draftDiscountCap.trim() === "" ? null : Number(draftDiscountCap);
+    const compCap = cc != null && cc > 0 ? cc : null;
+    const discountCap = dc != null && dc > 0 ? dc : null;
     startTransition(async () => {
       const res = await updateRolePermissions(r.id, perms);
       if ("error" in res) {
         setRowError(res.error);
         return;
       }
+      const capsRes = await setRoleCaps(r.id, compCap, discountCap);
+      if ("error" in capsRes) {
+        setRowError(capsRes.error);
+        return;
+      }
       setRoles((prev) =>
-        prev.map((x) => (x.id === r.id ? { ...x, permissions: perms } : x))
+        prev.map((x) => (x.id === r.id ? { ...x, permissions: perms, compCap, discountCap } : x))
       );
       setOpenId(null);
     });
@@ -80,6 +94,8 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
           key: null,
           is_system: false,
           permissions: [],
+          compCap: null,
+          discountCap: null,
           sort_order: prev.length,
         },
       ]);
@@ -155,6 +171,33 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
                       </label>
                     ))}
                   </div>
+                  <div className="flex flex-wrap items-end gap-3 pt-1">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Comp cap ($, blank = no limit)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={draftCompCap}
+                        onChange={(e) => setDraftCompCap(e.target.value)}
+                        placeholder="No limit"
+                        className="h-9 w-32"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Discount cap ($)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={draftDiscountCap}
+                        onChange={(e) => setDraftDiscountCap(e.target.value)}
+                        placeholder="No limit"
+                        className="h-9 w-32"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    A comp/discount over the cap requires a manager&apos;s approval at the register.
+                  </p>
                   {rowError && <p className="text-sm text-red-600">{rowError}</p>}
                   <div className="flex items-center gap-2">
                     <Button size="sm" onClick={() => save(r)} disabled={pending}>

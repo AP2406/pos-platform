@@ -19,6 +19,8 @@ export type ActiveStaff = {
   name: string;
   role: string;
   permissions: string[];
+  compCap: number | null;
+  discountCap: number | null;
 };
 
 export async function setActiveStaff(
@@ -74,6 +76,8 @@ export async function setActiveStaff(
     name: row.name as string,
     role: row.role as string,
     permissions: perms?.keys ?? [],
+    compCap: perms?.compCap ?? null,
+    discountCap: perms?.discountCap ?? null,
   };
   cookieStore.set(ACTIVE_STAFF_COOKIE, staff.id, {
     httpOnly: true,
@@ -103,5 +107,7 @@ export async function getActiveStaff(): Promise<ActiveStaff | null> {
     name: perms.name,
     role: perms.legacyRole,
     permissions: perms.keys,
+    compCap: perms.compCap,
+    discountCap: perms.discountCap,
   };
 }

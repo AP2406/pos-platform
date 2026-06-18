@@ -1430,16 +1430,24 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const cashierRole = staff ? (staff as { role?: string }).role : null;
   const cashierPerms = staff ? ((staff as { permissions?: string[] }).permissions ?? []) : [];
   const cashierCan = (p: string) => cashierPerms.includes(p);
+  const compCap = staff ? (staff as { compCap?: number | null }).compCap ?? null : null;
+  const discountCap = staff ? (staff as { discountCap?: number | null }).discountCap ?? null : null;
   // An adjustment needs a manager's PIN only if the cashier's role doesn't grant
   // it. discount/comp/void are permission-keyed (so a Server granted `comp` can
   // self-serve); tax-exempt + service-charge waive stay manager-gated (no direct
-  // permission key, and Manager's default set excludes change_tax).
+  // permission key, and Manager's default set excludes change_tax). Per-role $
+  // CAPS also force approval when the comp/discount exceeds the cap (null cap =
+  // unlimited = unchanged).
+  const overCompCap = comp > 0 && compCap != null && comp > compCap;
+  const overDiscountCap = discount > 0 && discountCap != null && discount > discountCap;
   const needsManagerApproval =
     hasStaff &&
     !!staff &&
     ((discount > 0 && !cashierCan("discount")) ||
       (comp > 0 && !cashierCan("comp")) ||
       (voidLines.length > 0 && !cashierCan("void")) ||
+      overCompCap ||
+      overDiscountCap ||
       ((taxExempt || scWaived) && cashierRole !== "manager"));
 
   function snapshot(): Snap {

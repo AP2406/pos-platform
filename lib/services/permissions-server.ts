@@ -14,6 +14,8 @@ export type StaffPermissions = {
   name: string;
   legacyRole: string;
   keys: PermissionKey[];
+  compCap: number | null; // max $ this role can comp without approval (null = unlimited)
+  discountCap: number | null;
   can: (perm: PermissionKey) => boolean;
 };
 
@@ -35,16 +37,20 @@ export async function staffPermissionsById(
   if (!st || st.is_active === false) return null;
 
   let customPermissions: string[] | null = null;
+  let compCap: number | null = null;
+  let discountCap: number | null = null;
   if (st.role_id) {
     const { data: r } = await supabase
       .from("roles")
-      .select("permissions")
+      .select("permissions, comp_cap, discount_cap")
       .eq("id", st.role_id as string)
       .eq("business_id", businessId)
       .maybeSingle();
     if (r && Array.isArray(r.permissions)) {
       customPermissions = r.permissions as string[];
     }
+    if (r && r.comp_cap != null) compCap = Number(r.comp_cap);
+    if (r && r.discount_cap != null) discountCap = Number(r.discount_cap);
   }
 
   const set = resolvePermissions({
@@ -56,6 +62,8 @@ export async function staffPermissionsById(
     name: st.name as string,
     legacyRole: st.role as string,
     keys: Array.from(set),
+    compCap,
+    discountCap,
     can: (perm: PermissionKey) => set.has(perm),
   };
 }
