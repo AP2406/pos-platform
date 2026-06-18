@@ -8,6 +8,8 @@ import { TaxRatesCard } from "./tax-rates-card";
 import { TrainingModeForm } from "./training-mode-form";
 import { ShowPhotosForm } from "./show-photos-form";
 import { StaffCard } from "./staff-card";
+import { RolesCard } from "./roles-card";
+import { listRoles } from "./roles-actions";
 import { FloorCard } from "./floor-card";
 import { SectionsCard } from "./sections-card";
 import { listSections, listAssignableTables } from "../pos/sections-actions";
@@ -101,20 +103,23 @@ export default async function SettingsPage() {
   const showItemPhotos =
     (business as { show_item_photos?: boolean }).show_item_photos !== false;
 
-  let staffList: { id: string; name: string; role: string; is_active: boolean; has_pin: boolean }[] = [];
+  let staffList: { id: string; name: string; role: string; role_id: string | null; is_active: boolean; has_pin: boolean }[] = [];
+  let rolesList: Awaited<ReturnType<typeof listRoles>> = [];
   if (role === "owner" || role === "manager") {
     const { data: staffData } = await supabase
       .from("staff_members")
-      .select("id, name, role, is_active, pin_hash")
+      .select("id, name, role, role_id, is_active, pin_hash")
       .eq("business_id", business.id)
       .order("created_at", { ascending: true });
     staffList = (staffData ?? []).map((s) => ({
       id: s.id as string,
       name: s.name as string,
       role: s.role as string,
+      role_id: (s.role_id as string | null) ?? null,
       is_active: s.is_active as boolean,
       has_pin: !!s.pin_hash,
     }));
+    rolesList = await listRoles();
   }
 
   const showFloor =
@@ -270,10 +275,19 @@ export default async function SettingsPage() {
       key: "team",
       label: "Team",
       content: (
-        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
-          <SectionHeader>Staff and PINs</SectionHeader>
-          <StaffCard initialStaff={staffList} />
-        </div>
+        <>
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
+            <SectionHeader>Staff and PINs</SectionHeader>
+            <StaffCard
+              initialStaff={staffList}
+              roles={rolesList.map((r) => ({ id: r.id, name: r.name, key: r.key }))}
+            />
+          </div>
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
+            <SectionHeader>Roles &amp; permissions</SectionHeader>
+            <RolesCard initialRoles={rolesList} />
+          </div>
+        </>
       ),
     });
   }

@@ -4,10 +4,42 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 
-const ROLES = ["manager", "staff", "trainee"];
-
 function canManage(role: string): boolean {
   return role === "owner" || role === "manager";
+}
+
+// The granular role_id is the source of truth for permissions; we still set the
+// legacy staff_members.role enum (the create RPC + PIN verify use it) by mapping
+// each role's key to the closest enum value.
+function legacyEnumForRoleKey(key: string | null): string {
+  switch (key) {
+    case "manager":
+      return "manager";
+    case "host":
+      return "trainee";
+    case "owner": // never assigned to staff; treated as manager-class if it slips through
+    case "manager_legacy":
+      return "manager";
+    default:
+      return "staff";
+  }
+}
+
+type ResolvedRole = { id: string; key: string | null };
+
+async function resolveRole(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  roleId: string
+): Promise<ResolvedRole | null> {
+  const { data } = await supabase
+    .from("roles")
+    .select("id, key")
+    .eq("id", roleId)
+    .eq("business_id", businessId)
+    .maybeSingle();
+  if (!data) return null;
+  return { id: data.id as string, key: (data.key as string | null) ?? null };
 }
 
 function pinError(msg: string): string {
@@ -18,12 +50,12 @@ function pinError(msg: string): string {
 
 export async function createStaff(
   name: string,
-  role: string,
+  roleId: string,
   pin: string
 ): Promise<{ ok: true; id: string } | { error: string }> {
   const clean = (name || "").trim();
   if (!clean) return { error: "Name is required." };
-  if (!ROLES.includes(role)) return { error: "Choose a role." };
+  if (!roleId) return { error: "Choose a role." };
   if (!/^[0-9]{4,6}$/.test(pin)) return { error: "PIN must be 4 to 6 digits." };
 
   const { business, role: myRole } = await requireBusiness();
@@ -31,10 +63,14 @@ export async function createStaff(
   if (!canManage(myRole)) return { error: "Only an owner or manager can add staff." };
 
   const supabase = await createClient();
+  const resolved = await resolveRole(supabase, business.id, roleId);
+  if (!resolved) return { error: "Choose a role." };
+  if (resolved.key === "owner") return { error: "The Owner role can't be assigned to staff." };
+
   const { data, error } = await supabase.rpc("create_staff_member", {
     p_business_id: business.id,
     p_name: clean.slice(0, 80),
-    p_role: role,
+    p_role: legacyEnumForRoleKey(resolved.key),
     p_pin: pin,
   });
   if (error) {
@@ -42,28 +78,42 @@ export async function createStaff(
     const mapped = pinError((error as { message?: string }).message || "");
     return { error: mapped || "Could not add staff. Please try again." };
   }
+  const newId = data as string;
+  await supabase
+    .from("staff_members")
+    .update({ role_id: roleId })
+    .eq("id", newId)
+    .eq("business_id", business.id);
   revalidatePath("/app/settings");
-  return { ok: true, id: data as string };
+  return { ok: true, id: newId };
 }
 
 export async function updateStaff(
   id: string,
   name: string,
-  role: string
+  roleId: string
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing staff." };
   const clean = (name || "").trim();
   if (!clean) return { error: "Name is required." };
-  if (!ROLES.includes(role)) return { error: "Choose a role." };
+  if (!roleId) return { error: "Choose a role." };
 
   const { business, role: myRole } = await requireBusiness();
   assertConfigEditable(business);
   if (!canManage(myRole)) return { error: "Only an owner or manager can edit staff." };
 
   const supabase = await createClient();
+  const resolved = await resolveRole(supabase, business.id, roleId);
+  if (!resolved) return { error: "Choose a role." };
+  if (resolved.key === "owner") return { error: "The Owner role can't be assigned to staff." };
+
   const { error } = await supabase
     .from("staff_members")
-    .update({ name: clean.slice(0, 80), role: role })
+    .update({
+      name: clean.slice(0, 80),
+      role: legacyEnumForRoleKey(resolved.key),
+      role_id: roleId,
+    })
     .eq("id", id)
     .eq("business_id", business.id);
   if (error) {

@@ -6,23 +6,53 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createStaff, updateStaff, setStaffPin, setStaffActive } from "./staff-actions";
 
-type Staff = { id: string; name: string; role: string; is_active: boolean; has_pin: boolean };
+type Staff = {
+  id: string;
+  name: string;
+  role: string;
+  role_id: string | null;
+  is_active: boolean;
+  has_pin: boolean;
+};
+type RolePick = { id: string; name: string; key: string | null };
 
-const ROLE_LABELS: Record<string, string> = { manager: "Manager", staff: "Staff", trainee: "Trainee" };
+const LEGACY_ROLE_LABELS: Record<string, string> = {
+  owner: "Owner",
+  manager: "Manager",
+  staff: "Staff",
+  trainee: "Trainee",
+};
 
-export function StaffCard({ initialStaff }: { initialStaff: Staff[] }) {
+export function StaffCard({
+  initialStaff,
+  roles,
+}: {
+  initialStaff: Staff[];
+  roles: RolePick[];
+}) {
+  // Owner is never assignable to a staff member.
+  const assignable = roles.filter((r) => r.key !== "owner");
+  const defaultRoleId =
+    assignable.find((r) => r.key === "server")?.id ?? assignable[0]?.id ?? "";
+
   const [staff, setStaff] = useState<Staff[]>(initialStaff);
   const [name, setName] = useState("");
-  const [role, setRole] = useState("staff");
+  const [roleId, setRoleId] = useState(defaultRoleId);
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const [manageId, setManageId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [editRole, setEditRole] = useState("staff");
+  const [editRoleId, setEditRoleId] = useState(defaultRoleId);
   const [newPin, setNewPin] = useState("");
   const [rowError, setRowError] = useState<string | null>(null);
+
+  function roleLabel(s: Staff): string {
+    const r = roles.find((x) => x.id === s.role_id);
+    if (r) return r.name;
+    return LEGACY_ROLE_LABELS[s.role] || s.role;
+  }
 
   function handleAdd() {
     setError(null);
@@ -30,22 +60,26 @@ export function StaffCard({ initialStaff }: { initialStaff: Staff[] }) {
       setError("Name is required.");
       return;
     }
+    if (!roleId) {
+      setError("Choose a role.");
+      return;
+    }
     if (!/^[0-9]{4,6}$/.test(pin)) {
       setError("PIN must be 4 to 6 digits.");
       return;
     }
     startTransition(async () => {
-      const res = await createStaff(name.trim(), role, pin);
+      const res = await createStaff(name.trim(), roleId, pin);
       if ("error" in res) {
         setError(res.error);
         return;
       }
       setStaff((prev) => [
         ...prev,
-        { id: res.id, name: name.trim(), role: role, is_active: true, has_pin: true },
+        { id: res.id, name: name.trim(), role: "staff", role_id: roleId, is_active: true, has_pin: true },
       ]);
       setName("");
-      setRole("staff");
+      setRoleId(defaultRoleId);
       setPin("");
     });
   }
@@ -53,7 +87,7 @@ export function StaffCard({ initialStaff }: { initialStaff: Staff[] }) {
   function openManage(s: Staff) {
     setRowError(null);
     setEditName(s.name);
-    setEditRole(s.role);
+    setEditRoleId(s.role_id ?? defaultRoleId);
     setNewPin("");
     setManageId((prev) => (prev === s.id ? null : s.id));
   }
@@ -65,13 +99,15 @@ export function StaffCard({ initialStaff }: { initialStaff: Staff[] }) {
       return;
     }
     startTransition(async () => {
-      const res = await updateStaff(s.id, editName.trim(), editRole);
+      const res = await updateStaff(s.id, editName.trim(), editRoleId);
       if ("error" in res) {
         setRowError(res.error);
         return;
       }
       setStaff((prev) =>
-        prev.map((x) => (x.id === s.id ? { ...x, name: editName.trim(), role: editRole } : x))
+        prev.map((x) =>
+          x.id === s.id ? { ...x, name: editName.trim(), role_id: editRoleId } : x
+        )
       );
     });
   }
@@ -108,7 +144,8 @@ export function StaffCard({ initialStaff }: { initialStaff: Staff[] }) {
     <div>
       <p className="text-sm text-muted-foreground mb-3">
         Staff who operate the register. Each gets a PIN to identify themselves at
-        checkout. Managers can approve actions like voids and refunds.
+        checkout. Their role decides what they can do — edit roles under Roles &
+        permissions.
       </p>
 
       {staff.length > 0 && (
@@ -123,7 +160,7 @@ export function StaffCard({ initialStaff }: { initialStaff: Staff[] }) {
                       {s.name}
                     </span>
                     <span className="ml-2 text-xs text-muted-foreground">
-                      {ROLE_LABELS[s.role] || s.role}
+                      {roleLabel(s)}
                     </span>
                     {!s.has_pin && <span className="ml-2 text-xs text-amber-500">No PIN</span>}
                   </div>
@@ -140,10 +177,10 @@ export function StaffCard({ initialStaff }: { initialStaff: Staff[] }) {
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs">Role</Label>
-                        <select value={editRole} onChange={(e) => setEditRole(e.target.value)} className="h-9 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
-                          <option value="manager">Manager</option>
-                          <option value="staff">Staff</option>
-                          <option value="trainee">Trainee</option>
+                        <select value={editRoleId} onChange={(e) => setEditRoleId(e.target.value)} className="h-9 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
+                          {assignable.map((r) => (
+                            <option key={r.id} value={r.id}>{r.name}</option>
+                          ))}
                         </select>
                       </div>
                       <Button size="sm" onClick={() => handleSaveDetails(s)} disabled={pending}>
@@ -178,10 +215,10 @@ export function StaffCard({ initialStaff }: { initialStaff: Staff[] }) {
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Role</Label>
-          <select value={role} onChange={(e) => setRole(e.target.value)} className="h-9 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
-            <option value="manager">Manager</option>
-            <option value="staff">Staff</option>
-            <option value="trainee">Trainee</option>
+          <select value={roleId} onChange={(e) => setRoleId(e.target.value)} className="h-9 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
+            {assignable.map((r) => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
           </select>
         </div>
         <div className="space-y-1">

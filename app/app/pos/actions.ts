@@ -2,6 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { staffPermissionsById } from "@/lib/services/permissions-server";
+import { type PermissionKey } from "@/lib/services/permissions";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
@@ -137,6 +139,27 @@ async function getManagerByPin(
   });
   const row = Array.isArray(data) ? data[0] : data;
   if (!row || row.role !== "manager") return null;
+  return { id: row.id as string, name: row.name as string };
+}
+
+// Permission-aware approver: verifies the PIN and that the resolved staff member
+// actually holds the required permission (managers do by default, plus any
+// custom role granted it — e.g. a Shift-lead with `void`).
+async function getApproverByPin(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  pin: string | undefined,
+  permission: PermissionKey
+): Promise<{ id: string; name: string } | null> {
+  if (!pin || !/^[0-9]{4,6}$/.test(pin)) return null;
+  const { data } = await supabase.rpc("verify_staff_member_pin", {
+    p_business_id: businessId,
+    p_pin: pin,
+  });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  const perms = await staffPermissionsById(supabase, businessId, row.id as string);
+  if (!perms || !perms.can(permission)) return null;
   return { id: row.id as string, name: row.name as string };
 }
 
@@ -897,10 +920,17 @@ export async function voidOrder(
 
   const active = await getActiveStaffRow(supabase, business.id);
   let approver: { id: string; name: string } | null = null;
-  if (active && (active.role === "staff" || active.role === "trainee")) {
-    if (!approverPin) return { needs_approval: true };
-    approver = await getManagerByPin(supabase, business.id, approverPin);
-    if (!approver) return { error: "Manager PIN not recognized." };
+  // The acting cashier needs the `void` permission; otherwise a staff member who
+  // holds it must approve by PIN. With the default role matrix this is identical
+  // to the old "staff/trainee need a manager" behavior.
+  if (active) {
+    const actorPerms = await staffPermissionsById(supabase, business.id, active.id);
+    const actorCanVoid = actorPerms?.can("void") ?? false;
+    if (!actorCanVoid) {
+      if (!approverPin) return { needs_approval: true };
+      approver = await getApproverByPin(supabase, business.id, approverPin, "void");
+      if (!approver) return { error: "That PIN can't approve a void." };
+    }
   }
 
   const {
