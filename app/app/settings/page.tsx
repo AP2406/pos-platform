@@ -10,6 +10,7 @@ import { ShowPhotosForm } from "./show-photos-form";
 import { StaffCard } from "./staff-card";
 import { RolesCard } from "./roles-card";
 import { listRoles } from "./roles-actions";
+import { DayCloseCard } from "./day-close-card";
 import { FloorCard } from "./floor-card";
 import { SectionsCard } from "./sections-card";
 import { listSections, listAssignableTables } from "../pos/sections-actions";
@@ -121,6 +122,12 @@ export default async function SettingsPage() {
     }));
     rolesList = await listRoles();
   }
+
+  const daySettings = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
+  const dayCutoff = typeof daySettings.business_day_cutoff === "string" ? daySettings.business_day_cutoff : "00:00";
+  const dayEmails = Array.isArray(daySettings.z_report_emails)
+    ? (daySettings.z_report_emails as unknown[]).filter((e): e is string => typeof e === "string")
+    : [];
 
   const showFloor =
     hasFloorService(business) && (role === "owner" || role === "manager");
@@ -352,6 +359,12 @@ export default async function SettingsPage() {
             <SectionHeader>Register</SectionHeader>
             <ShowPhotosForm initialEnabled={showItemPhotos} />
           </div>
+          {hasFloorService(business) && (
+            <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
+              <SectionHeader>Day close &amp; Z-report</SectionHeader>
+              <DayCloseCard cutoff={dayCutoff} emails={dayEmails} />
+            </div>
+          )}
           {business.industry === "transportation" && (
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
               <SectionHeader>Features</SectionHeader>

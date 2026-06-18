@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { getActiveStaff } from "../staff-session";
 import { actorCan, approverByPin } from "@/lib/services/permissions-server";
 import { businessDateFor, parseCutoff } from "@/lib/services/business-day";
+import { sendEmail, isEmailConfigured } from "@/lib/services/email";
 import { CASH_MOVEMENT_REASONS, isValidReason } from "../reason-codes";
 
 // No Sale / Pay In / Pay Out. Recorded in cash_movements and folded into the
@@ -376,6 +377,48 @@ export async function closeDrawerSession(input: {
   });
   if (zErr && (zErr as { code?: string }).code !== "23505") {
     console.error("z_report insert:", zErr);
+  }
+
+  // Auto-email the Z-report to the configured recipients (best-effort).
+  const settings = (business as { settings?: Record<string, unknown> }).settings ?? {};
+  const recipients = Array.isArray((settings as { z_report_emails?: unknown }).z_report_emails)
+    ? ((settings as { z_report_emails: unknown[] }).z_report_emails.filter(
+        (e): e is string => typeof e === "string"
+      ))
+    : [];
+  if (recipients.length > 0 && isEmailConfigured()) {
+    const bizName = (business as { name?: string }).name || "Your business";
+    const fmt = (n: number) =>
+      "$" + (Math.round((Number(n) || 0) * 100) / 100).toFixed(2);
+    const rows: [string, string][] = [
+      ["Gross sales", fmt(totals.gross_sales)],
+      ["Net (pre-tax)", fmt(totals.net_sales)],
+      ["Tax", fmt(totals.tax)],
+      ["Tips", fmt(totals.tips)],
+      ["Discounts", fmt(totals.discounts)],
+      ["Comps", fmt(totals.comps)],
+      ["Voids", `${totals.void_count} · ${fmt(totals.void_amount)}`],
+      ["Cash / Card / Other", `${fmt(totals.cash_sales)} / ${fmt(totals.card_sales)} / ${fmt(totals.other_sales)}`],
+      ["Refunds", fmt(totals.refunds)],
+      ["Pay in / out", `${fmt(totals.pay_ins)} / ${fmt(totals.pay_outs)}`],
+      ["Expected cash", fmt(totals.expected_cash)],
+      ["Counted cash", fmt(counted)],
+      ["Over / short", (overShort > 0 ? "+" : "") + fmt(overShort)],
+    ];
+    const html =
+      `<h2>Z-report — ${bizName}</h2><p>Business day ${businessDate} · ${totals.sale_count} sale(s)</p>` +
+      `<table cellpadding="6" style="border-collapse:collapse">` +
+      rows
+        .map(
+          ([k, v]) =>
+            `<tr><td style="color:#666">${k}</td><td style="text-align:right;font-variant-numeric:tabular-nums"><strong>${v}</strong></td></tr>`
+        )
+        .join("") +
+      `</table>`;
+    for (const to of recipients.slice(0, 10)) {
+      const sent = await sendEmail({ to, subject: `Z-report — ${bizName} — ${businessDate}`, html });
+      if ("error" in sent) console.error("z_report email:", sent.error);
+    }
   }
 
   revalidatePath("/app/pos/drawer");
