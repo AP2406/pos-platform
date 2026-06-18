@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback, useTransition } from "react";
+import { useEffect, useState, useCallback, useRef, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Chip, type ChipTone } from "@/components/ui/chip";
 import { displayItemName, formatDuration } from "@/lib/format";
 import { allergenLabels } from "@/lib/allergens";
-import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady, setOrderItemPrepared } from "./actions";
+import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady, setOrderItemPrepared, recallKitchenTicket, recallOrder } from "./actions";
 import { printReceiptHtml } from "../pos/qz-print";
 
 function allergenText(it: { allergens?: string[] | null; allergy?: string | null }): string {
@@ -54,20 +54,77 @@ type KitchenOrder = {
   items: KitchenItem[];
 };
 
+type RecentTicket = { id: string; kind: "kitchen" | "order"; label: string; fulfilledAt: string };
+
 export function KitchenClient({
   businessId,
   initialOrders,
   stations,
+  recent,
 }: {
   businessId: string;
   initialOrders: KitchenOrder[];
   stations: KitchenStation[];
+  recent?: RecentTicket[];
 }) {
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders);
   const [stationFilter, setStationFilter] = useState<string>("all");
   const [showAllDay, setShowAllDay] = useState(true);
   const [view, setView] = useState<"stations" | "expo">("stations");
   const [pending, startTransition] = useTransition();
+  const [recentList, setRecentList] = useState<RecentTicket[]>(recent ?? []);
+  useEffect(() => { setRecentList(recent ?? []); }, [recent]);
+
+  // Audible alerts (per-device, off by default). Web Audio beeps — no files.
+  const [soundOn, setSoundOn] = useState(false);
+  useEffect(() => {
+    try { setSoundOn(localStorage.getItem("kds_sound") === "1"); } catch {}
+  }, []);
+  const soundOnRef = useRef(soundOn);
+  useEffect(() => { soundOnRef.current = soundOn; }, [soundOn]);
+  const audioCtx = useRef<AudioContext | null>(null);
+  const seenIds = useRef<Set<string>>(new Set(initialOrders.map((o) => o.id)));
+  const alarmedIds = useRef<Set<string>>(new Set());
+
+  const beep = useCallback((freq: number, durMs: number, type: OscillatorType = "sine") => {
+    if (!soundOnRef.current) return;
+    try {
+      const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!audioCtx.current) audioCtx.current = new Ctx();
+      const ctx = audioCtx.current;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      gain.gain.value = 0.07;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + durMs / 1000);
+    } catch {}
+  }, []);
+  const chime = useCallback(() => { beep(880, 120); window.setTimeout(() => beep(1175, 150), 130); }, [beep]);
+  const alarm = useCallback(() => { beep(440, 220, "square"); window.setTimeout(() => beep(440, 220, "square"), 280); }, [beep]);
+
+  function toggleSound() {
+    setSoundOn((v) => {
+      const next = !v;
+      try { localStorage.setItem("kds_sound", next ? "1" : "0"); } catch {}
+      if (next) beep(1175, 120); // confirmation blip + unlocks the AudioContext
+      return next;
+    });
+  }
+
+  function handleRecall(r: RecentTicket) {
+    startTransition(async () => {
+      const res = r.kind === "kitchen" ? await recallKitchenTicket(r.id) : await recallOrder(r.id);
+      if (!("error" in res)) {
+        setRecentList((prev) => prev.filter((x) => x.id !== r.id));
+        seenIds.current.add(r.id); // it's coming back — don't chime for it
+        refresh();
+      }
+    });
+  }
 
   // Ticks every 15s so the aging timers/colours stay current (display only).
   const [now, setNow] = useState(() => Date.now());
@@ -82,6 +139,26 @@ export function KitchenClient({
     const tone: ChipTone = mins >= 18 ? "danger" : mins >= 10 ? "warning" : "success";
     return { label: formatDuration(mins), tone };
   }
+
+  // New-ticket chime: any id not seen before triggers one chime (seeded on mount,
+  // so the initial board is silent).
+  useEffect(() => {
+    let fresh = false;
+    for (const o of orders) if (!seenIds.current.has(o.id)) { fresh = true; break; }
+    seenIds.current = new Set(orders.map((o) => o.id));
+    if (fresh) chime();
+  }, [orders, chime]);
+
+  // Late alarm: a ticket crossing 18m sounds once.
+  useEffect(() => {
+    for (const o of orders) {
+      const mins = Math.floor((now - new Date(o.createdAt).getTime()) / 60000);
+      if (mins >= 18 && !alarmedIds.current.has(o.id)) {
+        alarmedIds.current.add(o.id);
+        alarm();
+      }
+    }
+  }, [now, orders, alarm]);
 
   const refresh = useCallback(async () => {
     const supabase = createClient();
@@ -378,7 +455,7 @@ export function KitchenClient({
     ) : null;
 
   const viewToggle = (
-    <div className="flex gap-2 mb-4">
+    <div className="flex gap-2 mb-4 items-center">
       {(["stations", "expo"] as const).map((v) => (
         <button
           key={v}
@@ -392,8 +469,39 @@ export function KitchenClient({
           {v === "stations" ? "By station" : "Expo"}
         </button>
       ))}
+      <button
+        type="button"
+        onClick={toggleSound}
+        title={soundOn ? "Sound alerts on" : "Sound alerts off"}
+        className={
+          "ml-auto text-sm rounded-md px-3 py-1.5 border " +
+          (soundOn
+            ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
+            : "border-border hover:bg-accent text-muted-foreground")
+        }
+      >
+        {soundOn ? "🔊 Sound" : "🔇 Sound"}
+      </button>
     </div>
   );
+
+  const recallStrip =
+    recentList.length > 0 ? (
+      <div className="mb-4 flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-muted-foreground">Recall:</span>
+        {recentList.map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            onClick={() => handleRecall(r)}
+            disabled={pending}
+            className="text-xs px-2 py-1 rounded-md border border-border hover:bg-accent disabled:opacity-60"
+          >
+            {"↩ " + r.label}
+          </button>
+        ))}
+      </div>
+    ) : null;
 
   // One single ticket / order card (used by the station grid and for online
   // orders in the expo grid).
@@ -505,6 +613,7 @@ export function KitchenClient({
     return (
       <div>
         {viewToggle}
+        {recallStrip}
         {allDayPanel}
         {expoGroups.length === 0 && orderCards.length === 0 ? (
           emptyCard
@@ -558,6 +667,7 @@ export function KitchenClient({
   return (
     <div>
       {viewToggle}
+      {recallStrip}
       {stationStrip}
       {allDayPanel}
       {visible.length === 0 ? (

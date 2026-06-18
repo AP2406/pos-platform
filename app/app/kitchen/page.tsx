@@ -126,6 +126,49 @@ export default async function KitchenPage() {
     a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0
   );
 
+  // Recently bumped (last 30 min) — feeds the Recall strip so a too-soon bump
+  // can be restored to the active board in its exact prior state.
+  const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const { data: recentKts } = await supabase
+    .from("kitchen_tickets")
+    .select("id, label, element_id, fulfilled_at")
+    .eq("business_id", business.id)
+    .not("fulfilled_at", "is", null)
+    .gte("fulfilled_at", since)
+    .order("fulfilled_at", { ascending: false })
+    .limit(20);
+  const { data: recentOrders } = await supabase
+    .from("orders")
+    .select("id, customer_id, fulfilled_at")
+    .eq("business_id", business.id)
+    .eq("status", "paid")
+    .not("fulfilled_at", "is", null)
+    .gte("fulfilled_at", since)
+    .order("fulfilled_at", { ascending: false })
+    .limit(20);
+
+  const recent = [
+    ...(recentKts ?? []).map((k) => ({
+      id: k.id as string,
+      kind: "kitchen" as const,
+      label:
+        (k.element_id ? elementLabelById[k.element_id as string] : null) ??
+        (k.label as string | null) ??
+        "Ticket",
+      fulfilledAt: k.fulfilled_at as string,
+    })),
+    ...(recentOrders ?? []).map((o) => ({
+      id: o.id as string,
+      kind: "order" as const,
+      label:
+        (o.customer_id ? customerNames[o.customer_id as string] : null) ??
+        "#" + (o.id as string).slice(0, 6),
+      fulfilledAt: o.fulfilled_at as string,
+    })),
+  ]
+    .sort((a, b) => (a.fulfilledAt < b.fulfilledAt ? 1 : -1))
+    .slice(0, 12);
+
   return (
     <div>
       <div className="mb-6">
@@ -134,7 +177,7 @@ export default async function KitchenPage() {
           New orders appear here automatically. Tap Done when an order is ready.
         </p>
       </div>
-      <KitchenClient businessId={business.id} initialOrders={initialOrders} stations={stations} />
+      <KitchenClient businessId={business.id} initialOrders={initialOrders} stations={stations} recent={recent} />
     </div>
   );
 }

@@ -62,6 +62,51 @@ export async function refireKitchenTicket(
   return { ok: true };
 }
 
+// Recall (un-bump) a kitchen ticket: clear fulfilled_at so it returns to the
+// active board in its EXACT prior state — the per-item `ready` flags live on the
+// items jsonb and are never cleared on bump, so a recalled ticket shows which
+// lines were already plated. Distinct from re-fire (which makes a fresh copy).
+export async function recallKitchenTicket(
+  ticketId: string
+): Promise<{ ok: true } | { error: string }> {
+  if (!ticketId) return { error: "Missing ticket." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("kitchen_tickets")
+    .update({ fulfilled_at: null })
+    .eq("id", ticketId)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("recallKitchenTicket:", error);
+    return { error: "Could not recall the ticket." };
+  }
+  revalidatePath("/app/kitchen");
+  return { ok: true };
+}
+
+// Recall an online/takeout order ticket — clears fulfilled_at; the per-item
+// prepared set (orders.kds_prepared) is preserved, so it returns with the same
+// lines bumped.
+export async function recallOrder(
+  orderId: string
+): Promise<{ ok: true } | { error: string }> {
+  if (!orderId) return { error: "Missing order." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("orders")
+    .update({ fulfilled_at: null })
+    .eq("id", orderId)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("recallOrder:", error);
+    return { error: "Could not recall the order." };
+  }
+  revalidatePath("/app/kitchen");
+  return { ok: true };
+}
+
 // P1-17: mark a single line on a fired ticket ready (or un-ready) as the cook
 // plates it. Stored as a `ready` flag inside the items jsonb — that array is the
 // fired kitchen snapshot, never a financial record, so mutating it is safe.
