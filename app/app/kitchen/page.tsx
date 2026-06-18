@@ -11,7 +11,7 @@ export default async function KitchenPage() {
 
   const { data: orders } = await supabase
     .from("orders")
-    .select("id, total, customer_id, created_at, kds_prepared")
+    .select("id, total, customer_id, created_at, kds_prepared, rush")
     .eq("business_id", business.id)
     .eq("status", "paid")
     .is("fulfilled_at", null)
@@ -73,6 +73,7 @@ export default async function KitchenPage() {
     stationName: null as string | null,
     elementId: null as string | null,
     tableName: null as string | null,
+    rush: (o.rush as boolean | null) ?? false,
     items: itemsByOrder[o.id as string] ?? [],
   }));
 
@@ -80,7 +81,7 @@ export default async function KitchenPage() {
   // they never count as revenue; the KDS shows both.
   const { data: kts } = await supabase
     .from("kitchen_tickets")
-    .select("id, label, items, fired_at, station_id, element_id")
+    .select("id, label, items, fired_at, station_id, element_id, rush")
     .eq("business_id", business.id)
     .is("fulfilled_at", null)
     .order("fired_at", { ascending: true });
@@ -116,6 +117,7 @@ export default async function KitchenPage() {
       stationName: stationId ? stationNameById[stationId] ?? null : null,
       elementId,
       tableName: elementId ? elementLabelById[elementId] ?? "Table" : (k.label as string | null) ?? "Ticket",
+      rush: (k.rush as boolean | null) ?? false,
       items: Array.isArray(k.items)
         ? (k.items as { name: string; quantity: number; note?: string | null; seat?: number | null; allergens?: string[] | null; allergy?: string | null; prep_minutes?: number | null; void?: boolean }[])
         : [],

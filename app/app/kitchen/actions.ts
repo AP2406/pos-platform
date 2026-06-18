@@ -62,6 +62,30 @@ export async function refireKitchenTicket(
   return { ok: true };
 }
 
+// Flag a ticket/order as Rush so it floats to the front of the line and shows a
+// loud badge. Non-financial display flag (the paid-order guard permits it).
+export async function setTicketRush(
+  id: string,
+  kind: "kitchen" | "order",
+  rush: boolean
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing ticket." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const table = kind === "order" ? "orders" : "kitchen_tickets";
+  const { error } = await supabase
+    .from(table)
+    .update({ rush })
+    .eq("id", id)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("setTicketRush:", error);
+    return { error: "Could not flag the ticket." };
+  }
+  revalidatePath("/app/kitchen");
+  return { ok: true };
+}
+
 // Recall (un-bump) a kitchen ticket: clear fulfilled_at so it returns to the
 // active board in its EXACT prior state — the per-item `ready` flags live on the
 // items jsonb and are never cleared on bump, so a recalled ticket shows which

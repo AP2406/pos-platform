@@ -7,7 +7,7 @@ import { Chip, type ChipTone } from "@/components/ui/chip";
 import { displayItemName, formatDuration } from "@/lib/format";
 import { allergenLabels } from "@/lib/allergens";
 import { setCatalogItemOutOfStock } from "../catalog/actions";
-import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady, setOrderItemPrepared, recallKitchenTicket, recallOrder } from "./actions";
+import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady, setOrderItemPrepared, recallKitchenTicket, recallOrder, setTicketRush } from "./actions";
 import { printReceiptHtml } from "../pos/qz-print";
 
 function allergenText(it: { allergens?: string[] | null; allergy?: string | null }): string {
@@ -52,6 +52,7 @@ type KitchenOrder = {
   stationName: string | null;
   elementId: string | null;
   tableName: string | null;
+  rush?: boolean;
   items: KitchenItem[];
 };
 
@@ -136,6 +137,17 @@ export function KitchenClient({
     });
   }
 
+  function handleRush(o: KitchenOrder) {
+    const next = !o.rush;
+    setOrders((prev) => prev.map((x) => (x.id === o.id ? { ...x, rush: next } : x)));
+    startTransition(async () => {
+      const res = await setTicketRush(o.id, o.kind, next);
+      if ("error" in res) {
+        setOrders((prev) => prev.map((x) => (x.id === o.id ? { ...x, rush: !next } : x)));
+      }
+    });
+  }
+
   function handleRecall(r: RecentTicket) {
     startTransition(async () => {
       const res = r.kind === "kitchen" ? await recallKitchenTicket(r.id) : await recallOrder(r.id);
@@ -202,7 +214,7 @@ export function KitchenClient({
 
     const { data: orderRows } = await supabase
       .from("orders")
-      .select("id, customer_id, created_at, kds_prepared")
+      .select("id, customer_id, created_at, kds_prepared, rush")
       .eq("business_id", businessId)
       .eq("status", "paid")
       .is("fulfilled_at", null)
@@ -261,12 +273,13 @@ export function KitchenClient({
       stationName: null,
       elementId: null,
       tableName: null,
+      rush: (o.rush as boolean | null) ?? false,
       items: itemsByOrder[o.id as string] ?? [],
     }));
 
     const { data: kts } = await supabase
       .from("kitchen_tickets")
-      .select("id, label, items, fired_at, station_id, element_id")
+      .select("id, label, items, fired_at, station_id, element_id, rush")
       .eq("business_id", businessId)
       .is("fulfilled_at", null)
       .order("fired_at", { ascending: true });
@@ -299,6 +312,7 @@ export function KitchenClient({
       stationName: stationId ? stationNameById[stationId] ?? null : null,
       elementId,
       tableName: elementId ? elementLabelById[elementId] ?? "Table" : (k.label as string | null) ?? "Ticket",
+      rush: (k.rush as boolean | null) ?? false,
       items: Array.isArray(k.items) ? (k.items as KitchenItem[]) : [],
     };
     });
@@ -413,8 +427,11 @@ export function KitchenClient({
 
   // P1-14: a station screen sees only its own tickets. "All" shows everything
   // (including online orders, which have no station).
-  const visible =
-    stationFilter === "all" ? orders : orders.filter((o) => o.stationId === stationFilter);
+  const visible = (
+    stationFilter === "all" ? orders : orders.filter((o) => o.stationId === stationFilter)
+  )
+    .slice()
+    .sort((a, b) => (a.rush === b.rush ? 0 : a.rush ? -1 : 1)); // rush floats to front (stable)
 
   // P1-15: all-day counts — total ORDERED quantity of each item across every
   // visible (unfulfilled) ticket, so the line sees full demand at a glance.
@@ -601,10 +618,18 @@ export function KitchenClient({
     const allReady = o.items.length > 0 && o.items.every((it) => it.ready);
     // A void/86 notice fired to the kitchen — loud red so the line can't miss it.
     const isVoid = o.items.some((it) => it.void === true);
+    const ringClass = isVoid
+      ? "ring-2 ring-red-500/70 bg-red-500/5"
+      : o.rush
+      ? "ring-2 ring-orange-500/70 bg-orange-500/5"
+      : "ring-1 ring-line";
     return (
-      <div key={o.id} className={"bg-card shadow-elevation rounded-xl p-4 flex flex-col " + (isVoid ? "ring-2 ring-red-500/70 bg-red-500/5" : "ring-1 ring-line")}>
+      <div key={o.id} className={"bg-card shadow-elevation rounded-xl p-4 flex flex-col " + ringClass}>
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="min-w-0">
+            {o.rush && !isVoid && (
+              <div className="text-[11px] font-bold uppercase tracking-wide text-orange-600 mb-0.5">🔥 Rush</div>
+            )}
             {isVoid ? (
               <div className="text-lg font-bold leading-tight truncate text-red-600">⚠ VOID — {o.tableName ?? o.tableLabel ?? "Table"}</div>
             ) : o.kind === "kitchen" ? (
@@ -666,6 +691,17 @@ export function KitchenClient({
           )}
         </div>
         <div className="flex gap-2 mt-3">
+          {!isVoid && (
+            <Button
+              variant="outline"
+              size="touch"
+              onClick={() => handleRush(o)}
+              disabled={pending}
+              className={o.rush ? "border-orange-500/60 text-orange-600" : ""}
+            >
+              {o.rush ? "Unrush" : "Rush"}
+            </Button>
+          )}
           <Button variant="outline" size="touch" onClick={() => handleReprint(o)}>Reprint</Button>
           {o.kind === "kitchen" && (
             <Button variant="outline" size="touch" onClick={() => handleRefire(o)} disabled={pending}>Re-fire</Button>
