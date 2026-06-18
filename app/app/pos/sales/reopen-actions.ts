@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { actorCan, approverByPin } from "@/lib/services/permissions-server";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 
@@ -24,25 +25,18 @@ async function getActiveStaffRow(supabase: Awaited<ReturnType<typeof createClien
   return { id: data.id as string, name: data.name as string, role: data.role as string };
 }
 
-async function getManagerByPin(supabase: Awaited<ReturnType<typeof createClient>>, businessId: string, pin: string | undefined) {
-  if (!pin || !/^[0-9]{4,6}$/.test(pin)) return null;
-  const { data } = await supabase.rpc("verify_staff_member_pin", { p_business_id: businessId, p_pin: pin });
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row || row.role !== "manager") return null;
-  return { id: row.id as string, name: row.name as string };
-}
-
-// Resolve actor + (if a staff/trainee is on the device) require a manager PIN.
+// Resolve actor + require approval unless the active operator holds
+// `reopen_closed_check` (behavior-preserving: server/host need a manager PIN).
 async function approve(
   supabase: Awaited<ReturnType<typeof createClient>>,
   businessId: string,
   approverPin: string | undefined
 ): Promise<{ active: { id: string; name: string; role: string } | null; approver: { id: string; name: string } | null } | { needsApproval: true } | { error: string }> {
   const active = await getActiveStaffRow(supabase, businessId);
-  if (active && (active.role === "staff" || active.role === "trainee")) {
+  if (active && !(await actorCan(supabase, businessId, active.id, "reopen_closed_check"))) {
     if (!approverPin) return { needsApproval: true };
-    const approver = await getManagerByPin(supabase, businessId, approverPin);
-    if (!approver) return { error: "Manager PIN not recognized." };
+    const approver = await approverByPin(supabase, businessId, approverPin, "reopen_closed_check");
+    if (!approver) return { error: "That PIN can't approve this." };
     return { active, approver };
   }
   return { active, approver: null };

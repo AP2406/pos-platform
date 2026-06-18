@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { getActiveStaff } from "../staff-session";
-import { verifyManagerPin } from "../approval-actions";
+import { actorCan, approverByPin } from "@/lib/services/permissions-server";
 import { CASH_MOVEMENT_REASONS, isValidReason } from "../reason-codes";
 
 // No Sale / Pay In / Pay Out. Recorded in cash_movements and folded into the
@@ -51,13 +51,15 @@ export async function recordCashMovement(input: {
     return { error: "Start the day before moving cash." };
   }
 
-  // Manager PIN gate for staff/trainee on cash adjustments.
+  // The active operator needs the `open_drawer` permission for a cash
+  // adjustment; otherwise someone who holds it must approve by PIN.
+  // Behavior-preserving (server/host need a manager; manager/owner don't).
   if (kind !== "no_sale") {
     const active = await getActiveStaff();
-    if (active && (active.role === "staff" || active.role === "trainee")) {
+    if (active && !(await actorCan(supabase, business.id, active.id, "open_drawer"))) {
       if (!input.approver_pin) return { needs_approval: true };
-      const v = await verifyManagerPin(input.approver_pin);
-      if ("error" in v) return { error: v.error };
+      const approver = await approverByPin(supabase, business.id, input.approver_pin, "open_drawer");
+      if (!approver) return { error: "That PIN can't approve this." };
     }
   }
 

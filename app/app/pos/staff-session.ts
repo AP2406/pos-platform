@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { staffPermissionsById } from "@/lib/services/permissions-server";
 import { cookies } from "next/headers";
 
 const ACTIVE_STAFF_COOKIE = "surge_active_staff";
@@ -13,7 +14,12 @@ const PIN_FAIL_COOKIE = "surge_pin_fails";
 const MAX_PIN_FAILS = 5;
 const LOCKOUT_SECONDS = 60;
 
-export type ActiveStaff = { id: string; name: string; role: string };
+export type ActiveStaff = {
+  id: string;
+  name: string;
+  role: string;
+  permissions: string[];
+};
 
 export async function setActiveStaff(
   pin: string
@@ -62,10 +68,12 @@ export async function setActiveStaff(
 
   // Success — clear the throttle and sign the cashier in.
   cookieStore.delete(PIN_FAIL_COOKIE);
+  const perms = await staffPermissionsById(supabase, business.id, row.id as string);
   const staff: ActiveStaff = {
     id: row.id as string,
     name: row.name as string,
     role: row.role as string,
+    permissions: perms?.keys ?? [],
   };
   cookieStore.set(ACTIVE_STAFF_COOKIE, staff.id, {
     httpOnly: true,
@@ -88,12 +96,12 @@ export async function getActiveStaff(): Promise<ActiveStaff | null> {
   if (!id) return null;
   const { business } = await requireBusiness();
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("staff_members")
-    .select("id, name, role, is_active")
-    .eq("id", id)
-    .eq("business_id", business.id)
-    .maybeSingle();
-  if (!data || data.is_active === false) return null;
-  return { id: data.id as string, name: data.name as string, role: data.role as string };
+  const perms = await staffPermissionsById(supabase, business.id, id);
+  if (!perms) return null;
+  return {
+    id: perms.staffId,
+    name: perms.name,
+    role: perms.legacyRole,
+    permissions: perms.keys,
+  };
 }

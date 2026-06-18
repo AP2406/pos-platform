@@ -13,6 +13,7 @@ export type StaffPermissions = {
   staffId: string;
   name: string;
   legacyRole: string;
+  keys: PermissionKey[];
   can: (perm: PermissionKey) => boolean;
 };
 
@@ -54,8 +55,40 @@ export async function staffPermissionsById(
     staffId: st.id as string,
     name: st.name as string,
     legacyRole: st.role as string,
+    keys: Array.from(set),
     can: (perm: PermissionKey) => set.has(perm),
   };
+}
+
+// True if the given staff member holds the permission (false if unknown).
+export async function actorCan(
+  supabase: SupabaseClient,
+  businessId: string,
+  staffId: string,
+  permission: PermissionKey
+): Promise<boolean> {
+  const p = await staffPermissionsById(supabase, businessId, staffId);
+  return p?.can(permission) ?? false;
+}
+
+// Verifies an approver PIN and that the resolved staff member holds the required
+// permission (managers do by default, plus any custom role granted it).
+export async function approverByPin(
+  supabase: SupabaseClient,
+  businessId: string,
+  pin: string | undefined,
+  permission: PermissionKey
+): Promise<{ id: string; name: string } | null> {
+  if (!pin || !/^[0-9]{4,6}$/.test(pin)) return null;
+  const { data } = await supabase.rpc("verify_staff_member_pin", {
+    p_business_id: businessId,
+    p_pin: pin,
+  });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  const perms = await staffPermissionsById(supabase, businessId, row.id as string);
+  if (!perms || !perms.can(permission)) return null;
+  return { id: row.id as string, name: row.name as string };
 }
 
 // The currently signed-in cashier's permissions (from the surge_active_staff

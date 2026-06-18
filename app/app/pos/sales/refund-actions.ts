@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { actorCan, approverByPin } from "@/lib/services/permissions-server";
 import { refundTransfer } from "@/lib/services/finix";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
@@ -28,22 +29,6 @@ async function getActiveStaffRow(
     .maybeSingle();
   if (!data || data.is_active === false) return null;
   return { id: data.id as string, name: data.name as string, role: data.role as string };
-}
-
-// Verify a PIN belongs to an active manager. Returns the manager or null.
-async function getManagerByPin(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  businessId: string,
-  pin: string | undefined
-): Promise<{ id: string; name: string } | null> {
-  if (!pin || !/^[0-9]{4,6}$/.test(pin)) return null;
-  const { data } = await supabase.rpc("verify_staff_member_pin", {
-    p_business_id: businessId,
-    p_pin: pin,
-  });
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row || row.role !== "manager") return null;
-  return { id: row.id as string, name: row.name as string };
 }
 
 type RefundLineInput = { order_item_id: string; quantity: number };
@@ -138,13 +123,15 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   }
   const supabase = await createClient();
 
-  // If a staff/trainee is the active operator, a manager must approve.
+  // The active operator needs the `refund` permission; otherwise a staff member
+  // who holds it must approve by PIN. Behavior-preserving with the default
+  // matrix (server/host need a manager; manager/owner don't).
   const active = await getActiveStaffRow(supabase, business.id);
   let approver: { id: string; name: string } | null = null;
-  if (active && (active.role === "staff" || active.role === "trainee")) {
+  if (active && !(await actorCan(supabase, business.id, active.id, "refund"))) {
     if (!input.approver_pin) return { needs_approval: true };
-    approver = await getManagerByPin(supabase, business.id, input.approver_pin);
-    if (!approver) return { error: "Manager PIN not recognized." };
+    approver = await approverByPin(supabase, business.id, input.approver_pin, "refund");
+    if (!approver) return { error: "That PIN can't approve a refund." };
   }
 
   const { data: order } = await supabase
