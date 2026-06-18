@@ -695,11 +695,19 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   }
 
   function changeQty(index: number, delta: number) {
-    setCart((prev) =>
-      prev
-        .map((l, i) => (i === index ? { ...l, quantity: l.quantity + delta } : l))
-        .filter((l) => l.quantity > 0)
-    );
+    setCart((prev) => {
+      const cur = prev[index];
+      if (!cur) return prev;
+      const fired = cur.sent_qty ?? 0;
+      let next = cur.quantity + delta;
+      // A fired item can't be reduced below what's already in the kitchen (you
+      // can't un-fire it) — and so can't be removed via the stepper. To take it
+      // off, use Void. Increasing is fine (the new portion is unfired).
+      if (fired > 0 && next < fired) next = fired;
+      return prev
+        .map((l, i) => (i === index ? { ...l, quantity: next } : l))
+        .filter((l) => l.quantity > 0);
+    });
   }
 
   // Remove a single cart line outright (used by the tap-to-edit line sheet).
@@ -852,7 +860,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
           )}
         </button>
         <div className="flex items-center gap-1.5 shrink-0">
-          <button type="button" onClick={() => changeQty(index, -1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">-</button>
+          <button type="button" onClick={() => changeQty(index, -1)} disabled={(line.sent_qty ?? 0) > 0 && line.quantity <= (line.sent_qty ?? 0)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none disabled:opacity-40">-</button>
           <span className="w-6 text-center text-sm tabular-nums">{line.quantity}</span>
           <button type="button" onClick={() => changeQty(index, 1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">+</button>
         </div>
@@ -2606,15 +2614,25 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => changeQty(editLineIndex, -1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">-</button>
+                    <button type="button" onClick={() => changeQty(editLineIndex, -1)} disabled={(cart[editLineIndex].sent_qty ?? 0) > 0 && cart[editLineIndex].quantity <= (cart[editLineIndex].sent_qty ?? 0)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none disabled:opacity-40">-</button>
                     <span className="w-8 text-center text-base tabular-nums">{cart[editLineIndex].quantity}</span>
                     <button type="button" onClick={() => changeQty(editLineIndex, 1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">+</button>
                   </div>
                   <span className="text-base font-semibold tabular-nums">{"$" + (cart[editLineIndex].unit_price * cart[editLineIndex].quantity).toFixed(2)}</span>
                 </div>
+                {(cart[editLineIndex].sent_qty ?? 0) > 0 && (
+                  <p className="text-[11px] text-amber-600 mt-1.5">
+                    🔒 Already sent to the kitchen — you can add more or change the note, but not reduce or remove it. To take it off, use Void.
+                  </p>
+                )}
                 <div className="space-y-1 mt-3">
                   <Label className="text-xs">Kitchen note</Label>
                   <Input value={cart[editLineIndex].note ?? ""} onChange={(e) => setLineNote(editLineIndex, e.target.value)} placeholder="e.g. no onions, well done" className="h-10" />
+                  {(cart[editLineIndex].sent_qty ?? 0) > 0 && (cart[editLineIndex].note ?? "").trim() !== "" && (
+                    <p className="text-[11px] font-medium text-amber-700 dark:text-amber-500">
+                      ⚠ This item is already in the kitchen — walk over and tell them about this note in case they don&apos;t see it on the screen.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1 mt-3">
                   <Label className="text-xs text-red-600 font-semibold">Allergy ⚠</Label>
@@ -2624,9 +2642,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                   <div className="space-y-1 mt-3">
                     <Label className="text-xs">Seat</Label>
                     <div className="flex items-center gap-1 flex-wrap">
-                      <button type="button" onClick={() => setLineSeat(editLineIndex, null)} className={"text-xs rounded-md border px-2.5 py-1.5 " + ((cart[editLineIndex].seat ?? null) === null ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground")}>Shared</button>
+                      <button type="button" disabled={(cart[editLineIndex].sent_qty ?? 0) >= cart[editLineIndex].quantity} onClick={() => setLineSeat(editLineIndex, null)} className={"text-xs rounded-md border px-2.5 py-1.5 disabled:opacity-40 " + ((cart[editLineIndex].seat ?? null) === null ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground")}>Shared</button>
                       {Array.from({ length: seatCount }, (_, i) => i + 1).map((s) => (
-                        <button key={s} type="button" onClick={() => setLineSeat(editLineIndex, s)} className={"text-xs rounded-md border px-2.5 py-1.5 " + (cart[editLineIndex].seat === s ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground")}>{s}</button>
+                        <button key={s} type="button" disabled={(cart[editLineIndex].sent_qty ?? 0) >= cart[editLineIndex].quantity} onClick={() => setLineSeat(editLineIndex, s)} className={"text-xs rounded-md border px-2.5 py-1.5 disabled:opacity-40 " + (cart[editLineIndex].seat === s ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground")}>{s}</button>
                       ))}
                     </div>
                   </div>
@@ -2636,7 +2654,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                     <Label className="text-xs">Course{(cart[editLineIndex].sent_qty ?? 0) >= cart[editLineIndex].quantity ? " (already fired)" : ""}</Label>
                     <div className="flex items-center gap-1 flex-wrap">
                       {courseList.map((co) => (
-                        <button key={co.id} type="button" onClick={() => setLineCourse(editLineIndex, co.id)} className={"text-xs rounded-md border px-2.5 py-1.5 " + ((cart[editLineIndex].course_id ?? null) === co.id ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground")}>{co.name}</button>
+                        <button key={co.id} type="button" disabled={(cart[editLineIndex].sent_qty ?? 0) >= cart[editLineIndex].quantity} onClick={() => setLineCourse(editLineIndex, co.id)} className={"text-xs rounded-md border px-2.5 py-1.5 disabled:opacity-40 " + ((cart[editLineIndex].course_id ?? null) === co.id ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground")}>{co.name}</button>
                       ))}
                     </div>
                     {(cart[editLineIndex].sent_qty ?? 0) >= cart[editLineIndex].quantity && cart[editLineIndex].quantity > 0 && (
