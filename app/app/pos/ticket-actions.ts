@@ -178,6 +178,8 @@ export async function discardTicket(
 const tableCartLineSchema = cartLineSchema.extend({
   sent_qty: z.coerce.number().int().min(0).max(1000).optional(),
   note: z.string().max(280).optional().nullable(),
+  // Per-line/per-seat allergy tag (P3) — surfaced bold red on the KDS + chit.
+  allergy: z.string().max(120).optional().nullable(),
   // Seat this line belongs to (1-based); null/absent = shared / no seat.
   seat: z.coerce.number().int().min(1).max(99).optional().nullable(),
   // Coursing (P0-1, full-service): which course this line fires with, and when
@@ -561,7 +563,7 @@ export async function sendTableTicket(
     const qty = Number(it.quantity) || 0;
     const sent = Number(it.sent_qty) || 0;
     const delta = qty - sent;
-    if (delta > 0) fired.push({ name: it.name, quantity: delta, note: it.note ?? null, seat: it.seat ?? null, catalog_item_id: it.catalog_item_id ?? null });
+    if (delta > 0) fired.push({ name: it.name, quantity: delta, note: it.note ?? null, seat: it.seat ?? null, catalog_item_id: it.catalog_item_id ?? null, allergy: it.allergy ?? null });
     return { ...it, sent_qty: qty };
   });
 
@@ -647,7 +649,7 @@ export async function fireCourse(
     const sent = Number(it.sent_qty) || 0;
     const delta = qty - sent;
     if (delta <= 0) return it;
-    fired.push({ name: it.name, quantity: delta, note: it.note ?? null, seat: it.seat ?? null, catalog_item_id: it.catalog_item_id ?? null });
+    fired.push({ name: it.name, quantity: delta, note: it.note ?? null, seat: it.seat ?? null, catalog_item_id: it.catalog_item_id ?? null, allergy: it.allergy ?? null });
     return { ...it, sent_qty: qty, fired_at: nowIso };
   });
 

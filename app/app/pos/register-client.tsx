@@ -63,6 +63,8 @@ type CartLine = {
   sent_qty?: number;
   // Optional kitchen note ("no onions", "well done").
   note?: string | null;
+  // Per-line/per-seat allergy tag (P3) — shown bold red on the KDS + chit.
+  allergy?: string | null;
   // Seat this line belongs to (1-based); null = shared.
   seat?: number | null;
   // Coursing (P0-1): which course this line fires with, and when last fired.
@@ -695,6 +697,10 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
 
   function setLineNote(index: number, note: string) {
     setCart((prev) => prev.map((l, i) => (i === index ? { ...l, note: note } : l)));
+  }
+
+  function setLineAllergy(index: number, allergy: string) {
+    setCart((prev) => prev.map((l, i) => (i === index ? { ...l, allergy: allergy || null } : l)));
   }
 
   // Move a line to a different seat (null = shared).
@@ -2462,6 +2468,10 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                 <div className="space-y-1 mt-3">
                   <Label className="text-xs">Kitchen note</Label>
                   <Input value={cart[editLineIndex].note ?? ""} onChange={(e) => setLineNote(editLineIndex, e.target.value)} placeholder="e.g. no onions, well done" className="h-10" />
+                </div>
+                <div className="space-y-1 mt-3">
+                  <Label className="text-xs text-red-600 font-semibold">Allergy ⚠</Label>
+                  <Input value={cart[editLineIndex].allergy ?? ""} onChange={(e) => setLineAllergy(editLineIndex, e.target.value)} placeholder="e.g. peanut allergy, shellfish" className="h-10" />
                 </div>
                 {tableMode && (
                   <div className="space-y-1 mt-3">
