@@ -1,0 +1,188 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import { requireBusiness } from "@/lib/services/tenancy";
+import { getActiveStaff } from "../pos/staff-session";
+import { notifyBusiness } from "@/lib/push";
+import { revalidatePath } from "next/cache";
+
+export type ApprovalRow = {
+  id: string;
+  kind: string;
+  orderId: string | null;
+  saleNumber: number | null;
+  amount: number | null;
+  reasonCode: string | null;
+  reasonNote: string | null;
+  requestedByName: string | null;
+  createdAt: string;
+};
+
+// A cashier without the permission/cap sends an approval request to the queue
+// instead of getting an on-the-spot manager PIN. Best-effort push to managers.
+export async function requestApproval(input: {
+  kind: "void";
+  orderId: string;
+  amount?: number;
+  reasonCode: string;
+  reasonNote?: string;
+}): Promise<{ ok: true } | { error: string }> {
+  if (!input.orderId) return { error: "Missing sale." };
+  if (input.kind !== "void") return { error: "Unsupported request." };
+  if (!input.reasonCode) return { error: "Choose a reason." };
+
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const active = await getActiveStaff();
+
+  // Don't stack duplicate pending requests for the same order+kind.
+  const { data: dup } = await supabase
+    .from("approval_requests")
+    .select("id")
+    .eq("business_id", business.id)
+    .eq("order_id", input.orderId)
+    .eq("kind", input.kind)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (dup) return { ok: true };
+
+  const { error } = await supabase.from("approval_requests").insert({
+    business_id: business.id,
+    kind: input.kind,
+    order_id: input.orderId,
+    amount: input.amount ?? null,
+    reason_code: input.reasonCode,
+    reason_note: input.reasonNote ? input.reasonNote.slice(0, 500) : null,
+    requested_by: active ? active.id : null,
+    requested_by_name: active ? active.name : null,
+    status: "pending",
+  });
+  if (error) {
+    console.error("requestApproval:", error);
+    return { error: "Could not send the request." };
+  }
+
+  await notifyBusiness(business.id, "exception", {
+    title: "Approval needed",
+    body:
+      (input.kind === "void" ? "Void" : input.kind) +
+      (input.amount ? " $" + Number(input.amount).toFixed(2) : "") +
+      (active ? " — " + active.name : ""),
+    url: "/app/approvals",
+  });
+  revalidatePath("/app/approvals");
+  return { ok: true };
+}
+
+export async function listPendingApprovals(): Promise<ApprovalRow[]> {
+  const { business, role } = await requireBusiness();
+  if (role !== "owner" && role !== "manager") return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("approval_requests")
+    .select("id, kind, order_id, amount, reason_code, reason_note, requested_by_name, created_at")
+    .eq("business_id", business.id)
+    .eq("status", "pending")
+    .order("created_at", { ascending: true })
+    .limit(50);
+
+  const rows = data ?? [];
+  const orderIds = Array.from(new Set(rows.map((r) => r.order_id as string | null).filter((x): x is string => !!x)));
+  const saleNo: Record<string, number | null> = {};
+  if (orderIds.length > 0) {
+    const { data: ords } = await supabase
+      .from("orders")
+      .select("id, sale_number")
+      .eq("business_id", business.id)
+      .in("id", orderIds);
+    for (const o of ords ?? []) saleNo[o.id as string] = o.sale_number != null ? Number(o.sale_number) : null;
+  }
+
+  return rows.map((r) => ({
+    id: r.id as string,
+    kind: (r.kind as string) || "",
+    orderId: (r.order_id as string | null) ?? null,
+    saleNumber: r.order_id ? saleNo[r.order_id as string] ?? null : null,
+    amount: r.amount != null ? Number(r.amount) : null,
+    reasonCode: (r.reason_code as string | null) ?? null,
+    reasonNote: (r.reason_note as string | null) ?? null,
+    requestedByName: (r.requested_by_name as string | null) ?? null,
+    createdAt: r.created_at as string,
+  }));
+}
+
+export async function decideApproval(
+  id: string,
+  approve: boolean
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing request." };
+  const { business, role } = await requireBusiness();
+  if (role !== "owner" && role !== "manager") {
+    return { error: "Only an owner or manager can decide approvals." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: req } = await supabase
+    .from("approval_requests")
+    .select("id, kind, order_id, reason_code, reason_note, requested_by, requested_by_name, status")
+    .eq("id", id)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!req) return { error: "Request not found." };
+  if ((req.status as string) !== "pending") return { error: "Already decided." };
+
+  // On approval, execute the action (void only in v1).
+  if (approve && (req.kind as string) === "void" && req.order_id) {
+    const { data: ord } = await supabase
+      .from("orders")
+      .select("total, status")
+      .eq("id", req.order_id as string)
+      .eq("business_id", business.id)
+      .maybeSingle();
+    if (ord && (ord.status as string) !== "voided") {
+      const { error: vErr } = await supabase
+        .from("orders")
+        .update({ status: "voided" })
+        .eq("id", req.order_id as string)
+        .eq("business_id", business.id);
+      if (vErr) {
+        console.error("decideApproval void:", vErr);
+        return { error: "Could not void the sale." };
+      }
+      await supabase.from("audit_events").insert({
+        business_id: business.id,
+        actor_id: user ? user.id : null,
+        actor_role: role,
+        action: "void",
+        order_id: req.order_id as string,
+        reason_code: (req.reason_code as string | null) ?? "approved_request",
+        reason_note: (req.reason_note as string | null) ?? null,
+        metadata: {
+          amount: ord.total != null ? Number(ord.total) : null,
+          staff_id: (req.requested_by as string | null) ?? null,
+          staff_name: (req.requested_by_name as string | null) ?? null,
+          approved_by: user ? user.id : null,
+          via: "approval_queue",
+        },
+      });
+    }
+  }
+
+  const { error } = await supabase
+    .from("approval_requests")
+    .update({ status: approve ? "approved" : "denied", decided_by: user ? user.id : null, decided_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("business_id", business.id)
+    .eq("status", "pending");
+  if (error) {
+    console.error("decideApproval:", error);
+    return { error: "Could not record the decision." };
+  }
+
+  revalidatePath("/app/approvals");
+  revalidatePath("/app/pos/sales");
+  return { ok: true };
+}

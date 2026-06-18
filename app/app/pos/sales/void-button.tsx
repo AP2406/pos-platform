@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { voidOrder } from "../actions";
+import { requestApproval } from "../../approvals/actions";
 import { VOID_REASONS } from "../reason-codes";
 
 export function VoidButton({ orderId }: { orderId: string }) {
@@ -61,6 +62,24 @@ export function VoidButton({ orderId }: { orderId: string }) {
     runVoid(mgrPin);
   }
 
+  const [sent, setSent] = useState(false);
+  function handleRequest() {
+    setError(null);
+    startTransition(async () => {
+      const res = await requestApproval({
+        kind: "void",
+        orderId,
+        reasonCode: reason,
+        reasonNote: reason === "other" ? note.trim() : undefined,
+      });
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      setSent(true);
+    });
+  }
+
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className="text-xs text-muted-foreground underline hover:text-foreground">
@@ -78,21 +97,34 @@ export function VoidButton({ orderId }: { orderId: string }) {
             </div>
 
             {needsApproval ? (
-              <>
-                <p className="text-xs text-muted-foreground mb-3">
-                  A manager must approve this void. Ask a manager to enter their PIN.
-                </p>
-                <input type="password" inputMode="numeric" value={mgrPin} onChange={(e) => setMgrPin(e.target.value)} placeholder="Manager PIN" className="w-full h-9 rounded-md border border-border bg-transparent text-foreground px-3 text-sm" />
-                {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
-                <div className="flex gap-2 mt-3">
-                  <button type="button" onClick={handleApprove} disabled={pending || !mgrPin} className="flex-1 px-3 py-2 text-sm rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
-                    {pending ? "Voiding..." : "Approve & void"}
+              sent ? (
+                <>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Request sent to a manager. The void applies once it&apos;s approved
+                    from the Approvals screen.
+                  </p>
+                  <button type="button" onClick={close} className="w-full px-3 py-2 text-sm rounded-md border border-border hover:bg-accent">
+                    Done
                   </button>
-                  <button type="button" onClick={close} className="flex-1 px-3 py-2 text-sm rounded-md border border-border hover:bg-accent">
-                    Cancel
-                  </button>
-                </div>
-              </>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    A manager must approve this void — enter their PIN now, or send it to
+                    the Approvals queue.
+                  </p>
+                  <input type="password" inputMode="numeric" value={mgrPin} onChange={(e) => setMgrPin(e.target.value)} placeholder="Manager PIN" className="w-full h-9 rounded-md border border-border bg-transparent text-foreground px-3 text-sm" />
+                  {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+                  <div className="flex gap-2 mt-3">
+                    <button type="button" onClick={handleApprove} disabled={pending || !mgrPin} className="flex-1 px-3 py-2 text-sm rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+                      {pending ? "Voiding..." : "Approve & void"}
+                    </button>
+                    <button type="button" onClick={handleRequest} disabled={pending} className="flex-1 px-3 py-2 text-sm rounded-md border border-border hover:bg-accent disabled:opacity-50">
+                      Request approval
+                    </button>
+                  </div>
+                </>
+              )
             ) : (
               <>
                 <p className="text-xs text-muted-foreground mb-3">

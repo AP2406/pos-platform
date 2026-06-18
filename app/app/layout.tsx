@@ -40,6 +40,7 @@ export default async function AppLayout({
     }
     if (role === "owner" || role === "manager") {
       if (hasFloorService(business)) {
+        extras.push({ href: "/app/approvals", label: "Approvals" });
         extras.push({ href: "/app/exceptions", label: "Exceptions" });
       }
       extras.push({ href: "/app/marketing", label: "Marketing" });
