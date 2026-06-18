@@ -256,6 +256,8 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const [splitOpen, setSplitOpen] = useState(false);
   const [splitResult, setSplitResult] = useState<{ mode: "separate" | "informational"; orders: SplitResultOrder[] } | null>(null);
   const [mgrIntent, setMgrIntent] = useState<"tender" | "split" | "action">("tender");
+  // What the manager is being asked to approve, for the modal copy.
+  const [mgrAction, setMgrAction] = useState("this action");
   const [taxExempt, setTaxExempt] = useState(false);
   const [taxExemptReason, setTaxExemptReason] = useState("");
   const [taxExemptNote, setTaxExemptNote] = useState("");
@@ -1227,6 +1229,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     if (scWaived && !serviceWaiveOk) { setError("Choose a reason for waiving the service charge."); return; }
     if (taxExempt && !taxExemptOk) { setError("Choose a reason for the tax exemption."); return; }
     if (needsManagerApproval && !approved) {
+      setMgrAction(taxExempt ? "tax exemption" : "service-charge waive");
       setMgrIntent("split");
       setMgrErr(null);
       setMgrPin("");
@@ -1521,11 +1524,29 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       commit();
       return;
     }
+    const labels: Record<string, string> = {
+      comp: "comp",
+      discount: "discount",
+      void: "void",
+      delete_item_prepay: "item removal",
+      change_tax: "tax change",
+    };
     pendingCommitRef.current = commit;
+    setMgrAction(labels[permission] ?? "action");
     setMgrIntent("action");
     setMgrErr(null);
     setMgrPin("");
     setMgrOpen(true);
+  }
+
+  // Dismiss the manager-approval modal without applying the pending action (and
+  // without disturbing the action sheet underneath it).
+  function cancelMgr() {
+    pendingCommitRef.current = null;
+    setMgrIntent("tender");
+    setMgrErr(null);
+    setMgrPin("");
+    setMgrOpen(false);
   }
 
   function applyComp() {
@@ -1681,6 +1702,8 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       return;
     }
     if (needsManagerApproval && !approved) {
+      setMgrAction(taxExempt ? "tax exemption" : "service-charge waive");
+      setMgrIntent("tender");
       setMgrErr(null);
       setMgrPin("");
       setMgrOpen(true);
@@ -1960,15 +1983,15 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       )}
 
       {mgrOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setMgrOpen(false)}>
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4" onClick={cancelMgr}>
           <div className="bg-card border border-border rounded-lg p-4 w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-medium">Manager approval</h3>
-              <button type="button" onClick={() => setMgrOpen(false)} className="text-xs text-muted-foreground underline">
+              <button type="button" onClick={cancelMgr} className="text-xs text-muted-foreground underline">
                 Cancel
               </button>
             </div>
-            <p className="text-xs text-muted-foreground mb-3">A discount or tax exemption needs a manager{"\u2019"}s PIN to continue.</p>
+            <p className="text-xs text-muted-foreground mb-3">{"This " + mgrAction + " needs a manager" + "\u2019" + "s PIN."}</p>
             <div className="mb-3 h-10 rounded-md border border-border flex items-center justify-center tracking-[0.4em] text-lg">
               {mgrPin ? mgrPin.replace(/./g, "\u2022") : <span className="text-muted-foreground tracking-normal text-sm">PIN</span>}
             </div>
