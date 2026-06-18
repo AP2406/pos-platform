@@ -1101,6 +1101,29 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     setStaff(null);
   }
 
+  // Idle auto-logout: sign the active cashier out after 90s of no interaction so
+  // an unattended till can't ring under the last person's name. Only runs when a
+  // staffed business actually has someone signed in.
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!hasStaff || !staff) return;
+    const IDLE_LOGOUT_MS = 90_000;
+    const reset = () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+      idleTimer.current = setTimeout(() => {
+        clearActiveStaff();
+        setStaff(null);
+      }, IDLE_LOGOUT_MS);
+    };
+    const events: (keyof DocumentEventMap)[] = ["pointerdown", "keydown"];
+    events.forEach((e) => document.addEventListener(e, reset));
+    reset();
+    return () => {
+      events.forEach((e) => document.removeEventListener(e, reset));
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+    };
+  }, [hasStaff, staff]);
+
   function mgrPush(d: string) {
     setMgrErr(null);
     setMgrPin((prev) => (prev.length >= 6 ? prev : prev + d));
@@ -1485,11 +1508,13 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       setError("Add at least one item.");
       return;
     }
-    // Full-service: a sale must be attributed to a cashier/server before it can
-    // close, so By-server reporting is never blank. Gated to table service so
-    // quick-service / retail / transportation close flows are unchanged. The
-    // order's staff_id comes from the signed-in staff (surge_active_staff cookie).
-    if (tableMode && hasStaff && !staff) {
+    // A sale must be attributed to a cashier/server before it can close, so
+    // By-server reporting is never blank and the "Unassigned" sale is gone. This
+    // now covers EVERY close path (table + togo/quick sale), not just tables.
+    // Gated to `hasStaff`, so businesses with no staff configured
+    // (quick-service / retail / transportation) close exactly as before. The
+    // server action enforces the same rule as the real backstop.
+    if (hasStaff && !staff) {
       setError("Enter your cashier PIN to close this sale.");
       openStaffPin();
       return;

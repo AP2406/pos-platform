@@ -137,6 +137,19 @@ export async function finalizeSplitCheck(
     }
   }
 
+  // Attribution guard (same rule as createOrder): a staffed business cannot
+  // close a split under no cashier. No-staff businesses are exempt.
+  if (!activeStaffId) {
+    const { count: activeStaffCount } = await supabase
+      .from("staff_members")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", business.id)
+      .eq("is_active", true);
+    if ((activeStaffCount ?? 0) > 0) {
+      return { error: "A cashier must be signed in to close this sale." };
+    }
+  }
+
   // --- resolve per-item tax fractions (same as createOrder) ---
   let defaultRate = Number(business.default_tax_rate) || 0;
   if (defaultRate > 1) defaultRate = defaultRate / 100;

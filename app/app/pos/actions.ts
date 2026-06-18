@@ -216,6 +216,21 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     }
   }
 
+  // Attribution guard: a staffed business must close every sale under a
+  // signed-in cashier (kills the "Unassigned" sale). Businesses with NO active
+  // staff configured (transportation, solo quick-service/retail) are exempt, so
+  // existing verticals are unaffected.
+  if (!activeStaffId) {
+    const { count: activeStaffCount } = await supabase
+      .from("staff_members")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", business.id)
+      .eq("is_active", true);
+    if ((activeStaffCount ?? 0) > 0) {
+      return { error: "A cashier must be signed in to close this sale." };
+    }
+  }
+
   const subtotal = parsed.data.items.reduce(
     (sum, i) => sum + i.unit_price * i.quantity,
     0

@@ -5,6 +5,13 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { cookies } from "next/headers";
 
 const ACTIVE_STAFF_COOKIE = "surge_active_staff";
+// Per-device PIN throttle. A wrong PIN doesn't identify a staff member, so
+// lockout is enforced at the device level: after MAX_PIN_FAILS consecutive bad
+// entries the pad is frozen for LOCKOUT_SECONDS. State lives in an httpOnly
+// cookie so it survives reloads but stays scoped to this till.
+const PIN_FAIL_COOKIE = "surge_pin_fails";
+const MAX_PIN_FAILS = 5;
+const LOCKOUT_SECONDS = 60;
 
 export type ActiveStaff = { id: string; name: string; role: string };
 
@@ -13,6 +20,24 @@ export async function setActiveStaff(
 ): Promise<{ ok: true; staff: ActiveStaff } | { error: string }> {
   if (!/^[0-9]{4,6}$/.test(pin)) return { error: "Enter your 4 to 6 digit PIN." };
   const { business } = await requireBusiness();
+  const cookieStore = await cookies();
+
+  // Throttle check: cookie holds { n: failedCount, until: epochSeconds }.
+  const now = Math.floor(Date.now() / 1000);
+  let fails = 0;
+  const raw = cookieStore.get(PIN_FAIL_COOKIE)?.value;
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as { n?: number; until?: number };
+      if (parsed.until && parsed.until > now) {
+        return { error: `Too many attempts. Try again in ${parsed.until - now}s.` };
+      }
+      fails = Number(parsed.n) || 0;
+    } catch {
+      fails = 0;
+    }
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("verify_staff_member_pin", {
     p_business_id: business.id,
@@ -23,13 +48,25 @@ export async function setActiveStaff(
     return { error: "Could not verify PIN. Please try again." };
   }
   const row = Array.isArray(data) ? data[0] : data;
-  if (!row) return { error: "PIN not recognized." };
+  if (!row) {
+    const n = fails + 1;
+    const locked = n >= MAX_PIN_FAILS;
+    cookieStore.set(
+      PIN_FAIL_COOKIE,
+      JSON.stringify({ n: locked ? 0 : n, until: locked ? now + LOCKOUT_SECONDS : 0 }),
+      { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 }
+    );
+    if (locked) return { error: `Too many attempts. Try again in ${LOCKOUT_SECONDS}s.` };
+    return { error: `PIN not recognized. ${MAX_PIN_FAILS - n} attempt(s) left.` };
+  }
+
+  // Success — clear the throttle and sign the cashier in.
+  cookieStore.delete(PIN_FAIL_COOKIE);
   const staff: ActiveStaff = {
     id: row.id as string,
     name: row.name as string,
     role: row.role as string,
   };
-  const cookieStore = await cookies();
   cookieStore.set(ACTIVE_STAFF_COOKIE, staff.id, {
     httpOnly: true,
     sameSite: "lax",
