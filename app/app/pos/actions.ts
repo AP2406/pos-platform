@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { staffPermissionsById } from "@/lib/services/permissions-server";
 import { type PermissionKey } from "@/lib/services/permissions";
+import { parseThresholds } from "@/lib/services/exception-thresholds";
+import { notifyBusiness } from "@/lib/push";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
@@ -937,6 +939,16 @@ export async function voidOrder(
     data: { user },
   } = await supabase.auth.getUser();
 
+  // The voided amount — recorded in the audit event (so the exception report can
+  // total it) and compared against the manager-alert threshold.
+  const { data: ord } = await supabase
+    .from("orders")
+    .select("total, sale_number")
+    .eq("id", orderId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  const voidTotal = ord ? Number(ord.total) || 0 : 0;
+
   const { error } = await supabase
     .from("orders")
     .update({ status: "voided" })
@@ -957,6 +969,7 @@ export async function voidOrder(
     reason_code: code,
     reason_note: note ? note.slice(0, 500) : null,
     metadata: {
+      amount: voidTotal,
       staff_id: active ? active.id : null,
       staff_name: active ? active.name : null,
       approved_by: approver ? approver.id : null,
@@ -965,6 +978,19 @@ export async function voidOrder(
   });
   if (auditError) {
     console.error("voidOrder audit:", auditError);
+  }
+
+  // Push a manager alert when the void exceeds the configured amount (best-effort).
+  const th = parseThresholds((business as { settings?: Record<string, unknown> }).settings);
+  if (th.alertVoidAmount > 0 && voidTotal >= th.alertVoidAmount) {
+    const who = active ? active.name : "a cashier";
+    await notifyBusiness(business.id, "exception", {
+      title: "Large void",
+      body:
+        "$" + voidTotal.toFixed(2) + " voided by " + who +
+        (ord?.sale_number ? " (#" + ord.sale_number + ")" : ""),
+      url: "/app/exceptions",
+    });
   }
 
   revalidatePath("/app/pos/sales");

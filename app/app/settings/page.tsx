@@ -11,6 +11,8 @@ import { StaffCard } from "./staff-card";
 import { RolesCard } from "./roles-card";
 import { listRoles } from "./roles-actions";
 import { DayCloseCard } from "./day-close-card";
+import { ExceptionCard } from "./exception-card";
+import { parseThresholds } from "@/lib/services/exception-thresholds";
 import { FloorCard } from "./floor-card";
 import { SectionsCard } from "./sections-card";
 import { listSections, listAssignableTables } from "../pos/sections-actions";
@@ -128,6 +130,7 @@ export default async function SettingsPage() {
   const dayEmails = Array.isArray(daySettings.z_report_emails)
     ? (daySettings.z_report_emails as unknown[]).filter((e): e is string => typeof e === "string")
     : [];
+  const exTh = parseThresholds(daySettings);
 
   const showFloor =
     hasFloorService(business) && (role === "owner" || role === "manager");
@@ -363,6 +366,18 @@ export default async function SettingsPage() {
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
               <SectionHeader>Day close &amp; Z-report</SectionHeader>
               <DayCloseCard cutoff={dayCutoff} emails={dayEmails} />
+            </div>
+          )}
+          {hasFloorService(business) && (
+            <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
+              <SectionHeader>Exception thresholds</SectionHeader>
+              <ExceptionCard
+                voidPct={Math.round(exTh.voidRate * 1000) / 10}
+                compPct={Math.round(exTh.compRate * 1000) / 10}
+                discountPct={Math.round(exTh.discountRate * 1000) / 10}
+                refundPct={Math.round(exTh.refundRate * 1000) / 10}
+                alertVoidAmount={exTh.alertVoidAmount}
+              />
             </div>
           )}
           {business.industry === "transportation" && (

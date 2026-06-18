@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
+import { parseThresholds } from "@/lib/services/exception-thresholds";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +15,6 @@ function pct(n: number): string {
 }
 
 const UNASSIGNED = "__unassigned__";
-
-// Default loss-prevention thresholds (as a share of the employee's own sales).
-// A row is flagged when any rate exceeds these.
-const TH = { voidRate: 0.05, compRate: 0.05, discountRate: 0.1, refundRate: 0.1 };
 
 type Row = {
   staffId: string;
@@ -42,6 +39,7 @@ export default async function ExceptionsPage({
 
   const sp = await searchParams;
   const range = sp.range === "today" || sp.range === "30d" ? sp.range : "7d";
+  const TH = parseThresholds((business as { settings?: Record<string, unknown> }).settings);
   const supabase = await createClient();
   const tz = (business as { timezone?: string }).timezone || "America/Toronto";
 
