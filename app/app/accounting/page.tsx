@@ -4,6 +4,8 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
 import { accountingSummary, resolvePeriod } from "./data";
+import { lockedThrough } from "@/lib/services/period-lock";
+import { LockBar } from "./lock-bar";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +31,12 @@ export default async function AccountingPage({
   const period = resolvePeriod(sp.period || "this_month", tz, { from: sp.from, to: sp.to });
   const supabase = await createClient();
   const s = await accountingSummary(supabase, business.id, period.startIso, period.endIso);
+  const currentLock = await lockedThrough(supabase, business.id);
+  const lastDay = (() => {
+    const d = new Date(period.endIso);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
 
   const presets = [
     { key: "this_month", label: "This month" },
@@ -78,6 +86,8 @@ export default async function AccountingPage({
           <button className="text-sm rounded-md px-3 py-1.5 border border-border hover:bg-accent">Go</button>
         </form>
       </div>
+
+      <LockBar currentLock={currentLock} throughDate={lastDay} isOwner={role === "owner"} />
 
       <div className="grid sm:grid-cols-2 gap-4">
         <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-5 text-sm">

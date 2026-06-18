@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { isOrderPeriodLocked } from "@/lib/services/period-lock";
 import { actorCan, approverByPin } from "@/lib/services/permissions-server";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
@@ -90,9 +91,15 @@ export async function reopenOrder(input: {
   }
 
   const { data: order } = await supabase
-    .from("orders").select("id, status").eq("id", input.order_id).eq("business_id", business.id).maybeSingle();
+    .from("orders").select("id, status, created_at").eq("id", input.order_id).eq("business_id", business.id).maybeSingle();
   if (!order) return { error: "Sale not found." };
   if (order.status === "voided") return { error: "This sale was voided." };
+  {
+    const tz = (business as { timezone?: string }).timezone || "America/Toronto";
+    if (await isOrderPeriodLocked(supabase, business.id, order.created_at as string, tz)) {
+      return { error: "That period is locked — this sale can't be reopened." };
+    }
+  }
 
   const { data: { user } } = await supabase.auth.getUser();
   const { error: adjErr } = await supabase.from("order_adjustments").insert({
@@ -135,8 +142,14 @@ export async function addOrderAdjustment(input: {
   if ("error" in gate) return gate;
 
   const { data: order } = await supabase
-    .from("orders").select("id, status").eq("id", input.order_id).eq("business_id", business.id).maybeSingle();
+    .from("orders").select("id, status, created_at").eq("id", input.order_id).eq("business_id", business.id).maybeSingle();
   if (!order) return { error: "Sale not found." };
+  {
+    const tz = (business as { timezone?: string }).timezone || "America/Toronto";
+    if (await isOrderPeriodLocked(supabase, business.id, order.created_at as string, tz)) {
+      return { error: "That period is locked — this sale can't be adjusted." };
+    }
+  }
 
   // Sign convention: comp / void reduce the take; add_item / charge / tip add to it.
   const signed = input.kind === "comp" || input.kind === "void" ? -Math.abs(amount) : Math.abs(amount);

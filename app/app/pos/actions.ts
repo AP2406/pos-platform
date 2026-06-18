@@ -5,6 +5,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { staffPermissionsById } from "@/lib/services/permissions-server";
 import { type PermissionKey } from "@/lib/services/permissions";
 import { parseThresholds } from "@/lib/services/exception-thresholds";
+import { isOrderPeriodLocked } from "@/lib/services/period-lock";
 import { notifyBusiness } from "@/lib/push";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
@@ -943,11 +944,19 @@ export async function voidOrder(
   // total it) and compared against the manager-alert threshold.
   const { data: ord } = await supabase
     .from("orders")
-    .select("total, sale_number")
+    .select("total, sale_number, created_at")
     .eq("id", orderId)
     .eq("business_id", business.id)
     .maybeSingle();
   const voidTotal = ord ? Number(ord.total) || 0 : 0;
+
+  // Period lock: can't void a sale in a closed fiscal period.
+  if (ord) {
+    const tz = (business as { timezone?: string }).timezone || "America/Toronto";
+    if (await isOrderPeriodLocked(supabase, business.id, ord.created_at as string, tz)) {
+      return { error: "That period is locked — this sale can't be voided." };
+    }
+  }
 
   const { error } = await supabase
     .from("orders")
