@@ -1,0 +1,172 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { requireBusiness } from "@/lib/services/tenancy";
+import { createClient } from "@/lib/supabase/server";
+import { hasFloorService } from "@/lib/modules/modes";
+import { displayItemName } from "@/lib/format";
+
+export const dynamic = "force-dynamic";
+
+function money(n: number): string {
+  return "$" + (Math.round((Number(n) || 0) * 100) / 100).toFixed(2);
+}
+
+type MenuRow = { name: string; units: number; revenue: number };
+const QUAD: Record<string, { label: string; cls: string }> = {
+  star: { label: "Star", cls: "text-emerald-600" },
+  plow: { label: "Plowhorse", cls: "text-sky-600" },
+  puzzle: { label: "Puzzle", cls: "text-amber-600" },
+  dog: { label: "Dog", cls: "text-muted-foreground" },
+};
+
+export default async function InsightsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: string }>;
+}) {
+  const { business, role } = await requireBusiness();
+  if (role !== "owner" && role !== "manager") redirect("/app");
+  if (!hasFloorService(business)) redirect("/app/reports");
+
+  const sp = await searchParams;
+  const range = sp.range === "today" || sp.range === "30d" ? sp.range : "7d";
+  const supabase = await createClient();
+  const tz = (business as { timezone?: string }).timezone || "America/Toronto";
+  const now = Date.now();
+  const since = new Date(now - (range === "today" ? 1 : range === "7d" ? 7 : 30) * 86400000).toISOString();
+  const dayKey = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+  const todayKey = dayKey(new Date().toISOString());
+  const inRange = (iso: string) => (range === "today" ? dayKey(iso) === todayKey : new Date(iso).getTime() >= now - (range === "7d" ? 7 : 30) * 86400000);
+
+  const [{ data: orders }, { data: items }] = await Promise.all([
+    supabase.from("orders").select("id, total, status, created_at").eq("business_id", business.id).neq("status", "voided").gte("created_at", since),
+    supabase.from("order_items").select("order_id, name, quantity, unit_price, created_at").eq("business_id", business.id).gte("created_at", since),
+  ]);
+
+  const liveOrders = (orders ?? []).filter((o) => inRange(o.created_at as string));
+  const liveIds = new Set(liveOrders.map((o) => o.id as string));
+
+  // Daypart (hour of day) + day of week.
+  const hourFmt = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hour12: false });
+  const dowFmt = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" });
+  const byHour = new Array(24).fill(0);
+  const byDow = new Map<string, number>();
+  const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  for (const o of liveOrders) {
+    const t = Number(o.total) || 0;
+    const h = Number(hourFmt.format(new Date(o.created_at as string))) % 24;
+    byHour[h] += t;
+    const dow = dowFmt.format(new Date(o.created_at as string));
+    byDow.set(dow, (byDow.get(dow) ?? 0) + t);
+  }
+  const maxHour = Math.max(1, ...byHour);
+  const maxDow = Math.max(1, ...DOW.map((d) => byDow.get(d) ?? 0));
+
+  // Menu mix (exclude voided orders' items).
+  const menu = new Map<string, MenuRow>();
+  for (const it of items ?? []) {
+    if (!liveIds.has(it.order_id as string)) continue;
+    if (!inRange(it.created_at as string)) continue;
+    const base = displayItemName((it.name as string).replace(/\s*\(\+[^)]*\)\s*$/, ""));
+    if (!base) continue;
+    const row = menu.get(base) ?? { name: base, units: 0, revenue: 0 };
+    row.units += Number(it.quantity) || 0;
+    row.revenue += (Number(it.unit_price) || 0) * (Number(it.quantity) || 0);
+    menu.set(base, row);
+  }
+  const menuRows = Array.from(menu.values()).map((r) => ({ ...r, revenue: Math.round(r.revenue * 100) / 100 }));
+  const median = (arr: number[]) => {
+    if (arr.length === 0) return 0;
+    const s = [...arr].sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+  const medU = median(menuRows.map((r) => r.units));
+  const medR = median(menuRows.map((r) => r.revenue));
+  const quadOf = (r: MenuRow) => {
+    const hu = r.units >= medU, hr = r.revenue >= medR;
+    return hu && hr ? "star" : hu && !hr ? "plow" : !hu && hr ? "puzzle" : "dog";
+  };
+  const topMenu = menuRows.sort((a, b) => b.revenue - a.revenue).slice(0, 25);
+
+  const tabs = [{ key: "today", label: "Today" }, { key: "7d", label: "7 days" }, { key: "30d", label: "30 days" }];
+
+  const Bar = ({ label, value, max }: { label: string; value: number; max: number }) => (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="w-10 shrink-0 text-muted-foreground tabular-nums">{label}</span>
+      <div className="flex-1 h-3 rounded bg-muted overflow-hidden">
+        <div className="h-full bg-foreground/70" style={{ width: Math.round((value / max) * 100) + "%" }} />
+      </div>
+      <span className="w-16 shrink-0 text-right tabular-nums">{value > 0 ? money(value) : ""}</span>
+    </div>
+  );
+
+  return (
+    <div className="max-w-3xl">
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Insights</h1>
+          <p className="text-muted-foreground text-sm mt-1">When you&apos;re busy and what sells. Voided sales excluded.</p>
+        </div>
+        <Link href="/app/reports" className="text-sm text-muted-foreground underline hover:text-foreground shrink-0">Reports →</Link>
+      </div>
+
+      <div className="flex gap-2 mb-4">
+        {tabs.map((t) => (
+          <Link key={t.key} href={"/app/insights?range=" + t.key}
+            className={"text-sm rounded-md px-3 py-1.5 border " + (range === t.key ? "bg-foreground text-background border-foreground" : "border-border hover:bg-accent")}>
+            {t.label}
+          </Link>
+        ))}
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4 mb-4">
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4">
+          <h2 className="font-semibold mb-2 text-sm">By hour</h2>
+          <div className="space-y-1">
+            {byHour.map((v, h) => (v > 0 ? <Bar key={h} label={(h % 12 === 0 ? 12 : h % 12) + (h < 12 ? "a" : "p")} value={v} max={maxHour} /> : null))}
+          </div>
+        </div>
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4">
+          <h2 className="font-semibold mb-2 text-sm">By day of week</h2>
+          <div className="space-y-1">
+            {DOW.map((d) => <Bar key={d} label={d} value={byDow.get(d) ?? 0} max={maxDow} />)}
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl overflow-hidden">
+        <div className="px-3 py-2 text-sm font-semibold border-b border-border">
+          Menu engineering <span className="text-xs font-normal text-muted-foreground ml-1">stars sell well &amp; earn well; dogs do neither</span>
+        </div>
+        {topMenu.length === 0 ? (
+          <div className="p-6 text-center text-muted-foreground text-sm">No items sold in this range.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground border-b border-border">
+                <th className="px-3 py-2 font-medium">Item</th>
+                <th className="px-3 py-2 font-medium text-right">Units</th>
+                <th className="px-3 py-2 font-medium text-right">Revenue</th>
+                <th className="px-3 py-2 font-medium text-right">Class</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topMenu.map((r) => {
+                const q = QUAD[quadOf(r)];
+                return (
+                  <tr key={r.name} className="border-b border-border last:border-0">
+                    <td className="px-3 py-2 font-medium truncate max-w-[260px]">{r.name}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{r.units}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{money(r.revenue)}</td>
+                    <td className={"px-3 py-2 text-right font-medium " + q.cls}>{q.label}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
