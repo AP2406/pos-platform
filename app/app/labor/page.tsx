@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
+import { listTimesheet } from "../clock/time-actions";
+import { TimesheetEditor } from "./timesheet-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +43,7 @@ export default async function LaborPage({
     supabase.from("staff_members").select("id, name, pay_rate, is_active").eq("business_id", business.id),
     supabase
       .from("time_clock_entries")
-      .select("staff_id, clock_in, clock_out")
+      .select("staff_id, clock_in, clock_out, break_minutes")
       .eq("business_id", business.id)
       .gte("clock_in", new Date(now - 31 * 86400000).toISOString()),
     supabase
@@ -70,7 +72,7 @@ export default async function LaborPage({
     const r = byId.get(c.staff_id as string);
     if (!r) continue;
     const end = c.clock_out ? new Date(c.clock_out as string).getTime() : now;
-    const hrs = Math.max(0, (end - new Date(ci).getTime()) / 3600000);
+    const hrs = Math.max(0, (end - new Date(ci).getTime()) / 3600000 - (Number(c.break_minutes) || 0) / 60);
     r.hours += hrs;
   }
   for (const o of orders ?? []) {
@@ -90,6 +92,8 @@ export default async function LaborPage({
   const totSales = rows.reduce((s, r) => s + r.sales, 0);
   const laborPct = totSales > 0 ? (totCost / totSales) * 100 : 0;
   const splh = totHours > 0 ? totSales / totHours : 0;
+
+  const timesheet = await listTimesheet();
 
   const tabs = [
     { key: "today", label: "Today" },
@@ -168,6 +172,14 @@ export default async function LaborPage({
           </div>
         </div>
       )}
+
+      <div className="mt-6">
+        <h2 className="text-sm font-semibold mb-1">Timesheets</h2>
+        <p className="text-xs text-muted-foreground mb-3">
+          Last two weeks. Edit a punch to fix a missed clock-out or correct a break — changes are logged to the audit trail.
+        </p>
+        <TimesheetEditor entries={timesheet} />
+      </div>
     </div>
   );
 }

@@ -54,7 +54,7 @@ async function laborForPeriod(
     supabase.from("staff_members").select("id, pay_rate").eq("business_id", businessId),
     supabase
       .from("time_clock_entries")
-      .select("staff_id, clock_in, clock_out")
+      .select("staff_id, clock_in, clock_out, break_minutes")
       .eq("business_id", businessId)
       .lt("clock_in", endIso)
       .or(`clock_out.gte.${startIso},clock_out.is.null`),
@@ -74,7 +74,10 @@ async function laborForPeriod(
     const outMs = c.clock_out ? new Date(c.clock_out as string).getTime() : now;
     const overlap = Math.min(outMs, endMs) - Math.max(inMs, startMs);
     if (overlap <= 0) continue;
-    const hrs = overlap / 3600000;
+    // Deduct unpaid break time, prorated to the share of the shift inside the window.
+    const shiftMs = Math.max(1, outMs - inMs);
+    const breakMs = (Number(c.break_minutes) || 0) * 60000 * (overlap / shiftMs);
+    const hrs = Math.max(0, (overlap - breakMs) / 3600000);
     hours += hrs;
     const rt = rate.get(c.staff_id as string);
     if (rt != null) cost += hrs * rt;

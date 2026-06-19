@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { clockToggle, listOnShift, type OnShift } from "./time-actions";
+import { clockToggle, breakToggle, listOnShift, type OnShift } from "./time-actions";
 
 function sinceLabel(iso: string): string {
   const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
@@ -41,6 +41,20 @@ export function ClockClient({ initialOnShift }: { initialOnShift: OnShift[] }) {
     });
   }
 
+  function submitBreak() {
+    if (pin.length < 4) return;
+    startTransition(async () => {
+      const res = await breakToggle(pin);
+      setPin("");
+      if ("error" in res) {
+        setMsg({ kind: "err", text: res.error });
+        return;
+      }
+      setMsg({ kind: "ok", text: res.name + (res.action === "break_start" ? " on break." : " back from break.") });
+      setOnShift(await listOnShift());
+    });
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl">
       {/* PIN pad */}
@@ -61,6 +75,9 @@ export function ClockClient({ initialOnShift }: { initialOnShift: OnShift[] }) {
         <Button className="w-full h-12 mt-3" onClick={submit} disabled={pending || pin.length < 4}>
           Clock in / out
         </Button>
+        <Button variant="outline" className="w-full h-11 mt-2" onClick={submitBreak} disabled={pending || pin.length < 4}>
+          Start / end break
+        </Button>
         {msg && (
           <p className={"text-sm mt-3 text-center " + (msg.kind === "ok" ? "text-emerald-600" : "text-red-600")}>{msg.text}</p>
         )}
@@ -76,8 +93,9 @@ export function ClockClient({ initialOnShift }: { initialOnShift: OnShift[] }) {
             {onShift.map((s) => (
               <div key={s.staffId} className="flex items-center justify-between border-b border-border pb-2 last:border-0">
                 <span className="font-medium text-sm flex items-center gap-2">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span className={"inline-block w-1.5 h-1.5 rounded-full " + (s.onBreakSince ? "bg-amber-500" : "bg-emerald-500")} />
                   {s.name}
+                  {s.onBreakSince && <span className="text-[10px] text-amber-600 font-semibold">ON BREAK</span>}
                 </span>
                 <span className="text-xs text-muted-foreground tabular-nums">{sinceLabel(s.since)}</span>
               </div>
