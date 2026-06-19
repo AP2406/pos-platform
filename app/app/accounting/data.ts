@@ -180,3 +180,26 @@ export function resolvePeriod(key: string, tz: string, custom?: { from?: string;
   const next = addMonth(y, m, 1);
   return { key: "this_month", label: "This month", startIso: monthStart(y, m), endIso: monthStart(next.y, next.m) };
 }
+
+// The comparison window for a resolved period: the prior equal-length period, or
+// the same dates one year earlier. Used for period-over-period / YoY deltas.
+function shiftIso(iso: string, years: number, months: number): string {
+  const d = new Date(iso);
+  return new Date(Date.UTC(d.getUTCFullYear() + years, d.getUTCMonth() + months, d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds())).toISOString();
+}
+
+export function comparePeriod(period: Period, mode: "prev" | "yoy"): Period {
+  if (mode === "yoy") {
+    return { key: "cmp", label: "same period last year", startIso: shiftIso(period.startIso, -1, 0), endIso: shiftIso(period.endIso, -1, 0) };
+  }
+  // prev: shift back by the period's own calendar length where it's month-aligned,
+  // otherwise by its raw duration (custom ranges).
+  if (period.key === "this_month" || period.key === "last_month") {
+    return { key: "cmp", label: "the prior month", startIso: shiftIso(period.startIso, 0, -1), endIso: shiftIso(period.endIso, 0, -1) };
+  }
+  if (period.key === "this_quarter") {
+    return { key: "cmp", label: "the prior quarter", startIso: shiftIso(period.startIso, 0, -3), endIso: shiftIso(period.endIso, 0, -3) };
+  }
+  const dur = new Date(period.endIso).getTime() - new Date(period.startIso).getTime();
+  return { key: "cmp", label: "the prior period", startIso: new Date(new Date(period.startIso).getTime() - dur).toISOString(), endIso: period.startIso };
+}

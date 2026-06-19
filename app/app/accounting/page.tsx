@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
-import { accountingSummary, resolvePeriod } from "./data";
+import { accountingSummary, resolvePeriod, comparePeriod } from "./data";
+import { primeCostSummary } from "./cost";
 import { lockedThrough } from "@/lib/services/period-lock";
 import { LockBar } from "./lock-bar";
 
@@ -20,7 +21,7 @@ const TENDER_LABEL: Record<string, string> = {
 export default async function AccountingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ period?: string; from?: string; to?: string; cmp?: string }>;
 }) {
   const { business, role } = await requireBusiness();
   if (role !== "owner" && role !== "manager") redirect("/app");
@@ -31,6 +32,20 @@ export default async function AccountingPage({
   const period = resolvePeriod(sp.period || "this_month", tz, { from: sp.from, to: sp.to });
   const supabase = await createClient();
   const s = await accountingSummary(supabase, business.id, period.startIso, period.endIso);
+  const pc = await primeCostSummary(supabase, business.id, period.startIso, period.endIso, s.netSales);
+
+  // Period-over-period / YoY comparison (optional).
+  const cmpMode = sp.cmp === "prev" || sp.cmp === "yoy" ? sp.cmp : null;
+  const cmpPeriod = cmpMode ? comparePeriod(period, cmpMode) : null;
+  const cmpS = cmpPeriod ? await accountingSummary(supabase, business.id, cmpPeriod.startIso, cmpPeriod.endIso) : null;
+  const cmpPc = cmpPeriod ? await primeCostSummary(supabase, business.id, cmpPeriod.startIso, cmpPeriod.endIso, cmpS!.netSales) : null;
+  const delta = (cur: number, prev: number | undefined | null): string | null => {
+    if (prev == null) return null;
+    const d = cur - prev;
+    const pctTxt = prev !== 0 ? " (" + (d >= 0 ? "+" : "") + Math.round((d / Math.abs(prev)) * 1000) / 10 + "%)" : "";
+    return (d >= 0 ? "▲ " : "▼ ") + money(Math.abs(d)) + pctTxt + " vs " + (cmpPeriod?.label ?? "");
+  };
+
   const currentLock = await lockedThrough(supabase, business.id);
   const lastDay = (() => {
     const d = new Date(period.endIso);
@@ -87,7 +102,51 @@ export default async function AccountingPage({
         </form>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 mb-4 text-xs">
+        <span className="text-muted-foreground">Compare to:</span>
+        {[
+          { key: "", label: "None" },
+          { key: "prev", label: "Prior period" },
+          { key: "yoy", label: "Last year" },
+        ].map((c) => {
+          const base = "period=" + period.key + (period.key === "custom" && sp.from && sp.to ? "&from=" + sp.from + "&to=" + sp.to : "");
+          const href = "/app/accounting?" + base + (c.key ? "&cmp=" + c.key : "");
+          const active = (sp.cmp || "") === c.key || (!c.key && !cmpMode);
+          return (
+            <Link key={c.label} href={href} className={"rounded-md px-2.5 py-1 border " + (active ? "bg-foreground text-background border-foreground" : "border-border hover:bg-accent")}>
+              {c.label}
+            </Link>
+          );
+        })}
+      </div>
+
       <LockBar currentLock={currentLock} throughDate={lastDay} isOwner={role === "owner"} />
+
+      <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-5 text-sm mb-4">
+        <div className="flex items-baseline justify-between mb-2">
+          <h2 className="font-semibold">Prime cost (P&amp;L)</h2>
+          {pc.primeCostPct != null && (
+            <span className="text-xs text-muted-foreground">Prime cost {pc.primeCostPct}% of net sales</span>
+          )}
+        </div>
+        <Line label="Net sales (pre-tax)" value={money(s.netSales)} />
+        {cmpS && (
+          <p className={"text-[11px] -mt-1 mb-1 " + (s.netSales - cmpS.netSales >= 0 ? "text-emerald-600" : "text-red-600")}>{delta(s.netSales, cmpS.netSales)}</p>
+        )}
+        <Line label="Food cost (COGS)" sub={pc.foodCostPct != null ? pc.foodCostPct + "% of sales" : "set recipes to track"} value={pc.cogs > 0 ? "-" + money(pc.cogs) : money(0)} />
+        <Line label="Gross profit" value={money(pc.grossProfit)} strong />
+        <Line label="Labor" sub={pc.laborPct != null ? pc.laborPct + "% of sales · " + pc.laborHours.toFixed(1) + " hrs" : undefined} value={pc.laborCost > 0 ? "-" + money(pc.laborCost) : money(0)} />
+        <div className="border-t border-border my-1" />
+        <Line label="Prime cost (food + labor)" value={money(pc.primeCost)} strong />
+        {cmpPc && (
+          <p className={"text-[11px] " + (pc.primeCost - cmpPc.primeCost <= 0 ? "text-emerald-600" : "text-red-600")}>{delta(pc.primeCost, cmpPc.primeCost)}</p>
+        )}
+        <p className="text-[11px] text-muted-foreground mt-2">
+          {pc.coveragePct != null && pc.coveragePct < 99
+            ? "Food cost covers " + pc.coveragePct + "% of sales — items without a recipe count as $0 COGS. Add recipes under Catalog → Recipes for a complete figure."
+            : "Food cost is theoretical (recipe plate cost × units sold). Labor is clocked hours × pay rate for the period."}
+        </p>
+      </div>
 
       <div className="grid sm:grid-cols-2 gap-4">
         <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-5 text-sm">

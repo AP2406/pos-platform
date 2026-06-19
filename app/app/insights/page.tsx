@@ -4,6 +4,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
 import { displayItemName } from "@/lib/format";
+import { plateCostByItem } from "../accounting/cost";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ function money(n: number): string {
   return "$" + (Math.round((Number(n) || 0) * 100) / 100).toFixed(2);
 }
 
-type MenuRow = { name: string; units: number; revenue: number };
+type MenuRow = { name: string; units: number; revenue: number; cost: number; costedUnits: number };
 const QUAD: Record<string, { label: string; cls: string }> = {
   star: { label: "Star", cls: "text-emerald-600" },
   plow: { label: "Plowhorse", cls: "text-sky-600" },
@@ -22,7 +23,7 @@ const QUAD: Record<string, { label: string; cls: string }> = {
 export default async function InsightsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string }>;
+  searchParams: Promise<{ range?: string; mode?: string }>;
 }) {
   const { business, role } = await requireBusiness();
   if (role !== "owner" && role !== "manager") redirect("/app");
@@ -30,6 +31,7 @@ export default async function InsightsPage({
 
   const sp = await searchParams;
   const range = sp.range === "today" || sp.range === "30d" ? sp.range : "7d";
+  const mode = sp.mode === "margin" ? "margin" : "revenue";
   const supabase = await createClient();
   const tz = (business as { timezone?: string }).timezone || "America/Toronto";
   const now = Date.now();
@@ -38,9 +40,10 @@ export default async function InsightsPage({
   const todayKey = dayKey(new Date().toISOString());
   const inRange = (iso: string) => (range === "today" ? dayKey(iso) === todayKey : new Date(iso).getTime() >= now - (range === "7d" ? 7 : 30) * 86400000);
 
-  const [{ data: orders }, { data: items }] = await Promise.all([
+  const [{ data: orders }, { data: items }, plate] = await Promise.all([
     supabase.from("orders").select("id, total, status, created_at").eq("business_id", business.id).neq("status", "voided").gte("created_at", since),
-    supabase.from("order_items").select("order_id, name, quantity, unit_price, created_at").eq("business_id", business.id).gte("created_at", since),
+    supabase.from("order_items").select("order_id, catalog_item_id, name, quantity, unit_price, created_at").eq("business_id", business.id).gte("created_at", since),
+    plateCostByItem(supabase, business.id),
   ]);
 
   const liveOrders = (orders ?? []).filter((o) => inRange(o.created_at as string));
@@ -62,32 +65,49 @@ export default async function InsightsPage({
   const maxHour = Math.max(1, ...byHour);
   const maxDow = Math.max(1, ...DOW.map((d) => byDow.get(d) ?? 0));
 
-  // Menu mix (exclude voided orders' items).
+  // Menu mix (exclude voided orders' items). Cost accumulates each line's recipe
+  // plate cost × qty (0 when no recipe); costedUnits tracks recipe coverage.
   const menu = new Map<string, MenuRow>();
   for (const it of items ?? []) {
     if (!liveIds.has(it.order_id as string)) continue;
     if (!inRange(it.created_at as string)) continue;
     const base = displayItemName((it.name as string).replace(/\s*\(\+[^)]*\)\s*$/, ""));
     if (!base) continue;
-    const row = menu.get(base) ?? { name: base, units: 0, revenue: 0 };
-    row.units += Number(it.quantity) || 0;
-    row.revenue += (Number(it.unit_price) || 0) * (Number(it.quantity) || 0);
+    const qty = Number(it.quantity) || 0;
+    const cid = it.catalog_item_id as string | null;
+    const hasRecipe = cid != null && plate.has(cid);
+    const row = menu.get(base) ?? { name: base, units: 0, revenue: 0, cost: 0, costedUnits: 0 };
+    row.units += qty;
+    row.revenue += (Number(it.unit_price) || 0) * qty;
+    if (hasRecipe) {
+      row.cost += (plate.get(cid as string) || 0) * qty;
+      row.costedUnits += qty;
+    }
     menu.set(base, row);
   }
-  const menuRows = Array.from(menu.values()).map((r) => ({ ...r, revenue: Math.round(r.revenue * 100) / 100 }));
+  const menuRows = Array.from(menu.values()).map((r) => ({
+    ...r,
+    revenue: Math.round(r.revenue * 100) / 100,
+    cost: Math.round(r.cost * 100) / 100,
+    margin: Math.round((r.revenue - r.cost) * 100) / 100,
+  }));
+  type Row = (typeof menuRows)[number];
   const median = (arr: number[]) => {
     if (arr.length === 0) return 0;
     const s = [...arr].sort((a, b) => a - b);
     const m = Math.floor(s.length / 2);
     return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
   };
+  // Profitability axis = revenue, or contribution margin in margin mode.
+  const profitOf = (r: Row) => (mode === "margin" ? r.margin : r.revenue);
   const medU = median(menuRows.map((r) => r.units));
-  const medR = median(menuRows.map((r) => r.revenue));
-  const quadOf = (r: MenuRow) => {
-    const hu = r.units >= medU, hr = r.revenue >= medR;
-    return hu && hr ? "star" : hu && !hr ? "plow" : !hu && hr ? "puzzle" : "dog";
+  const medP = median(menuRows.map((r) => profitOf(r)));
+  const quadOf = (r: Row) => {
+    const hu = r.units >= medU, hp = profitOf(r) >= medP;
+    return hu && hp ? "star" : hu && !hp ? "plow" : !hu && hp ? "puzzle" : "dog";
   };
-  const topMenu = menuRows.sort((a, b) => b.revenue - a.revenue).slice(0, 25);
+  const topMenu = menuRows.sort((a, b) => profitOf(b) - profitOf(a)).slice(0, 25);
+  const anyUncosted = mode === "margin" && menuRows.some((r) => r.costedUnits < r.units);
 
   const tabs = [{ key: "today", label: "Today" }, { key: "7d", label: "7 days" }, { key: "30d", label: "30 days" }];
 
@@ -136,8 +156,21 @@ export default async function InsightsPage({
       </div>
 
       <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl overflow-hidden">
-        <div className="px-3 py-2 text-sm font-semibold border-b border-border">
-          Menu engineering <span className="text-xs font-normal text-muted-foreground ml-1">stars sell well &amp; earn well; dogs do neither</span>
+        <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-2 flex-wrap">
+          <div className="text-sm font-semibold">
+            Menu engineering <span className="text-xs font-normal text-muted-foreground ml-1">{mode === "margin" ? "popularity × profit margin" : "popularity × revenue"}</span>
+          </div>
+          <div className="flex gap-1.5 text-xs">
+            {[
+              { key: "revenue", label: "By revenue" },
+              { key: "margin", label: "By margin" },
+            ].map((m) => (
+              <Link key={m.key} href={"/app/insights?range=" + range + (m.key === "margin" ? "&mode=margin" : "")}
+                className={"rounded-md px-2.5 py-1 border " + (mode === m.key ? "bg-foreground text-background border-foreground" : "border-border hover:bg-accent")}>
+                {m.label}
+              </Link>
+            ))}
+          </div>
         </div>
         {topMenu.length === 0 ? (
           <div className="p-6 text-center text-muted-foreground text-sm">No items sold in this range.</div>
@@ -148,23 +181,37 @@ export default async function InsightsPage({
                 <th className="px-3 py-2 font-medium">Item</th>
                 <th className="px-3 py-2 font-medium text-right">Units</th>
                 <th className="px-3 py-2 font-medium text-right">Revenue</th>
+                {mode === "margin" && <th className="px-3 py-2 font-medium text-right">Margin</th>}
+                {mode === "margin" && <th className="px-3 py-2 font-medium text-right">Food %</th>}
                 <th className="px-3 py-2 font-medium text-right">Class</th>
               </tr>
             </thead>
             <tbody>
               {topMenu.map((r) => {
                 const q = QUAD[quadOf(r)];
+                const uncosted = r.costedUnits < r.units;
+                const foodPct = r.revenue > 0 ? Math.round((r.cost / r.revenue) * 1000) / 10 : null;
                 return (
                   <tr key={r.name} className="border-b border-border last:border-0">
-                    <td className="px-3 py-2 font-medium truncate max-w-[260px]">{r.name}</td>
+                    <td className="px-3 py-2 font-medium truncate max-w-[260px]">
+                      {r.name}
+                      {mode === "margin" && uncosted && <span className="ml-1.5 text-[10px] text-amber-600" title="No recipe — margin may be overstated">no recipe</span>}
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums">{r.units}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{money(r.revenue)}</td>
+                    {mode === "margin" && <td className="px-3 py-2 text-right tabular-nums">{money(r.margin)}</td>}
+                    {mode === "margin" && <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{foodPct != null && r.cost > 0 ? foodPct + "%" : "—"}</td>}
                     <td className={"px-3 py-2 text-right font-medium " + q.cls}>{q.label}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+        )}
+        {anyUncosted && (
+          <div className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">
+            Items marked &ldquo;no recipe&rdquo; count as $0 food cost, so their margin equals revenue. Add recipes under Catalog → Recipes for accurate margins.
+          </div>
         )}
       </div>
     </div>
