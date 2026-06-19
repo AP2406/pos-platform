@@ -11,6 +11,8 @@ import { StaffCard } from "./staff-card";
 import { RolesCard } from "./roles-card";
 import { listRoles } from "./roles-actions";
 import { DayCloseCard } from "./day-close-card";
+import { CoaCard } from "./coa-card";
+import { resolveCoa, COA_DEFAULTS, type CoaKey } from "../accounting/journal";
 import { ExceptionCard } from "./exception-card";
 import { parseThresholds } from "@/lib/services/exception-thresholds";
 import { FloorCard } from "./floor-card";
@@ -132,6 +134,8 @@ export default async function SettingsPage() {
     ? (daySettings.z_report_emails as unknown[]).filter((e): e is string => typeof e === "string")
     : [];
   const dayBlind = daySettings.blind_close === true;
+  const coa = resolveCoa(daySettings);
+  const coaRows = (Object.keys(COA_DEFAULTS) as CoaKey[]).map((k) => ({ key: k, name: coa[k].name, code: coa[k].code }));
   const exTh = parseThresholds(daySettings);
 
   const showFloor =
@@ -380,6 +384,12 @@ export default async function SettingsPage() {
                 refundPct={Math.round(exTh.refundRate * 1000) / 10}
                 alertVoidAmount={exTh.alertVoidAmount}
               />
+            </div>
+          )}
+          {hasFloorService(business) && (
+            <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
+              <SectionHeader>Chart of accounts (QBO/Xero export)</SectionHeader>
+              <CoaCard rows={coaRows} />
             </div>
           )}
           {business.industry === "transportation" && (

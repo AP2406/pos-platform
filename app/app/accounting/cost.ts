@@ -82,6 +82,89 @@ async function laborForPeriod(
   return { cost: r2(cost), hours: Math.round(hours * 100) / 100 };
 }
 
+// Theoretical (recipe-driven sales usage) vs actual (sales + logged waste) food
+// cost over [startIso, endIso), valued at ingredient unit cost. The variance is
+// the waste — depletion beyond what the recipes implied for what was sold.
+export type VarianceRow = {
+  ingredientId: string;
+  name: string;
+  unit: string;
+  salesQty: number;
+  wasteQty: number;
+  theoreticalCost: number;
+  wasteCost: number;
+};
+export type FoodVariance = {
+  rows: VarianceRow[];
+  theoreticalCost: number;
+  wasteCost: number;
+  actualCost: number;
+  variancePct: number | null;
+};
+
+export async function foodCostVariance(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  startIso: string,
+  endIso: string
+): Promise<FoodVariance> {
+  const [{ data: ing }, { data: sales }, { data: waste }] = await Promise.all([
+    supabase.from("ingredients").select("id, name, unit, cost").eq("business_id", businessId),
+    supabase
+      .from("ingredient_movements")
+      .select("ingredient_id, change")
+      .eq("business_id", businessId)
+      .eq("reason", "sale")
+      .gte("created_at", startIso)
+      .lt("created_at", endIso),
+    supabase
+      .from("waste_events")
+      .select("ingredient_id, quantity")
+      .eq("business_id", businessId)
+      .gte("created_at", startIso)
+      .lt("created_at", endIso),
+  ]);
+
+  const meta = new Map<string, { name: string; unit: string; cost: number }>();
+  for (const i of ing ?? []) meta.set(i.id as string, { name: (i.name as string) || "Ingredient", unit: (i.unit as string) || "", cost: Number(i.cost) || 0 });
+
+  const salesQty = new Map<string, number>();
+  for (const m of sales ?? []) {
+    const id = m.ingredient_id as string;
+    salesQty.set(id, (salesQty.get(id) || 0) - (Number(m.change) || 0)); // change is negative on sale
+  }
+  const wasteQty = new Map<string, number>();
+  for (const w of waste ?? []) {
+    const id = w.ingredient_id as string;
+    wasteQty.set(id, (wasteQty.get(id) || 0) + (Number(w.quantity) || 0));
+  }
+
+  const ids = new Set<string>([...salesQty.keys(), ...wasteQty.keys()]);
+  let theoreticalCost = 0;
+  let wasteCost = 0;
+  const rows: VarianceRow[] = [];
+  for (const id of ids) {
+    const m = meta.get(id) ?? { name: "Ingredient", unit: "", cost: 0 };
+    const sq = r2(salesQty.get(id) || 0);
+    const wq = r2(wasteQty.get(id) || 0);
+    const tc = r2(sq * m.cost);
+    const wc = r2(wq * m.cost);
+    theoreticalCost += tc;
+    wasteCost += wc;
+    rows.push({ ingredientId: id, name: m.name, unit: m.unit, salesQty: sq, wasteQty: wq, theoreticalCost: tc, wasteCost: wc });
+  }
+  rows.sort((a, b) => b.wasteCost - a.wasteCost);
+  theoreticalCost = r2(theoreticalCost);
+  wasteCost = r2(wasteCost);
+  return {
+    rows,
+    theoreticalCost,
+    wasteCost,
+    actualCost: r2(theoreticalCost + wasteCost),
+    variancePct: theoreticalCost > 0 ? Math.round((wasteCost / theoreticalCost) * 1000) / 10 : null,
+  };
+}
+
 export async function primeCostSummary(
   supabase: Awaited<ReturnType<typeof createClient>>,
   businessId: string,

@@ -4,7 +4,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
 import { accountingSummary, resolvePeriod, comparePeriod } from "./data";
-import { primeCostSummary } from "./cost";
+import { primeCostSummary, foodCostVariance } from "./cost";
 import { lockedThrough } from "@/lib/services/period-lock";
 import { LockBar } from "./lock-bar";
 
@@ -33,6 +33,7 @@ export default async function AccountingPage({
   const supabase = await createClient();
   const s = await accountingSummary(supabase, business.id, period.startIso, period.endIso);
   const pc = await primeCostSummary(supabase, business.id, period.startIso, period.endIso, s.netSales);
+  const fv = await foodCostVariance(supabase, business.id, period.startIso, period.endIso);
 
   // Period-over-period / YoY comparison (optional).
   const cmpMode = sp.cmp === "prev" || sp.cmp === "yoy" ? sp.cmp : null;
@@ -79,9 +80,14 @@ export default async function AccountingPage({
             Sales, GST/HST and tenders for {period.label.toLowerCase()}. Voided sales excluded.
           </p>
         </div>
-        <a href={exportHref} className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent shrink-0">
-          Export CSV
-        </a>
+        <div className="flex gap-2 shrink-0">
+          <a href={exportHref} className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent">
+            Export CSV
+          </a>
+          <a href={"/app/accounting/journal?" + exportHref.split("?")[1]} className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent">
+            Journal (QBO/Xero)
+          </a>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 mb-4">
@@ -196,6 +202,35 @@ export default async function AccountingPage({
           <Line label="Store credit outstanding" value={money(s.storeCreditOutstanding)} />
         </div>
       </div>
+
+      {(fv.theoreticalCost > 0 || fv.wasteCost > 0) && (
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-5 text-sm mt-4">
+          <div className="flex items-baseline justify-between mb-2">
+            <h2 className="font-semibold">Food cost variance</h2>
+            {fv.variancePct != null && (
+              <span className={"text-xs " + (fv.variancePct > 5 ? "text-red-600" : "text-muted-foreground")}>Waste is {fv.variancePct}% over theoretical</span>
+            )}
+          </div>
+          <Line label="Theoretical (recipe usage on sales)" value={money(fv.theoreticalCost)} />
+          <Line label="Waste (logged)" value={fv.wasteCost > 0 ? "+" + money(fv.wasteCost) : money(0)} />
+          <div className="border-t border-border my-1" />
+          <Line label="Actual food cost (theoretical + waste)" value={money(fv.actualCost)} strong />
+          {fv.rows.filter((r) => r.wasteCost > 0).length > 0 && (
+            <div className="mt-3">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Top waste by cost</div>
+              {fv.rows.filter((r) => r.wasteCost > 0).slice(0, 6).map((r) => (
+                <div key={r.ingredientId} className="flex justify-between py-0.5">
+                  <span className="text-muted-foreground">{r.name}<span className="text-xs ml-1">{r.wasteQty} {r.unit}</span></span>
+                  <span className="tabular-nums">{money(r.wasteCost)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-[11px] text-muted-foreground mt-2">
+            Theoretical = recipe ingredients consumed by what sold. Variance is logged waste; an actual count beyond this needs inventory counts. Log waste under Catalog → Waste.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
