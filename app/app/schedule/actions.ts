@@ -111,3 +111,139 @@ export async function publishWeek(
   revalidatePath("/app/schedule");
   return { ok: true };
 }
+
+// ---- P1.3 shift templates -------------------------------------------------
+
+export type ShiftTemplate = { id: string; name: string; count: number };
+type TemplateItem = { dow: number; staff_id: string | null; start: string; end: string; role_label: string | null };
+
+// Local day-of-week (Mon=0) and HH:MM in the business tz for an instant.
+function localDowTime(iso: string, tz: string): { dow: number; time: string } {
+  const wd = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(new Date(iso));
+  const dow = (["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(wd) + 6) % 7; // Mon=0
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso));
+  return { dow, time };
+}
+
+export async function listShiftTemplates(): Promise<ShiftTemplate[]> {
+  const { business, role } = await requireBusiness();
+  if (!canManage(role)) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("shift_templates")
+    .select("id, name, items")
+    .eq("business_id", business.id)
+    .order("created_at", { ascending: false });
+  return (data ?? []).map((t) => ({
+    id: t.id as string,
+    name: t.name as string,
+    count: Array.isArray(t.items) ? (t.items as unknown[]).length : 0,
+  }));
+}
+
+// Snapshot the given week's shifts into a reusable template.
+export async function saveWeekAsTemplate(
+  name: string,
+  startIso: string,
+  endIso: string
+): Promise<{ ok: true } | { error: string }> {
+  const { business, role } = await requireBusiness();
+  if (!canManage(role)) return { error: "Only an owner or manager can save templates." };
+  const clean = (name || "").trim().slice(0, 60);
+  if (!clean) return { error: "Name the template." };
+  const tz = (business as { timezone?: string }).timezone || "America/Toronto";
+  const supabase = await createClient();
+  const { data: rows } = await supabase
+    .from("shifts")
+    .select("staff_id, starts_at, ends_at, role_label")
+    .eq("business_id", business.id)
+    .gte("starts_at", startIso)
+    .lt("starts_at", endIso);
+  if (!rows || rows.length === 0) return { error: "This week has no shifts to save." };
+  const items: TemplateItem[] = rows.map((s) => {
+    const st = localDowTime(s.starts_at as string, tz);
+    const en = localDowTime(s.ends_at as string, tz);
+    return { dow: st.dow, staff_id: (s.staff_id as string | null) ?? null, start: st.time, end: en.time, role_label: (s.role_label as string | null) ?? null };
+  });
+  const { error } = await supabase.from("shift_templates").insert({ business_id: business.id, name: clean, items });
+  if (error) {
+    console.error("saveWeekAsTemplate:", error);
+    return { error: "Could not save the template." };
+  }
+  revalidatePath("/app/schedule");
+  return { ok: true };
+}
+
+// Apply a template's shifts onto the week starting at targetMonday (YYYY-MM-DD),
+// as unpublished drafts. Reuses addShift's overnight handling.
+export async function applyTemplate(
+  templateId: string,
+  targetMonday: string
+): Promise<{ ok: true; added: number } | { error: string }> {
+  const { business, role } = await requireBusiness();
+  if (!canManage(role)) return { error: "Only an owner or manager can apply templates." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(targetMonday)) return { error: "Bad week." };
+  const supabase = await createClient();
+  const { data: tpl } = await supabase
+    .from("shift_templates")
+    .select("items")
+    .eq("id", templateId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!tpl) return { error: "Template not found." };
+  const items = (Array.isArray(tpl.items) ? tpl.items : []) as TemplateItem[];
+  if (items.length === 0) return { error: "Template is empty." };
+  const tz = (business as { timezone?: string }).timezone || "America/Toronto";
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const dayOffset = (dow: number) => {
+    const [y, mo, d] = targetMonday.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, (mo || 1) - 1, d || 1));
+    dt.setUTCDate(dt.getUTCDate() + dow);
+    return dt.toISOString().slice(0, 10);
+  };
+
+  const inserts = items
+    .filter((it) => it.staff_id) // unassigned template slots are skipped (no staff to attach)
+    .map((it) => {
+      const date = dayOffset(Math.max(0, Math.min(6, Number(it.dow) || 0)));
+      const startIso = localToUtcIso(date, it.start, tz);
+      let endIso = localToUtcIso(date, it.end, tz);
+      if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
+        const next = new Date(date + "T00:00:00Z");
+        next.setUTCDate(next.getUTCDate() + 1);
+        endIso = localToUtcIso(next.toISOString().slice(0, 10), it.end, tz);
+      }
+      return {
+        business_id: business.id,
+        staff_id: it.staff_id,
+        starts_at: startIso,
+        ends_at: endIso,
+        role_label: it.role_label ? it.role_label.slice(0, 40) : null,
+        published: false,
+        created_by: user ? user.id : null,
+      };
+    });
+  if (inserts.length === 0) return { error: "Template has no assigned shifts to apply." };
+  const { error } = await supabase.from("shifts").insert(inserts);
+  if (error) {
+    console.error("applyTemplate:", error);
+    return { error: "Could not apply the template." };
+  }
+  revalidatePath("/app/schedule");
+  return { ok: true, added: inserts.length };
+}
+
+export async function deleteShiftTemplate(id: string): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing template." };
+  const { business, role } = await requireBusiness();
+  if (!canManage(role)) return { error: "Only an owner or manager can delete templates." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("shift_templates").delete().eq("id", id).eq("business_id", business.id);
+  if (error) {
+    console.error("deleteShiftTemplate:", error);
+    return { error: "Could not delete the template." };
+  }
+  revalidatePath("/app/schedule");
+  return { ok: true };
+}

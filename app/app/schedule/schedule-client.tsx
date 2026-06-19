@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { addShift, deleteShift, publishWeek } from "./actions";
+import { addShift, deleteShift, publishWeek, saveWeekAsTemplate, applyTemplate, deleteShiftTemplate, type ShiftTemplate } from "./actions";
 
 type Staff = { id: string; name: string; active: boolean };
 type Shift = {
@@ -19,14 +19,16 @@ type Variance = { id: string; name: string; scheduled: number; actual: number };
 type Forecast = { cost: number; hours: number; sales: number; laborPct: number | null; coverage: number };
 
 export function ScheduleClient({
-  staff, shifts, days, variance, monday, prevWeek, nextWeek, startIso, endIso, anyUnpublished, forecast,
+  staff, shifts, days, variance, monday, prevWeek, nextWeek, startIso, endIso, anyUnpublished, forecast, templates,
 }: {
   staff: Staff[]; shifts: Shift[]; days: DayLabel[]; variance: Variance[];
-  monday: string; prevWeek: string; nextWeek: string; startIso: string; endIso: string; anyUnpublished: boolean; forecast: Forecast;
+  monday: string; prevWeek: string; nextWeek: string; startIso: string; endIso: string; anyUnpublished: boolean; forecast: Forecast; templates: ShiftTemplate[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
+  const [tplName, setTplName] = useState("");
+  const [tplPick, setTplPick] = useState(templates[0]?.id ?? "");
 
   const assignable = staff.filter((s) => s.active);
   const [staffId, setStaffId] = useState(assignable[0]?.id ?? "");
@@ -60,6 +62,32 @@ export function ScheduleClient({
     setErr(null);
     start(async () => {
       const res = await publishWeek(startIso, endIso);
+      if ("error" in res) { setErr(res.error); return; }
+      refresh();
+    });
+  }
+  function saveTpl() {
+    setErr(null);
+    start(async () => {
+      const res = await saveWeekAsTemplate(tplName, startIso, endIso);
+      if ("error" in res) { setErr(res.error); return; }
+      setTplName("");
+      refresh();
+    });
+  }
+  function applyTpl() {
+    if (!tplPick) return;
+    setErr(null);
+    start(async () => {
+      const res = await applyTemplate(tplPick, monday);
+      if ("error" in res) { setErr(res.error); return; }
+      refresh();
+    });
+  }
+  function removeTpl(id: string) {
+    setErr(null);
+    start(async () => {
+      const res = await deleteShiftTemplate(id);
       if ("error" in res) { setErr(res.error); return; }
       refresh();
     });
@@ -141,6 +169,32 @@ export function ScheduleClient({
             </div>
           );
         })}
+      </div>
+
+      <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 mb-4">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Templates</div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex items-end gap-1.5">
+            <div className="space-y-1">
+              <Label className="text-xs">Save this week as</Label>
+              <Input value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="Standard week" className="h-9 w-44" />
+            </div>
+            <Button variant="outline" className="h-9" onClick={saveTpl} disabled={pending || !tplName.trim()}>Save</Button>
+          </div>
+          {templates.length > 0 && (
+            <div className="flex items-end gap-1.5">
+              <div className="space-y-1">
+                <Label className="text-xs">Apply a template to this week</Label>
+                <select value={tplPick} onChange={(e) => setTplPick(e.target.value)} className="h-9 w-52 rounded-md border border-border bg-transparent px-2 text-sm">
+                  {templates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.count})</option>)}
+                </select>
+              </div>
+              <Button variant="outline" className="h-9" onClick={applyTpl} disabled={pending || !tplPick}>Apply</Button>
+              <button type="button" onClick={() => removeTpl(tplPick)} disabled={pending} className="text-xs text-muted-foreground underline hover:text-red-600 pb-2">Delete</button>
+            </div>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-2">Applying adds the template&apos;s assigned shifts to this week as unpublished drafts (unassigned slots are skipped).</p>
       </div>
 
       {forecast.hours > 0 && (

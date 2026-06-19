@@ -3,6 +3,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
 import { ScheduleClient } from "./schedule-client";
+import { listShiftTemplates } from "./actions";
 import { todayKey, mondayOf, localMidnightUtc, weekDays, addDays } from "./week";
 
 export const dynamic = "force-dynamic";
@@ -116,6 +117,7 @@ export default async function SchedulePage({
     coverage: forecastHours > 0 ? Math.round((ratedHours / forecastHours) * 100) : 100,
   };
 
+  const templates = await listShiftTemplates();
   const anyUnpublished = shifts.some((s) => !s.published);
   const dayLabels = days.map((d) => ({
     key: d,
@@ -135,6 +137,7 @@ export default async function SchedulePage({
       endIso={endIso}
       anyUnpublished={anyUnpublished}
       forecast={forecast}
+      templates={templates}
     />
   );
 }
