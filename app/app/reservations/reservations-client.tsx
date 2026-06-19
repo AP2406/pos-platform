@@ -27,25 +27,30 @@ export function ReservationsClient({
   const [name, setName] = useState("");
   const [party, setParty] = useState("2");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [when, setWhen] = useState("");
   const [wait, setWait] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [seatingId, setSeatingId] = useState<string | null>(null);
 
   function add() {
     setErr(null);
+    setWarning(null);
     startTransition(async () => {
       const res = await createReservation({
         guest_name: name,
         party_size: Number(party),
         phone,
+        email,
         scheduled_at: mode === "booking" && when ? new Date(when).toISOString() : null,
         quoted_wait_min: mode === "waitlist" && wait ? Number(wait) : null,
       });
       if ("error" in res) { setErr(res.error); return; }
       setRows((prev) => [...prev, res.reservation]);
-      setName(""); setParty("2"); setPhone(""); setWhen(""); setWait("");
+      setWarning(res.warning);
+      setName(""); setParty("2"); setPhone(""); setEmail(""); setWhen(""); setWait("");
     });
   }
 
@@ -121,12 +126,16 @@ export function ReservationsClient({
           <div className="space-y-1"><Label className="text-xs">Guest name</Label><Input value={name} onChange={(e) => setName(e.target.value)} className="h-9" /></div>
           <div className="space-y-1"><Label className="text-xs">Party size</Label><Input value={party} onChange={(e) => setParty(e.target.value)} inputMode="numeric" className="h-9" /></div>
           <div className="space-y-1"><Label className="text-xs">Phone (optional)</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} className="h-9" /></div>
+          {mode === "booking" && (
+            <div className="space-y-1"><Label className="text-xs">Email (sends a confirmation)</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-9" /></div>
+          )}
           {mode === "booking" ? (
             <div className="space-y-1"><Label className="text-xs">Date &amp; time</Label><Input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="h-9" /></div>
           ) : (
             <div className="space-y-1"><Label className="text-xs">Quoted wait (min)</Label><Input value={wait} onChange={(e) => setWait(e.target.value)} inputMode="numeric" placeholder="20" className="h-9" /></div>
           )}
         </div>
+        {warning && <p className="text-sm text-amber-600">{warning}</p>}
         <div className="flex items-center gap-3">
           <Button onClick={add} disabled={pending || !name.trim()}>{mode === "booking" ? "Add booking" : "Add to waitlist"}</Button>
           {err && <span className="text-sm text-red-600">{err}</span>}
