@@ -7,9 +7,11 @@ import { Label } from "@/components/ui/label";
 import {
   saveTipPoolSettings,
   computeTipPool,
+  serverCashout,
   type TipPoolSettings,
   type TipPoolResult,
   type TipSplitMethod,
+  type ServerCashout,
 } from "./tip-actions";
 
 const money = (n: number) => "$" + (Number(n) || 0).toFixed(2);
@@ -40,6 +42,24 @@ export function TipsClient({
   const [result, setResult] = useState<TipPoolResult | null>(null);
   const [runErr, setRunErr] = useState<string | null>(null);
   const [running, startRun] = useTransition();
+
+  const [coDate, setCoDate] = useState(today);
+  const [cashout, setCashout] = useState<ServerCashout | null>(null);
+  const [coErr, setCoErr] = useState<string | null>(null);
+  const [coRunning, startCo] = useTransition();
+
+  function runCashout() {
+    setCoErr(null);
+    startCo(async () => {
+      const res = await serverCashout(coDate);
+      if ("error" in res) {
+        setCoErr(res.error);
+        setCashout(null);
+        return;
+      }
+      setCashout(res);
+    });
+  }
 
   const totalPct = tipouts.reduce((s, r) => s + r.percent, 0);
 
@@ -171,6 +191,62 @@ export function TipsClient({
           </div>
           <Button type="submit" variant="outline">Export CSV</Button>
         </form>
+      </div>
+
+      {/* Server cashout */}
+      <div className="bg-card border border-border rounded-lg p-6 space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold">Server cashout</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            End-of-shift reconciliation per server. Assumes servers drop their cash sales and keep cash tips net of tip-out.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Date</Label>
+            <Input type="date" value={coDate} onChange={(e) => setCoDate(e.target.value)} className="h-9 w-44" />
+          </div>
+          <Button onClick={runCashout} disabled={coRunning}>{coRunning ? "Running…" : "Run cashout"}</Button>
+          {coErr && <span className="text-xs text-red-600">{coErr}</span>}
+        </div>
+
+        {cashout && (
+          cashout.rows.length === 0 ? (
+            <p className="text-xs text-muted-foreground pt-2 border-t border-border">No server-attributed sales that day.</p>
+          ) : (
+            <div className="pt-2 border-t border-border overflow-x-auto">
+              {cashout.tipOutPct > 0 && (
+                <p className="text-[11px] text-muted-foreground mb-2">Tip-out: {cashout.tipOutPct}% of each server&apos;s tips.</p>
+              )}
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground border-b border-border">
+                    <th className="py-2 pr-2 font-medium">Server</th>
+                    <th className="py-2 px-2 font-medium text-right">Cash sales</th>
+                    <th className="py-2 px-2 font-medium text-right">Card sales</th>
+                    <th className="py-2 px-2 font-medium text-right">Tips</th>
+                    <th className="py-2 px-2 font-medium text-right">Tip-out</th>
+                    <th className="py-2 px-2 font-medium text-right">Drop to house</th>
+                    <th className="py-2 pl-2 font-medium text-right">Take-home tips</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cashout.rows.map((r) => (
+                    <tr key={r.staffId} className="border-b border-border last:border-0">
+                      <td className="py-2 pr-2 font-medium">{r.name}<span className="text-xs text-muted-foreground ml-1">{r.orders}</span></td>
+                      <td className="py-2 px-2 text-right tabular-nums">{money(r.cashSales)}</td>
+                      <td className="py-2 px-2 text-right tabular-nums">{money(r.cardSales)}</td>
+                      <td className="py-2 px-2 text-right tabular-nums">{money(r.tips)}</td>
+                      <td className="py-2 px-2 text-right tabular-nums text-muted-foreground">{r.tipOut > 0 ? "-" + money(r.tipOut) : "—"}</td>
+                      <td className="py-2 px-2 text-right tabular-nums font-semibold">{money(r.dropToHouse)}</td>
+                      <td className="py-2 pl-2 text-right tabular-nums font-semibold text-emerald-600">{money(r.takeHomeTips)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
       </div>
 
       {/* Run the pool */}

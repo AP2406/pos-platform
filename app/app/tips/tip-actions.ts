@@ -338,3 +338,94 @@ export async function tipPayrollForRange(
     grossTips: d(grossTipsCents),
   };
 }
+
+export type CashoutRow = {
+  staffId: string;
+  name: string;
+  orders: number;
+  cashSales: number;
+  cardSales: number;
+  otherSales: number;
+  totalSales: number;
+  tips: number;
+  cashTips: number;
+  tipOut: number; // owed to support roles (pool rules % of their tips)
+  dropToHouse: number; // cash sales revenue to hand in
+  takeHomeTips: number; // tips − tip-out
+};
+export type ServerCashout = { date: string; tipOutPct: number; rows: CashoutRow[] };
+
+// Per-server end-of-shift cashout for a calendar day: what each server sold (by
+// tender), tips they brought in, their tip-out, cash owed to the house (cash
+// sales revenue), and take-home tips. Policy shown plainly so it can reconcile.
+export async function serverCashout(date: string): Promise<ServerCashout | { error: string }> {
+  const { business, role } = await requireBusiness();
+  if (role !== "owner" && role !== "manager") return { error: "Only an owner or manager can run cashout." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Pick a date." };
+
+  const tz = (business as { timezone?: string }).timezone || "America/Toronto";
+  const supabase = await createClient();
+  const { data: bizRow } = await supabase.from("businesses").select("tip_pool_settings").eq("id", business.id).maybeSingle();
+  const settings = sanitize(bizRow?.tip_pool_settings ?? DEFAULT_SETTINGS);
+  const tipOutPct = settings.tipouts.reduce((s, r) => s + r.percent, 0);
+
+  const start = new Date(date + "T00:00:00.000Z");
+  const winStart = new Date(start.getTime() - 24 * 3600 * 1000).toISOString();
+  const winEnd = new Date(start.getTime() + 48 * 3600 * 1000).toISOString();
+  const { data: orders } = await supabase
+    .from("orders")
+    .select("total, tip, staff_id, payment_method, created_at")
+    .eq("business_id", business.id)
+    .eq("status", "paid")
+    .gte("created_at", winStart)
+    .lte("created_at", winEnd);
+
+  type Acc = { orders: number; cash: number; card: number; other: number; tips: number; cashTips: number };
+  const per = new Map<string, Acc>();
+  for (const o of orders ?? []) {
+    if (dayKey(o.created_at as string, tz) !== date) continue;
+    const sid = (o.staff_id as string | null) ?? null;
+    if (!sid) continue;
+    const a = per.get(sid) ?? { orders: 0, cash: 0, card: 0, other: 0, tips: 0, cashTips: 0 };
+    const total = Number(o.total) || 0;
+    const tip = Number(o.tip) || 0;
+    const m = (o.payment_method as string) || "cash";
+    a.orders += 1;
+    a.tips += tip;
+    if (m === "cash") { a.cash += total; a.cashTips += tip; }
+    else if (m === "card") a.card += total;
+    else a.other += total;
+    per.set(sid, a);
+  }
+
+  const ids = Array.from(per.keys());
+  const nameById = new Map<string, string>();
+  if (ids.length > 0) {
+    const { data: staff } = await supabase.from("staff_members").select("id, name").eq("business_id", business.id).in("id", ids);
+    for (const s of staff ?? []) nameById.set(s.id as string, s.name as string);
+  }
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const rows: CashoutRow[] = ids
+    .map((sid) => {
+      const a = per.get(sid)!;
+      const tips = r2(a.tips);
+      const tipOut = r2((a.tips * tipOutPct) / 100);
+      return {
+        staffId: sid,
+        name: nameById.get(sid) ?? "Server",
+        orders: a.orders,
+        cashSales: r2(a.cash),
+        cardSales: r2(a.card),
+        otherSales: r2(a.other),
+        totalSales: r2(a.cash + a.card + a.other),
+        tips,
+        cashTips: r2(a.cashTips),
+        tipOut,
+        dropToHouse: r2(a.cash),
+        takeHomeTips: r2(tips - tipOut),
+      };
+    })
+    .sort((a, b) => b.totalSales - a.totalSales || a.name.localeCompare(b.name));
+
+  return { date, tipOutPct, rows };
+}
