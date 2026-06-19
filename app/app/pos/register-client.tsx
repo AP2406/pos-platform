@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Chip } from "@/components/ui/chip";
-import { formatPaymentMethod } from "@/lib/format";
+import { formatPaymentMethod, displayItemName } from "@/lib/format";
 import { createOrder, searchCustomers, quickCreateCustomer } from "./actions";
 import { finalizeSplitCheck, type SplitResultOrder } from "./split-actions";
 import { SplitSheet, type SplitCheck } from "./split-sheet";
 import { verifyManagerPin } from "./approval-actions";
+import { requestRegisterApproval, getApprovalStatus } from "../approvals/actions";
+import { ALLERGENS, allergenLabels } from "@/lib/allergens";
 import {
   holdTicket,
   listOpenTickets,
@@ -286,6 +288,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const [pickerItem, setPickerItem] = useState<Item | null>(null);
   const [pickerVariationId, setPickerVariationId] = useState<string | null>(null);
   const [pickerMods, setPickerMods] = useState<string[]>([]);
+  // P1: kitchen note + allergen flags captured at add-item time (not just line-edit).
+  const [pickerNote, setPickerNote] = useState("");
+  const [pickerAllergens, setPickerAllergens] = useState<string[]>([]);
   const [openTickets, setOpenTickets] = useState<OpenTicketSummary[]>([]);
   const [ticketsOpen, setTicketsOpen] = useState(false);
   const [holdOpen, setHoldOpen] = useState(false);
@@ -312,6 +317,12 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const [mgrErr, setMgrErr] = useState<string | null>(null);
   const [mgrBusy, setMgrBusy] = useState(false);
   const [approved, setApproved] = useState(false);
+  // P1: async "Send for approval" from the register. Holds the request context
+  // for the pending action, the in-flight request id while we poll, and the
+  // terminal state so the modal can show waiting / approved / denied.
+  const pendingApprovalRef = useRef<{ kind: string; amount?: number; reasonCode?: string; context?: string } | null>(null);
+  const [awaitApprovalId, setAwaitApprovalId] = useState<string | null>(null);
+  const [approvalState, setApprovalState] = useState<"idle" | "waiting" | "denied">("idle");
   // Which compact cart action sheet is open, and which cart line is being edited.
   const [sheet, setSheet] = useState<null | "discount" | "tip" | "tax" | "customer" | "comp" | "service">(null);
   const [editLineIndex, setEditLineIndex] = useState<number | null>(null);
@@ -378,6 +389,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const firstCourseId = courseList[0]?.id ?? null;
   const courseById = new Map(courseList.map((c) => [c.id, c]));
   const itemDefaultCourse = new Map(items.map((i) => [i.id, i.default_course_id ?? null]));
+  const itemById = new Map(items.map((i) => [i.id, i]));
   function defaultCourseFor(catalogItemId: string | null): string | null {
     if (!coursingOn) return null;
     const fromItem = catalogItemId ? itemDefaultCourse.get(catalogItemId) ?? null : null;
@@ -460,15 +472,20 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     setOpenTickets(t);
   }
 
-  function addLine(line: { catalog_item_id: string | null; variation_id: string | null; name: string; unit_price: number; taxable: boolean; taxFrac: number }) {
+  function addLine(line: { catalog_item_id: string | null; variation_id: string | null; name: string; unit_price: number; taxable: boolean; taxFrac: number; note?: string | null; allergy?: string | null }) {
     setReceipt(null);
     const seat = tableMode ? activeSeat : null;
+    const note = line.note && line.note.trim() ? line.note.trim() : null;
+    const allergy = line.allergy && line.allergy.trim() ? line.allergy.trim() : null;
     setCart((prev) => {
+      // A line carrying a note/allergy is kept distinct (don't merge it into an
+      // existing plain line — the kitchen instructions differ).
       const match = (l: CartLine) =>
         l.catalog_item_id === line.catalog_item_id &&
         l.variation_id === line.variation_id &&
         l.name === line.name &&
-        (l.seat ?? null) === (seat ?? null);
+        (l.seat ?? null) === (seat ?? null) &&
+        !note && !allergy && !l.note && !l.allergy;
       if (prev.some(match)) {
         return prev.map((l) => (match(l) ? { ...l, quantity: l.quantity + 1 } : l));
       }
@@ -484,6 +501,8 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
           taxFrac: line.taxFrac,
           seat: seat,
           course_id: defaultCourseFor(line.catalog_item_id),
+          note: note,
+          allergy: allergy,
         },
       ];
     });
@@ -494,6 +513,8 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       setReceipt(null);
       setPickerVariationId(null);
       setPickerMods([]);
+      setPickerNote("");
+      setPickerAllergens([]);
       setPickerItem(item);
       return;
     }
@@ -509,6 +530,15 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     if (isOos(item)) return false;
     const qty = localStock[item.id] ?? (item.stock_qty ?? 0);
     return qty > 0 && qty <= item.reorder_point;
+  }
+
+  // P1: is this cart line's item currently 86'd (incl. a live kitchen 86 over
+  // realtime)? Used to block firing/charging it and to raise the stop banner.
+  function lineIsOos(l: CartLine): boolean {
+    if (!l.catalog_item_id || l.void) return false;
+    const it = itemById.get(l.catalog_item_id);
+    if (!it) return false;
+    return localOos[it.id] ?? it.out_of_stock;
   }
 
   function toggleOos(item: Item) {
@@ -683,6 +713,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       label = label + " (" + chosen.map((m) => "+ " + m.name).join(", ") + ")";
     }
     unit = Math.round(unit * 100) / 100;
+    // Allergen chips compile into the per-line allergy string (the KDS + chit
+    // already render `allergy`); the note rides alongside.
+    const allergyStr = pickerAllergens.length > 0 ? allergenLabels(pickerAllergens).join(", ") : "";
     addLine({
       catalog_item_id: item.id,
       variation_id: varId,
@@ -690,6 +723,8 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       unit_price: unit,
       taxable: item.taxable,
       taxFrac: item.taxFrac,
+      note: pickerNote,
+      allergy: allergyStr,
     });
     setPickerItem(null);
   }
@@ -767,7 +802,18 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   // P0: voiding a line requires the `void` permission; otherwise a manager PIN
   // must authorize it (the void doesn't apply until approved).
   function voidLine(index: number, reasonCode: string) {
-    authorizeAction("void", false, () => commitVoid(index, reasonCode));
+    const line = cart[index];
+    const meta = line
+      ? {
+          kind: "void",
+          amount: Math.round(line.unit_price * line.quantity * 100) / 100,
+          reasonCode,
+          context:
+            displayItemName(line.name) +
+            (tableBinding?.tableLabel ? " · " + tableBinding.tableLabel : ""),
+        }
+      : undefined;
+    authorizeAction("void", false, () => commitVoid(index, reasonCode), meta);
   }
   function unvoidLine(index: number) {
     setCart((prev) => prev.map((l, i) => (i === index ? { ...l, void: null } : l)));
@@ -956,6 +1002,11 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   // Fire the new items to the kitchen, then mark them sent locally.
   function sendToKitchen() {
     if (!tableBinding || unsentCount === 0) return;
+    const blocked = cart.find((l) => lineIsOos(l) && l.quantity > (l.sent_qty ?? 0));
+    if (blocked) {
+      setError(displayItemName(blocked.name) + " was 86'd by the kitchen — remove it before firing.");
+      return;
+    }
     setError(null);
     setSending(true);
     startTransition(async () => {
@@ -1015,6 +1066,13 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   // Fire just one course's new items to the kitchen, then mark them sent locally.
   function fireCourseClient(course: Course) {
     if (!tableBinding || courseUnsent(course.id) === 0) return;
+    const blocked = cart.find(
+      (l) => (l.course_id ?? null) === course.id && lineIsOos(l) && l.quantity > (l.sent_qty ?? 0)
+    );
+    if (blocked) {
+      setError(displayItemName(blocked.name) + " was 86'd by the kitchen — remove it before firing.");
+      return;
+    }
     setError(null);
     setSending(true);
     startTransition(async () => {
@@ -1519,7 +1577,12 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   // grants the permission and the amount is within cap, it commits immediately;
   // otherwise a manager PIN must authorize it first (the action does not apply
   // until then), and that manager is recorded as the approver.
-  function authorizeAction(permission: string, overCap: boolean, commit: () => void) {
+  function authorizeAction(
+    permission: string,
+    overCap: boolean,
+    commit: () => void,
+    approvalMeta?: { kind: string; amount?: number; reasonCode?: string; context?: string }
+  ) {
     // Businesses that don't use staff PINs (QSR / retail / transportation) have
     // no register permission system — apply directly, exactly as before. The
     // gate only engages for staffed full-service tills.
@@ -1540,6 +1603,10 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       change_tax: "tax change",
     };
     pendingCommitRef.current = commit;
+    // Only void supports the async queue today (matches /app/approvals scope).
+    pendingApprovalRef.current = approvalMeta && approvalMeta.kind === "void" ? approvalMeta : null;
+    setApprovalState("idle");
+    setAwaitApprovalId(null);
     setMgrAction(labels[permission] ?? "action");
     setMgrIntent("action");
     setMgrErr(null);
@@ -1551,11 +1618,70 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   // without disturbing the action sheet underneath it).
   function cancelMgr() {
     pendingCommitRef.current = null;
+    pendingApprovalRef.current = null;
+    setAwaitApprovalId(null);
+    setApprovalState("idle");
     setMgrIntent("tender");
     setMgrErr(null);
     setMgrPin("");
     setMgrOpen(false);
   }
+
+  // P1: send the pending (void) action to the async approvals queue instead of
+  // entering a manager PIN here. Creates the request, then polls until a manager
+  // decides — on approve we apply the held action on this device; on deny we say so.
+  function sendForApproval() {
+    const meta = pendingApprovalRef.current;
+    if (!meta) return;
+    setMgrErr(null);
+    setMgrBusy(true);
+    startTransition(async () => {
+      const res = await requestRegisterApproval({
+        kind: meta.kind,
+        amount: meta.amount,
+        reasonCode: meta.reasonCode,
+        context: meta.context,
+      });
+      setMgrBusy(false);
+      if ("error" in res) {
+        setMgrErr(res.error);
+        return;
+      }
+      setAwaitApprovalId(res.id);
+      setApprovalState("waiting");
+    });
+  }
+
+  // Poll the in-flight approval request; apply or reject when a manager decides.
+  useEffect(() => {
+    if (!awaitApprovalId || approvalState !== "waiting") return;
+    let alive = true;
+    const tick = async () => {
+      const res = await getApprovalStatus(awaitApprovalId);
+      if (!alive || !res || "error" in res) return;
+      if (res.status === "approved") {
+        const commit = pendingCommitRef.current;
+        pendingCommitRef.current = null;
+        pendingApprovalRef.current = null;
+        setAwaitApprovalId(null);
+        setApprovalState("idle");
+        setMgrOpen(false);
+        setMgrIntent("tender");
+        if (commit) commit();
+      } else if (res.status === "denied") {
+        pendingCommitRef.current = null;
+        pendingApprovalRef.current = null;
+        setAwaitApprovalId(null);
+        setApprovalState("denied");
+      }
+    };
+    const id = setInterval(tick, 3000);
+    tick();
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [awaitApprovalId, approvalState]);
 
   function applyComp() {
     const amt = parseFloat(compValue) || 0;
@@ -1676,6 +1802,13 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     setError(null);
     if (cart.length === 0) {
       setError("Add at least one item.");
+      return;
+    }
+    // P1: a line 86'd by the kitchen can't be sold. Block on the unfired portion
+    // (anything already fired was made before the 86 and is fine to charge).
+    const blocked86 = cart.find((l) => lineIsOos(l) && l.quantity > (l.sent_qty ?? 0));
+    if (blocked86) {
+      setError(displayItemName(blocked86.name) + " was 86'd by the kitchen — remove it before charging.");
       return;
     }
     // A sale must be attributed to a cashier/server before it can close, so
@@ -1999,27 +2132,50 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                 Cancel
               </button>
             </div>
-            <p className="text-xs text-muted-foreground mb-3">{"This " + mgrAction + " needs a manager" + "\u2019" + "s PIN."}</p>
-            <div className="mb-3 h-10 rounded-md border border-border flex items-center justify-center tracking-[0.4em] text-lg">
-              {mgrPin ? mgrPin.replace(/./g, "\u2022") : <span className="text-muted-foreground tracking-normal text-sm">PIN</span>}
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
-                <button key={d} type="button" onClick={() => mgrPush(d)} className="h-12 rounded-md border border-border text-lg font-medium hover:bg-accent">
-                  {d}
-                </button>
-              ))}
-              <button type="button" onClick={mgrBackspace} className="h-12 rounded-md border border-border text-sm hover:bg-accent">
-                Del
-              </button>
-              <button type="button" onClick={() => mgrPush("0")} className="h-12 rounded-md border border-border text-lg font-medium hover:bg-accent">
-                0
-              </button>
-              <button type="button" onClick={submitMgrPin} disabled={mgrBusy} className="h-12 rounded-md border border-foreground bg-accent text-sm font-medium hover:bg-accent/80 disabled:opacity-50">
-                {mgrBusy ? "..." : "Approve"}
-              </button>
-            </div>
-            {mgrErr && <p className="text-sm text-red-600 mt-2">{mgrErr}</p>}
+            {approvalState === "waiting" ? (
+              <div className="py-6 text-center space-y-2">
+                <div className="mx-auto w-6 h-6 rounded-full border-2 border-muted-foreground/30 border-t-foreground animate-spin" />
+                <p className="text-sm font-medium">Waiting for a manager to approve\u2026</p>
+                <p className="text-xs text-muted-foreground">Sent to Approvals. This applies automatically once approved.</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground mb-3">{"This " + mgrAction + " needs a manager" + "\u2019" + "s PIN."}</p>
+                {approvalState === "denied" && (
+                  <p className="text-sm text-red-600 mb-2">A manager declined the request. Enter a PIN to override, or cancel.</p>
+                )}
+                <div className="mb-3 h-10 rounded-md border border-border flex items-center justify-center tracking-[0.4em] text-lg">
+                  {mgrPin ? mgrPin.replace(/./g, "\u2022") : <span className="text-muted-foreground tracking-normal text-sm">PIN</span>}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+                    <button key={d} type="button" onClick={() => mgrPush(d)} className="h-12 rounded-md border border-border text-lg font-medium hover:bg-accent">
+                      {d}
+                    </button>
+                  ))}
+                  <button type="button" onClick={mgrBackspace} className="h-12 rounded-md border border-border text-sm hover:bg-accent">
+                    Del
+                  </button>
+                  <button type="button" onClick={() => mgrPush("0")} className="h-12 rounded-md border border-border text-lg font-medium hover:bg-accent">
+                    0
+                  </button>
+                  <button type="button" onClick={submitMgrPin} disabled={mgrBusy} className="h-12 rounded-md border border-foreground bg-accent text-sm font-medium hover:bg-accent/80 disabled:opacity-50">
+                    {mgrBusy ? "..." : "Approve"}
+                  </button>
+                </div>
+                {mgrAction === "void" && (
+                  <button
+                    type="button"
+                    onClick={sendForApproval}
+                    disabled={mgrBusy}
+                    className="mt-2 w-full h-10 rounded-md border border-border text-sm hover:bg-accent disabled:opacity-50"
+                  >
+                    No manager? Send for approval
+                  </button>
+                )}
+                {mgrErr && <p className="text-sm text-red-600 mt-2">{mgrErr}</p>}
+              </>
+            )}
           </div>
         </div>
       )}
@@ -2050,6 +2206,41 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
             )}
 
             {modGroupsOf(pickerItem).map((g) => renderModGroup(g, 0))}
+
+            {/* P1: allergen flags + kitchen note at add time (red on the KDS + chit). */}
+            <div className="space-y-2 mb-3 pt-2 border-t border-border">
+              <div className="text-xs text-muted-foreground">Allergy alert</div>
+              <div className="flex flex-wrap gap-1.5">
+                {ALLERGENS.map((a) => {
+                  const on = pickerAllergens.includes(a.key);
+                  return (
+                    <button
+                      key={a.key}
+                      type="button"
+                      onClick={() =>
+                        setPickerAllergens((prev) =>
+                          prev.includes(a.key) ? prev.filter((k) => k !== a.key) : [...prev, a.key]
+                        )
+                      }
+                      className={
+                        "text-xs rounded-full border px-2.5 py-1 transition-colors " +
+                        (on
+                          ? "border-red-600 bg-red-600 text-white font-medium"
+                          : "border-border hover:border-red-600/50 hover:bg-red-600/5")
+                      }
+                    >
+                      {a.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <Input
+                value={pickerNote}
+                onChange={(e) => setPickerNote(e.target.value)}
+                placeholder="Kitchen note (e.g. no onions, well done)"
+                className="h-10"
+              />
+            </div>
 
             <Button className="w-full" onClick={confirmOptions} disabled={(pickerItem.variations.length > 0 && !pickerVariationId) || requiredUnmet(pickerItem).length > 0}>
               {requiredUnmet(pickerItem).length > 0 ? "Choose " + requiredUnmet(pickerItem)[0].name : "Add to cart - $" + pickerUnitPrice(pickerItem).toFixed(2)}
@@ -2415,6 +2606,18 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                   <button type="button" onClick={() => setSeatCount((n) => Math.min(n + 1, 30))} className="shrink-0 whitespace-nowrap text-sm rounded-lg border border-dashed border-border px-3 min-h-[44px] inline-flex items-center text-muted-foreground hover:bg-accent/50">+ Seat</button>
                 </div>
               )}
+
+              {(() => {
+                const stopped = cart.filter((l) => lineIsOos(l) && l.quantity > (l.sent_qty ?? 0));
+                if (stopped.length === 0) return null;
+                const names = Array.from(new Set(stopped.map((l) => displayItemName(l.name))));
+                return (
+                  <div className="shrink-0 mx-4 mt-3 rounded-md border border-red-600/50 bg-red-600/10 px-3 py-2 text-xs text-red-700 dark:text-red-400">
+                    <span className="font-semibold">⛔ 86&apos;d by the kitchen:</span>{" "}
+                    {names.join(", ")} — remove {names.length === 1 ? "it" : "them"} before firing or charging.
+                  </div>
+                );
+              })()}
 
               <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
                 {cart.length === 0 ? (

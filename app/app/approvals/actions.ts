@@ -15,6 +15,7 @@ export type ApprovalRow = {
   reasonCode: string | null;
   reasonNote: string | null;
   requestedByName: string | null;
+  context: string | null;
   createdAt: string;
 };
 
@@ -74,13 +75,83 @@ export async function requestApproval(input: {
   return { ok: true };
 }
 
+// Register variant: a mid-sale action (void/comp/discount) with no saved order
+// yet. There's nothing for the server to execute on approval — the cashier's
+// device applies the action once approved — so this records the request +
+// notifies managers, and the register polls `getApprovalStatus`. The context
+// label (table / cart) rides in payload so the manager knows what they're OK'ing.
+export async function requestRegisterApproval(input: {
+  kind: string;
+  amount?: number;
+  reasonCode?: string;
+  reasonNote?: string;
+  context?: string;
+}): Promise<{ ok: true; id: string } | { error: string }> {
+  if (!input.kind) return { error: "Missing action." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const active = await getActiveStaff();
+
+  const { data, error } = await supabase
+    .from("approval_requests")
+    .insert({
+      business_id: business.id,
+      kind: input.kind,
+      order_id: null,
+      amount: input.amount ?? null,
+      reason_code: input.reasonCode ?? null,
+      reason_note: input.reasonNote ? input.reasonNote.slice(0, 500) : null,
+      requested_by: active ? active.id : null,
+      requested_by_name: active ? active.name : null,
+      status: "pending",
+      payload: { source: "register", context: input.context ?? null },
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    console.error("requestRegisterApproval:", error);
+    return { error: "Could not send the request." };
+  }
+
+  await notifyBusiness(business.id, "exception", {
+    title: "Approval needed",
+    body:
+      input.kind.charAt(0).toUpperCase() + input.kind.slice(1) +
+      (input.amount ? " $" + Number(input.amount).toFixed(2) : "") +
+      (input.context ? " — " + input.context : "") +
+      (active ? " — " + active.name : ""),
+    url: "/app/approvals",
+  });
+  revalidatePath("/app/approvals");
+  return { ok: true, id: data.id as string };
+}
+
+// Polled by the register while it waits on a sent approval.
+export async function getApprovalStatus(
+  id: string
+): Promise<{ status: "pending" | "approved" | "denied" } | { error: string }> {
+  if (!id) return { error: "Missing request." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("approval_requests")
+    .select("status")
+    .eq("id", id)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!data) return { error: "Request not found." };
+  const s = data.status as string;
+  if (s === "approved" || s === "denied") return { status: s };
+  return { status: "pending" };
+}
+
 export async function listPendingApprovals(): Promise<ApprovalRow[]> {
   const { business, role } = await requireBusiness();
   if (role !== "owner" && role !== "manager") return [];
   const supabase = await createClient();
   const { data } = await supabase
     .from("approval_requests")
-    .select("id, kind, order_id, amount, reason_code, reason_note, requested_by_name, created_at")
+    .select("id, kind, order_id, amount, reason_code, reason_note, requested_by_name, payload, created_at")
     .eq("business_id", business.id)
     .eq("status", "pending")
     .order("created_at", { ascending: true })
@@ -107,6 +178,7 @@ export async function listPendingApprovals(): Promise<ApprovalRow[]> {
     reasonCode: (r.reason_code as string | null) ?? null,
     reasonNote: (r.reason_note as string | null) ?? null,
     requestedByName: (r.requested_by_name as string | null) ?? null,
+    context: ((r.payload as { context?: string | null } | null)?.context as string | null) ?? null,
     createdAt: r.created_at as string,
   }));
 }

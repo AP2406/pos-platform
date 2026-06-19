@@ -99,6 +99,10 @@ export function KitchenClient({
 
   // Audible alerts (per-device, off by default). Web Audio beeps — no files.
   const [soundOn, setSoundOn] = useState(false);
+  // P1: a sticky STOP banner naming items the register just voided/86'd, on top
+  // of the loud red ticket — so a busy line can't miss it. Auto-clears.
+  const [stopItems, setStopItems] = useState<string[]>([]);
+  const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     try { setSoundOn(localStorage.getItem("kds_sound") === "1"); } catch {}
   }, []);
@@ -187,15 +191,24 @@ export function KitchenClient({
   useEffect(() => {
     let freshNormal = false;
     let freshVoid = false;
+    const voidNames: string[] = [];
     for (const o of orders) {
       if (!seenIds.current.has(o.id)) {
-        if (o.items.some((it) => it.void === true)) freshVoid = true;
-        else freshNormal = true;
+        const vs = o.items.filter((it) => it.void === true).map((it) => displayItemName(it.name));
+        if (vs.length > 0) {
+          freshVoid = true;
+          voidNames.push(...vs);
+        } else freshNormal = true;
       }
     }
     seenIds.current = new Set(orders.map((o) => o.id));
     if (freshVoid) alarm();
     else if (freshNormal) chime();
+    if (voidNames.length > 0) {
+      setStopItems((prev) => Array.from(new Set([...prev, ...voidNames])));
+      if (stopTimer.current) clearTimeout(stopTimer.current);
+      stopTimer.current = setTimeout(() => setStopItems([]), 25000);
+    }
   }, [orders, chime, alarm]);
 
   // Late alarm: a ticket crossing 18m sounds once.
@@ -539,6 +552,24 @@ export function KitchenClient({
     </div>
   );
 
+  const stopBanner =
+    stopItems.length > 0 ? (
+      <div className="mb-4 flex items-center gap-3 rounded-xl border-2 border-red-600 bg-red-600/15 px-4 py-3 text-red-700 dark:text-red-300">
+        <span className="text-2xl leading-none">⛔</span>
+        <div className="min-w-0 flex-1">
+          <div className="font-bold">STOP — do not make</div>
+          <div className="text-sm truncate">{stopItems.join(", ")}</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setStopItems([])}
+          className="shrink-0 text-sm rounded-md border border-red-600/50 px-3 py-1.5 hover:bg-red-600/10"
+        >
+          Got it
+        </button>
+      </div>
+    ) : null;
+
   const recallStrip =
     recentList.length > 0 ? (
       <div className="mb-4 flex items-center gap-2 flex-wrap">
@@ -743,6 +774,7 @@ export function KitchenClient({
     return (
       <div>
         {viewToggle}
+        {stopBanner}
         {board86}
         {recallStrip}
         {allDayPanel}
@@ -798,6 +830,7 @@ export function KitchenClient({
   return (
     <div>
       {viewToggle}
+      {stopBanner}
       {board86}
       {recallStrip}
       {stationStrip}

@@ -61,7 +61,7 @@ export function ApprovalsClient({ initial }: { initial: ApprovalRow[] }) {
           <div className="min-w-0">
             <div className="font-medium">
               {labelKind(r.kind)}
-              {r.saleNumber ? " · #" + r.saleNumber : ""}
+              {r.saleNumber ? " · #" + r.saleNumber : r.context ? " · " + r.context : ""}
               {r.amount != null ? " · $" + r.amount.toFixed(2) : ""}
             </div>
             <div className="text-xs text-muted-foreground truncate">
