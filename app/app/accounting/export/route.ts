@@ -35,7 +35,7 @@ export async function GET(request: Request) {
   lines.push(row("Sales", "Tips payable", "", n(s.tips)));
   lines.push(row("Sales", "Gross sales", s.orderCount + " sales", n(s.grossSales)));
   for (const t of s.taxByRate) {
-    lines.push(row("Tax", t.label, pct(t.rate) + " on " + n(t.base), n(t.amount)));
+    lines.push(row("Tax", t.label + (t.jurisdiction ? " (" + t.jurisdiction + ")" : ""), pct(t.rate) + " on " + n(t.base), n(t.amount)));
   }
   lines.push(row("Tax", "Taxable base", "", n(s.taxableBase)));
   lines.push(row("Tax", "Exempt / zero-rated", "", n(s.exemptBase)));

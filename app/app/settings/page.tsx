@@ -66,7 +66,7 @@ export default async function SettingsPage() {
 
   const { data: taxRatesData } = await supabase
     .from("tax_rates")
-    .select("id, name, rate")
+    .select("id, name, rate, jurisdiction")
     .eq("business_id", business.id)
     .eq("is_active", true)
     .order("created_at", { ascending: true });
@@ -74,6 +74,7 @@ export default async function SettingsPage() {
     id: r.id as string,
     name: r.name as string,
     rate: Number(r.rate),
+    jurisdiction: (r.jurisdiction as string | null) ?? null,
   }));
 
   const trainingMode =

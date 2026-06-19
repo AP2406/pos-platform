@@ -6,12 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createTaxRate, deleteTaxRate } from "./tax-rate-actions";
 
-type Rate = { id: string; name: string; rate: number };
+type Rate = { id: string; name: string; rate: number; jurisdiction?: string | null };
 
 export function TaxRatesCard({ initialRates }: { initialRates: Rate[] }) {
   const [rates, setRates] = useState<Rate[]>(initialRates);
   const [name, setName] = useState("");
   const [rate, setRate] = useState("");
+  const [jurisdiction, setJurisdiction] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -22,17 +23,18 @@ export function TaxRatesCard({ initialRates }: { initialRates: Rate[] }) {
       return;
     }
     startTransition(async () => {
-      const res = await createTaxRate(name.trim(), parseFloat(rate) || 0);
+      const res = await createTaxRate(name.trim(), parseFloat(rate) || 0, jurisdiction.trim() || undefined);
       if ("error" in res) {
         setError(res.error);
         return;
       }
       setRates((prev) => [
         ...prev,
-        { id: res.id, name: name.trim(), rate: parseFloat(rate) || 0 },
+        { id: res.id, name: name.trim(), rate: parseFloat(rate) || 0, jurisdiction: jurisdiction.trim() || null },
       ]);
       setName("");
       setRate("");
+      setJurisdiction("");
     });
   }
 
@@ -60,6 +62,7 @@ export function TaxRatesCard({ initialRates }: { initialRates: Rate[] }) {
               <div className="text-sm">
                 <span className="font-medium">{r.name}</span>
                 <span className="text-muted-foreground">{"  " + "\u00b7" + "  " + r.rate.toFixed(2) + "%"}</span>
+                {r.jurisdiction && <span className="text-muted-foreground">{"  " + "\u00b7" + "  " + r.jurisdiction}</span>}
               </div>
               <button type="button" onClick={() => handleDelete(r.id)} disabled={pending} className="text-xs text-muted-foreground underline hover:text-red-600">
                 Remove
@@ -77,6 +80,10 @@ export function TaxRatesCard({ initialRates }: { initialRates: Rate[] }) {
         <div className="space-y-1">
           <Label className="text-xs">Rate (%)</Label>
           <Input type="number" min="0" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0" className="h-9 w-24 text-right" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Jurisdiction (optional)</Label>
+          <Input value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)} placeholder="Ontario" className="h-9 w-36" />
         </div>
         <Button onClick={handleAdd} disabled={pending || !name.trim()}>
           {pending ? "Saving..." : "Add rate"}

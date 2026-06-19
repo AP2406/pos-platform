@@ -14,9 +14,10 @@ export type TipSplitMethod = "by_sales" | "by_tips" | "equal";
 export type TipPoolSettings = {
   tipouts: TipOutRule[];
   method: TipSplitMethod;
+  reportable: boolean; // tips are payroll-reportable income (drives the payroll export label)
 };
 
-const DEFAULT_SETTINGS: TipPoolSettings = { tipouts: [], method: "by_sales" };
+const DEFAULT_SETTINGS: TipPoolSettings = { tipouts: [], method: "by_sales", reportable: true };
 
 function sanitize(raw: unknown): TipPoolSettings {
   const s = (raw ?? {}) as Partial<TipPoolSettings>;
@@ -31,7 +32,7 @@ function sanitize(raw: unknown): TipPoolSettings {
         .filter((r) => r.role.length > 0)
         .slice(0, 12)
     : [];
-  return { tipouts, method };
+  return { tipouts, method, reportable: s.reportable !== false };
 }
 
 export async function getTipPoolSettings(): Promise<TipPoolSettings> {
@@ -223,5 +224,117 @@ export async function computeTipPool(date: string): Promise<TipPoolResult | { er
     servers,
     unallocated: d(serverPoolCents - allocatedCents),
     orderCount: rows.length,
+  };
+}
+
+export type TipPayroll = {
+  from: string;
+  to: string;
+  reportable: boolean;
+  method: TipSplitMethod;
+  employees: { staffId: string; name: string; tipPool: number; ownTips: number; sales: number; days: number }[];
+  tipoutsByRole: { role: string; amount: number }[];
+  grossTips: number;
+};
+
+// Aggregate the daily tip pool across a pay period into per-employee totals for
+// payroll. Each day is pooled/allocated exactly as computeTipPool does (so the
+// numbers reconcile day-by-day), then summed per server over the range.
+export async function tipPayrollForRange(
+  from: string,
+  to: string
+): Promise<TipPayroll | { error: string }> {
+  const { business, role } = await requireBusiness();
+  if (role !== "owner" && role !== "manager") return { error: "Only an owner or manager can export payroll." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+    return { error: "Pick a valid date range." };
+  }
+  const tz = (business as { timezone?: string }).timezone || "America/Toronto";
+  const supabase = await createClient();
+
+  const { data: bizRow } = await supabase
+    .from("businesses").select("tip_pool_settings").eq("id", business.id).maybeSingle();
+  const settings = sanitize(bizRow?.tip_pool_settings ?? DEFAULT_SETTINGS);
+
+  const winStart = new Date(new Date(from + "T00:00:00.000Z").getTime() - 24 * 3600 * 1000).toISOString();
+  const winEnd = new Date(new Date(to + "T00:00:00.000Z").getTime() + 48 * 3600 * 1000).toISOString();
+  const { data: orders } = await supabase
+    .from("orders")
+    .select("id, total, tip, staff_id, created_at")
+    .eq("business_id", business.id)
+    .eq("status", "paid")
+    .gte("created_at", winStart)
+    .lte("created_at", winEnd);
+
+  // Bucket orders into local days within [from, to].
+  const byDay = new Map<string, { total: number; tip: number; staff_id: string | null }[]>();
+  for (const o of orders ?? []) {
+    const day = dayKey(o.created_at as string, tz);
+    if (day < from || day > to) continue;
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day)!.push({ total: Number(o.total) || 0, tip: Number(o.tip) || 0, staff_id: (o.staff_id as string | null) ?? null });
+  }
+
+  type Acc = { tipPool: number; ownTips: number; sales: number; days: number };
+  const perStaff = new Map<string, Acc>();
+  const tipoutTotals = new Map<string, number>();
+  let grossTipsCents = 0;
+
+  for (const [, dayOrders] of byDay) {
+    let dayGross = 0;
+    const salesByStaff = new Map<string, number>();
+    const tipsByStaff = new Map<string, number>();
+    for (const o of dayOrders) {
+      const tipCents = c(o.tip);
+      dayGross += tipCents;
+      if (o.staff_id) {
+        salesByStaff.set(o.staff_id, (salesByStaff.get(o.staff_id) ?? 0) + c(o.total));
+        tipsByStaff.set(o.staff_id, (tipsByStaff.get(o.staff_id) ?? 0) + tipCents);
+      }
+    }
+    grossTipsCents += dayGross;
+    for (const r of settings.tipouts) {
+      const amt = Math.round((dayGross * r.percent) / 100);
+      tipoutTotals.set(r.role, (tipoutTotals.get(r.role) ?? 0) + amt);
+    }
+    const tipoutTotal = settings.tipouts.reduce((s, r) => s + Math.round((dayGross * r.percent) / 100), 0);
+    const serverPool = Math.max(0, dayGross - tipoutTotal);
+    const staffIds = Array.from(new Set([...salesByStaff.keys(), ...tipsByStaff.keys()]));
+    const weights = staffIds.map((sid) =>
+      settings.method === "equal" ? 1 : settings.method === "by_tips" ? tipsByStaff.get(sid) ?? 0 : salesByStaff.get(sid) ?? 0
+    );
+    const amounts = allocate(serverPool, weights);
+    staffIds.forEach((sid, i) => {
+      const a = perStaff.get(sid) ?? { tipPool: 0, ownTips: 0, sales: 0, days: 0 };
+      a.tipPool += amounts[i];
+      a.ownTips += tipsByStaff.get(sid) ?? 0;
+      a.sales += salesByStaff.get(sid) ?? 0;
+      a.days += 1;
+      perStaff.set(sid, a);
+    });
+  }
+
+  const ids = Array.from(perStaff.keys());
+  const nameById = new Map<string, string>();
+  if (ids.length > 0) {
+    const { data: staff } = await supabase.from("staff_members").select("id, name").eq("business_id", business.id).in("id", ids);
+    for (const s of staff ?? []) nameById.set(s.id as string, s.name as string);
+  }
+
+  const employees = ids
+    .map((sid) => {
+      const a = perStaff.get(sid)!;
+      return { staffId: sid, name: nameById.get(sid) ?? "Server", tipPool: d(a.tipPool), ownTips: d(a.ownTips), sales: d(a.sales), days: a.days };
+    })
+    .sort((a, b) => b.tipPool - a.tipPool || a.name.localeCompare(b.name));
+
+  return {
+    from,
+    to,
+    reportable: settings.reportable,
+    method: settings.method,
+    employees,
+    tipoutsByRole: Array.from(tipoutTotals.entries()).map(([role, cents]) => ({ role, amount: d(cents) })),
+    grossTips: d(grossTipsCents),
   };
 }

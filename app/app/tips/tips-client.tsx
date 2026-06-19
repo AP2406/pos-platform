@@ -29,6 +29,7 @@ export function TipsClient({
 }) {
   const [tipouts, setTipouts] = useState(initialSettings.tipouts);
   const [method, setMethod] = useState<TipSplitMethod>(initialSettings.method);
+  const [reportable, setReportable] = useState(initialSettings.reportable);
   const [newRole, setNewRole] = useState("");
   const [newPct, setNewPct] = useState("");
   const [saveErr, setSaveErr] = useState<string | null>(null);
@@ -60,7 +61,7 @@ export function TipsClient({
   function save() {
     setSaveErr(null);
     startTransition(async () => {
-      const res = await saveTipPoolSettings({ tipouts, method });
+      const res = await saveTipPoolSettings({ tipouts, method, reportable });
       if ("error" in res) {
         setSaveErr(res.error);
         return;
@@ -136,11 +137,40 @@ export function TipsClient({
           </select>
         </div>
 
+        <label className="flex items-start gap-2 text-xs pt-2 border-t border-border select-none">
+          <input type="checkbox" checked={reportable} onChange={(e) => { setReportable(e.target.checked); setSaved(false); }} className="h-4 w-4 mt-0.5" />
+          <span>
+            <span className="font-medium text-foreground">Tips are payroll-reportable income</span>
+            <span className="block text-muted-foreground">Labels the payroll export so your bookkeeper includes them in pay. Turn off only if tips are handled outside payroll.</span>
+          </span>
+        </label>
+
         <div className="flex items-center gap-3">
           <Button onClick={save} disabled={pending}>Save rules</Button>
           {saved && <span className="text-xs text-emerald-600">Saved.</span>}
           {saveErr && <span className="text-xs text-red-600">{saveErr}</span>}
         </div>
+      </div>
+
+      {/* Payroll export */}
+      <div className="bg-card border border-border rounded-lg p-6 space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold">Payroll export</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Per-employee tip totals for a pay period (the daily pool, summed). Downloads a CSV for payroll.
+          </p>
+        </div>
+        <form action="/app/tips/payroll" method="get" className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">From</Label>
+            <Input type="date" name="from" defaultValue={today} className="h-9 w-44" required />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">To</Label>
+            <Input type="date" name="to" defaultValue={today} className="h-9 w-44" required />
+          </div>
+          <Button type="submit" variant="outline">Export CSV</Button>
+        </form>
       </div>
 
       {/* Run the pool */}

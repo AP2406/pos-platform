@@ -4,7 +4,7 @@ import type { createClient } from "@/lib/supabase/server";
 // Reads existing orders/payments/refunds + gift-card/store-credit balances.
 // All money in numeric dollars; tax split comes from the immutable snapshot.
 
-export type TaxLine = { key: string; label: string; rate: number; base: number; amount: number };
+export type TaxLine = { key: string; label: string; rate: number; base: number; amount: number; jurisdiction: string | null };
 
 export type AccountingSummary = {
   orderCount: number;
@@ -75,7 +75,7 @@ export async function accountingSummary(
         const rate = Number(b.rate) || 0;
         const label = (b.label as string) || "Tax";
         const key = label + "@" + rate;
-        const line = taxMap.get(key) ?? { key, label, rate, base: 0, amount: 0 };
+        const line = taxMap.get(key) ?? { key, label, rate, base: 0, amount: 0, jurisdiction: null };
         line.base += Number(b.base) || 0;
         line.amount += Number(b.amount) || 0;
         taxMap.set(key, line);
@@ -108,6 +108,17 @@ export async function accountingSummary(
   for (const r of refundRows ?? []) {
     if ((r.status as string) === "voided") continue;
     refunds += Number(r.amount) || 0;
+  }
+
+  // Map each tax line to its jurisdiction (by the rate's name) for remittance.
+  if (taxMap.size > 0) {
+    const { data: rates } = await supabase
+      .from("tax_rates")
+      .select("name, jurisdiction")
+      .eq("business_id", businessId);
+    const juris = new Map<string, string | null>();
+    for (const r of rates ?? []) juris.set((r.name as string) || "", (r.jurisdiction as string | null) || null);
+    for (const line of taxMap.values()) line.jurisdiction = juris.get(line.label) ?? null;
   }
 
   // Outstanding liabilities (point-in-time).

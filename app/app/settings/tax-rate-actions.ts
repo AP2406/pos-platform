@@ -8,12 +8,13 @@ import { z } from "zod";
 const rateSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(60),
   rate: z.coerce.number().min(0).max(100),
+  jurisdiction: z.string().trim().max(60).optional(),
 });
 
 type RateResult = { ok: true; id: string } | { error: string };
 
-export async function createTaxRate(name: string, rate: number): Promise<RateResult> {
-  const parsed = rateSchema.safeParse({ name: name, rate: rate });
+export async function createTaxRate(name: string, rate: number, jurisdiction?: string): Promise<RateResult> {
+  const parsed = rateSchema.safeParse({ name: name, rate: rate, jurisdiction: jurisdiction });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
@@ -29,6 +30,7 @@ export async function createTaxRate(name: string, rate: number): Promise<RateRes
       business_id: business.id,
       name: parsed.data.name,
       rate: parsed.data.rate,
+      jurisdiction: parsed.data.jurisdiction || null,
     })
     .select("id")
     .single();

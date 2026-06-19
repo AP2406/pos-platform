@@ -174,9 +174,20 @@ export default async function AccountingPage({
             <p className="text-muted-foreground">No tax collected.</p>
           ) : (
             s.taxByRate.map((t) => (
-              <Line key={t.key} label={t.label} sub={RATE_PCT(t.rate) + " on " + money(t.base)} value={money(t.amount)} />
+              <Line key={t.key} label={t.label + (t.jurisdiction ? " · " + t.jurisdiction : "")} sub={RATE_PCT(t.rate) + " on " + money(t.base)} value={money(t.amount)} />
             ))
           )}
+          {(() => {
+            const byJur = new Map<string, number>();
+            for (const t of s.taxByRate) if (t.jurisdiction) byJur.set(t.jurisdiction, (byJur.get(t.jurisdiction) ?? 0) + t.amount);
+            if (byJur.size === 0) return null;
+            return (
+              <div className="mt-1 pt-1 border-t border-dashed border-border">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-0.5">By jurisdiction</div>
+                {Array.from(byJur.entries()).map(([j, amt]) => <Line key={j} label={j} value={money(amt)} />)}
+              </div>
+            );
+          })()}
           <div className="border-t border-border my-1" />
           <Line label="Taxable base" value={money(s.taxableBase)} />
           <Line label="Exempt / zero-rated" value={money(s.exemptBase)} />
