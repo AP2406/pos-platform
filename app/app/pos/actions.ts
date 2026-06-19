@@ -7,6 +7,7 @@ import { type PermissionKey } from "@/lib/services/permissions";
 import { parseThresholds } from "@/lib/services/exception-thresholds";
 import { isOrderPeriodLocked } from "@/lib/services/period-lock";
 import { notifyBusiness } from "@/lib/push";
+import { emailOwnerAlert } from "@/lib/services/owner-alerts";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
@@ -1006,12 +1007,13 @@ export async function voidOrder(
   const th = parseThresholds((business as { settings?: Record<string, unknown> }).settings);
   if (th.alertVoidAmount > 0 && voidTotal >= th.alertVoidAmount) {
     const who = active ? active.name : "a cashier";
-    await notifyBusiness(business.id, "exception", {
-      title: "Large void",
-      body:
-        "$" + voidTotal.toFixed(2) + " voided by " + who +
-        (ord?.sale_number ? " (#" + ord.sale_number + ")" : ""),
-      url: "/app/exceptions",
+    const label = "$" + voidTotal.toFixed(2) + " voided by " + who + (ord?.sale_number ? " (#" + ord.sale_number + ")" : "");
+    await notifyBusiness(business.id, "exception", { title: "Large void", body: label, url: "/app/exceptions" });
+    // Also email the owner/manager recipients (toggleable, best-effort).
+    await emailOwnerAlert(business as { settings?: unknown; name?: string }, {
+      key: "large_txn_email",
+      subject: "Large void — " + ((business as { name?: string }).name || "your business"),
+      html: "<p><strong>" + label + "</strong></p><p>Threshold: $" + th.alertVoidAmount.toFixed(2) + ". Review in Exceptions.</p>",
     });
   }
 

@@ -210,7 +210,7 @@ export default async function InsightsPage({
         )}
         {anyUncosted && (
           <div className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">
-            Items marked &ldquo;no recipe&rdquo; count as $0 food cost, so their margin equals revenue. Add recipes under Catalog → Recipes for accurate margins.
+            Items marked &ldquo;no recipe&rdquo; count as $0 food cost, so their margin equals revenue. <Link href="/app/recipes" className="underline hover:text-foreground">Add recipes</Link> for accurate margins.
           </div>
         )}
       </div>

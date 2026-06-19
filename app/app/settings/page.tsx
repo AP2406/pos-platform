@@ -13,6 +13,8 @@ import { listRoles } from "./roles-actions";
 import { DayCloseCard } from "./day-close-card";
 import { CoaCard } from "./coa-card";
 import { resolveCoa, COA_DEFAULTS, type CoaKey } from "../accounting/journal";
+import { OvertimeCard } from "./overtime-card";
+import { parseOvertime } from "@/lib/services/overtime";
 import { ExceptionCard } from "./exception-card";
 import { parseThresholds } from "@/lib/services/exception-thresholds";
 import { FloorCard } from "./floor-card";
@@ -135,7 +137,9 @@ export default async function SettingsPage() {
     ? (daySettings.z_report_emails as unknown[]).filter((e): e is string => typeof e === "string")
     : [];
   const dayBlind = daySettings.blind_close === true;
+  const largeTxnEmail = ((daySettings.alerts ?? {}) as Record<string, unknown>).large_txn_email !== false;
   const coa = resolveCoa(daySettings);
+  const ot = parseOvertime(daySettings);
   const coaRows = (Object.keys(COA_DEFAULTS) as CoaKey[]).map((k) => ({ key: k, name: coa[k].name, code: coa[k].code }));
   const exTh = parseThresholds(daySettings);
 
@@ -372,7 +376,7 @@ export default async function SettingsPage() {
           {hasFloorService(business) && (
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
               <SectionHeader>Day close &amp; Z-report</SectionHeader>
-              <DayCloseCard cutoff={dayCutoff} emails={dayEmails} blind={dayBlind} />
+              <DayCloseCard cutoff={dayCutoff} emails={dayEmails} blind={dayBlind} largeTxnEmail={largeTxnEmail} />
             </div>
           )}
           {hasFloorService(business) && (
@@ -391,6 +395,12 @@ export default async function SettingsPage() {
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
               <SectionHeader>Chart of accounts (QBO/Xero export)</SectionHeader>
               <CoaCard rows={coaRows} />
+            </div>
+          )}
+          {hasFloorService(business) && (
+            <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
+              <SectionHeader>Overtime</SectionHeader>
+              <OvertimeCard weeklyHours={ot.weeklyHours} multiplier={ot.multiplier} />
             </div>
           )}
           {business.industry === "transportation" && (
