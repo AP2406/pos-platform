@@ -247,3 +247,42 @@ export async function deleteShiftTemplate(id: string): Promise<{ ok: true } | { 
   revalidatePath("/app/schedule");
   return { ok: true };
 }
+
+// Drag-to-move: keep the shift's local times, change its day. (Times are edited
+// via delete + re-add; this is day reassignment only.)
+export async function moveShift(id: string, newDate: string): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing shift." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return { error: "Bad day." };
+  const { business, role } = await requireBusiness();
+  if (!canManage(role)) return { error: "Only an owner or manager can edit the schedule." };
+  const tz = (business as { timezone?: string }).timezone || "America/Toronto";
+  const supabase = await createClient();
+  const { data: s } = await supabase
+    .from("shifts")
+    .select("starts_at, ends_at")
+    .eq("id", id)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!s) return { error: "Shift not found." };
+  const hm = (iso: string) => new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso));
+  const startTime = hm(s.starts_at as string);
+  const endTime = hm(s.ends_at as string);
+  const startIso = localToUtcIso(newDate, startTime, tz);
+  let endIso = localToUtcIso(newDate, endTime, tz);
+  if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
+    const next = new Date(newDate + "T00:00:00Z");
+    next.setUTCDate(next.getUTCDate() + 1);
+    endIso = localToUtcIso(next.toISOString().slice(0, 10), endTime, tz);
+  }
+  const { error } = await supabase
+    .from("shifts")
+    .update({ starts_at: startIso, ends_at: endIso, published: false })
+    .eq("id", id)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("moveShift:", error);
+    return { error: "Could not move the shift." };
+  }
+  revalidatePath("/app/schedule");
+  return { ok: true };
+}

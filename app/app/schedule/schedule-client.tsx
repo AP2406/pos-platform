@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { addShift, deleteShift, publishWeek, saveWeekAsTemplate, applyTemplate, deleteShiftTemplate, type ShiftTemplate } from "./actions";
+import { addShift, deleteShift, publishWeek, saveWeekAsTemplate, applyTemplate, deleteShiftTemplate, moveShift, type ShiftTemplate } from "./actions";
 
 type Staff = { id: string; name: string; active: boolean };
 type Shift = {
@@ -29,6 +29,21 @@ export function ScheduleClient({
   const [err, setErr] = useState<string | null>(null);
   const [tplName, setTplName] = useState("");
   const [tplPick, setTplPick] = useState(templates[0]?.id ?? "");
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overDay, setOverDay] = useState<string | null>(null);
+
+  function drop(dayKey: string) {
+    const id = dragId;
+    setDragId(null);
+    setOverDay(null);
+    if (!id) return;
+    setErr(null);
+    start(async () => {
+      const res = await moveShift(id, dayKey);
+      if ("error" in res) { setErr(res.error); return; }
+      refresh();
+    });
+  }
 
   const assignable = staff.filter((s) => s.active);
   const [staffId, setStaffId] = useState(assignable[0]?.id ?? "");
@@ -146,14 +161,26 @@ export function ScheduleClient({
         {days.map((d) => {
           const dayShifts = shifts.filter((s) => s.dayKey === d.key);
           return (
-            <div key={d.key} className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-3">
+            <div
+              key={d.key}
+              onDragOver={(e) => { if (dragId) { e.preventDefault(); setOverDay(d.key); } }}
+              onDragLeave={() => setOverDay((cur) => (cur === d.key ? null : cur))}
+              onDrop={(e) => { e.preventDefault(); drop(d.key); }}
+              className={"bg-card ring-1 shadow-elevation rounded-xl p-3 transition-colors " + (overDay === d.key ? "ring-foreground bg-accent/40" : "ring-line")}
+            >
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{d.label}</div>
               {dayShifts.length === 0 ? (
-                <div className="text-xs text-muted-foreground">—</div>
+                <div className="text-xs text-muted-foreground">{dragId ? "Drop here" : "—"}</div>
               ) : (
                 <div className="space-y-1.5">
                   {dayShifts.map((s) => (
-                    <div key={s.id} className="text-sm rounded-md border border-border px-2 py-1.5">
+                    <div
+                      key={s.id}
+                      draggable
+                      onDragStart={() => setDragId(s.id)}
+                      onDragEnd={() => { setDragId(null); setOverDay(null); }}
+                      className={"text-sm rounded-md border border-border px-2 py-1.5 cursor-grab active:cursor-grabbing " + (dragId === s.id ? "opacity-50" : "")}
+                    >
                       <div className="flex items-center justify-between gap-1">
                         <span className="font-medium truncate">{s.staffName}</span>
                         <button type="button" onClick={() => remove(s.id)} disabled={pending} className="text-xs text-muted-foreground hover:text-red-600">✕</button>
