@@ -16,11 +16,13 @@ type Shift = {
 type DayLabel = { key: string; label: string };
 type Variance = { id: string; name: string; scheduled: number; actual: number };
 
+type Forecast = { cost: number; hours: number; sales: number; laborPct: number | null; coverage: number };
+
 export function ScheduleClient({
-  staff, shifts, days, variance, monday, prevWeek, nextWeek, startIso, endIso, anyUnpublished,
+  staff, shifts, days, variance, monday, prevWeek, nextWeek, startIso, endIso, anyUnpublished, forecast,
 }: {
   staff: Staff[]; shifts: Shift[]; days: DayLabel[]; variance: Variance[];
-  monday: string; prevWeek: string; nextWeek: string; startIso: string; endIso: string; anyUnpublished: boolean;
+  monday: string; prevWeek: string; nextWeek: string; startIso: string; endIso: string; anyUnpublished: boolean; forecast: Forecast;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -140,6 +142,21 @@ export function ScheduleClient({
           );
         })}
       </div>
+
+      {forecast.hours > 0 && (
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 mb-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Labor forecast (this week)</div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div><div className="text-muted-foreground text-xs">Scheduled hours</div><div className="text-lg font-semibold tabular-nums">{forecast.hours.toFixed(1)}</div></div>
+            <div><div className="text-muted-foreground text-xs">Projected labor</div><div className="text-lg font-semibold tabular-nums">{"$" + forecast.cost.toFixed(2)}</div></div>
+            <div><div className="text-muted-foreground text-xs">Forecast sales</div><div className="text-lg font-semibold tabular-nums">{forecast.sales > 0 ? "$" + forecast.sales.toFixed(0) : "—"}</div></div>
+            <div><div className="text-muted-foreground text-xs">Projected labor %</div><div className={"text-lg font-semibold tabular-nums " + (forecast.laborPct != null && forecast.laborPct > 30 ? "text-amber-600" : "")}>{forecast.laborPct != null ? forecast.laborPct + "%" : "—"}</div></div>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-2">
+            Sales forecast = trailing 4-week average. {forecast.coverage < 100 ? forecast.coverage + "% of scheduled hours have a pay rate set (others count as $0)." : "Set pay rates under Team."}
+          </p>
+        </div>
+      )}
 
       {variance.length > 0 && (
         <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl overflow-hidden">

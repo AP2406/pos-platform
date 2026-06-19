@@ -25,9 +25,12 @@ export default async function SchedulePage({
   const startIso = localMidnightUtc(monday, tz);
   const endIso = localMidnightUtc(nextMonday, tz);
 
+  // Trailing 4 weeks (for a sales forecast) → labor % projection.
+  const trailStartIso = localMidnightUtc(addDays(monday, -28), tz);
+
   const supabase = await createClient();
-  const [{ data: staffRows }, { data: shiftRows }, { data: clocks }] = await Promise.all([
-    supabase.from("staff_members").select("id, name, is_active").eq("business_id", business.id).order("name"),
+  const [{ data: staffRows }, { data: shiftRows }, { data: clocks }, { data: trailOrders }] = await Promise.all([
+    supabase.from("staff_members").select("id, name, is_active, pay_rate").eq("business_id", business.id).order("name"),
     supabase
       .from("shifts")
       .select("id, staff_id, starts_at, ends_at, role_label, note, published")
@@ -41,10 +44,18 @@ export default async function SchedulePage({
       .eq("business_id", business.id)
       .gte("clock_in", startIso)
       .lt("clock_in", endIso),
+    supabase
+      .from("orders")
+      .select("total")
+      .eq("business_id", business.id)
+      .neq("status", "voided")
+      .gte("created_at", trailStartIso)
+      .lt("created_at", startIso),
   ]);
 
   const staff = (staffRows ?? []).map((s) => ({ id: s.id as string, name: (s.name as string) || "Staff", active: s.is_active !== false }));
   const nameById = new Map(staff.map((s) => [s.id, s.name]));
+  const rateById = new Map((staffRows ?? []).map((s) => [s.id as string, s.pay_rate != null ? Number(s.pay_rate) : null]));
 
   const shifts = (shiftRows ?? []).map((s) => {
     const start = s.starts_at as string;
@@ -85,6 +96,26 @@ export default async function SchedulePage({
     }))
     .filter((v) => v.scheduled > 0 || v.actual > 0);
 
+  // Labor-cost forecast: scheduled hours × pay rate vs a trailing-average sales
+  // forecast for the week. Staff without a pay rate contribute hours but $0 cost.
+  let forecastCost = 0;
+  let forecastHours = 0;
+  let ratedHours = 0;
+  for (const s of shifts) {
+    forecastHours += s.hours;
+    const rate = rateById.get(s.staffId);
+    if (rate != null) { forecastCost += s.hours * rate; ratedHours += s.hours; }
+  }
+  const trailingSales = (trailOrders ?? []).reduce((acc, o) => acc + (Number(o.total) || 0), 0);
+  const forecastSales = Math.round((trailingSales / 4) * 100) / 100; // avg weekly
+  const forecast = {
+    cost: Math.round(forecastCost * 100) / 100,
+    hours: Math.round(forecastHours * 10) / 10,
+    sales: forecastSales,
+    laborPct: forecastSales > 0 ? Math.round((forecastCost / forecastSales) * 1000) / 10 : null,
+    coverage: forecastHours > 0 ? Math.round((ratedHours / forecastHours) * 100) : 100,
+  };
+
   const anyUnpublished = shifts.some((s) => !s.published);
   const dayLabels = days.map((d) => ({
     key: d,
@@ -103,6 +134,7 @@ export default async function SchedulePage({
       startIso={startIso}
       endIso={endIso}
       anyUnpublished={anyUnpublished}
+      forecast={forecast}
     />
   );
 }
