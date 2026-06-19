@@ -3,7 +3,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
 import { ScheduleClient } from "./schedule-client";
-import { listShiftTemplates } from "./actions";
+import { listShiftTemplates, listTimeOff } from "./actions";
 import { todayKey, mondayOf, localMidnightUtc, weekDays, addDays } from "./week";
 
 export const dynamic = "force-dynamic";
@@ -118,6 +118,8 @@ export default async function SchedulePage({
   };
 
   const templates = await listShiftTemplates();
+  const timeOffRaw = await listTimeOff(startIso, endIso);
+  const timeOff = timeOffRaw.map((t) => ({ ...t, staffName: nameById.get(t.staffId) ?? "Staff" }));
   const anyUnpublished = shifts.some((s) => !s.published);
   const dayLabels = days.map((d) => ({
     key: d,
@@ -138,6 +140,7 @@ export default async function SchedulePage({
       anyUnpublished={anyUnpublished}
       forecast={forecast}
       templates={templates}
+      timeOff={timeOff}
     />
   );
 }

@@ -286,3 +286,84 @@ export async function moveShift(id: string, newDate: string): Promise<{ ok: true
   revalidatePath("/app/schedule");
   return { ok: true };
 }
+
+// ---- P1.3 time-off / availability + swap requests -------------------------
+
+export type TimeOff = { id: string; staffId: string; date: string; note: string | null };
+
+export async function listTimeOff(startIso: string, endIso: string): Promise<TimeOff[]> {
+  const { business, role } = await requireBusiness();
+  if (!canManage(role)) return [];
+  const supabase = await createClient();
+  const lo = startIso.slice(0, 10);
+  const hi = endIso.slice(0, 10);
+  const { data } = await supabase
+    .from("staff_availability")
+    .select("id, staff_id, date, note")
+    .eq("business_id", business.id)
+    .gte("date", lo)
+    .lt("date", hi);
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    staffId: r.staff_id as string,
+    date: r.date as string,
+    note: (r.note as string | null) ?? null,
+  }));
+}
+
+export async function addTimeOff(staffId: string, date: string, note?: string): Promise<{ ok: true } | { error: string }> {
+  const { business, role } = await requireBusiness();
+  if (!canManage(role)) return { error: "Only an owner or manager can record time off." };
+  if (!staffId) return { error: "Choose a staff member." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Pick a date." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("staff_availability")
+    .upsert({ business_id: business.id, staff_id: staffId, date, kind: "time_off", note: note ? note.slice(0, 200) : null }, { onConflict: "business_id,staff_id,date" });
+  if (error) {
+    console.error("addTimeOff:", error);
+    return { error: "Could not save the time off." };
+  }
+  revalidatePath("/app/schedule");
+  return { ok: true };
+}
+
+export async function deleteTimeOff(id: string): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing entry." };
+  const { business, role } = await requireBusiness();
+  if (!canManage(role)) return { error: "Only an owner or manager can change this." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("staff_availability").delete().eq("id", id).eq("business_id", business.id);
+  if (error) return { error: "Could not remove the entry." };
+  revalidatePath("/app/schedule");
+  return { ok: true };
+}
+
+// Offer a shift to another staff member; a manager approves it in /app/approvals,
+// which reassigns the shift (decideApproval handles kind 'shift_swap').
+export async function requestShiftSwap(shiftId: string, toStaffId: string): Promise<{ ok: true } | { error: string }> {
+  if (!shiftId || !toStaffId) return { error: "Pick a shift and a staff member." };
+  const { business, role } = await requireBusiness();
+  if (!canManage(role)) return { error: "Only an owner or manager can request a swap." };
+  const supabase = await createClient();
+  const { data: shift } = await supabase
+    .from("shifts").select("id, staff_id, starts_at").eq("id", shiftId).eq("business_id", business.id).maybeSingle();
+  if (!shift) return { error: "Shift not found." };
+  const { data: to } = await supabase
+    .from("staff_members").select("name").eq("id", toStaffId).eq("business_id", business.id).maybeSingle();
+  const { data: { user } } = await supabase.auth.getUser();
+  const { error } = await supabase.from("approval_requests").insert({
+    business_id: business.id,
+    kind: "shift_swap",
+    order_id: null,
+    requested_by: user ? user.id : null,
+    status: "pending",
+    payload: { source: "schedule", context: "Shift swap", shift_id: shiftId, to_staff_id: toStaffId, to_name: (to?.name as string | null) ?? null },
+  });
+  if (error) {
+    console.error("requestShiftSwap:", error);
+    return { error: "Could not send the swap request." };
+  }
+  revalidatePath("/app/approvals");
+  return { ok: true };
+}

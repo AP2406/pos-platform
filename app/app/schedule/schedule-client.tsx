@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { addShift, deleteShift, publishWeek, saveWeekAsTemplate, applyTemplate, deleteShiftTemplate, moveShift, type ShiftTemplate } from "./actions";
+import { addShift, deleteShift, publishWeek, saveWeekAsTemplate, applyTemplate, deleteShiftTemplate, moveShift, addTimeOff, deleteTimeOff, requestShiftSwap, type ShiftTemplate } from "./actions";
 
 type Staff = { id: string; name: string; active: boolean };
+type TimeOffRow = { id: string; staffId: string; staffName: string; date: string; note: string | null };
 type Shift = {
   id: string; staffId: string; staffName: string; dayKey: string;
   timeLabel: string; roleLabel: string | null; note: string | null; published: boolean; hours: number;
@@ -19,10 +20,10 @@ type Variance = { id: string; name: string; scheduled: number; actual: number };
 type Forecast = { cost: number; hours: number; sales: number; laborPct: number | null; coverage: number };
 
 export function ScheduleClient({
-  staff, shifts, days, variance, monday, prevWeek, nextWeek, startIso, endIso, anyUnpublished, forecast, templates,
+  staff, shifts, days, variance, monday, prevWeek, nextWeek, startIso, endIso, anyUnpublished, forecast, templates, timeOff,
 }: {
   staff: Staff[]; shifts: Shift[]; days: DayLabel[]; variance: Variance[];
-  monday: string; prevWeek: string; nextWeek: string; startIso: string; endIso: string; anyUnpublished: boolean; forecast: Forecast; templates: ShiftTemplate[];
+  monday: string; prevWeek: string; nextWeek: string; startIso: string; endIso: string; anyUnpublished: boolean; forecast: Forecast; templates: ShiftTemplate[]; timeOff: TimeOffRow[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -56,8 +57,13 @@ export function ScheduleClient({
     router.refresh();
   }
 
+  const offByStaffDate = new Set(timeOff.map((t) => t.staffId + "|" + t.date));
   function add() {
     setErr(null);
+    if (offByStaffDate.has(staffId + "|" + date)) {
+      setErr("That staff member has time off that day — remove it first or pick another.");
+      return;
+    }
     start(async () => {
       const res = await addShift({ staffId, date, start: from, end: to, roleLabel: roleLabel || undefined });
       if ("error" in res) { setErr(res.error); return; }
@@ -105,6 +111,39 @@ export function ScheduleClient({
       const res = await deleteShiftTemplate(id);
       if ("error" in res) { setErr(res.error); return; }
       refresh();
+    });
+  }
+
+  const [offStaff, setOffStaff] = useState(assignable[0]?.id ?? "");
+  const [offDate, setOffDate] = useState(days[0]?.key ?? monday);
+  const [swapShift, setSwapShift] = useState("");
+  const [swapTo, setSwapTo] = useState("");
+  const [swapMsg, setSwapMsg] = useState<string | null>(null);
+
+  function addOff() {
+    setErr(null);
+    start(async () => {
+      const res = await addTimeOff(offStaff, offDate);
+      if ("error" in res) { setErr(res.error); return; }
+      refresh();
+    });
+  }
+  function removeOff(id: string) {
+    setErr(null);
+    start(async () => {
+      const res = await deleteTimeOff(id);
+      if ("error" in res) { setErr(res.error); return; }
+      refresh();
+    });
+  }
+  function sendSwap() {
+    if (!swapShift || !swapTo) return;
+    setErr(null); setSwapMsg(null);
+    start(async () => {
+      const res = await requestShiftSwap(swapShift, swapTo);
+      if ("error" in res) { setErr(res.error); return; }
+      setSwapShift(""); setSwapTo("");
+      setSwapMsg("Sent to Approvals.");
     });
   }
 
@@ -169,6 +208,12 @@ export function ScheduleClient({
               className={"bg-card ring-1 shadow-elevation rounded-xl p-3 transition-colors " + (overDay === d.key ? "ring-foreground bg-accent/40" : "ring-line")}
             >
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{d.label}</div>
+              {timeOff.filter((t) => t.date === d.key).map((t) => (
+                <div key={t.id} className="text-[11px] text-amber-600 mb-1 flex items-center justify-between gap-1">
+                  <span>{t.staffName} — off</span>
+                  <button type="button" onClick={() => removeOff(t.id)} className="underline hover:text-red-600">✕</button>
+                </div>
+              ))}
               {dayShifts.length === 0 ? (
                 <div className="text-xs text-muted-foreground">{dragId ? "Drop here" : "—"}</div>
               ) : (
@@ -222,6 +267,40 @@ export function ScheduleClient({
           )}
         </div>
         <p className="text-[11px] text-muted-foreground mt-2">Applying adds the template&apos;s assigned shifts to this week as unpublished drafts (unassigned slots are skipped).</p>
+      </div>
+
+      <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 mb-4">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Time off &amp; swaps</div>
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+          <div className="flex items-end gap-1.5">
+            <div className="space-y-1">
+              <Label className="text-xs">Time off</Label>
+              <select value={offStaff} onChange={(e) => setOffStaff(e.target.value)} className="h-9 w-36 rounded-md border border-border bg-transparent px-2 text-sm">
+                {assignable.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <select value={offDate} onChange={(e) => setOffDate(e.target.value)} className="h-9 w-40 rounded-md border border-border bg-transparent px-2 text-sm">
+              {days.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
+            </select>
+            <Button variant="outline" className="h-9" onClick={addOff} disabled={pending || !offStaff}>Mark off</Button>
+          </div>
+          <div className="flex items-end gap-1.5">
+            <div className="space-y-1">
+              <Label className="text-xs">Swap shift</Label>
+              <select value={swapShift} onChange={(e) => setSwapShift(e.target.value)} className="h-9 w-48 rounded-md border border-border bg-transparent px-2 text-sm">
+                <option value="">Pick a shift…</option>
+                {shifts.map((s) => <option key={s.id} value={s.id}>{s.staffName} · {s.dayKey.slice(5)} {s.timeLabel}</option>)}
+              </select>
+            </div>
+            <select value={swapTo} onChange={(e) => setSwapTo(e.target.value)} className="h-9 w-36 rounded-md border border-border bg-transparent px-2 text-sm">
+              <option value="">to…</option>
+              {assignable.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <Button variant="outline" className="h-9" onClick={sendSwap} disabled={pending || !swapShift || !swapTo}>Request</Button>
+            {swapMsg && <span className="text-xs text-emerald-600 pb-2">{swapMsg}</span>}
+          </div>
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-2">Scheduling a shift on someone&apos;s day off is blocked. Swap requests go to Approvals; on approve the shift is reassigned.</p>
       </div>
 
       {forecast.hours > 0 && (

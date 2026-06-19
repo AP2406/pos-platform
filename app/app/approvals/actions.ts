@@ -199,12 +199,37 @@ export async function decideApproval(
 
   const { data: req } = await supabase
     .from("approval_requests")
-    .select("id, kind, order_id, reason_code, reason_note, requested_by, requested_by_name, status")
+    .select("id, kind, order_id, reason_code, reason_note, requested_by, requested_by_name, status, payload")
     .eq("id", id)
     .eq("business_id", business.id)
     .maybeSingle();
   if (!req) return { error: "Request not found." };
   if ((req.status as string) !== "pending") return { error: "Already decided." };
+
+  // Shift swap: on approval, reassign the shift to the requested staff member.
+  if (approve && (req.kind as string) === "shift_swap") {
+    const p = (req.payload ?? {}) as { shift_id?: string; to_staff_id?: string; to_name?: string };
+    if (p.shift_id && p.to_staff_id) {
+      const { error: swErr } = await supabase
+        .from("shifts")
+        .update({ staff_id: p.to_staff_id, published: false })
+        .eq("id", p.shift_id)
+        .eq("business_id", business.id);
+      if (swErr) {
+        console.error("decideApproval swap:", swErr);
+        return { error: "Could not reassign the shift." };
+      }
+      await supabase.from("audit_events").insert({
+        business_id: business.id,
+        actor_id: user ? user.id : null,
+        actor_role: role,
+        action: "shift_swap",
+        reason_code: "approved_request",
+        metadata: { shift_id: p.shift_id, to_staff_id: p.to_staff_id, to_name: p.to_name ?? null, approved_by: user ? user.id : null, via: "approval_queue" },
+      });
+      revalidatePath("/app/schedule");
+    }
+  }
 
   // On approval, execute the action (void only in v1).
   if (approve && (req.kind as string) === "void" && req.order_id) {

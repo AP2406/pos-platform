@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { listPendingApprovals, decideApproval, type ApprovalRow } from "./actions";
 
 function labelKind(k: string): string {
-  return k === "void" ? "Void" : k.charAt(0).toUpperCase() + k.slice(1);
+  if (k === "void") return "Void";
+  if (k === "shift_swap") return "Shift swap";
+  return k.charAt(0).toUpperCase() + k.slice(1);
 }
 
 export function ApprovalsClient({ initial }: { initial: ApprovalRow[] }) {
