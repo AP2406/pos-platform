@@ -199,6 +199,8 @@ const tableCartSchema = z.object({
   discount_reason: z.string().max(60).optional(),
   discount_reason_note: z.string().max(500).optional(),
   customer: customerSchema.nullable().optional(),
+  // P3: optional guest name per seat — { "1": "John", "2": "Maya" }.
+  seat_names: z.record(z.string(), z.string().max(40)).optional(),
 });
 export type TableCart = z.infer<typeof tableCartSchema>;
 

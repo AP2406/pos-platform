@@ -150,6 +150,18 @@ export function SplitSheet(props: Props) {
     if (nextMembers.length === 0) return; // keep at least one guest on the item
     shareAmong(i, nextMembers);
   }
+  // By item: put each line on its own check (capped at 8; extra lines pile onto
+  // the last check, which the server can then re-assign by hand).
+  function byItem() {
+    const nn = Math.max(2, Math.min(8, lines.length));
+    setN(nn);
+    setAlloc(lines.map((_, i) => {
+      const row = new Array<number>(nn).fill(0);
+      row[Math.min(i, nn - 1)] += lineCents[i];
+      return row;
+    }));
+    setPays(Array.from({ length: nn }, () => "cash"));
+  }
   // Even split across all seats. Rotate each line's leftover penny by the line
   // index so the extra cents spread across seats instead of piling on seat 1 —
   // every seat's total ends up within a cent of the check total ÷ N.
@@ -246,6 +258,7 @@ export function SplitSheet(props: Props) {
           <div className="flex items-center gap-1.5">
             <Button type="button" variant="ghost" className="h-9" onClick={resetSplit}>Reset</Button>
             {hasSeats && <Button type="button" variant="outline" className="h-9" onClick={bySeat}>By seat</Button>}
+            {lines.length >= 2 && <Button type="button" variant="outline" className="h-9" onClick={byItem}>By item</Button>}
             <Button type="button" variant="outline" className="h-9" onClick={evenAll}>Even split</Button>
           </div>
         </div>

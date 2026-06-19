@@ -382,6 +382,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     return Math.max(m, 1);
   });
   const [activeSeat, setActiveSeat] = useState<number | null>(tableMode ? 1 : null);
+  // P3: optional guest name per seat (keyed by seat number as a string).
+  const [seatNames, setSeatNames] = useState<Record<string, string>>(initialTableCart?.seat_names ?? {});
+  const seatName = (s: number | null) => (s != null ? (seatNames[String(s)] || "").trim() : "");
 
   // Coursing (P0-1): only on real full-service tables that have courses.
   const courseList = courses ?? [];
@@ -978,6 +981,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       discount_reason: !hasStaff || discountAuthorized ? discountReason : "",
       discount_reason_note: !hasStaff || discountAuthorized ? discountReasonNote : "",
       customer: customer ? { id: customer.id, name: customer.name } : null,
+      seat_names: seatNames,
     };
   }
 
@@ -2598,13 +2602,25 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
 
               {/* Seat selector (real tables only) */}
               {tableMode && (
+                <>
                 <div className="shrink-0 flex items-center gap-1.5 px-2 py-2 border-b border-border overflow-x-auto [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)]">
                   <button type="button" onClick={() => setActiveSeat(null)} className={"shrink-0 whitespace-nowrap text-sm rounded-lg border px-3.5 min-h-[44px] inline-flex items-center justify-center transition-colors" + (activeSeat === null ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>Shared</button>
                   {Array.from({ length: seatCount }, (_, i) => i + 1).map((s) => (
-                    <button key={s} type="button" onClick={() => setActiveSeat(s)} className={"shrink-0 whitespace-nowrap text-sm rounded-lg border px-3.5 min-h-[44px] inline-flex items-center justify-center transition-colors" + (activeSeat === s ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>{"Seat " + s}</button>
+                    <button key={s} type="button" onClick={() => setActiveSeat(s)} className={"shrink-0 whitespace-nowrap text-sm rounded-lg border px-3.5 min-h-[44px] inline-flex items-center justify-center transition-colors" + (activeSeat === s ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:bg-accent/50")}>{seatName(s) ? "S" + s + " · " + seatName(s) : "Seat " + s}</button>
                   ))}
                   <button type="button" onClick={() => setSeatCount((n) => Math.min(n + 1, 30))} className="shrink-0 whitespace-nowrap text-sm rounded-lg border border-dashed border-border px-3 min-h-[44px] inline-flex items-center text-muted-foreground hover:bg-accent/50">+ Seat</button>
                 </div>
+                {activeSeat != null && (
+                  <div className="shrink-0 px-2 pb-2 border-b border-border">
+                    <input
+                      value={seatNames[String(activeSeat)] ?? ""}
+                      onChange={(e) => setSeatNames((prev) => ({ ...prev, [String(activeSeat)]: e.target.value.slice(0, 40) }))}
+                      placeholder={"Guest name for Seat " + activeSeat + " (optional)"}
+                      className="w-full h-9 rounded-md border border-border bg-transparent px-2 text-sm"
+                    />
+                  </div>
+                )}
+                </>
               )}
 
               {(() => {
@@ -2665,7 +2681,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                       return (
                         <div key={seat === null ? "shared" : "s" + seat} className="space-y-1.5">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold text-muted-foreground">{seat === null ? "Shared" : "Seat " + seat}</span>
+                            <span className="text-xs font-semibold text-muted-foreground">{seat === null ? "Shared" : seatName(seat) ? "Seat " + seat + " · " + seatName(seat) : "Seat " + seat}</span>
                             {entries.length > 0 && <span className="text-xs tabular-nums text-muted-foreground">{"$" + sub.toFixed(2)}</span>}
                           </div>
                           {entries.length === 0 ? (
