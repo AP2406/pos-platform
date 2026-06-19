@@ -8,6 +8,7 @@ import { CustomerNotes } from "./customer-notes";
 import { CustomerTags } from "./customer-tags";
 import { StoreCreditCard } from "./store-credit-card";
 import { MarketingConsent } from "./marketing-consent";
+import { MergeCustomer } from "./merge-customer";
 import { StatusBadge, SectionHeader } from "../../_components/ui";
 
 function formatCurrency(amount: number | string | null | undefined): string {
@@ -281,6 +282,12 @@ export default async function CustomerDetailPage({
           initialNotes={customer.notes ?? null}
         />
       </div>
+
+      {(role === "owner" || role === "manager") && (
+        <div className="mb-4">
+          <MergeCustomer keepId={customer.id} keepName={customer.name} />
+        </div>
+      )}
 
       {/* Purchase history (POS businesses) */}
       {!isTransport && (

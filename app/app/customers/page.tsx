@@ -9,7 +9,7 @@ import { ChevronRight } from "lucide-react";
 type CustomerRow = any;
 
 export default async function CustomersPage() {
-  await requireBusiness();
+  const { business } = await requireBusiness();
   const supabase = await createClient();
 
   const { data: customers } = await supabase
@@ -17,18 +17,26 @@ export default async function CustomersPage() {
     .select("*")
     .order("name");
 
+  // Industry-aware copy: the transportation tenant keeps its wording; restaurant
+  // (and any other vertical) gets neutral/hospitality copy.
+  const isTransport = business.industry === "transportation";
+  const subtitle = isTransport ? "People you've driven for." : "Your regulars.";
+  const emptyMessage = isTransport
+    ? "Add your first customer or create one inline when booking a trip."
+    : "Add your first customer, or create one at the register.";
+
   return (
     <div className="max-w-6xl">
       <PageHeader
         title="Customers"
-        subtitle="People you've driven for."
+        subtitle={subtitle}
         action={<AddCustomerSheet />}
       />
 
       {!customers || customers.length === 0 ? (
         <EmptyState
           title="No customers yet"
-          message="Add your first customer or create one inline when booking a trip."
+          message={emptyMessage}
         />
       ) : (
         <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">

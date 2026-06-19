@@ -2142,7 +2142,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
             {approvalState === "waiting" ? (
               <div className="py-6 text-center space-y-2">
                 <div className="mx-auto w-6 h-6 rounded-full border-2 border-muted-foreground/30 border-t-foreground animate-spin" />
-                <p className="text-sm font-medium">Waiting for a manager to approve\u2026</p>
+                <p className="text-sm font-medium">Waiting for a manager to approve&hellip;</p>
                 <p className="text-xs text-muted-foreground">Sent to Approvals. This applies automatically once approved.</p>
               </div>
             ) : (

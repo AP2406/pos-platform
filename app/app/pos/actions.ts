@@ -1053,13 +1053,28 @@ export async function searchCustomers(
 
 export async function quickCreateCustomer(
   name: string,
-  phone?: string
-): Promise<{ ok: true; id: string; name: string } | { error: string }> {
+  phone?: string,
+  opts?: { force?: boolean }
+): Promise<{ ok: true; id: string; name: string } | { exists: true; id: string; name: string } | { error: string }> {
   const clean = (name || "").trim();
   if (!clean) return { error: "Customer name is required." };
 
   const { business } = await requireBusiness();
   const supabase = await createClient();
+
+  // Dedupe guard: only when a phone is actually provided. On a match, hand back
+  // the existing customer so the register can attach them instead of duplicating.
+  const cleanPhone = phone && phone.trim() ? phone.trim() : "";
+  if (!opts?.force && cleanPhone) {
+    const { data: hit } = await supabase
+      .from("customers")
+      .select("id, name")
+      .eq("business_id", business.id)
+      .eq("phone", cleanPhone)
+      .limit(1)
+      .maybeSingle();
+    if (hit) return { exists: true, id: hit.id as string, name: hit.name as string };
+  }
 
   const { data, error } = await supabase
     .from("customers")

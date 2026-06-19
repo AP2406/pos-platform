@@ -38,6 +38,7 @@ export function AddCustomerSheet({
   const [notes, setNotes] = useState<string>(existingCustomer?.notes ?? "");
 
   const [error, setError] = useState<string | null>(null);
+  const [dupe, setDupe] = useState<{ id: string; name: string; on: "email" | "phone" } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function reset() {
@@ -47,12 +48,11 @@ export function AddCustomerSheet({
     setEmail("");
     setNotes("");
     setError(null);
+    setDupe(null);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function submit(force: boolean) {
     setError(null);
-
     startTransition(async () => {
       const payload = {
         name: name.trim(),
@@ -63,8 +63,12 @@ export function AddCustomerSheet({
 
       const result = isEditMode
         ? await updateCustomer(existingCustomer.id, payload)
-        : await createCustomer(payload);
+        : await createCustomer(payload, { force });
 
+      if ("exists" in result) {
+        setDupe({ id: result.id, name: result.name, on: result.on });
+        return;
+      }
       if ("error" in result) {
         setError(result.error);
       } else {
@@ -73,6 +77,12 @@ export function AddCustomerSheet({
         router.refresh();
       }
     });
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setDupe(null);
+    submit(false);
   }
 
   return (
@@ -95,11 +105,26 @@ export function AddCustomerSheet({
             <SheetDescription>
               {isEditMode
                 ? "Update customer details."
-                : "A person you've worked with."}
+                : "A person you've served."}
             </SheetDescription>
           </SheetHeader>
 
           <div className="flex-1 space-y-4 px-4 py-2 overflow-y-auto">
+            {dupe && (
+              <div className="rounded-md border border-amber-300/60 bg-amber-50 dark:bg-amber-400/10 p-3 text-sm">
+                <p className="text-amber-900 dark:text-amber-200">
+                  <span className="font-medium">{dupe.name}</span> already has that {dupe.on === "email" ? "email" : "phone"}. Open them, or create a separate record anyway.
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <Button type="button" size="sm" onClick={() => { setOpen(false); router.push(`/app/customers/${dupe.id}`); }}>
+                    Open existing
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" disabled={isPending} onClick={() => submit(true)}>
+                    Create anyway
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="name">
                 Name <span className="text-red-500">*</span>
@@ -142,7 +167,7 @@ export function AddCustomerSheet({
                 id="notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Prefers SUV, often books early morning"
+                placeholder="Allergies, preferences, VIP…"
                 rows={3}
               />
             </div>
