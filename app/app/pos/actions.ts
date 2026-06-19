@@ -18,6 +18,7 @@ const lineSchema = z.object({
   unit_price: z.coerce.number().min(0).max(1000000),
   quantity: z.coerce.number().int().min(1).max(1000),
   note: z.string().max(280).optional().nullable(),
+  allergy: z.string().max(120).optional().nullable(),
   seat: z.coerce.number().int().min(1).max(99).optional().nullable(),
 });
 
@@ -582,6 +583,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       unit_price: i.unit_price,
       quantity: i.quantity,
       note: i.note ?? null,
+      allergy: i.allergy ?? null,
       seat: i.seat ?? null,
     })),
     subtotal: Math.round(subtotal * 100) / 100,
