@@ -93,6 +93,17 @@ export const finix = {
   delete: <T>(path: string) => finixRequest<T>("DELETE", path),
 };
 
+// Lightweight read to confirm Finix credentials work (used by the integrations
+// "Test connection" button). Verifies the merchant when set, else just auth.
+export async function finixPing(): Promise<{ ok: true; detail: string } | { error: string }> {
+  if (!isFinixConfigured()) return { error: "Finix credentials are not set in the server environment." };
+  const cfg = getFinixConfig();
+  const path = cfg.merchantId ? "/merchants/" + cfg.merchantId : "/settlements?limit=1";
+  const res = await finix.get<{ id?: string }>(path);
+  if ("error" in res) return { error: res.error };
+  return { ok: true, detail: cfg.environment + (cfg.merchantId ? " · merchant verified" : " · auth OK") };
+}
+
 // ---------- Payment Instrument types & helpers ----------
 // NOTE: createPaymentInstrument takes a RAW card number and is only used by the
 // /app/debug charge harness. The production register path tokenizes the card in

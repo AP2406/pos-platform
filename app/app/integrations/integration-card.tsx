@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { setIntegrationEnabled } from "./actions";
+import { setIntegrationEnabled, testIntegration } from "./actions";
 
 type Status = {
   key: string;
@@ -20,7 +20,9 @@ export function IntegrationCard({ status }: { status: Status }) {
   const [enabled, setEnabled] = useState(status.enabled);
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
+  const [testing, startTest] = useTransition();
 
   function toggle(next: boolean) {
     setErr(null);
@@ -29,6 +31,14 @@ export function IntegrationCard({ status }: { status: Status }) {
       const res = await setIntegrationEnabled(status.key, next);
       if ("error" in res) { setErr(res.error); setEnabled(!next); return; }
       router.refresh();
+    });
+  }
+
+  function test() {
+    setTestMsg(null);
+    startTest(async () => {
+      const res = await testIntegration(status.key);
+      setTestMsg("error" in res ? { ok: false, text: res.error } : { ok: true, text: res.detail });
     });
   }
 
@@ -55,9 +65,17 @@ export function IntegrationCard({ status }: { status: Status }) {
         </label>
       </div>
 
-      <button type="button" onClick={() => setOpen((v) => !v)} className="mt-2 text-xs text-muted-foreground underline hover:text-foreground">
-        {open ? "Hide setup" : status.configured ? "Setup & test" : "What's needed"}
-      </button>
+      <div className="mt-2 flex items-center gap-3">
+        <button type="button" onClick={() => setOpen((v) => !v)} className="text-xs text-muted-foreground underline hover:text-foreground">
+          {open ? "Hide setup" : status.configured ? "Setup & test" : "What's needed"}
+        </button>
+        {status.configured && (
+          <button type="button" onClick={test} disabled={testing} className="text-xs rounded-md border border-border px-2 py-0.5 hover:bg-accent disabled:opacity-50">
+            {testing ? "Testing…" : "Test connection"}
+          </button>
+        )}
+        {testMsg && <span className={"text-xs " + (testMsg.ok ? "text-emerald-600" : "text-red-600")}>{testMsg.ok ? "✓ " : "✕ "}{testMsg.text}</span>}
+      </div>
 
       {open && (
         <div className="mt-2 rounded-md border border-border bg-muted/30 p-3 text-xs space-y-2">

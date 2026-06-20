@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import type { IntegrationKey } from "@/lib/services/integrations";
+import { finixPing } from "@/lib/services/finix";
 
 const KEYS = new Set<IntegrationKey>([
   "finix_cards", "bar_tab", "qbo", "xero", "settlement", "delivery", "reservations_sync",
@@ -35,4 +36,17 @@ export async function setIntegrationEnabled(
   }
   revalidatePath("/app/integrations");
   return { ok: true };
+}
+
+// Live "Test connection". Finix-backed connectors actually ping the Finix API;
+// others have no test until their live wiring lands (returns a clear message).
+export async function testIntegration(key: string): Promise<{ ok: true; detail: string } | { error: string }> {
+  const { role } = await requireBusiness();
+  if (role !== "owner" && role !== "manager") return { error: "Only an owner or manager can test integrations." };
+  if (key === "finix_cards" || key === "bar_tab" || key === "settlement") {
+    const res = await finixPing();
+    if ("error" in res) return { error: res.error };
+    return { ok: true, detail: "Finix reachable — " + res.detail };
+  }
+  return { error: "No live test yet — add credentials and the connector's wiring lands per its checklist." };
 }
