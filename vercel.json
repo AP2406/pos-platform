@@ -1,5 +1,5 @@
 {
   "crons": [
-    { "path": "/api/reservation-reminders", "schedule": "0 * * * *" }
+    { "path": "/api/reservation-reminders", "schedule": "0 14 * * *" }
   ]
 }
