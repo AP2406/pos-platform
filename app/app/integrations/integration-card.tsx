@@ -13,6 +13,7 @@ type Status = {
   envVars: string[];
   checklist: string[];
   enabled: boolean;
+  liveNote?: string | null;
 };
 
 export function IntegrationCard({ status }: { status: Status }) {
@@ -58,6 +59,11 @@ export function IntegrationCard({ status }: { status: Status }) {
             {enabled && <span className="text-[10px] rounded-full bg-foreground text-background px-2 py-0.5 font-medium">On</span>}
           </div>
           <p className="text-sm text-muted-foreground mt-1">{status.description}</p>
+          {status.liveNote && (
+            <p className={"text-xs mt-1 font-medium " + (status.liveNote.startsWith("Live") ? "text-emerald-600" : "text-amber-600")}>
+              {status.liveNote.startsWith("Live") ? "● " : "○ "}{status.liveNote}
+            </p>
+          )}
         </div>
         <label className="shrink-0 inline-flex items-center gap-1.5 text-xs select-none">
           <input type="checkbox" checked={enabled} onChange={(e) => toggle(e.target.checked)} disabled={pending} className="h-4 w-4" />

@@ -2,7 +2,16 @@ import { redirect } from "next/navigation";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { hasFloorService } from "@/lib/modules/modes";
 import { integrationStatuses, integrationEnabled } from "@/lib/services/integrations";
+import { getCardConfig } from "../pos/finix-pos-actions";
 import { IntegrationCard } from "./integration-card";
+
+const CARD_REASON: Record<string, string> = {
+  demo: "Demo business — never processes real money",
+  not_configured: "Finix credentials missing",
+  training: "Training mode is on",
+  not_onboarded: "Finix merchant not onboarded yet",
+  not_approved: "Finix merchant pending approval",
+};
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +21,17 @@ export default async function IntegrationsPage() {
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const settings = (business as { settings?: unknown }).settings;
-  const statuses = integrationStatuses().map((s) => ({ ...s, enabled: integrationEnabled(settings, s.key) }));
+  // Real card-payment readiness (merchant onboarding/approval), surfaced on the Finix card.
+  const card = await getCardConfig();
+  const cardLive = "enabled" in card && card.enabled === true
+    ? "Live — merchant approved"
+    : CARD_REASON[(card as { reason?: string }).reason ?? ""] ?? null;
+
+  const statuses = integrationStatuses().map((s) => ({
+    ...s,
+    enabled: integrationEnabled(settings, s.key),
+    liveNote: s.key === "finix_cards" ? cardLive : null,
+  }));
   const groups = ["Payments", "Accounting", "Delivery", "Reservations"] as const;
 
   return (
