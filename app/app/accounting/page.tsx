@@ -87,6 +87,9 @@ export default async function AccountingPage({
           <a href={"/app/accounting/journal?" + exportHref.split("?")[1]} className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent">
             Journal (QBO/Xero)
           </a>
+          <Link href="/app/accounting/settlement" className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent">
+            Settlement
+          </Link>
         </div>
       </div>
 

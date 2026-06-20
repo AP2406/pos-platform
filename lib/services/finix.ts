@@ -93,6 +93,53 @@ export const finix = {
   delete: <T>(path: string) => finixRequest<T>("DELETE", path),
 };
 
+// A Finix settlement batch (gross collected → fees → net deposit). Field names
+// are mapped defensively (Finix returns amounts in cents); verify against a live
+// batch when settlements first appear.
+export type FinixSettlement = {
+  id: string;
+  status: string;
+  grossCents: number;
+  feeCents: number;
+  netCents: number;
+  createdAt: string;
+};
+
+function num(v: unknown): number {
+  const n = typeof v === "number" ? v : parseFloat(String(v ?? "0"));
+  return isNaN(n) ? 0 : n;
+}
+
+// List settlement batches for the configured merchant in [sinceIso, untilIso).
+export async function listSettlements(
+  sinceIso: string,
+  untilIso: string
+): Promise<{ ok: true; settlements: FinixSettlement[] } | { error: string }> {
+  if (!isFinixConfigured()) return { error: "Finix is not configured." };
+  const cfg = getFinixConfig();
+  const qs = new URLSearchParams({ limit: "100", sort: "created_at,desc" });
+  if (cfg.merchantId) qs.set("merchant_id", cfg.merchantId);
+  qs.set("created_at.gte", sinceIso);
+  qs.set("created_at.lte", untilIso);
+  const res = await finix.get<{ _embedded?: { settlements?: Record<string, unknown>[] } }>("/settlements?" + qs.toString());
+  if ("error" in res) return { error: res.error };
+  const rows = res.data?._embedded?.settlements ?? [];
+  const settlements: FinixSettlement[] = rows.map((s) => {
+    const gross = num(s.total_amount);
+    const fee = num((s as { total_fees?: unknown }).total_fees ?? (s as { total_fee?: unknown }).total_fee);
+    const net = (s as { net_amount?: unknown }).net_amount != null ? num((s as { net_amount?: unknown }).net_amount) : gross - fee;
+    return {
+      id: String(s.id ?? ""),
+      status: String(s.status ?? ""),
+      grossCents: gross,
+      feeCents: fee,
+      netCents: net,
+      createdAt: String(s.created_at ?? ""),
+    };
+  });
+  return { ok: true, settlements };
+}
+
 // Lightweight read to confirm Finix credentials work (used by the integrations
 // "Test connection" button). Verifies the merchant when set, else just auth.
 export async function finixPing(): Promise<{ ok: true; detail: string } | { error: string }> {
