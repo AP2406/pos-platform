@@ -2564,12 +2564,15 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                             : "$" + item.price.toFixed(2);
                           const oos = isOos(item);
                           const low = isLowStock(item);
+                          // A7: show the live remaining count ("3 left") so staff can pace a
+                          // low item; it auto-86s at 0 (decrement-on-sale + trigger).
+                          const lowN = low ? (localStock[item.id] ?? (item.stock_qty ?? 0)) : 0;
                           if (showItemPhotos && item.image_url) {
                             return (
                               <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative min-h-[110px] rounded-xl border border-line shadow-elevation-sm overflow-hidden active:scale-[0.97] transition-transform " + (oos ? "opacity-50" : "")}>
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={item.image_url} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
-                                {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">Low</span>}
+                                {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">{lowN} left</span>}
                                 <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white text-left px-2 py-1.5">
                                   <div className="font-semibold text-sm leading-snug line-clamp-2">{item.name}</div>
                                   <div className="text-xs text-white/90">{oos ? "86'd" : priceLabel}</div>
@@ -2579,7 +2582,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                           }
                           return (
                             <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative text-left p-3 min-h-[110px] rounded-xl border shadow-elevation-sm active:scale-[0.97] transition-all flex flex-col justify-between " + tileClassesFor(item.category, categoryColors) + (oos ? " opacity-50" : "")}>
-                              {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">Low</span>}
+                              {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">{lowN} left</span>}
                               <div className="font-semibold text-sm leading-snug line-clamp-3">{item.name}</div>
                               <div className="text-sm opacity-80 mt-1 tabular-nums">{oos ? "86'd" : priceLabel}</div>
                             </button>

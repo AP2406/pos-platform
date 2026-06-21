@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { liveSnapshot, type Snapshot } from "./actions";
 
-const REFRESH_MS = 20000;
+const REFRESH_MS = 30000;
 
-export function MobileManagerClient({ initial }: { initial: Snapshot }) {
+export function MobileManagerClient({ initial, businessId }: { initial: Snapshot; businessId?: string }) {
   const [snap, setSnap] = useState<Snapshot>(initial);
   const [updatedAt, setUpdatedAt] = useState<number>(Date.now());
   const [refreshing, setRefreshing] = useState(false);
@@ -34,9 +35,21 @@ export function MobileManagerClient({ initial }: { initial: Snapshot }) {
       if (document.visibilityState === "visible") refresh();
     };
     document.addEventListener("visibilitychange", onVis);
+    // A9: live — refresh on each new sale / open-check change (debounced via the
+    // setRefreshing guard), so the board ticks intra-shift instead of waiting 30s.
+    let channel: ReturnType<ReturnType<typeof createBrowserClient>["channel"]> | null = null;
+    if (businessId) {
+      const supabase = createBrowserClient();
+      channel = supabase
+        .channel("live-" + businessId)
+        .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: "business_id=eq." + businessId }, () => refresh())
+        .on("postgres_changes", { event: "*", schema: "public", table: "open_tickets", filter: "business_id=eq." + businessId }, () => refresh())
+        .subscribe();
+    }
     return () => {
       if (timer.current) clearInterval(timer.current);
       document.removeEventListener("visibilitychange", onVis);
+      if (channel) channel.unsubscribe();
     };
   }, []);
 
@@ -69,6 +82,22 @@ export function MobileManagerClient({ initial }: { initial: Snapshot }) {
           value={String(snap.totals.openChecks)}
           hint={snap.totals.openValue > 0 ? fmt(snap.totals.openValue) + " in progress" : undefined}
         />
+      </div>
+
+      <SectionHeader>On pace</SectionHeader>
+      <div className="grid grid-cols-2 gap-3">
+        <Big
+          label="vs last week"
+          value={(snap.totals.net - snap.lastWeekNet >= 0 ? "+" : "") + fmt(snap.totals.net - snap.lastWeekNet)}
+          hint={snap.lastWeekNet > 0 ? "last wk " + fmt(snap.lastWeekNet) : "no comparison"}
+        />
+        <Big
+          label="Labor %"
+          value={snap.laborPct != null ? snap.laborPct + "%" : "—"}
+          hint={snap.laborCost > 0 ? fmt(snap.laborCost) + " labor" : "set pay rates"}
+        />
+        <Big label="Covers" value={String(snap.covers)} hint={snap.covers > 0 ? "today" : "—"} />
+        <Big label="Sales / cover" value={snap.covers > 0 ? fmt(snap.salesPerCover) : "—"} />
       </div>
 
       {(snap.alerts.voids.n > 0 ||

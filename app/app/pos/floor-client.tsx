@@ -450,7 +450,9 @@ export function FloorClient({
   function matchesFind(el: FloorElement): boolean {
     if (!q) return true;
     const open = openByElement[el.id];
-    return (el.label ?? "").toLowerCase().includes(q) || (open?.server_name ?? "").toLowerCase().includes(q);
+    return (el.label ?? "").toLowerCase().includes(q)
+      || (open?.server_name ?? "").toLowerCase().includes(q)
+      || (open?.guests ?? "").toLowerCase().includes(q);
   }
   const visibleTogo = togo.filter(
     (t) => !q || (t.name ?? "").toLowerCase().includes(q) || (t.server_name ?? "").toLowerCase().includes(q)

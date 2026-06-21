@@ -221,6 +221,8 @@ export type TableTicketSummary = {
   // Phase A live state: any item fired to the kitchen, and whether the check was dropped.
   fired: boolean;
   check_dropped_at: string | null;
+  // Searchable guest names (check customer + per-seat names) for find-my-check.
+  guests: string;
 };
 
 export type TogoTicketSummary = {
@@ -265,6 +267,25 @@ export async function openTableTicket(
       : null;
 
   const active = await getActiveStaff();
+  // A2: a new check auto-attributes to the server assigned to this table's section
+  // today (if any); otherwise the active cashier. Managers can still reassign.
+  let attributedStaffId: string | null = active ? active.id : null;
+  {
+    const { data: el } = await supabase.from("floor_elements").select("section_id").eq("id", elementId).eq("business_id", business.id).maybeSingle();
+    const secId = (el?.section_id as string | null) ?? null;
+    if (secId) {
+      const tz = (business as { timezone?: string }).timezone || "America/Toronto";
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      const { data: asg } = await supabase
+        .from("section_assignments")
+        .select("staff_id")
+        .eq("business_id", business.id)
+        .eq("section_id", secId)
+        .eq("shift_date", today)
+        .maybeSingle();
+      if (asg?.staff_id) attributedStaffId = asg.staff_id as string;
+    }
+  }
   const { data, error } = await supabase
     .from("open_tickets")
     .insert({
@@ -272,7 +293,7 @@ export async function openTableTicket(
       element_id: elementId,
       ticket_type: "table",
       guest_count: guests,
-      staff_id: active ? active.id : null,
+      staff_id: attributedStaffId,
       cart: { items: [] },
       created_by: user ? user.id : null,
     })
@@ -909,6 +930,13 @@ export async function mergeTickets(
     console.error("mergeTickets delete:", delErr);
     return { error: "Merged, but could not free the source table." };
   }
+  {
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase.from("audit_events").insert({
+      business_id: business.id, actor_id: user ? user.id : null, action: "ticket_merge",
+      metadata: { from_ticket: fromTicketId, into_ticket: intoTicketId },
+    });
+  }
   return { ok: true };
 }
 
@@ -1058,6 +1086,8 @@ export async function moveTicketToTable(
     const merged: TableCart = { ...intoCart.data, items: [...intoCart.data.items, ...fromCart.data.items] };
     await supabase.from("open_tickets").update({ cart: merged }).eq("id", targetTicket.id).eq("business_id", business.id);
     await supabase.from("open_tickets").delete().eq("id", ticketId).eq("business_id", business.id);
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase.from("audit_events").insert({ business_id: business.id, actor_id: user ? user.id : null, action: "ticket_move", metadata: { ticket_id: ticketId, to_element: targetElementId, merged: true } });
     return { ok: true, merged: true };
   }
 
@@ -1069,6 +1099,10 @@ export async function moveTicketToTable(
   if (error) {
     console.error("moveTicketToTable:", error);
     return { error: "Could not move the check." };
+  }
+  {
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase.from("audit_events").insert({ business_id: business.id, actor_id: user ? user.id : null, action: "ticket_move", metadata: { ticket_id: ticketId, to_element: targetElementId, merged: false } });
   }
   return { ok: true, merged: false };
 }
@@ -1150,6 +1184,8 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
       (i) => i.guest === true && !i.void && (Number(i.quantity) || 0) - (Number(i.sent_qty) || 0) > 0
     );
     const fired = cartItems.some((i) => !i.void && (Number(i.sent_qty) || 0) > 0);
+    const cartObj = (t.cart as { customer?: { name?: string } | null; seat_names?: Record<string, string> } | null) ?? null;
+    const guests = [cartObj?.customer?.name ?? "", ...Object.values(cartObj?.seat_names ?? {})].filter(Boolean).join(" ");
     return {
       id: id,
       element_id: t.element_id as string,
@@ -1165,6 +1201,7 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
       new_guest_items: newGuestItems,
       fired,
       check_dropped_at: (t.check_dropped_at as string | null) ?? null,
+      guests,
     };
   });
 }

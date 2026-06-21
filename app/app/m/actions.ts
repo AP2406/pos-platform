@@ -30,6 +30,12 @@ export type Snapshot = {
   avgTicket: number;
   recent: RecentSale[];
   alerts: Alerts;
+  // A9 on-pace: covers + labor % today, and the same-day-last-week net for pacing.
+  covers: number;
+  salesPerCover: number;
+  laborCost: number;
+  laborPct: number | null;
+  lastWeekNet: number;
 };
 
 function num(v: unknown): number {
@@ -48,7 +54,10 @@ export async function liveSnapshot(): Promise<Snapshot> {
   const { business } = await requireBusiness();
   const tz = business.timezone || "America/Toronto";
   const currency = (business.currency || "USD").toUpperCase();
-  const startIso = getTodayBoundsUTC(tz).start.toISOString();
+  const bounds = getTodayBoundsUTC(tz);
+  const startIso = bounds.start.toISOString();
+  const lwStartIso = new Date(bounds.start.getTime() - 7 * 86400000).toISOString();
+  const lwEndIso = new Date(bounds.end.getTime() - 7 * 86400000).toISOString();
   const supabase = await createClient();
 
   const mine = (await listBusinesses()).filter(
@@ -68,7 +77,7 @@ export async function liveSnapshot(): Promise<Snapshot> {
   ] = await Promise.all([
     supabase
       .from("orders")
-      .select("business_id, total, status, staff_id")
+      .select("business_id, total, status, staff_id, guest_count")
       .in("business_id", ids)
       .gte("created_at", startIso)
       .neq("status", "voided"),
@@ -94,6 +103,32 @@ export async function liveSnapshot(): Promise<Snapshot> {
     supabase.from("drawer_sessions").select("business_id").in("business_id", ids).eq("status", "open"),
     supabase.from("staff_members").select("business_id").in("business_id", ids).eq("is_active", true),
   ]);
+
+  // A9: same-day-last-week net + today's labor cost (clocked hours × pay rate).
+  const [{ data: lwOrders }, { data: lwRefunds }, { data: clocks }, { data: rates }] = await Promise.all([
+    supabase.from("orders").select("total, status").in("business_id", ids).gte("created_at", lwStartIso).lt("created_at", lwEndIso).neq("status", "voided"),
+    supabase.from("refunds").select("amount, status").in("business_id", ids).gte("created_at", lwStartIso).lt("created_at", lwEndIso),
+    supabase.from("time_clock_entries").select("staff_id, clock_in, clock_out").in("business_id", ids).or(`clock_out.is.null,clock_in.gte.${startIso}`),
+    supabase.from("staff_members").select("id, pay_rate").in("business_id", ids),
+  ]);
+  let lastWeekNet = 0;
+  for (const o of lwOrders ?? []) lastWeekNet += num(o.total);
+  for (const r of lwRefunds ?? []) { if ((r.status as string) !== "voided") lastWeekNet -= num(r.amount); }
+  lastWeekNet = Math.round(lastWeekNet * 100) / 100;
+
+  const rateById = new Map((rates ?? []).map((s) => [s.id as string, s.pay_rate != null ? Number(s.pay_rate) : null]));
+  const todayStartMs = bounds.start.getTime();
+  const nowMsL = Date.now();
+  let laborCost = 0;
+  for (const c of clocks ?? []) {
+    const inMs = new Date(c.clock_in as string).getTime();
+    const outMs = c.clock_out ? new Date(c.clock_out as string).getTime() : nowMsL;
+    const overlap = Math.min(outMs, nowMsL) - Math.max(inMs, todayStartMs);
+    if (overlap <= 0) continue;
+    const rate = rateById.get(c.staff_id as string);
+    if (rate != null) laborCost += (overlap / 3600000) * rate;
+  }
+  laborCost = Math.round(laborCost * 100) / 100;
 
   const agg: Record<string, LocationLive> = {};
   for (const b of mine) agg[b.id] = { id: b.id, name: b.name, net: 0, orders: 0, openChecks: 0, openValue: 0 };
@@ -169,6 +204,9 @@ export async function liveSnapshot(): Promise<Snapshot> {
     oldestCheckMin: oldestMin,
   };
 
+  let covers = 0;
+  for (const o of orders ?? []) covers += num(o.guest_count);
+
   return {
     currency,
     locations,
@@ -176,5 +214,10 @@ export async function liveSnapshot(): Promise<Snapshot> {
     avgTicket: totals.orders > 0 ? Math.round((totals.net / totals.orders) * 100) / 100 : 0,
     recent,
     alerts,
+    covers,
+    salesPerCover: covers > 0 ? Math.round((totals.net / covers) * 100) / 100 : 0,
+    laborCost,
+    laborPct: totals.net > 0 ? Math.round((laborCost / totals.net) * 1000) / 10 : null,
+    lastWeekNet,
   };
 }
