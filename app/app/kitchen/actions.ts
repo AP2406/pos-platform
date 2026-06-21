@@ -96,6 +96,7 @@ export async function recallKitchenTicket(
   if (!ticketId) return { error: "Missing ticket." };
   const { business } = await requireBusiness();
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
   const { error } = await supabase
     .from("kitchen_tickets")
     .update({ fulfilled_at: null })
@@ -105,6 +106,11 @@ export async function recallKitchenTicket(
     console.error("recallKitchenTicket:", error);
     return { error: "Could not recall the ticket." };
   }
+  // B12: recalls are logged so the audit trail shows who recalled what, when.
+  await supabase.from("audit_events").insert({
+    business_id: business.id, actor_id: user ? user.id : null, action: "kds_recall",
+    metadata: { ticket_id: ticketId, kind: "kitchen" },
+  });
   revalidatePath("/app/kitchen");
   return { ok: true };
 }
@@ -118,6 +124,7 @@ export async function recallOrder(
   if (!orderId) return { error: "Missing order." };
   const { business } = await requireBusiness();
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
   const { error } = await supabase
     .from("orders")
     .update({ fulfilled_at: null })
@@ -127,6 +134,10 @@ export async function recallOrder(
     console.error("recallOrder:", error);
     return { error: "Could not recall the order." };
   }
+  await supabase.from("audit_events").insert({
+    business_id: business.id, actor_id: user ? user.id : null, action: "kds_recall",
+    metadata: { order_id: orderId, kind: "order" },
+  });
   revalidatePath("/app/kitchen");
   return { ok: true };
 }

@@ -65,12 +65,16 @@ export function KitchenClient({
   stations,
   recent,
   menu,
+  kdsWarn = 10,
+  kdsLate = 18,
 }: {
   businessId: string;
   initialOrders: KitchenOrder[];
   stations: KitchenStation[];
   recent?: RecentTicket[];
   menu?: MenuItem[];
+  kdsWarn?: number;
+  kdsLate?: number;
 }) {
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders);
   const [stationFilter, setStationFilter] = useState<string>("all");
@@ -180,8 +184,8 @@ export function KitchenClient({
   function aging(iso: string, items?: KitchenItem[]): { label: string; tone: ChipTone } {
     const mins = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000));
     const target = items ? ticketTarget(items) : null;
-    const warnAt = target ?? 10;
-    const lateAt = target ? Math.round(target * 1.5) : 18;
+    const warnAt = target ?? kdsWarn;
+    const lateAt = target ? Math.round(target * 1.5) : kdsLate;
     const tone: ChipTone = mins >= lateAt ? "danger" : mins >= warnAt ? "warning" : "success";
     return { label: formatDuration(mins), tone };
   }
@@ -492,6 +496,20 @@ export function KitchenClient({
       </div>
     ) : null;
 
+  // B11: per-station load — open (unbumped) item count + oldest age, so a backed-up
+  // station is obvious at a glance on the filter bar.
+  const stationLoad = new Map<string, { items: number; oldest: number }>();
+  for (const o of orders) {
+    if (!o.stationId) continue;
+    const openItems = o.items.filter((it) => !it.void && !it.ready).reduce((s, it) => s + (Number(it.quantity) || 1), 0);
+    if (openItems <= 0) continue;
+    const cur = stationLoad.get(o.stationId) ?? { items: 0, oldest: 0 };
+    cur.items += openItems;
+    const mins = Math.floor((now - new Date(o.createdAt).getTime()) / 60000);
+    if (mins > cur.oldest) cur.oldest = mins;
+    stationLoad.set(o.stationId, cur);
+  }
+
   const stationStrip =
     stations.length > 0 ? (
       <div className="flex flex-wrap gap-2 mb-4">
@@ -516,6 +534,12 @@ export function KitchenClient({
             }
           >
             {s.name}
+            {(() => {
+              const ld = stationLoad.get(s.id);
+              if (!ld) return null;
+              const hot = ld.oldest >= kdsLate;
+              return <span className={"ml-1.5 text-[11px] tabular-nums " + (stationFilter === s.id ? "opacity-90" : hot ? "text-red-600 font-semibold" : "text-muted-foreground")}>{ld.items}·{ld.oldest}m</span>;
+            })()}
           </button>
         ))}
       </div>

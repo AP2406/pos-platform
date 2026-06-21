@@ -40,11 +40,30 @@ export default async function InsightsPage({
   const todayKey = dayKey(new Date().toISOString());
   const inRange = (iso: string) => (range === "today" ? dayKey(iso) === todayKey : new Date(iso).getTime() >= now - (range === "7d" ? 7 : 30) * 86400000);
 
-  const [{ data: orders }, { data: items }, plate] = await Promise.all([
+  const [{ data: orders }, { data: items }, plate, { data: ktix }, { data: kstations }] = await Promise.all([
     supabase.from("orders").select("id, total, status, created_at, guest_count, seated_at").eq("business_id", business.id).neq("status", "voided").gte("created_at", since),
     supabase.from("order_items").select("order_id, catalog_item_id, name, quantity, unit_price, created_at").eq("business_id", business.id).gte("created_at", since),
     plateCostByItem(supabase, business.id),
+    supabase.from("kitchen_tickets").select("station_id, fired_at, fulfilled_at").eq("business_id", business.id).gte("fired_at", since).not("fulfilled_at", "is", null),
+    supabase.from("kitchen_stations").select("id, name").eq("business_id", business.id),
   ]);
+
+  // B4 speed-of-service: fire → bump time per ticket + per station.
+  const stationName = new Map((kstations ?? []).map((s) => [s.id as string, (s.name as string) || "Station"]));
+  let kTimeSum = 0, kTimeN = 0;
+  const perStation = new Map<string, { sum: number; n: number }>();
+  for (const k of ktix ?? []) {
+    const mins = (new Date(k.fulfilled_at as string).getTime() - new Date(k.fired_at as string).getTime()) / 60000;
+    if (mins < 0 || mins > 240) continue;
+    kTimeSum += mins; kTimeN += 1;
+    const sid = (k.station_id as string | null) ?? "none";
+    const cur = perStation.get(sid) ?? { sum: 0, n: 0 };
+    cur.sum += mins; cur.n += 1; perStation.set(sid, cur);
+  }
+  const avgTicketMin = kTimeN > 0 ? kTimeSum / kTimeN : 0;
+  const stationTimes = Array.from(perStation.entries())
+    .map(([sid, v]) => ({ name: sid === "none" ? "Unrouted" : stationName.get(sid) ?? "Station", avg: v.sum / v.n, n: v.n }))
+    .sort((a, b) => b.avg - a.avg);
 
   const liveOrders = (orders ?? []).filter((o) => inRange(o.created_at as string));
   const liveIds = new Set(liveOrders.map((o) => o.id as string));
@@ -181,6 +200,28 @@ export default async function InsightsPage({
             <div><div className="text-muted-foreground text-xs">Avg table turn</div><div className="text-lg font-semibold tabular-nums">{avgTurnMin > 0 ? Math.round(avgTurnMin) + "m" : "—"}</div></div>
             <div><div className="text-muted-foreground text-xs">Avg party</div><div className="text-lg font-semibold tabular-nums">{avgPartySize > 0 ? avgPartySize.toFixed(1) : "—"}</div></div>
           </div>
+        )}
+      </div>
+
+      <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 mb-4">
+        <h2 className="font-semibold mb-2 text-sm">Kitchen speed</h2>
+        {kTimeN === 0 ? (
+          <p className="text-xs text-muted-foreground">No bumped kitchen tickets in this range yet.</p>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-2xl font-semibold tabular-nums">{avgTicketMin.toFixed(1)}m</span>
+              <span className="text-xs text-muted-foreground">avg fire → bump · {kTimeN} tickets</span>
+            </div>
+            <div className="space-y-1">
+              {stationTimes.map((s) => (
+                <div key={s.name} className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">{s.name}<span className="text-xs ml-1">{s.n}</span></span>
+                  <span className={"tabular-nums " + (s.avg >= avgTicketMin * 1.3 ? "text-amber-600 font-medium" : "")}>{s.avg.toFixed(1)}m</span>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 

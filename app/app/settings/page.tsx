@@ -16,6 +16,7 @@ import { resolveCoa, COA_DEFAULTS, type CoaKey } from "../accounting/journal";
 import { OvertimeCard } from "./overtime-card";
 import { parseOvertime } from "@/lib/services/overtime";
 import { OnlineBookingCard } from "./online-booking-card";
+import { KdsCard } from "./kds-card";
 import { ExceptionCard } from "./exception-card";
 import { parseThresholds } from "@/lib/services/exception-thresholds";
 import { FloorCard } from "./floor-card";
@@ -142,6 +143,9 @@ export default async function SettingsPage() {
   const coa = resolveCoa(daySettings);
   const ot = parseOvertime(daySettings);
   const onlineBookingOn = daySettings.online_booking_enabled === true;
+  const kdsCfg = (daySettings.kds ?? {}) as { warnMin?: unknown; lateMin?: unknown };
+  const kdsWarnMin = Number(kdsCfg.warnMin) > 0 ? Number(kdsCfg.warnMin) : 10;
+  const kdsLateMin = Number(kdsCfg.lateMin) > kdsWarnMin ? Number(kdsCfg.lateMin) : 18;
   const bookingUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://surgetechpos.com") + "/book/" + business.id;
   const coaRows = (Object.keys(COA_DEFAULTS) as CoaKey[]).map((k) => ({ key: k, name: coa[k].name, code: coa[k].code }));
   const exTh = parseThresholds(daySettings);
@@ -410,6 +414,12 @@ export default async function SettingsPage() {
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
               <SectionHeader>Online booking</SectionHeader>
               <OnlineBookingCard enabled={onlineBookingOn} bookingUrl={bookingUrl} />
+            </div>
+          )}
+          {hasFloorService(business) && (
+            <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
+              <SectionHeader>Kitchen display (KDS)</SectionHeader>
+              <KdsCard warnMin={kdsWarnMin} lateMin={kdsLateMin} />
             </div>
           )}
           {business.industry === "transportation" && (
