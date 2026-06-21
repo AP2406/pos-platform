@@ -67,6 +67,7 @@ export function KitchenClient({
   menu,
   kdsWarn = 10,
   kdsLate = 18,
+  recipes = {},
 }: {
   businessId: string;
   initialOrders: KitchenOrder[];
@@ -75,7 +76,13 @@ export function KitchenClient({
   menu?: MenuItem[];
   kdsWarn?: number;
   kdsLate?: number;
+  recipes?: Record<string, string[]>;
 }) {
+  // B5: which item's build card is open (keyed by base name).
+  const [recipeItem, setRecipeItem] = useState<string | null>(null);
+  const recipeLines = recipeItem ? recipes[recipeItem.toLowerCase()] ?? [] : [];
+  // B3: bump-bar / keyboard nav — which ticket is focused (stations view).
+  const [focusIdx, setFocusIdx] = useState(-1);
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders);
   const [stationFilter, setStationFilter] = useState<string>("all");
   const [showAllDay, setShowAllDay] = useState(true);
@@ -450,6 +457,24 @@ export function KitchenClient({
     .slice()
     .sort((a, b) => (a.rush === b.rush ? 0 : a.rush ? -1 : 1)); // rush floats to front (stable)
 
+  // B3: bump-bar — arrow keys move focus, Enter/Space bumps the focused ticket,
+  // R recalls the last bump, Esc clears. Ignored while typing in a field.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (view !== "stations") return;
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); setFocusIdx((i) => Math.min(visible.length - 1, i < 0 ? 0 : i + 1)); }
+      else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); setFocusIdx((i) => Math.max(0, i < 0 ? 0 : i - 1)); }
+      else if (e.key === "Enter" || e.key === " ") { if (focusIdx >= 0 && visible[focusIdx]) { e.preventDefault(); handleDone(visible[focusIdx]); setFocusIdx((i) => Math.min(i, visible.length - 2)); } }
+      else if (e.key === "r" || e.key === "R") { if (recentList[0]) { e.preventDefault(); handleRecall(recentList[0]); } }
+      else if (e.key === "Escape") setFocusIdx(-1);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, focusIdx, recentList, view]);
+
   // P1-15: all-day counts — total ORDERED quantity of each item across every
   // visible (unfulfilled) ticket, so the line sees full demand at a glance.
   // Reflects ordered quantities, NOT per-item prep state — bumping a line never
@@ -576,6 +601,25 @@ export function KitchenClient({
     </div>
   );
 
+  // B5: build-card modal.
+  const recipeModal = recipeItem ? (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" onClick={() => setRecipeItem(null)}>
+      <div className="bg-card border border-border rounded-lg p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-semibold">{recipeItem}</h3>
+          <button type="button" onClick={() => setRecipeItem(null)} className="text-xs text-muted-foreground underline">Close</button>
+        </div>
+        {recipeLines.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No build card for this item.</p>
+        ) : (
+          <ul className="text-sm space-y-1">
+            {recipeLines.map((l, i) => <li key={i} className="flex items-start gap-2"><span className="text-muted-foreground">•</span>{l}</li>)}
+          </ul>
+        )}
+      </div>
+    </div>
+  ) : null;
+
   const stopBanner =
     stopItems.length > 0 ? (
       <div className="mb-4 flex items-center gap-3 rounded-xl border-2 border-red-600 bg-red-600/15 px-4 py-3 text-red-700 dark:text-red-300">
@@ -667,13 +711,15 @@ export function KitchenClient({
 
   // One single ticket / order card (used by the station grid and for online
   // orders in the expo grid).
-  function card(o: KitchenOrder) {
+  function card(o: KitchenOrder, focused = false) {
     const age = aging(o.createdAt, o.items);
     // Subtle "ready" cue once every line is bumped (does NOT auto-complete).
     const allReady = o.items.length > 0 && o.items.every((it) => it.ready);
     // A void/86 notice fired to the kitchen — loud red so the line can't miss it.
     const isVoid = o.items.some((it) => it.void === true);
-    const ringClass = isVoid
+    const ringClass = focused
+      ? "ring-2 ring-sky-500 bg-sky-500/5"
+      : isVoid
       ? "ring-2 ring-red-500/70 bg-red-500/5"
       : o.rush
       ? "ring-2 ring-orange-500/70 bg-orange-500/5"
@@ -717,6 +763,7 @@ export function KitchenClient({
                       {/* Per-item bump: tap to mark this line done (round target). */}
                       <span className={"shrink-0 w-5 h-5 rounded-full border flex items-center justify-center text-[11px] leading-none transition-colors " + (it.ready ? "bg-emerald-500 border-emerald-500 text-white" : "border-muted-foreground/40 text-transparent")}>✓</span>
                       <span className={"truncate" + (it.ready ? " line-through" : "") + (it.void ? " line-through text-red-600 font-semibold" : "")}>{(it.void ? "✗ " : "") + (it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}</span>
+                      {recipes[displayItemName(it.name).toLowerCase()] && <span role="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); setRecipeItem(displayItemName(it.name)); }} className="shrink-0 text-[10px] text-sky-600 underline">build</span>}
                     </span>
                     <span className={"tabular-nums " + (it.ready ? "text-muted-foreground line-through" : "text-muted-foreground")}>{"x" + it.quantity}</span>
                   </div>
@@ -736,6 +783,7 @@ export function KitchenClient({
                     <span className={"min-w-0 flex items-center gap-2 " + (it.ready ? "text-muted-foreground" : "")}>
                       <span className={"shrink-0 w-5 h-5 rounded-full border flex items-center justify-center text-[11px] leading-none transition-colors " + (it.ready ? "bg-emerald-500 border-emerald-500 text-white" : "border-muted-foreground/40 text-transparent")}>✓</span>
                       <span className={"truncate" + (it.ready ? " line-through" : "") + (it.void ? " line-through text-red-600 font-semibold" : "")}>{(it.void ? "✗ " : "") + (it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}</span>
+                      {recipes[displayItemName(it.name).toLowerCase()] && <span role="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); setRecipeItem(displayItemName(it.name)); }} className="shrink-0 text-[10px] text-sky-600 underline">build</span>}
                     </span>
                     <span className={"tabular-nums " + (it.ready ? "text-muted-foreground line-through" : "text-muted-foreground")}>{"x" + it.quantity}</span>
                   </div>
@@ -799,6 +847,7 @@ export function KitchenClient({
       <div>
         {viewToggle}
         {stopBanner}
+        {recipeModal}
         {board86}
         {recallStrip}
         {allDayPanel}
@@ -808,8 +857,13 @@ export function KitchenClient({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {expoGroups.map((g) => {
               const gAge = aging(g.firstAt, g.tickets.flatMap((t) => t.items));
+              // B2: the whole table is ready to plate only when every station's items are bumped.
+              const groupReady = g.tickets.length > 0 && g.tickets.every((t) => t.items.length > 0 && t.items.every((it) => it.void || it.ready));
               return (
-              <div key={g.key} className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 flex flex-col">
+              <div key={g.key} className={"bg-card ring-1 shadow-elevation rounded-xl p-4 flex flex-col " + (groupReady ? "ring-2 ring-emerald-400" : "ring-line")}>
+                {groupReady && (
+                  <div className="mb-2 -mt-1 text-center text-xs font-bold text-emerald-600 bg-emerald-500/10 rounded-md py-1">✓ ALL READY — PLATE</div>
+                )}
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="min-w-0">
                     <div className="text-lg font-bold leading-tight truncate">{g.tableName}</div>
@@ -855,6 +909,7 @@ export function KitchenClient({
     <div>
       {viewToggle}
       {stopBanner}
+        {recipeModal}
       {board86}
       {recallStrip}
       {stationStrip}
@@ -863,7 +918,7 @@ export function KitchenClient({
         emptyCard
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {visible.map((o) => card(o))}
+          {visible.map((o, idx) => card(o, idx === focusIdx))}
         </div>
       )}
     </div>

@@ -190,6 +190,23 @@ export default async function KitchenPage() {
     out_of_stock: (m.out_of_stock as boolean | null) ?? false,
   }));
 
+  // B5: recipe/build cards — ingredient lines per item, keyed by lowercase name so
+  // the KDS can show a build card on tap (matched to the fired item's base name).
+  const { data: riRows } = await supabase
+    .from("recipe_ingredients")
+    .select("catalog_item_id, quantity, ingredient:ingredients(name, unit)")
+    .eq("business_id", business.id);
+  const nameByItemId = new Map(menu.map((m) => [m.id, m.name.toLowerCase()]));
+  const recipes: Record<string, string[]> = {};
+  for (const r of riRows ?? []) {
+    const key = nameByItemId.get(r.catalog_item_id as string);
+    if (!key) continue;
+    const ing = (Array.isArray(r.ingredient) ? r.ingredient[0] : r.ingredient) as { name?: string; unit?: string } | null;
+    const qty = Number(r.quantity) || 0;
+    const line = ((qty ? qty + (ing?.unit ? " " + ing.unit : "") + " " : "") + (ing?.name ?? "")).trim();
+    if (line) (recipes[key] ??= []).push(line);
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -198,7 +215,7 @@ export default async function KitchenPage() {
           New orders appear here automatically. Tap Done when an order is ready.
         </p>
       </div>
-      <KitchenClient businessId={business.id} initialOrders={initialOrders} stations={stations} recent={recent} menu={menu} kdsWarn={kdsWarn} kdsLate={kdsLate} />
+      <KitchenClient businessId={business.id} initialOrders={initialOrders} stations={stations} recent={recent} menu={menu} kdsWarn={kdsWarn} kdsLate={kdsLate} recipes={recipes} />
     </div>
   );
 }
