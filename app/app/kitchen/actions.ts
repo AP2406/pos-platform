@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
+import { sendEmail, isEmailConfigured } from "@/lib/services/email";
 
 export async function markOrderFulfilled(
   orderId: string
@@ -21,6 +22,32 @@ export async function markOrderFulfilled(
   if (error) {
     console.error("markOrderFulfilled:", error);
     return { error: "Could not update the order." };
+  }
+
+  // B7: ready-for-pickup email for takeout/pickup/delivery orders, when the guest
+  // has an email on file. Best-effort; toggle via settings.pickup_notify (default on).
+  const settings = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
+  if (settings.pickup_notify !== false && isEmailConfigured()) {
+    const { data: ord } = await supabase
+      .from("orders")
+      .select("dining_option, customer_id, sale_number")
+      .eq("id", orderId)
+      .eq("business_id", business.id)
+      .maybeSingle();
+    const dopt = (ord?.dining_option as string | null) ?? null;
+    if (ord?.customer_id && (dopt === "takeout" || dopt === "pickup" || dopt === "delivery")) {
+      const { data: cust } = await supabase.from("customers").select("name, email").eq("id", ord.customer_id as string).maybeSingle();
+      const email = (cust?.email as string | null) ?? null;
+      if (email) {
+        const biz = (business as { name?: string }).name || "your order";
+        const label = ord.sale_number ? "Order #" + ord.sale_number : "Your order";
+        await sendEmail({
+          to: email,
+          subject: (dopt === "delivery" ? "Out for delivery" : "Ready for pickup") + " — " + biz,
+          html: `<p>Hi ${(cust?.name as string | null) ?? "there"},</p><p><strong>${label}</strong> at ${biz} is ${dopt === "delivery" ? "on its way" : "ready for pickup"}. See you soon!</p>`,
+        });
+      }
+    }
   }
 
   revalidatePath("/app/kitchen");
