@@ -41,7 +41,7 @@ export default async function InsightsPage({
   const inRange = (iso: string) => (range === "today" ? dayKey(iso) === todayKey : new Date(iso).getTime() >= now - (range === "7d" ? 7 : 30) * 86400000);
 
   const [{ data: orders }, { data: items }, plate] = await Promise.all([
-    supabase.from("orders").select("id, total, status, created_at").eq("business_id", business.id).neq("status", "voided").gte("created_at", since),
+    supabase.from("orders").select("id, total, status, created_at, guest_count, seated_at").eq("business_id", business.id).neq("status", "voided").gte("created_at", since),
     supabase.from("order_items").select("order_id, catalog_item_id, name, quantity, unit_price, created_at").eq("business_id", business.id).gte("created_at", since),
     plateCostByItem(supabase, business.id),
   ]);
@@ -64,6 +64,21 @@ export default async function InsightsPage({
   }
   const maxHour = Math.max(1, ...byHour);
   const maxDow = Math.max(1, ...DOW.map((d) => byDow.get(d) ?? 0));
+
+  // Covers + table-turn-time (from orders that carry guest_count / seated_at).
+  let coversTotal = 0, coverSales = 0, coverChecks = 0, turnSum = 0, turnCount = 0;
+  for (const o of liveOrders) {
+    const g = Number(o.guest_count) || 0;
+    if (g > 0) { coversTotal += g; coverSales += Number(o.total) || 0; coverChecks += 1; }
+    if (o.seated_at) {
+      const mins = (new Date(o.created_at as string).getTime() - new Date(o.seated_at as string).getTime()) / 60000;
+      if (mins > 0 && mins < 600) { turnSum += mins; turnCount += 1; }
+    }
+  }
+  const salesPerCover = coversTotal > 0 ? coverSales / coversTotal : 0;
+  const avgTurnMin = turnCount > 0 ? turnSum / turnCount : 0;
+  const avgPartySize = coverChecks > 0 ? coversTotal / coverChecks : 0;
+  const hasCovers = coversTotal > 0 || turnCount > 0;
 
   // Menu mix (exclude voided orders' items). Cost accumulates each line's recipe
   // plate cost × qty (0 when no recipe); costedUnits tracks recipe coverage.
@@ -153,6 +168,20 @@ export default async function InsightsPage({
             {DOW.map((d) => <Bar key={d} label={d} value={byDow.get(d) ?? 0} max={maxDow} />)}
           </div>
         </div>
+      </div>
+
+      <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 mb-4">
+        <h2 className="font-semibold mb-2 text-sm">Covers &amp; table turn</h2>
+        {!hasCovers ? (
+          <p className="text-xs text-muted-foreground">No guest counts recorded yet — enter a party size when opening a table to track covers and turn time.</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div><div className="text-muted-foreground text-xs">Covers</div><div className="text-lg font-semibold tabular-nums">{coversTotal}</div></div>
+            <div><div className="text-muted-foreground text-xs">Sales / cover</div><div className="text-lg font-semibold tabular-nums">{money(salesPerCover)}</div></div>
+            <div><div className="text-muted-foreground text-xs">Avg table turn</div><div className="text-lg font-semibold tabular-nums">{avgTurnMin > 0 ? Math.round(avgTurnMin) + "m" : "—"}</div></div>
+            <div><div className="text-muted-foreground text-xs">Avg party</div><div className="text-lg font-semibold tabular-nums">{avgPartySize > 0 ? avgPartySize.toFixed(1) : "—"}</div></div>
+          </div>
+        )}
       </div>
 
       <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl overflow-hidden">

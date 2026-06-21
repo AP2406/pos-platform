@@ -29,6 +29,7 @@ import {
   listTableMoveTargets,
   moveTicketToTable,
   setTicketServer,
+  dropCheck,
   type OpenTicketSummary,
   type TableCart,
 } from "./ticket-actions";
@@ -1802,6 +1803,8 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       customer_id: customer ? customer.id : null,
       dining_option: diningOption,
       approver: approver ?? undefined,
+      // Phase A: carry the table ticket so covers / seated-at / section persist on the order.
+      open_ticket_id: tableBinding?.ticketId ?? undefined,
     };
   }
 
@@ -2725,6 +2728,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                     )}
                     {canRepeatRound && (
                       <Button variant="outline" className="h-11 px-3" onClick={repeatRound} disabled={pending || sending} title="Re-add the last round to fire again">Repeat round</Button>
+                    )}
+                    {canRepeatRound && (
+                      <Button variant="outline" className="h-11 px-3" onClick={() => { if (tableBinding) startTransition(async () => { await dropCheck(tableBinding.ticketId); }); }} disabled={pending || sending} title="Mark the check as presented to the guest">Drop check</Button>
                     )}
                     <Button variant="outline" className="flex-1 h-11" onClick={sendAndPay} disabled={pending}>
                       Send &amp; Pay

@@ -218,6 +218,9 @@ export type TableTicketSummary = {
   child_count: number;
   // P2-27: a guest added items via QR that haven't been fired yet.
   new_guest_items: boolean;
+  // Phase A live state: any item fired to the kitchen, and whether the check was dropped.
+  fired: boolean;
+  check_dropped_at: string | null;
 };
 
 export type TogoTicketSummary = {
@@ -1108,7 +1111,7 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
 
   const { data, error } = await supabase
     .from("open_tickets")
-    .select("id, element_id, guest_count, opened_at, cart, staff_id, split_kind")
+    .select("id, element_id, guest_count, opened_at, cart, staff_id, split_kind, check_dropped_at")
     .eq("business_id", business.id)
     .not("element_id", "is", null);
   if (error) {
@@ -1146,6 +1149,7 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
     const newGuestItems = cartItems.some(
       (i) => i.guest === true && !i.void && (Number(i.quantity) || 0) - (Number(i.sent_qty) || 0) > 0
     );
+    const fired = cartItems.some((i) => !i.void && (Number(i.sent_qty) || 0) > 0);
     return {
       id: id,
       element_id: t.element_id as string,
@@ -1159,6 +1163,8 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
       split_kind: (t.split_kind as string | null) ?? null,
       child_count: kids,
       new_guest_items: newGuestItems,
+      fired,
+      check_dropped_at: (t.check_dropped_at as string | null) ?? null,
     };
   });
 }
@@ -1381,4 +1387,27 @@ export async function transferTables(
     return { error: "Could not transfer the tables. Please try again." };
   }
   return { ok: true, moved: (data ?? []).length };
+}
+// Phase A: mark the check as dropped (presented to the guest) — drives the live
+// floor state and the seat→pay turn-time. Audited; idempotent.
+export async function dropCheck(ticketId: string): Promise<{ ok: true } | { error: string }> {
+  if (!ticketId) return { error: "Missing check." };
+  const { business, role } = await requireBusiness();
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from("open_tickets")
+    .update({ check_dropped_at: new Date().toISOString() })
+    .eq("id", ticketId)
+    .eq("business_id", business.id)
+    .is("check_dropped_at", null);
+  if (error) {
+    console.error("dropCheck:", error);
+    return { error: "Could not drop the check." };
+  }
+  await supabase.from("audit_events").insert({
+    business_id: business.id, actor_id: user ? user.id : null, actor_role: role,
+    action: "check_dropped", metadata: { ticket_id: ticketId },
+  });
+  return { ok: true };
 }

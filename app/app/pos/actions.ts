@@ -64,6 +64,7 @@ const orderSchema = z.object({
   customer_id: z.string().uuid().optional().nullable(),
   idempotency_key: z.string().uuid().optional(),
   dining_option: z.enum(DINING_OPTIONS).optional().nullable(),
+  open_ticket_id: z.string().uuid().optional().nullable(),
   // The manager who authorized a sensitive action (comp/discount/void) at the
   // register via PIN, when the cashier's own role lacked the permission/cap.
   approver: z.object({ id: z.string().max(64), name: z.string().max(120) }).optional().nullable(),
@@ -104,6 +105,7 @@ type OrderInput = {
   customer_id?: string | null;
   idempotency_key?: string;
   dining_option?: "dine_in" | "takeout" | "delivery" | "pickup" | null;
+  open_ticket_id?: string | null;
   approver?: { id: string; name: string } | null;
 };
 
@@ -796,6 +798,34 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       await redeemLoyaltyPoints(supabase, business.id, customerId, result.order_id, loyaltyRedeemPts);
     }
     await accrueLoyaltyPoints(supabase, business.id, customerId, result.order_id, netSubtotal);
+  }
+
+  // Phase A: persist covers (guest_count), seated_at (turn-time) and section from
+  // the table ticket onto the order before the ticket is dropped — these are lost
+  // otherwise. Non-financial columns, so the paid-order guard allows the update.
+  if (parsed.data.open_ticket_id && !result.replayed) {
+    const { data: ot } = await supabase
+      .from("open_tickets")
+      .select("guest_count, opened_at, element_id")
+      .eq("id", parsed.data.open_ticket_id)
+      .eq("business_id", business.id)
+      .maybeSingle();
+    if (ot) {
+      let sectionId: string | null = null;
+      if (ot.element_id) {
+        const { data: el } = await supabase
+          .from("floor_elements")
+          .select("section_id")
+          .eq("id", ot.element_id as string)
+          .maybeSingle();
+        sectionId = (el?.section_id as string | null) ?? null;
+      }
+      await supabase
+        .from("orders")
+        .update({ guest_count: ot.guest_count ?? null, seated_at: ot.opened_at ?? null, section_id: sectionId })
+        .eq("id", result.order_id)
+        .eq("business_id", business.id);
+    }
   }
 
   // P2-32b: decrement the gift cards used as tenders. Atomic + overdraft-safe via

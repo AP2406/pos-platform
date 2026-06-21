@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,7 @@ type RegisterProps = {
   items: Item[];
   taxRate: number;
   businessName: string;
+  businessId?: string;
   hasStaff: boolean;
   activeStaff: ActiveStaff | null;
   receiptSettings: Partial<ReceiptSettings> | null;
@@ -148,11 +150,22 @@ export function FloorClient({
     };
   }, []);
 
-  // P2-27: poll open tickets so guest QR orders (and other devices' changes)
-  // surface on the floor — e.g. the "New" badge — without a manual reload.
+  // Phase A: live floor — subscribe to open_tickets changes so table state flips
+  // on every device without a refresh (guest QR orders, another server firing,
+  // dropping a check, paying out). A slow safety poll covers any missed event.
   useEffect(() => {
-    const id = setInterval(() => { refreshOpen(); }, 20000);
-    return () => clearInterval(id);
+    const bid = register.businessId;
+    if (!bid) {
+      const id = setInterval(() => { refreshOpen(); }, 20000);
+      return () => clearInterval(id);
+    }
+    const supabase = createBrowserClient();
+    const channel = supabase
+      .channel("floor-" + bid)
+      .on("postgres_changes", { event: "*", schema: "public", table: "open_tickets", filter: "business_id=eq." + bid }, () => { refreshOpen(); })
+      .subscribe();
+    const id = setInterval(() => { refreshOpen(); }, 60000);
+    return () => { supabase.removeChannel(channel); clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -487,6 +500,16 @@ export function FloorClient({
     }
   }
 
+  // Phase A: explicit lifecycle state (seated → ordered → fired → check-dropped),
+  // independent of the time-aged color. Shown as a small label on each table.
+  function lifecycleState(open: TableTicketSummary | undefined): { label: string; cls: string } | null {
+    if (!open) return null;
+    if (open.check_dropped_at) return { label: "Check dropped", cls: "text-violet-600" };
+    if (open.fired) return { label: "Fired", cls: "text-emerald-600" };
+    if (open.item_count > 0) return { label: "Ordered", cls: "text-sky-600" };
+    return { label: "Seated", cls: "text-muted-foreground" };
+  }
+
   // Live summary for the toolbar.
   const ringEls = elements.filter((e) => isRingable(e.kind));
   const seatedCount = ringEls.filter((e) => openByElement[e.id]).length;
@@ -585,6 +608,7 @@ export function FloorClient({
                           ? formatDuration(minutesOpen(open.opened_at)) + (open.server_name ? " · " + open.server_name : "") + (open.child_count && open.child_count > 0 ? " · split" : "")
                           : "Available"}
                       </div>
+                      {open && (() => { const ls = lifecycleState(open); return ls ? <div className={"text-[10px] font-semibold mt-0.5 " + ls.cls}>{ls.label}</div> : null; })()}
                     </button>
                   );
                 })}
