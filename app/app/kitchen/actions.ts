@@ -272,3 +272,79 @@ export async function markKitchenTicketFulfilled(
   revalidatePath("/app/kitchen");
   return { ok: true };
 }
+// ---- B8: kitchen → server (BOH→FOH) messaging --------------------------------
+
+export type KitchenMessage = { id: string; body: string; kind: string; toName: string | null; elementId: string | null; createdAt: string };
+
+// Kitchen pushes a note to the owning server (resolved from the ticket's table or
+// the order). Delivered live via the kitchen_messages realtime table.
+export async function sendKitchenMessage(input: {
+  elementId?: string | null;
+  orderId?: string | null;
+  body: string;
+  kind?: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const body = (input.body || "").trim().slice(0, 200);
+  if (!body) return { error: "Empty message." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  let toStaffId: string | null = null;
+  if (input.elementId) {
+    const { data: ot } = await supabase.from("open_tickets").select("staff_id").eq("business_id", business.id).eq("element_id", input.elementId).maybeSingle();
+    toStaffId = (ot?.staff_id as string | null) ?? null;
+  } else if (input.orderId) {
+    const { data: o } = await supabase.from("orders").select("staff_id").eq("business_id", business.id).eq("id", input.orderId).maybeSingle();
+    toStaffId = (o?.staff_id as string | null) ?? null;
+  }
+  let toName: string | null = null;
+  if (toStaffId) {
+    const { data: s } = await supabase.from("staff_members").select("name").eq("id", toStaffId).maybeSingle();
+    toName = (s?.name as string | null) ?? null;
+  }
+
+  const { error } = await supabase.from("kitchen_messages").insert({
+    business_id: business.id,
+    element_id: input.elementId ?? null,
+    to_staff_id: toStaffId,
+    to_name: toName,
+    body,
+    kind: input.kind === "alert" ? "alert" : "info",
+    created_by: user ? user.id : null,
+  });
+  if (error) {
+    console.error("sendKitchenMessage:", error);
+    return { error: "Could not send the message." };
+  }
+  return { ok: true };
+}
+
+// Unacked messages (last 2h) for the floor banner.
+export async function listKitchenMessages(): Promise<KitchenMessage[]> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const since = new Date(Date.now() - 2 * 3600000).toISOString();
+  const { data } = await supabase
+    .from("kitchen_messages")
+    .select("id, body, kind, to_name, element_id, created_at")
+    .eq("business_id", business.id)
+    .is("acked_at", null)
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  return (data ?? []).map((m) => ({
+    id: m.id as string, body: m.body as string, kind: (m.kind as string) || "info",
+    toName: (m.to_name as string | null) ?? null, elementId: (m.element_id as string | null) ?? null,
+    createdAt: m.created_at as string,
+  }));
+}
+
+export async function ackKitchenMessage(id: string): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing message." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { error } = await supabase.from("kitchen_messages").update({ acked_at: new Date().toISOString() }).eq("id", id).eq("business_id", business.id);
+  if (error) return { error: "Could not dismiss." };
+  return { ok: true };
+}

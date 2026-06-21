@@ -27,6 +27,7 @@ import {
   type ChildTicket,
 } from "./ticket-actions";
 import { listFloor, type FloorElement, type ElementKind, type FloorPlan } from "../floor/floor-actions";
+import { listKitchenMessages, ackKitchenMessage, type KitchenMessage } from "../kitchen/actions";
 import type { ActiveStaff } from "./staff-session";
 import type { ReceiptSettings } from "./receipt-template";
 
@@ -160,14 +161,24 @@ export function FloorClient({
       return () => clearInterval(id);
     }
     const supabase = createBrowserClient();
+    const refreshMsgs = () => { listKitchenMessages().then(setKmsgs).catch(() => {}); };
+    refreshMsgs();
     const channel = supabase
       .channel("floor-" + bid)
       .on("postgres_changes", { event: "*", schema: "public", table: "open_tickets", filter: "business_id=eq." + bid }, () => { refreshOpen(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "kitchen_messages", filter: "business_id=eq." + bid }, () => { refreshMsgs(); })
       .subscribe();
-    const id = setInterval(() => { refreshOpen(); }, 60000);
+    const id = setInterval(() => { refreshOpen(); refreshMsgs(); }, 60000);
     return () => { supabase.removeChannel(channel); clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // B8: live kitchen → server messages, shown as a dismissible banner.
+  const [kmsgs, setKmsgs] = useState<KitchenMessage[]>([]);
+  function ackMsg(id: string) {
+    setKmsgs((prev) => prev.filter((m) => m.id !== id));
+    ackKitchenMessage(id).catch(() => {});
+  }
 
   // Designed-layout bounds (the floor is scaled to fit its container).
   let canvasW = 600;
@@ -523,6 +534,18 @@ export function FloorClient({
 
   return (
     <div className="h-full flex flex-col">
+      {/* B8: live kitchen → server messages */}
+      {kmsgs.length > 0 && (
+        <div className="shrink-0 border-b border-amber-500/40 bg-amber-500/10">
+          {kmsgs.map((m) => (
+            <div key={m.id} className="flex items-center gap-2 px-3 py-1.5 text-sm text-amber-800 dark:text-amber-300">
+              <span className="font-semibold">🔔 Kitchen{m.toName ? " → " + m.toName : ""}:</span>
+              <span className="flex-1 min-w-0 truncate">{m.body}</span>
+              <button type="button" onClick={() => ackMsg(m.id)} className="text-xs underline shrink-0">Got it</button>
+            </div>
+          ))}
+        </div>
+      )}
       {/* One toolbar */}
       <div className="shrink-0 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 border-b border-border bg-card">
         <span className="font-semibold truncate">{register.businessName}</span>

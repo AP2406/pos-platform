@@ -7,7 +7,7 @@ import { Chip, type ChipTone } from "@/components/ui/chip";
 import { displayItemName, formatDuration } from "@/lib/format";
 import { allergenLabels } from "@/lib/allergens";
 import { setCatalogItemOutOfStock } from "../catalog/actions";
-import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady, setOrderItemPrepared, recallKitchenTicket, recallOrder, setTicketRush } from "./actions";
+import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady, setOrderItemPrepared, recallKitchenTicket, recallOrder, setTicketRush, sendKitchenMessage } from "./actions";
 import { printReceiptHtml } from "../pos/qz-print";
 
 function allergenText(it: { allergens?: string[] | null; allergy?: string | null }): string {
@@ -83,6 +83,17 @@ export function KitchenClient({
   const recipeLines = recipeItem ? recipes[recipeItem.toLowerCase()] ?? [] : [];
   // B3: bump-bar / keyboard nav — which ticket is focused (stations view).
   const [focusIdx, setFocusIdx] = useState(-1);
+  // B8: which ticket the kitchen is messaging the server about.
+  const [msgFor, setMsgFor] = useState<KitchenOrder | null>(null);
+  function sendMsg(body: string) {
+    const o = msgFor;
+    if (!o) return;
+    startTransition(async () => {
+      await sendKitchenMessage(o.kind === "kitchen" ? { elementId: o.elementId, body } : { orderId: o.id, body });
+      setMsgFor(null);
+    });
+  }
+  const MSG_PRESETS = ["Item delayed", "86 mid-course", "Course held", "Re-fire needed", "See the kitchen"];
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders);
   const [stationFilter, setStationFilter] = useState<string>("all");
   const [showAllDay, setShowAllDay] = useState(true);
@@ -601,6 +612,24 @@ export function KitchenClient({
     </div>
   );
 
+  // B8: message-the-server modal.
+  const msgModal = msgFor ? (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" onClick={() => setMsgFor(null)}>
+      <div className="bg-card border border-border rounded-lg p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-semibold">Message {msgFor.tableName ?? msgFor.tableLabel ?? msgFor.customerName ?? "server"}</h3>
+          <button type="button" onClick={() => setMsgFor(null)} className="text-xs text-muted-foreground underline">Close</button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {MSG_PRESETS.map((p) => (
+            <button key={p} type="button" onClick={() => sendMsg(p)} disabled={pending} className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent disabled:opacity-50">{p}</button>
+          ))}
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-2">Sent live to the table&apos;s server.</p>
+      </div>
+    </div>
+  ) : null;
+
   // B5: build-card modal.
   const recipeModal = recipeItem ? (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" onClick={() => setRecipeItem(null)}>
@@ -806,6 +835,7 @@ export function KitchenClient({
             </Button>
           )}
           <Button variant="outline" size="touch" onClick={() => handleReprint(o)}>Reprint</Button>
+          <Button variant="outline" size="touch" onClick={() => setMsgFor(o)} disabled={pending} title="Message the server">Msg</Button>
           {o.kind === "kitchen" && (
             <Button variant="outline" size="touch" onClick={() => handleRefire(o)} disabled={pending}>Re-fire</Button>
           )}
@@ -848,6 +878,7 @@ export function KitchenClient({
         {viewToggle}
         {stopBanner}
         {recipeModal}
+        {msgModal}
         {board86}
         {recallStrip}
         {allDayPanel}
@@ -910,6 +941,7 @@ export function KitchenClient({
       {viewToggle}
       {stopBanner}
         {recipeModal}
+        {msgModal}
       {board86}
       {recallStrip}
       {stationStrip}
