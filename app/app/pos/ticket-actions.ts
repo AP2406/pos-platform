@@ -470,7 +470,8 @@ async function insertFiredByStation(
   elementId: string | null,
   baseLabel: string | null,
   fired: FiredItem[],
-  createdBy: string | null
+  createdBy: string | null,
+  courseId: string | null = null
 ): Promise<{ error?: string }> {
   const catIds = Array.from(
     new Set(fired.map((f) => f.catalog_item_id).filter((x): x is string => !!x))
@@ -541,6 +542,7 @@ async function insertFiredByStation(
     label: sid ? (baseLabel ? baseLabel + " · " : "") + (stationName[sid] || "Station") : baseLabel,
     items: groups[sid],
     station_id: sid || null,
+    course_id: courseId,
     created_by: createdBy,
   }));
   const { error } = await supabase.from("kitchen_tickets").insert(rows);
@@ -692,7 +694,7 @@ export async function fireCourse(
     return { ok: true, fired: 0 };
   }
 
-  const ins = await insertFiredByStation(supabase, business.id, elementId, label, fired, user ? user.id : null);
+  const ins = await insertFiredByStation(supabase, business.id, elementId, label, fired, user ? user.id : null, courseId);
   if (ins.error) {
     return { error: ins.error };
   }
@@ -705,6 +707,79 @@ export async function fireCourse(
   if (updErr) console.error("fireCourse update:", updErr);
 
   return { ok: true, fired: fired.reduce((s, f) => s + f.quantity, 0) };
+}
+
+// B10 auto-coursing: fire the NEXT unfired course for a table, server-side, from
+// its open ticket. Called when a course is fully bumped (if the business opted in).
+// Mirrors fireCourse but reads the cart directly (no client payload).
+async function autoFireNextCourse(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  elementId: string
+): Promise<void> {
+  const { data: ticket } = await supabase
+    .from("open_tickets")
+    .select("id, cart, label, element_id")
+    .eq("business_id", businessId)
+    .eq("element_id", elementId)
+    .maybeSingle();
+  if (!ticket) return;
+  const cart = (ticket.cart as TableCart | null) ?? null;
+  const items = Array.isArray(cart?.items) ? cart!.items : [];
+  if (items.length === 0) return;
+
+  // Course order (lowest sort_order first); items with no course fire last.
+  const { data: courses } = await supabase.from("courses").select("id, sort_order").eq("business_id", businessId);
+  const order = new Map((courses ?? []).map((c) => [c.id as string, Number(c.sort_order) || 0]));
+  const unfiredCourses = Array.from(
+    new Set(items.filter((it) => !it.void && (Number(it.quantity) || 0) > (Number(it.sent_qty) || 0)).map((it) => (it.course_id ?? null)))
+  );
+  if (unfiredCourses.length === 0) return;
+  unfiredCourses.sort((a, b) => (order.get(a as string) ?? 9999) - (order.get(b as string) ?? 9999));
+  const nextCourse = unfiredCourses[0];
+  if (!nextCourse) return; // don't auto-fire the no-course bucket
+
+  let label: string | null = (ticket.label as string | null) ?? null;
+  const { data: el } = await supabase.from("floor_elements").select("label").eq("id", elementId).maybeSingle();
+  if (el?.label) label = el.label as string;
+
+  const nowIso = new Date().toISOString();
+  const fired: FiredItem[] = [];
+  const updatedItems = items.map((it) => {
+    if ((it.course_id ?? null) !== nextCourse) return it;
+    const delta = (Number(it.quantity) || 0) - (Number(it.sent_qty) || 0);
+    if (delta <= 0) return it;
+    fired.push({ name: it.name, quantity: delta, note: it.note ?? null, seat: it.seat ?? null, catalog_item_id: it.catalog_item_id ?? null, allergy: it.allergy ?? null });
+    return { ...it, sent_qty: Number(it.quantity) || 0, fired_at: nowIso };
+  });
+  if (fired.length === 0) return;
+  const ins = await insertFiredByStation(supabase, businessId, elementId, label, fired, null, nextCourse as string);
+  if (ins.error) return; // e.g. an item got 86'd — leave it for a human to fire
+  await supabase.from("open_tickets").update({ cart: { ...cart!, items: updatedItems } }).eq("id", ticket.id as string).eq("business_id", businessId);
+}
+
+// B10: called after a ticket is bumped. If the business opted into auto-coursing
+// (settings.auto_course) AND every kitchen ticket for this table+course is now
+// bumped, fire the next course automatically. Opt-in, no-op otherwise.
+export async function autoFireNextCourseIfReady(
+  elementId: string | null,
+  courseId: string | null
+): Promise<{ ok: true } | { error: string }> {
+  if (!elementId || !courseId) return { ok: true };
+  const { business } = await requireBusiness();
+  const settings = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
+  if (settings.auto_course !== true) return { ok: true };
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("kitchen_tickets")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", business.id)
+    .eq("element_id", elementId)
+    .eq("course_id", courseId)
+    .is("fulfilled_at", null);
+  if ((count ?? 0) > 0) return { ok: true }; // this course isn't fully bumped yet
+  await autoFireNextCourse(supabase, business.id, elementId);
+  return { ok: true };
 }
 
 // P0-10: tell the kitchen an already-fired item was voided (stop making it).

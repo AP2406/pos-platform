@@ -6,9 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { setKdsThresholds } from "./kds-actions";
 
-export function KdsCard({ warnMin, lateMin }: { warnMin: number; lateMin: number }) {
+export function KdsCard({ warnMin, lateMin, autoCourse: initAuto = false }: { warnMin: number; lateMin: number; autoCourse?: boolean }) {
   const [warn, setWarn] = useState(String(warnMin));
   const [late, setLate] = useState(String(lateMin));
+  const [autoCourse, setAutoCourse] = useState(initAuto);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -16,7 +17,7 @@ export function KdsCard({ warnMin, lateMin }: { warnMin: number; lateMin: number
   function save() {
     setErr(null); setMsg(null);
     start(async () => {
-      const res = await setKdsThresholds({ warnMin: parseInt(warn) || 0, lateMin: parseInt(late) || 0 });
+      const res = await setKdsThresholds({ warnMin: parseInt(warn) || 0, lateMin: parseInt(late) || 0, autoCourse });
       if ("error" in res) { setErr(res.error); return; }
       setMsg("Saved.");
     });
@@ -38,6 +39,15 @@ export function KdsCard({ warnMin, lateMin }: { warnMin: number; lateMin: number
         </div>
         <Button onClick={save} disabled={pending}>{pending ? "Saving..." : "Save"}</Button>
       </div>
+      <label className="mt-3 flex items-start gap-2 text-sm select-none">
+        <input type="checkbox" checked={autoCourse} onChange={(e) => setAutoCourse(e.target.checked)} className="h-4 w-4 mt-0.5" />
+        <span>
+          <span className="font-medium">Auto-fire the next course</span>
+          <span className="block text-xs text-muted-foreground">
+            When a table&apos;s current course is fully bumped, automatically fire the next course to the kitchen. Off by default — manual fire still works.
+          </span>
+        </span>
+      </label>
       {err && <p className="text-sm text-red-600 mt-2">{err}</p>}
       {msg && <p className="text-sm text-green-600 mt-2">{msg}</p>}
     </div>

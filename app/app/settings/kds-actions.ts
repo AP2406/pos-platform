@@ -10,6 +10,7 @@ import { revalidatePath } from "next/cache";
 export async function setKdsThresholds(input: {
   warnMin: number;
   lateMin: number;
+  autoCourse?: boolean;
 }): Promise<{ ok: true } | { error: string }> {
   const { business, role } = await requireBusiness();
   assertConfigEditable(business);
@@ -25,7 +26,7 @@ export async function setKdsThresholds(input: {
   const current = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
   const { error } = await supabase
     .from("businesses")
-    .update({ settings: { ...current, kds: { warnMin: warn, lateMin: late } } })
+    .update({ settings: { ...current, kds: { warnMin: warn, lateMin: late }, auto_course: input.autoCourse === true } })
     .eq("id", business.id);
   if (error) {
     console.error("setKdsThresholds:", error);

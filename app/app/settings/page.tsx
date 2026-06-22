@@ -146,6 +146,7 @@ export default async function SettingsPage() {
   const kdsCfg = (daySettings.kds ?? {}) as { warnMin?: unknown; lateMin?: unknown };
   const kdsWarnMin = Number(kdsCfg.warnMin) > 0 ? Number(kdsCfg.warnMin) : 10;
   const kdsLateMin = Number(kdsCfg.lateMin) > kdsWarnMin ? Number(kdsCfg.lateMin) : 18;
+  const autoCourse = daySettings.auto_course === true;
   const bookingUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://surgetechpos.com") + "/book/" + business.id;
   const coaRows = (Object.keys(COA_DEFAULTS) as CoaKey[]).map((k) => ({ key: k, name: coa[k].name, code: coa[k].code }));
   const exTh = parseThresholds(daySettings);
@@ -419,7 +420,7 @@ export default async function SettingsPage() {
           {hasFloorService(business) && (
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
               <SectionHeader>Kitchen display (KDS)</SectionHeader>
-              <KdsCard warnMin={kdsWarnMin} lateMin={kdsLateMin} />
+              <KdsCard warnMin={kdsWarnMin} lateMin={kdsLateMin} autoCourse={autoCourse} />
             </div>
           )}
           {business.industry === "transportation" && (

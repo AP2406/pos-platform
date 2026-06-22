@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { sendEmail, isEmailConfigured } from "@/lib/services/email";
+import { autoFireNextCourseIfReady } from "../pos/ticket-actions";
 
 export async function markOrderFulfilled(
   orderId: string
@@ -262,6 +263,12 @@ export async function markKitchenTicketsFulfilled(
   const { business } = await requireBusiness();
   const supabase = await createClient();
 
+  const { data: pre } = await supabase
+    .from("kitchen_tickets")
+    .select("element_id, course_id")
+    .in("id", ids)
+    .eq("business_id", business.id);
+
   const { error } = await supabase
     .from("kitchen_tickets")
     .update({ fulfilled_at: new Date().toISOString() })
@@ -271,6 +278,18 @@ export async function markKitchenTicketsFulfilled(
   if (error) {
     console.error("markKitchenTicketsFulfilled:", error);
     return { error: "Could not bump the table." };
+  }
+
+  // B10: for each distinct table+course just bumped, maybe auto-fire the next course.
+  const seen = new Set<string>();
+  for (const p of pre ?? []) {
+    const el = (p.element_id as string | null) ?? null;
+    const co = (p.course_id as string | null) ?? null;
+    if (!el || !co) continue;
+    const key = el + "|" + co;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    await autoFireNextCourseIfReady(el, co);
   }
 
   revalidatePath("/app/kitchen");
@@ -285,6 +304,13 @@ export async function markKitchenTicketFulfilled(
   const { business } = await requireBusiness();
   const supabase = await createClient();
 
+  const { data: pre } = await supabase
+    .from("kitchen_tickets")
+    .select("element_id, course_id")
+    .eq("id", ticketId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("kitchen_tickets")
     .update({ fulfilled_at: new Date().toISOString() })
@@ -295,6 +321,9 @@ export async function markKitchenTicketFulfilled(
     console.error("markKitchenTicketFulfilled:", error);
     return { error: "Could not update the ticket." };
   }
+
+  // B10: maybe auto-fire the next course (opt-in; no-op otherwise).
+  await autoFireNextCourseIfReady((pre?.element_id as string | null) ?? null, (pre?.course_id as string | null) ?? null);
 
   revalidatePath("/app/kitchen");
   return { ok: true };
