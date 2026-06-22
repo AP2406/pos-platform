@@ -12,6 +12,7 @@ import { finalizeSplitCheck, type SplitResultOrder } from "./split-actions";
 import { SplitSheet, type SplitCheck } from "./split-sheet";
 import { verifyManagerPin } from "./approval-actions";
 import { requestRegisterApproval, getApprovalStatus, requestManagerCall } from "../approvals/actions";
+import { listSavedTickets, saveSavedTicket, deleteSavedTicket, type SavedTicket, type SavedLine } from "./saved-ticket-actions";
 import { ALLERGENS, allergenLabels } from "@/lib/allergens";
 import {
   holdTicket,
@@ -414,6 +415,74 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   for (const it of items) {
     itemTaxableById[it.id] = it.taxable;
     itemTaxFracById[it.id] = it.taxFrac;
+  }
+
+  // E4/E7: saved tickets (quick-tickets + favorite rounds) + granular re-order.
+  const [savedTickets, setSavedTickets] = useState<SavedTicket[]>([]);
+  const refreshSaved = () => listSavedTickets().then(setSavedTickets).catch(() => {});
+  useEffect(() => { refreshSaved(); }, []);
+  const [saveDialog, setSaveDialog] = useState<{ scope: "quick" | "favorite"; name: string } | null>(null);
+  const [repeatPicker, setRepeatPicker] = useState<Set<number> | null>(null);
+
+  function addSavedLines(lines: SavedLine[]) {
+    if (!lines || lines.length === 0) return;
+    setReceipt(null);
+    setCart((prev) => {
+      const add: CartLine[] = lines.map((l) => ({
+        catalog_item_id: l.catalog_item_id,
+        variation_id: l.variation_id,
+        name: l.name,
+        unit_price: l.unit_price, // preserve the saved ring (modifiers/variation baked in)
+        quantity: Math.max(1, l.quantity),
+        taxable: l.taxable,
+        taxFrac: l.catalog_item_id ? (itemTaxFracById[l.catalog_item_id] ?? taxRate) : (l.taxable ? taxRate : 0),
+        sent_qty: 0,
+        note: l.note ?? null,
+        allergy: l.allergy ?? null,
+        seat: tableMode ? activeSeat : null,
+        course_id: l.course_id ?? defaultCourseFor(l.catalog_item_id),
+        fired_at: null,
+        void: null,
+      }));
+      return [...prev, ...add];
+    });
+  }
+
+  function buildSavedFromCart(): SavedLine[] {
+    return cart.filter((l) => !l.void).map((l) => ({
+      catalog_item_id: l.catalog_item_id,
+      variation_id: l.variation_id,
+      name: l.name,
+      unit_price: l.unit_price,
+      quantity: l.quantity,
+      taxable: l.taxable,
+      note: l.note ?? null,
+      allergy: l.allergy ?? null,
+      course_id: l.course_id ?? null,
+    }));
+  }
+
+  async function doSaveTicket() {
+    if (!saveDialog) return;
+    const res = await saveSavedTicket({ name: saveDialog.name, scope: saveDialog.scope, lines: buildSavedFromCart() });
+    if ("error" in res) return; // dialog stays open; minimal
+    setSaveDialog(null);
+    refreshSaved();
+  }
+
+  // The lines of the most recent fired round (for the partial-round re-order picker).
+  function lastRoundLines(): CartLine[] {
+    const sent = cart.filter((l) => !l.void && (l.sent_qty ?? 0) > 0);
+    if (sent.length === 0) return [];
+    const firedAts = sent.map((l) => l.fired_at).filter((x): x is string => !!x);
+    if (firedAts.length === 0) return sent;
+    const latest = firedAts.slice().sort().at(-1) ?? null;
+    return sent.filter((l) => (l.fired_at ?? null) === latest);
+  }
+  function repeatSelected(lines: CartLine[]) {
+    if (lines.length === 0) return;
+    setReceipt(null);
+    setCart((prev) => [...prev, ...lines.map((l) => ({ ...l, sent_qty: 0, fired_at: null, void: null }))]);
   }
 
   const categories = Array.from(new Set(items.map((i) => i.category).filter((c): c is string => !!c)));
@@ -2294,6 +2363,56 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         </div>
       )}
 
+      {/* E7: name + save the current cart as a quick ticket / favorite. */}
+      {saveDialog && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" onClick={() => setSaveDialog(null)}>
+          <div className="bg-card border border-border rounded-lg p-4 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-medium mb-3">Save ticket</h3>
+            <Input autoFocus value={saveDialog.name} onChange={(e) => setSaveDialog({ ...saveDialog, name: e.target.value })} placeholder="Name (e.g. Pint + wings)" className="h-10 mb-3" />
+            <div className="flex gap-2 mb-3">
+              {(["quick", "favorite"] as const).map((s) => (
+                <button key={s} type="button" onClick={() => setSaveDialog({ ...saveDialog, scope: s })} className={"flex-1 text-sm rounded-md border px-2 py-2 " + (saveDialog.scope === s ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground")}>
+                  {s === "quick" ? "Quick ticket" : "★ Favorite"}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={() => startTransition(doSaveTicket)} disabled={pending || !saveDialog.name.trim()}>Save</Button>
+              <Button variant="outline" onClick={() => setSaveDialog(null)} disabled={pending}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* E4: partial-round re-order — pick which items from the last round to re-add. */}
+      {repeatPicker && (() => {
+        const lines = lastRoundLines();
+        return (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" onClick={() => setRepeatPicker(null)}>
+            <div className="bg-card border border-border rounded-lg p-4 w-full max-w-sm max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <h3 className="font-medium mb-1">Repeat items</h3>
+              <p className="text-xs text-muted-foreground mb-3">Re-add just what you want from the last round — e.g. another round of drinks.</p>
+              {lines.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nothing in the last round.</p>
+              ) : (
+                <div className="space-y-1 mb-3">
+                  {lines.map((l, i) => (
+                    <label key={i} className="flex items-center gap-2 text-sm py-1">
+                      <input type="checkbox" checked={repeatPicker.has(i)} onChange={(e) => { const next = new Set(repeatPicker); if (e.target.checked) next.add(i); else next.delete(i); setRepeatPicker(next); }} className="h-4 w-4" />
+                      <span className="flex-1">{l.quantity > 1 ? l.quantity + "× " : ""}{l.name}{l.seat ? " · S" + l.seat : ""}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Button className="flex-1" onClick={() => { repeatSelected(lines.filter((_, i) => repeatPicker.has(i))); setRepeatPicker(null); }} disabled={repeatPicker.size === 0}>Add {repeatPicker.size}</Button>
+                <Button variant="outline" onClick={() => setRepeatPicker(null)}>Cancel</Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {ticketsOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setTicketsOpen(false)}>
           <div className="bg-card border border-border rounded-lg p-4 w-full max-w-sm max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -2564,6 +2683,23 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                     Custom
                   </Button>
                 </div>
+
+                {/* E7/E4: quick tickets + favorites — one tap to add a saved set of items. */}
+                {(savedTickets.length > 0 || cart.some((l) => !l.void)) && (
+                  <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+                    {savedTickets.map((t) => (
+                      <span key={t.id} className="shrink-0 inline-flex items-center rounded-full border border-border overflow-hidden">
+                        <button type="button" onClick={() => addSavedLines(t.lines)} className="text-xs px-2.5 py-1.5 hover:bg-accent" title={"Add " + t.lines.length + " item" + (t.lines.length === 1 ? "" : "s")}>
+                          {t.scope === "favorite" ? "★ " : ""}{t.name}
+                        </button>
+                        <button type="button" onClick={() => { if (confirm("Delete saved ticket “" + t.name + "”?")) startTransition(async () => { await deleteSavedTicket(t.id); refreshSaved(); }); }} className="px-1.5 py-1.5 text-muted-foreground hover:text-red-600 border-l border-border" title="Delete">×</button>
+                      </span>
+                    ))}
+                    {cart.some((l) => !l.void) && (
+                      <button type="button" onClick={() => setSaveDialog({ scope: "quick", name: "" })} className="shrink-0 text-xs rounded-full border border-dashed border-border px-2.5 py-1.5 text-muted-foreground hover:bg-accent">＋ Save ticket</button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-5">
@@ -2750,6 +2886,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                     )}
                     {canRepeatRound && (
                       <Button variant="outline" className="h-11 px-3" onClick={repeatRound} disabled={pending || sending} title="Re-add the last round to fire again">Repeat round</Button>
+                    )}
+                    {canRepeatRound && (
+                      <Button variant="outline" className="h-11 px-3" onClick={() => setRepeatPicker(new Set(lastRoundLines().map((_, i) => i)))} disabled={pending || sending} title="Re-add just some items from the last round">Repeat…</Button>
                     )}
                     {canRepeatRound && (
                       <Button variant="outline" className="h-11 px-3" onClick={() => { if (tableBinding) startTransition(async () => { await dropCheck(tableBinding.ticketId); }); }} disabled={pending || sending} title="Mark the check as presented to the guest">Drop check</Button>
