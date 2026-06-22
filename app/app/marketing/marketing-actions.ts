@@ -12,18 +12,26 @@ import { headers } from "next/headers";
 
 export type MarketingRecipient = { id: string; name: string; email: string; unsubscribe_token: string };
 
-// Consented, emailable customers — optionally narrowed to a tag.
+// C7: dynamic segments derived from order history, alongside the existing tag
+// segments. These keys are recognised in addition to a raw tag UUID.
+export const DYNAMIC_SEGMENTS = ["all", "active", "lapsed", "vip", "loyalty", "new"] as const;
+export type DynamicSegment = (typeof DYNAMIC_SEGMENTS)[number];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Consented, emailable customers — narrowed to a segment (a dynamic key or a
+// tag UUID). Dynamic segments fetch order/loyalty history for the consented set
+// and filter on recency / frequency / value.
 async function loadRecipients(
   supabase: Awaited<ReturnType<typeof createClient>>,
   businessId: string,
-  tagId: string | null
+  segment: string
 ): Promise<MarketingRecipient[]> {
   let customerIds: string[] | null = null;
-  if (tagId) {
+  if (segment && segment !== "all" && UUID_RE.test(segment)) {
     const { data: tagged } = await supabase
       .from("customer_tags")
       .select("customer_id")
-      .eq("tag_id", tagId);
+      .eq("tag_id", segment);
     customerIds = (tagged ?? []).map((t) => t.customer_id as string);
     if (customerIds.length === 0) return [];
   }
@@ -37,7 +45,7 @@ async function loadRecipients(
   if (customerIds) q = q.in("id", customerIds);
 
   const { data } = await q;
-  return (data ?? [])
+  let recipients = (data ?? [])
     .filter((c) => (c.email as string | null) && (c.email as string).includes("@"))
     .map((c) => ({
       id: c.id as string,
@@ -45,12 +53,63 @@ async function loadRecipients(
       email: c.email as string,
       unsubscribe_token: c.unsubscribe_token as string,
     }));
+
+  // Dynamic, history-based segments.
+  const dyn = segment as DynamicSegment;
+  if (recipients.length > 0 && (dyn === "active" || dyn === "lapsed" || dyn === "vip" || dyn === "new" || dyn === "loyalty")) {
+    const ids = recipients.map((r) => r.id);
+    const now = Date.now();
+    if (dyn === "loyalty") {
+      const { data: loy } = await supabase
+        .from("loyalty_accounts")
+        .select("customer_id, points")
+        .eq("business_id", businessId)
+        .in("customer_id", ids)
+        .gt("points", 0);
+      const has = new Set((loy ?? []).map((l) => l.customer_id as string));
+      recipients = recipients.filter((r) => has.has(r.id));
+    } else {
+      const { data: ord } = await supabase
+        .from("orders")
+        .select("customer_id, total, created_at, status")
+        .eq("business_id", businessId)
+        .neq("status", "voided")
+        .in("customer_id", ids)
+        .gte("created_at", new Date(now - 365 * 86400000).toISOString());
+      const stat = new Map<string, { visits: number; spend: number; firstMs: number; lastMs: number }>();
+      for (const o of ord ?? []) {
+        const cid = o.customer_id as string;
+        const ms = new Date(o.created_at as string).getTime();
+        const s = stat.get(cid) ?? { visits: 0, spend: 0, firstMs: Infinity, lastMs: 0 };
+        s.visits += 1; s.spend += Number(o.total) || 0;
+        if (ms < s.firstMs) s.firstMs = ms;
+        if (ms > s.lastMs) s.lastMs = ms;
+        stat.set(cid, s);
+      }
+      if (dyn === "vip") {
+        // Top 20% by lifetime spend among the consented set (min spend $1).
+        const spends = recipients.map((r) => stat.get(r.id)?.spend ?? 0).filter((v) => v > 0).sort((a, b) => a - b);
+        const cut = spends.length > 0 ? spends[Math.floor(spends.length * 0.8)] : Infinity;
+        recipients = recipients.filter((r) => (stat.get(r.id)?.spend ?? 0) >= cut && (stat.get(r.id)?.spend ?? 0) > 0);
+      } else {
+        recipients = recipients.filter((r) => {
+          const s = stat.get(r.id);
+          if (dyn === "active") return s != null && now - s.lastMs <= 30 * 86400000;
+          if (dyn === "lapsed") return s != null && now - s.lastMs > 60 * 86400000;
+          if (dyn === "new") return s != null && s.visits <= 2 && now - s.firstMs <= 30 * 86400000;
+          return true;
+        });
+      }
+    }
+  }
+
+  return recipients;
 }
 
-export async function getMarketingAudience(tagId?: string | null): Promise<{ count: number; configured: boolean }> {
+export async function getMarketingAudience(segment?: string | null): Promise<{ count: number; configured: boolean }> {
   const { business } = await requireBusiness();
   const supabase = await createClient();
-  const recipients = await loadRecipients(supabase, business.id, tagId ?? null);
+  const recipients = await loadRecipients(supabase, business.id, segment || "all");
   return { count: recipients.length, configured: isEmailConfigured() };
 }
 
@@ -92,7 +151,7 @@ function escapeHtml(s: string): string {
 export async function sendCampaign(input: {
   subject: string;
   body: string;
-  tagId?: string | null;
+  segment?: string | null;
 }): Promise<{ ok: true; sent: number; failed: number } | { error: string }> {
   const { business, role } = await requireBusiness();
   if (role !== "owner" && role !== "manager") {
@@ -104,8 +163,9 @@ export async function sendCampaign(input: {
   if (!subject) return { error: "Add a subject." };
   if (!body) return { error: "Write a message." };
 
+  const segment = input.segment || "all";
   const supabase = await createClient();
-  const recipients = await loadRecipients(supabase, business.id, input.tagId ?? null);
+  const recipients = await loadRecipients(supabase, business.id, segment);
   if (recipients.length === 0) return { error: "No consented customers in that segment." };
 
   const hdrs = await headers();
@@ -141,7 +201,7 @@ export async function sendCampaign(input: {
     business_id: business.id,
     subject,
     body,
-    segment_tag: input.tagId ?? null,
+    segment_tag: UUID_RE.test(segment) ? segment : null, // dynamic segments aren't tags
     recipient_count: sent,
     created_by: user ? user.id : null,
   });

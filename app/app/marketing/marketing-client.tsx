@@ -27,7 +27,7 @@ export function MarketingClient({
   // Recompute the audience whenever the segment changes.
   useEffect(() => {
     let cancelled = false;
-    getMarketingAudience(segment === "all" ? null : segment)
+    getMarketingAudience(segment)
       .then((a) => { if (!cancelled) setAudience(a.count); })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -37,7 +37,7 @@ export function MarketingClient({
     setErr(null);
     setResult(null);
     startTransition(async () => {
-      const res = await sendCampaign({ subject, body, tagId: segment === "all" ? null : segment });
+      const res = await sendCampaign({ subject, body, segment });
       setConfirm(false);
       if ("error" in res) { setErr(res.error); return; }
       setResult("Sent to " + res.sent + (res.failed > 0 ? " (" + res.failed + " failed)" : "") + ".");
@@ -58,10 +58,21 @@ export function MarketingClient({
         <div className="space-y-1">
           <Label className="text-xs">Audience</Label>
           <select value={segment} onChange={(e) => setSegment(e.target.value)} className="h-9 w-full rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
-            <option value="all">All opted-in customers</option>
-            {tags.map((t) => (
-              <option key={t.id} value={t.id}>{"Tagged: " + t.name}</option>
-            ))}
+            <optgroup label="Smart segments">
+              <option value="all">All opted-in customers</option>
+              <option value="active">Active — ordered in the last 30 days</option>
+              <option value="lapsed">Lapsed — no order in 60+ days</option>
+              <option value="vip">VIP — top 20% by spend</option>
+              <option value="loyalty">Loyalty members</option>
+              <option value="new">New — first order in the last 30 days</option>
+            </optgroup>
+            {tags.length > 0 && (
+              <optgroup label="Tags">
+                {tags.map((t) => (
+                  <option key={t.id} value={t.id}>{"Tagged: " + t.name}</option>
+                ))}
+              </optgroup>
+            )}
           </select>
           <p className="text-xs text-muted-foreground">
             {audience + (audience === 1 ? " consented recipient" : " consented recipients") + " with an email."}

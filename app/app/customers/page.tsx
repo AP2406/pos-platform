@@ -9,13 +9,15 @@ import { ChevronRight } from "lucide-react";
 type CustomerRow = any;
 
 export default async function CustomersPage() {
-  const { business } = await requireBusiness();
+  const { business, role } = await requireBusiness();
   const supabase = await createClient();
 
   const { data: customers } = await supabase
     .from("customers")
     .select("*")
     .order("name");
+
+  const canSeeInsights = (role === "owner" || role === "manager") && business.industry !== "transportation";
 
   // Industry-aware copy: the transportation tenant keeps its wording; restaurant
   // (and any other vertical) gets neutral/hospitality copy.
@@ -30,7 +32,16 @@ export default async function CustomersPage() {
       <PageHeader
         title="Customers"
         subtitle={subtitle}
-        action={<AddCustomerSheet />}
+        action={
+          <div className="flex items-center gap-2">
+            {canSeeInsights && (
+              <Link href="/app/customers/insights" className="text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent">
+                Insights
+              </Link>
+            )}
+            <AddCustomerSheet />
+          </div>
+        }
       />
 
       {!customers || customers.length === 0 ? (
