@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { rowToWindow } from "@/lib/services/price-windows";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { RegisterClient } from "./register-client";
 import { FloorClient } from "./floor-client";
@@ -230,6 +231,14 @@ export default async function PosPage() {
   const courses = isFullService ? await listCourses() : undefined;
 
   const loyaltyCfg = await getLoyaltySettings();
+  // E1: active happy-hour price windows for ring-in resolution.
+  const { data: pwRows } = await supabase
+    .from("price_windows")
+    .select("*")
+    .eq("business_id", business.id)
+    .eq("active", true);
+  const priceWindows = (pwRows ?? []).map(rowToWindow);
+
   const registerProps = {
     items,
     taxRate,
@@ -244,6 +253,8 @@ export default async function PosPage() {
     splitSettings,
     courses,
     loyalty: { enabled: loyaltyCfg.enabled, redeemPerDollar: loyaltyCfg.redeemPerDollar },
+    priceWindows,
+    timezone: (business as { timezone?: string }).timezone || "America/Toronto",
   };
 
   // Full-service restaurants get the table floor first; every other mode (and

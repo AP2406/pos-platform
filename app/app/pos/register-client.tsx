@@ -13,6 +13,7 @@ import { SplitSheet, type SplitCheck } from "./split-sheet";
 import { verifyManagerPin } from "./approval-actions";
 import { requestRegisterApproval, getApprovalStatus, requestManagerCall } from "../approvals/actions";
 import { listSavedTickets, saveSavedTicket, deleteSavedTicket, type SavedTicket, type SavedLine } from "./saved-ticket-actions";
+import { resolveWindow, windowPrice, type PriceWindow } from "@/lib/services/price-windows";
 import { ALLERGENS, allergenLabels } from "@/lib/allergens";
 import {
   holdTicket,
@@ -203,7 +204,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
   });
 }
 
-export function RegisterClient({ items, taxRate, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList }: { items: Item[]; taxRate: number; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[] }) {
+export function RegisterClient({ items, taxRate, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto" }: { items: Item[]; taxRate: number; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string }) {
   const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
   const online = useOnlineStatus();
   // P1-22: back up the quick-service cart (no table/tab — nothing server-side
@@ -417,6 +418,22 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     itemTaxFracById[it.id] = it.taxFrac;
   }
 
+  // E1: resolve the active happy-hour window for an item at the current local
+  // time (re-evaluated each render, so it switches on/off live during service).
+  function nowDayMinute(): { weekday: number; minute: number } {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short", hour: "numeric", minute: "numeric", hour12: false }).formatToParts(new Date());
+    const wd = parts.find((p) => p.type === "weekday")?.value ?? "Sun";
+    const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(wd);
+    const hh = Number(parts.find((p) => p.type === "hour")?.value ?? 0) % 24;
+    const mm = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
+    return { weekday: weekday < 0 ? 0 : weekday, minute: hh * 60 + mm };
+  }
+  const { weekday: hhWeekday, minute: hhMinute } = priceWindows.length > 0 ? nowDayMinute() : { weekday: 0, minute: 0 };
+  function activeWindow(item: Item): PriceWindow | null {
+    if (priceWindows.length === 0) return null;
+    return resolveWindow(priceWindows, { id: item.id, category: item.category }, hhWeekday, hhMinute);
+  }
+
   // E4/E7: saved tickets (quick-tickets + favorite rounds) + granular re-order.
   const [savedTickets, setSavedTickets] = useState<SavedTicket[]>([]);
   const refreshSaved = () => listSavedTickets().then(setSavedTickets).catch(() => {});
@@ -600,7 +617,8 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       setPickerItem(item);
       return;
     }
-    addLine({ catalog_item_id: item.id, variation_id: null, name: item.name, unit_price: item.price, taxable: item.taxable, taxFrac: item.taxFrac });
+    const win = activeWindow(item);
+    addLine({ catalog_item_id: item.id, variation_id: null, name: item.name, unit_price: win ? windowPrice(item.price, win) : item.price, taxable: item.taxable, taxFrac: item.taxFrac });
   }
 
   function isOos(item: Item): boolean {
@@ -790,9 +808,16 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       label = item.name + " - " + v.name;
     }
     const chosen = item.modifiers.filter((m) => pickerMods.includes(m.id));
+    const modTotal = chosen.reduce((s, m) => s + m.price, 0);
     if (chosen.length > 0) {
-      unit = unit + chosen.reduce((s, m) => s + m.price, 0);
+      unit = unit + modTotal;
       label = label + " (" + chosen.map((m) => "+ " + m.name).join(", ") + ")";
+    }
+    // E1: happy-hour — percent applies to the whole line; a set price replaces the
+    // base (modifiers still add on top).
+    const win = activeWindow(item);
+    if (win) {
+      unit = win.mode === "percent" ? windowPrice(unit, win) : Math.max(0, win.value + modTotal);
     }
     unit = Math.round(unit * 100) / 100;
     // Allergen chips compile into the per-line allergy string (the KDS + chit
@@ -2714,9 +2739,13 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
                         {list.map((item) => {
                           const hasVars = item.variations.length > 0;
+                          const hhWin = activeWindow(item); // E1
+                          const hhPrice = hhWin && !hasVars ? windowPrice(item.price, hhWin) : null;
                           const priceLabel = hasVars
                             ? "From $" + Math.min(...item.variations.map((v) => v.price)).toFixed(2)
-                            : "$" + item.price.toFixed(2);
+                            : hhPrice != null
+                              ? "$" + hhPrice.toFixed(2)
+                              : "$" + item.price.toFixed(2);
                           const oos = isOos(item);
                           const low = isLowStock(item);
                           // A7: show the live remaining count ("3 left") so staff can pace a
@@ -2728,6 +2757,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={item.image_url} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
                                 {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">{lowN} left</span>}
+                                {hhWin && !oos && <span className="absolute top-1 left-1 text-[10px] rounded-full bg-emerald-600 text-white px-1.5 py-0.5 font-medium">HH</span>}
                                 <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white text-left px-2 py-1.5">
                                   <div className="font-semibold text-sm leading-snug line-clamp-2">{item.name}</div>
                                   <div className="text-xs text-white/90">{oos ? "86'd" : priceLabel}</div>
@@ -2738,8 +2768,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                           return (
                             <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative text-left p-3 min-h-[110px] rounded-xl border shadow-elevation-sm active:scale-[0.97] transition-all flex flex-col justify-between " + tileClassesFor(item.category, categoryColors) + (oos ? " opacity-50" : "")}>
                               {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">{lowN} left</span>}
+                              {hhWin && !oos && <span className="absolute top-1 left-1 text-[10px] rounded-full bg-emerald-600 text-white px-1.5 py-0.5 font-medium">HH</span>}
                               <div className="font-semibold text-sm leading-snug line-clamp-3">{item.name}</div>
-                              <div className="text-sm opacity-80 mt-1 tabular-nums">{oos ? "86'd" : priceLabel}</div>
+                              <div className="text-sm opacity-80 mt-1 tabular-nums">{oos ? "86'd" : priceLabel}{hhPrice != null && <span className="ml-1 text-xs line-through opacity-50">${item.price.toFixed(2)}</span>}</div>
                             </button>
                           );
                         })}
