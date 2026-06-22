@@ -103,10 +103,14 @@ export function MobileManagerClient({ initial, businessId }: { initial: Snapshot
       {(snap.alerts.voids.n > 0 ||
         snap.alerts.unassigned > 0 ||
         snap.alerts.staleChecks > 0 ||
-        snap.alerts.openDrawers > 0) && (
+        snap.alerts.openDrawers > 0 ||
+        snap.alerts.laborOverTarget != null) && (
         <>
           <SectionHeader>Needs attention</SectionHeader>
           <div className="grid grid-cols-2 gap-3">
+            {snap.alerts.laborOverTarget != null && (
+              <Alert label="Labor over target" value={snap.alerts.laborOverTarget.pct + "%"} hint={"target " + snap.alerts.laborOverTarget.target + "%"} tone="red" />
+            )}
             {snap.alerts.voids.n > 0 && (
               <Alert label="Voids today" value={String(snap.alerts.voids.n)} hint={fmt(snap.alerts.voids.amt)} tone="red" />
             )}

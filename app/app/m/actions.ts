@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness, listBusinesses } from "@/lib/services/tenancy";
 import { getTodayBoundsUTC } from "@/lib/utils/dates";
+import { notifyBusiness } from "@/lib/push";
 
 export type LocationLive = {
   id: string;
@@ -21,6 +22,8 @@ export type Alerts = {
   openDrawers: number;
   staleChecks: number;
   oldestCheckMin: number;
+  // D4: today's labor % is over the active business's target (null when under or off).
+  laborOverTarget: { pct: number; target: number } | null;
 };
 
 export type Snapshot = {
@@ -108,7 +111,7 @@ export async function liveSnapshot(): Promise<Snapshot> {
   const [{ data: lwOrders }, { data: lwRefunds }, { data: clocks }, { data: rates }] = await Promise.all([
     supabase.from("orders").select("total, status").in("business_id", ids).gte("created_at", lwStartIso).lt("created_at", lwEndIso).neq("status", "voided"),
     supabase.from("refunds").select("amount, status").in("business_id", ids).gte("created_at", lwStartIso).lt("created_at", lwEndIso),
-    supabase.from("time_clock_entries").select("staff_id, clock_in, clock_out").in("business_id", ids).or(`clock_out.is.null,clock_in.gte.${startIso}`),
+    supabase.from("time_clock_entries").select("staff_id, business_id, clock_in, clock_out").in("business_id", ids).or(`clock_out.is.null,clock_in.gte.${startIso}`),
     supabase.from("staff_members").select("id, pay_rate").in("business_id", ids),
   ]);
   let lastWeekNet = 0;
@@ -120,15 +123,21 @@ export async function liveSnapshot(): Promise<Snapshot> {
   const todayStartMs = bounds.start.getTime();
   const nowMsL = Date.now();
   let laborCost = 0;
+  let activeLaborCost = 0; // D4: just the active business, for the per-business target
   for (const c of clocks ?? []) {
     const inMs = new Date(c.clock_in as string).getTime();
     const outMs = c.clock_out ? new Date(c.clock_out as string).getTime() : nowMsL;
     const overlap = Math.min(outMs, nowMsL) - Math.max(inMs, todayStartMs);
     if (overlap <= 0) continue;
     const rate = rateById.get(c.staff_id as string);
-    if (rate != null) laborCost += (overlap / 3600000) * rate;
+    if (rate != null) {
+      const cost = (overlap / 3600000) * rate;
+      laborCost += cost;
+      if ((c.business_id as string) === business.id) activeLaborCost += cost;
+    }
   }
   laborCost = Math.round(laborCost * 100) / 100;
+  activeLaborCost = Math.round(activeLaborCost * 100) / 100;
 
   const agg: Record<string, LocationLive> = {};
   for (const b of mine) agg[b.id] = { id: b.id, name: b.name, net: 0, orders: 0, openChecks: 0, openValue: 0 };
@@ -196,12 +205,48 @@ export async function liveSnapshot(): Promise<Snapshot> {
     if (mins >= 90) staleChecks++;
     if (mins > oldestMin) oldestMin = mins;
   }
+  // D4: labor-target alert for the active business. When today's labor % is over
+  // the configured target, surface it + push to managers once per day (mirrors
+  // the void-over-$ alert). Best-effort; never blocks the snapshot.
+  let laborOverTarget: { pct: number; target: number } | null = null;
+  const ltCfg = (((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>).labor_target as
+    | { enabled?: boolean; targetPct?: number; alerted_on?: string }
+    | undefined;
+  if (ltCfg?.enabled === true && Number(ltCfg.targetPct) > 0) {
+    const activeNet = agg[business.id]?.net ?? 0;
+    if (activeNet > 0) {
+      const activePct = Math.round((activeLaborCost / activeNet) * 1000) / 10;
+      const target = Number(ltCfg.targetPct);
+      if (activePct > target) {
+        laborOverTarget = { pct: activePct, target };
+        const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+        if (ltCfg.alerted_on !== todayKey) {
+          try {
+            const settings = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
+            await supabase
+              .from("businesses")
+              .update({ settings: { ...settings, labor_target: { ...ltCfg, alerted_on: todayKey } } })
+              .eq("id", business.id);
+            await notifyBusiness(business.id, "exception", {
+              title: "Labor over target",
+              body: `Labor is ${activePct}% of sales today (target ${target}%).`,
+              url: "/app/labor",
+            });
+          } catch (e) {
+            console.error("labor target alert:", e);
+          }
+        }
+      }
+    }
+  }
+
   const alerts: Alerts = {
     voids: { n: voidN, amt: Math.round(voidAmt * 100) / 100 },
     unassigned,
     openDrawers: (openDrawerRows ?? []).length,
     staleChecks,
     oldestCheckMin: oldestMin,
+    laborOverTarget,
   };
 
   let covers = 0;

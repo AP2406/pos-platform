@@ -47,7 +47,7 @@ export default async function AttendancePage() {
     // Today's punches plus any still-open entry (to catch overnight / missed clock-outs).
     supabase
       .from("time_clock_entries")
-      .select("staff_id, clock_in, clock_out, on_break_since")
+      .select("staff_id, clock_in, clock_out, on_break_since, break_minutes")
       .eq("business_id", business.id)
       .or(`clock_in.gte.${new Date(dayStart - 18 * 3600000).toISOString()},clock_out.is.null`),
   ]);
@@ -58,6 +58,8 @@ export default async function AttendancePage() {
     inMs: new Date(e.clock_in as string).getTime(),
     outMs: e.clock_out ? new Date(e.clock_out as string).getTime() : null,
     onBreak: !!e.on_break_since,
+    onBreakSinceMs: e.on_break_since ? new Date(e.on_break_since as string).getTime() : null,
+    breakMin: Number(e.break_minutes) || 0,
   }));
   const fmtT = (ms: number) => new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(new Date(ms));
 
@@ -121,6 +123,36 @@ export default async function AttendancePage() {
   const order: Status[] = ["no_show", "missed_punch", "late", "left_early", "on_time", "upcoming", "done"];
   rows.sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status) || (b.inAt ?? 0) - (a.inAt ?? 0));
 
+  // D3: Ontario ESA break compliance — a 30-min eating period within each 5
+  // consecutive hours of work. Computed live for anyone on the clock from worked
+  // time (clock-in, minus break taken) vs break minutes logged.
+  const ESA_BLOCK_H = 5, ESA_BREAK_MIN = 30, WARN_AT_H = 4.5;
+  type BreakStatus = "ok" | "due" | "overdue" | "onbreak";
+  const breakRows = entries
+    .filter((e) => e.outMs == null)
+    .map((e) => {
+      const openBreakMin = e.onBreakSinceMs ? (now - e.onBreakSinceMs) / 60000 : 0;
+      const breakTaken = e.breakMin + openBreakMin;
+      const workedH = Math.max(0, (now - e.inMs - e.breakMin * 60000 - openBreakMin * 60000) / 3600000);
+      const blocks = Math.floor(workedH / ESA_BLOCK_H);
+      const required = blocks * ESA_BREAK_MIN;
+      const intoBlock = workedH - blocks * ESA_BLOCK_H;
+      let status: BreakStatus;
+      if (e.onBreak) status = "onbreak";
+      else if (breakTaken < required) status = "overdue";
+      else if (intoBlock >= WARN_AT_H && breakTaken < (blocks + 1) * ESA_BREAK_MIN) status = "due";
+      else status = "ok";
+      return { name: nameById.get(e.staffId) ?? "Staff", workedH, breakTaken, status };
+    })
+    .sort((a, b) => ({ overdue: 0, due: 1, onbreak: 2, ok: 3 }[a.status] - { overdue: 0, due: 1, onbreak: 2, ok: 3 }[b.status]));
+  const breaksOverdue = breakRows.filter((r) => r.status === "overdue").length;
+  const BRK_META: Record<BreakStatus, { label: string; cls: string }> = {
+    overdue: { label: "Break overdue", cls: "bg-red-500/15 text-red-700 dark:text-red-400" },
+    due: { label: "Break due soon", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-500" },
+    onbreak: { label: "On break", cls: "bg-sky-500/15 text-sky-700 dark:text-sky-400" },
+    ok: { label: "OK", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
+  };
+
   const noShow = rows.filter((r) => r.status === "no_show").length;
   const missed = rows.filter((r) => r.status === "missed_punch").length;
   const late = rows.filter((r) => r.status === "late").length;
@@ -137,12 +169,14 @@ export default async function AttendancePage() {
         <Link href="/app/schedule" className="text-sm text-muted-foreground underline hover:text-foreground shrink-0">Schedule →</Link>
       </div>
 
-      {(noShow > 0 || missed > 0) && (
+      {(noShow > 0 || missed > 0 || breaksOverdue > 0) && (
         <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 mb-5 text-sm">
           <span className="font-semibold text-red-700 dark:text-red-400">Needs attention:</span>{" "}
-          {noShow > 0 && <span>{noShow} no-show{noShow === 1 ? "" : "s"}</span>}
-          {noShow > 0 && missed > 0 && <span> · </span>}
-          {missed > 0 && <span>{missed} missed punch{missed === 1 ? "" : "es"} (fix in Labor → Timesheets)</span>}
+          {[
+            noShow > 0 ? `${noShow} no-show${noShow === 1 ? "" : "s"}` : null,
+            missed > 0 ? `${missed} missed punch${missed === 1 ? "" : "es"} (fix in Labor → Timesheets)` : null,
+            breaksOverdue > 0 ? `${breaksOverdue} break${breaksOverdue === 1 ? "" : "s"} overdue (ESA)` : null,
+          ].filter(Boolean).join(" · ")}
         </div>
       )}
 
@@ -182,6 +216,38 @@ export default async function AttendancePage() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {breakRows.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold mb-1">Break compliance</h2>
+          <p className="text-xs text-muted-foreground mb-3">Ontario ESA: a 30-minute eating period within each 5 consecutive hours of work. Live for everyone on the clock.</p>
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground border-b border-border">
+                  <th className="px-3 py-2 font-medium">Staff</th>
+                  <th className="px-3 py-2 font-medium text-right">Worked</th>
+                  <th className="px-3 py-2 font-medium text-right">Break taken</th>
+                  <th className="px-3 py-2 font-medium text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {breakRows.map((r, i) => {
+                  const m = BRK_META[r.status];
+                  return (
+                    <tr key={i} className="border-b border-border last:border-0">
+                      <td className="px-3 py-2 font-medium">{r.name}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{r.workedH.toFixed(1)}h</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{Math.round(r.breakTaken)}m</td>
+                      <td className="px-3 py-2 text-right"><span className={"inline-block rounded-full px-2 py-0.5 text-[11px] font-medium " + m.cls}>{m.label}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

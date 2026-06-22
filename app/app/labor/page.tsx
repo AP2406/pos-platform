@@ -108,6 +108,11 @@ export default async function LaborPage({
   const laborPct = totSales > 0 ? (totCost / totSales) * 100 : 0;
   const splh = totHours > 0 ? totSales / totHours : 0;
 
+  // D4: labor target line.
+  const ltCfg = ((((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>).labor_target ?? {}) as { enabled?: unknown; targetPct?: unknown };
+  const laborTargetPct = ltCfg.enabled === true && Number(ltCfg.targetPct) > 0 ? Number(ltCfg.targetPct) : null;
+  const overTarget = laborTargetPct != null && laborPct > laborTargetPct;
+
   // C3: daypart labor-vs-sales. Sales are bucketed by the local hour of each
   // order; labor is prorated into the same windows by stepping each clock entry
   // in 15-min increments (net of break, prorated across the shift). Labor % per
@@ -193,7 +198,7 @@ export default async function LaborPage({
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <Stat label="Labor cost" value={money(totCost)} />
-        <Stat label="Labor %" value={laborPct.toFixed(1) + "%"} hint={"of " + money(totSales)} />
+        <Stat label="Labor %" value={laborPct.toFixed(1) + "%"} hint={"of " + money(totSales) + (laborTargetPct != null ? " · target " + laborTargetPct + "%" : "")} tone={overTarget ? "bad" : undefined} />
         <Stat label="Sales / labor hr" value={money(splh)} />
         <Stat label="Hours" value={(Math.round(totHours * 10) / 10).toFixed(1)} hint={totOt > 0 ? totOt.toFixed(1) + " OT @ " + otCfg.multiplier + "× over " + otCfg.weeklyHours + "h/wk" : undefined} />
       </div>
@@ -297,11 +302,11 @@ export default async function LaborPage({
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Stat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: "bad" }) {
   return (
     <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-xl font-semibold tabular-nums mt-0.5">{value}</div>
+      <div className={"text-xl font-semibold tabular-nums mt-0.5 " + (tone === "bad" ? "text-red-600" : "")}>{value}</div>
       {hint && <div className="text-[11px] text-muted-foreground mt-0.5">{hint}</div>}
     </div>
   );
