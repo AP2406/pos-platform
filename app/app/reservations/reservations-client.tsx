@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createReservation, setReservationStatus, type Reservation } from "./reservation-actions";
+import { createReservation, setReservationStatus, pageWaitlistGuest, type Reservation } from "./reservation-actions";
 
 function fmtTime(iso: string): string {
   const d = new Date(iso);
@@ -34,6 +34,7 @@ export function ReservationsClient({
   const [warning, setWarning] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [seatingId, setSeatingId] = useState<string | null>(null);
+  const [pageNote, setPageNote] = useState<string | null>(null);
 
   function add() {
     setErr(null);
@@ -73,6 +74,13 @@ export function ReservationsClient({
   const seated = rows.filter((r) => r.status === "seated");
   const tableLabel = (id: string | null) => tables.find((t) => t.id === id)?.label ?? "table";
 
+  function pageGuest(id: string) {
+    startTransition(async () => {
+      const res = await pageWaitlistGuest(id);
+      setPageNote("error" in res ? res.error : "Paged the guest by " + (res.channel === "sms" ? "text" : "email") + ".");
+    });
+  }
+
   function row(r: Reservation) {
     return (
       <div key={r.id} className="flex items-center justify-between gap-3 p-3 border-b border-border last:border-0">
@@ -101,6 +109,11 @@ export function ReservationsClient({
             </select>
           ) : (
             <>
+              {!r.scheduled_at && (r.phone || r.email) && (
+                <button type="button" onClick={() => pageGuest(r.id)} disabled={pending} className={"text-xs rounded-md border px-2 py-1.5 hover:bg-accent " + (r.paged_at ? "border-emerald-500/50 text-emerald-600" : "border-border")}>
+                  {r.paged_at ? "Paged ✓" : "Table ready"}
+                </button>
+              )}
               <button type="button" onClick={() => setSeatingId(r.id)} disabled={pending} className="text-xs rounded-md border border-foreground px-2 py-1.5 hover:bg-accent">Seat</button>
               <button type="button" onClick={() => update(r.id, "no_show")} disabled={pending} className="text-xs rounded-md border border-border px-2 py-1.5 hover:bg-accent">No-show</button>
               <button type="button" onClick={() => update(r.id, "cancelled")} disabled={pending} className="text-xs text-red-600 underline">Cancel</button>
@@ -113,6 +126,12 @@ export function ReservationsClient({
 
   return (
     <div className="space-y-6 max-w-3xl">
+      {pageNote && (
+        <div className="rounded-md border border-border bg-accent/40 px-3 py-2 text-sm flex items-center justify-between gap-2">
+          <span>{pageNote}</span>
+          <button onClick={() => setPageNote(null)} className="text-xs text-muted-foreground underline">dismiss</button>
+        </div>
+      )}
       {/* Add */}
       <div className="bg-card border border-border rounded-lg p-6 space-y-3">
         <div className="flex gap-2">

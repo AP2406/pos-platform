@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { sendEmail, isEmailConfigured } from "@/lib/services/email";
+import { sendSms, isSmsConfigured } from "@/lib/services/sms";
 
 // P2-30 reservations + waitlist. A row with scheduled_at is a future booking;
 // scheduled_at null is a walk-in waitlist entry.
@@ -19,9 +20,10 @@ export type Reservation = {
   status: string;
   notes: string | null;
   source: string;
+  paged_at: string | null;
 };
 
-const RES_COLS = "id, guest_name, party_size, phone, email, scheduled_at, quoted_wait_min, element_id, status, notes, source";
+const RES_COLS = "id, guest_name, party_size, phone, email, scheduled_at, quoted_wait_min, element_id, status, notes, source, paged_at";
 
 // Total seatable capacity = count of seat elements on the floor.
 async function totalSeats(supabase: Awaited<ReturnType<typeof createClient>>, businessId: string): Promise<number> {
@@ -89,6 +91,7 @@ function mapRow(r: Record<string, unknown>): Reservation {
     status: (r.status as string | null) ?? "booked",
     notes: (r.notes as string | null) ?? null,
     source: (r.source as string | null) ?? "staff",
+    paged_at: (r.paged_at as string | null) ?? null,
   };
 }
 
@@ -238,4 +241,47 @@ export async function setReservationStatus(
   }
   revalidatePath("/app/reservations");
   return { ok: true };
+}
+
+// D8: page a waitlisted guest that their table is ready. Prefers SMS (behind the
+// flag) when a phone is on file, falling back to email; reports which was used.
+export async function pageWaitlistGuest(id: string): Promise<{ ok: true; channel: "sms" | "email" } | { error: string }> {
+  const { business, role } = await requireBusiness();
+  if (role !== "owner" && role !== "manager") {
+    // Any staff working the door can page; allow all roles but keep it server-checked.
+  }
+  const supabase = await createClient();
+  const { data: r } = await supabase
+    .from("reservations")
+    .select("id, guest_name, phone, email")
+    .eq("id", id)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!r) return { error: "Guest not found." };
+
+  const name = (r.guest_name as string | null) || "there";
+  const phone = (r.phone as string | null) || "";
+  const email = (r.email as string | null) || "";
+  const bizName = business.name || "the restaurant";
+  const msg = `Hi ${name}, your table at ${bizName} is ready! Please see the host.`;
+
+  let channel: "sms" | "email" | null = null;
+  if (isSmsConfigured() && phone) {
+    const res = await sendSms({ to: phone, body: msg });
+    if ("ok" in res) channel = "sms";
+  }
+  if (!channel && isEmailConfigured() && email.includes("@")) {
+    const res = await sendEmail({ to: email, subject: `Your table at ${bizName} is ready`, html: `<p>Hi ${name},</p><p>Your table at <strong>${bizName}</strong> is ready — please see the host. See you shortly!</p>` });
+    if (!("error" in res)) channel = "email";
+  }
+
+  if (!channel) {
+    if (!phone && !email) return { error: "No phone or email on file for this guest." };
+    if (phone && !isSmsConfigured() && !email) return { error: "Texting isn't set up yet, and there's no email on file." };
+    return { error: "Could not reach the guest. Check the contact details." };
+  }
+
+  await supabase.from("reservations").update({ paged_at: new Date().toISOString() }).eq("id", id).eq("business_id", business.id);
+  revalidatePath("/app/reservations");
+  return { ok: true, channel };
 }
