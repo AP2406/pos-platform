@@ -48,7 +48,7 @@ export default async function LaborPage({
       .gte("clock_in", new Date(now - 31 * 86400000).toISOString()),
     supabase
       .from("orders")
-      .select("staff_id, total, status")
+      .select("staff_id, total, status, created_at")
       .eq("business_id", business.id)
       .neq("status", "voided")
       .gte("created_at", new Date(now - 31 * 86400000).toISOString()),
@@ -107,6 +107,60 @@ export default async function LaborPage({
   const totSales = rows.reduce((s, r) => s + r.sales, 0);
   const laborPct = totSales > 0 ? (totCost / totSales) * 100 : 0;
   const splh = totHours > 0 ? totSales / totHours : 0;
+
+  // C3: daypart labor-vs-sales. Sales are bucketed by the local hour of each
+  // order; labor is prorated into the same windows by stepping each clock entry
+  // in 15-min increments (net of break, prorated across the shift). Labor % per
+  // daypart flags the hours where staffing and sales are out of line.
+  const DAYPARTS = [
+    { key: "morning", label: "Morning", note: "5a–11a", lo: 5, hi: 11 },
+    { key: "lunch", label: "Lunch", note: "11a–3p", lo: 11, hi: 15 },
+    { key: "afternoon", label: "Afternoon", note: "3p–5p", lo: 15, hi: 17 },
+    { key: "dinner", label: "Dinner", note: "5p–10p", lo: 17, hi: 22 },
+    { key: "late", label: "Late", note: "10p–5a", lo: 22, hi: 29 },
+  ];
+  const dpFor = (hour: number) => {
+    const h = hour < 5 ? hour + 24 : hour; // wrap small-hours into the "late" band
+    return DAYPARTS.find((d) => h >= d.lo && h < d.hi)?.key ?? "late";
+  };
+  const hourFmt = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hour12: false });
+  const localHour = (ms: number) => parseInt(hourFmt.format(new Date(ms))) % 24;
+
+  const dpSales = new Map<string, number>();
+  const dpCost = new Map<string, number>();
+  const dpHours = new Map<string, number>();
+  for (const o of orders ?? []) {
+    const ca = o.created_at as string | null;
+    if (!ca || !inRange(ca)) continue;
+    const k = dpFor(localHour(new Date(ca).getTime()));
+    dpSales.set(k, (dpSales.get(k) ?? 0) + (Number(o.total) || 0));
+  }
+  const rateById = new Map<string, number | null>();
+  for (const s of staff ?? []) rateById.set(s.id as string, s.pay_rate != null ? Number(s.pay_rate) : null);
+  const STEP = 15 * 60000;
+  for (const c of clocks ?? []) {
+    const ci = c.clock_in as string | null;
+    if (!ci || !inRange(ci)) continue;
+    const inMs = new Date(ci).getTime();
+    const outMs = c.clock_out ? new Date(c.clock_out as string).getTime() : now;
+    if (outMs <= inMs) continue;
+    const shiftMs = outMs - inMs;
+    const netFactor = Math.max(0, 1 - ((Number(c.break_minutes) || 0) * 60000) / shiftMs); // spread break across the shift
+    const rt = rateById.get(c.staff_id as string) ?? null;
+    for (let t = inMs; t < outMs; t += STEP) {
+      const seg = Math.min(STEP, outMs - t);
+      const hrs = (seg / 3600000) * netFactor;
+      const k = dpFor(localHour(t + seg / 2));
+      dpHours.set(k, (dpHours.get(k) ?? 0) + hrs);
+      if (rt != null) dpCost.set(k, (dpCost.get(k) ?? 0) + hrs * rt);
+    }
+  }
+  const dayparts = DAYPARTS.map((d) => {
+    const sales = Math.round((dpSales.get(d.key) ?? 0) * 100) / 100;
+    const cost = Math.round((dpCost.get(d.key) ?? 0) * 100) / 100;
+    const hours = Math.round((dpHours.get(d.key) ?? 0) * 10) / 10;
+    return { ...d, sales, cost, hours, lp: sales > 0 ? (cost / sales) * 100 : null, splh: hours > 0 ? sales / hours : null };
+  }).filter((d) => d.sales > 0 || d.hours > 0);
 
   const timesheet = await listTimesheet();
 
@@ -185,6 +239,49 @@ export default async function LaborPage({
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {dayparts.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold mb-1">Labor vs sales by daypart</h2>
+          <p className="text-xs text-muted-foreground mb-3">
+            Where staffing and sales line up across the day. A high labor % flags hours you may be overstaffed; a high sales/labor-hr with low labor % can mean the opposite.
+          </p>
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground border-b border-border">
+                    <th className="px-3 py-2 font-medium">Daypart</th>
+                    <th className="px-3 py-2 font-medium text-right">Sales</th>
+                    <th className="px-3 py-2 font-medium text-right">Labor hrs</th>
+                    <th className="px-3 py-2 font-medium text-right">Labor cost</th>
+                    <th className="px-3 py-2 font-medium text-right">Labor %</th>
+                    <th className="px-3 py-2 font-medium text-right">SPLH</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dayparts.map((d) => {
+                    const lpClass = d.lp == null ? "" : d.lp > 40 ? "text-red-600 font-semibold" : d.lp > 30 ? "text-amber-600 font-medium" : "";
+                    return (
+                      <tr key={d.key} className="border-b border-border last:border-0">
+                        <td className="px-3 py-2 font-medium">
+                          {d.label}
+                          <span className="block text-[11px] text-muted-foreground font-normal">{d.note}</span>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{money(d.sales)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{d.hours > 0 ? d.hours.toFixed(1) : "—"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{money(d.cost)}</td>
+                        <td className={"px-3 py-2 text-right tabular-nums " + lpClass}>{d.lp != null ? d.lp.toFixed(1) + "%" : "—"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{d.splh != null ? money(d.splh) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
