@@ -239,6 +239,21 @@ export default async function PosPage() {
     .eq("active", true);
   const priceWindows = (pwRows ?? []).map(rowToWindow);
 
+  // E6: active upsell / combo prompts.
+  const { data: upRows } = await supabase
+    .from("upsell_prompts")
+    .select("trigger_scope, trigger_item_id, trigger_category, suggest_item_id, label, combo_discount")
+    .eq("business_id", business.id)
+    .eq("active", true);
+  const upsellPrompts = (upRows ?? []).map((r) => ({
+    triggerScope: (r.trigger_scope as string) === "category" ? ("category" as const) : ("item" as const),
+    triggerItemId: (r.trigger_item_id as string | null) ?? null,
+    triggerCategory: (r.trigger_category as string | null) ?? null,
+    suggestItemId: r.suggest_item_id as string,
+    label: (r.label as string | null) ?? null,
+    comboDiscount: Number(r.combo_discount) || 0,
+  }));
+
   const registerProps = {
     items,
     taxRate,
@@ -255,6 +270,7 @@ export default async function PosPage() {
     loyalty: { enabled: loyaltyCfg.enabled, redeemPerDollar: loyaltyCfg.redeemPerDollar },
     priceWindows,
     timezone: (business as { timezone?: string }).timezone || "America/Toronto",
+    upsellPrompts,
   };
 
   // Full-service restaurants get the table floor first; every other mode (and

@@ -14,6 +14,8 @@ import { verifyManagerPin } from "./approval-actions";
 import { requestRegisterApproval, getApprovalStatus, requestManagerCall } from "../approvals/actions";
 import { listSavedTickets, saveSavedTicket, deleteSavedTicket, type SavedTicket, type SavedLine } from "./saved-ticket-actions";
 import { resolveWindow, windowPrice, type PriceWindow } from "@/lib/services/price-windows";
+
+type UpsellPrompt = { triggerScope: "item" | "category"; triggerItemId: string | null; triggerCategory: string | null; suggestItemId: string; label: string | null; comboDiscount: number };
 import { ALLERGENS, allergenLabels } from "@/lib/allergens";
 import {
   holdTicket,
@@ -204,7 +206,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
   });
 }
 
-export function RegisterClient({ items, taxRate, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto" }: { items: Item[]; taxRate: number; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string }) {
+export function RegisterClient({ items, taxRate, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto", upsellPrompts = [] }: { items: Item[]; taxRate: number; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string; upsellPrompts?: UpsellPrompt[] }) {
   const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
   const online = useOnlineStatus();
   // P1-22: back up the quick-service cart (no table/tab — nothing server-side
@@ -434,6 +436,37 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     return resolveWindow(priceWindows, { id: item.id, category: item.category }, hhWeekday, hhMinute);
   }
 
+  // E6: suggestive-selling — when a trigger item is rung in, surface its prompts.
+  type Suggestion = { item: Item; label: string; discount: number };
+  const [upsellModal, setUpsellModal] = useState<Suggestion[] | null>(null);
+  function maybeUpsell(item: Item) {
+    if (upsellPrompts.length === 0) return;
+    const matches = upsellPrompts.filter(
+      (p) => (p.triggerScope === "item" && p.triggerItemId === item.id) || (p.triggerScope === "category" && !!p.triggerCategory && (item.category || "") === p.triggerCategory)
+    );
+    const sugg: Suggestion[] = [];
+    for (const p of matches) {
+      const si = itemById.get(p.suggestItemId);
+      if (!si || isOos(si)) continue;
+      if (sugg.some((s) => s.item.id === si.id)) continue;
+      sugg.push({ item: si, label: p.label || ("Add " + si.name + "?"), discount: Math.max(0, p.comboDiscount) });
+    }
+    if (sugg.length > 0) setUpsellModal(sugg);
+  }
+  function addSuggested(s: Suggestion) {
+    // Items needing choices open their picker (combo discount skipped there);
+    // simple items add directly at the combo price.
+    if (s.item.variations.length > 0 || s.item.modifiers.length > 0) {
+      setUpsellModal(null);
+      addItem(s.item);
+      return;
+    }
+    const win = activeWindow(s.item);
+    const base = win ? windowPrice(s.item.price, win) : s.item.price;
+    addLine({ catalog_item_id: s.item.id, variation_id: null, name: s.item.name, unit_price: Math.max(0, Math.round((base - s.discount) * 100) / 100), taxable: s.item.taxable, taxFrac: s.item.taxFrac });
+    setUpsellModal(null);
+  }
+
   // E4/E7: saved tickets (quick-tickets + favorite rounds) + granular re-order.
   const [savedTickets, setSavedTickets] = useState<SavedTicket[]>([]);
   const refreshSaved = () => listSavedTickets().then(setSavedTickets).catch(() => {});
@@ -619,6 +652,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     }
     const win = activeWindow(item);
     addLine({ catalog_item_id: item.id, variation_id: null, name: item.name, unit_price: win ? windowPrice(item.price, win) : item.price, taxable: item.taxable, taxFrac: item.taxFrac });
+    maybeUpsell(item);
   }
 
   function isOos(item: Item): boolean {
@@ -834,6 +868,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       allergy: allergyStr,
     });
     setPickerItem(null);
+    maybeUpsell(item);
   }
 
   function changeQty(index: number, delta: number) {
@@ -2384,6 +2419,32 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                 Cancel
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* E6: suggestive-selling prompt after a trigger item is rung in. */}
+      {upsellModal && upsellModal.length > 0 && (
+        <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setUpsellModal(null)}>
+          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-medium mb-3">Anything else?</h3>
+            <div className="space-y-2">
+              {upsellModal.map((s, i) => {
+                const win = activeWindow(s.item);
+                const base = win ? windowPrice(s.item.price, win) : s.item.price;
+                const price = Math.max(0, Math.round((base - s.discount) * 100) / 100);
+                return (
+                  <button key={i} type="button" onClick={() => addSuggested(s)} className="w-full flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2.5 text-left hover:bg-accent">
+                    <span className="text-sm font-medium">{s.label}</span>
+                    <span className="text-sm tabular-nums shrink-0">
+                      ${price.toFixed(2)}
+                      {s.discount > 0 && <span className="ml-1 text-[11px] text-emerald-600">combo</span>}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <Button variant="outline" className="w-full mt-3" onClick={() => setUpsellModal(null)}>No thanks</Button>
           </div>
         </div>
       )}
