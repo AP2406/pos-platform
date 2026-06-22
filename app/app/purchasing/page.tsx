@@ -1,6 +1,9 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { PurchasingClient } from "./purchasing-client";
+
+const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
 export default async function PurchasingPage() {
   const { business, role } = await requireBusiness();
@@ -126,15 +129,103 @@ export default async function PurchasingPage() {
       })),
   ];
 
+  // C4: per-vendor price history + cost-creep, derived from the lines of POs that
+  // were actually placed (sent/received carry the agreed price). Grouped by
+  // vendor + item; we compare the latest unit cost to the prior one.
+  const fmtMoney = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency }).format(r2(n));
+  const poMeta = new Map(
+    (poRows ?? []).map((p) => [
+      p.id as string,
+      { vendor_id: (p.vendor_id as string | null) ?? null, status: p.status as string, date: (p.received_at as string | null) || (p.sent_at as string | null) || (p.created_at as string) },
+    ])
+  );
+  const vendorName = new Map(vendors.map((v) => [v.id, v.name]));
+  const series = new Map<string, { vendor: string; item: string; unit: string; points: { date: string; cost: number }[] }>();
+  for (const l of lineRows ?? []) {
+    const m = poMeta.get(l.po_id as string);
+    if (!m || (m.status !== "sent" && m.status !== "received")) continue;
+    const cost = Number(l.unit_cost) || 0;
+    if (cost <= 0) continue;
+    const desc = (l.description as string) || "Item";
+    const key = (m.vendor_id ?? "none") + "|" + ((l.ingredient_id as string | null) ?? "d:" + desc.toLowerCase().trim());
+    const s = series.get(key) ?? { vendor: (m.vendor_id && vendorName.get(m.vendor_id)) || "No vendor", item: desc, unit: (l.unit as string) || "unit", points: [] };
+    s.points.push({ date: m.date, cost });
+    series.set(key, s);
+  }
+  const priceRows = Array.from(series.values()).map((s) => {
+    s.points.sort((a, b) => (a.date < b.date ? -1 : 1));
+    const last = s.points[s.points.length - 1];
+    const prev = s.points.length > 1 ? s.points[s.points.length - 2] : null;
+    const change = prev && prev.cost > 0 ? (last.cost - prev.cost) / prev.cost : null;
+    return { vendor: s.vendor, item: s.item, unit: s.unit, last: last.cost, prev: prev?.cost ?? null, change, n: s.points.length, lastDate: last.date };
+  });
+  const creep = priceRows.filter((r) => r.change != null && r.change > 0.1).sort((a, b) => (b.change ?? 0) - (a.change ?? 0));
+  const trendTop = priceRows.filter((r) => r.n >= 2).sort((a, b) => (a.lastDate < b.lastDate ? 1 : -1)).slice(0, 12);
+  const fmtDate = (iso: string) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(iso));
+
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Purchasing</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Manage vendors and raise purchase orders. Email a PO to a vendor, then
-          receive stock against it.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Purchasing</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Manage vendors and raise purchase orders. Email a PO to a vendor, then
+            receive stock against it.
+          </p>
+        </div>
+        <Link href="/app/purchasing/invoices" className="shrink-0 text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent">
+          Invoices
+        </Link>
       </div>
+
+      {creep.length > 0 && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 mb-6">
+          <div className="text-sm font-semibold text-amber-700 dark:text-amber-500 mb-2">⚠ Cost creep — {creep.length} item{creep.length === 1 ? "" : "s"} up &gt;10%</div>
+          <div className="space-y-1 text-sm">
+            {creep.slice(0, 6).map((r, i) => (
+              <div key={i} className="flex items-center justify-between gap-3">
+                <span className="truncate">{r.item} <span className="text-xs text-muted-foreground">· {r.vendor}</span></span>
+                <span className="tabular-nums shrink-0">
+                  {fmtMoney(r.prev ?? 0)} → <span className="font-medium">{fmtMoney(r.last)}</span>
+                  <span className="text-red-600 ml-1">+{Math.round((r.change ?? 0) * 100)}%</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {trendTop.length > 0 && (
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl overflow-hidden mb-6">
+          <div className="px-3 py-2 border-b border-border text-sm font-semibold">Vendor price history</div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground border-b border-border">
+                <th className="px-3 py-2 font-medium">Item</th>
+                <th className="px-3 py-2 font-medium">Vendor</th>
+                <th className="px-3 py-2 font-medium text-right">Prev</th>
+                <th className="px-3 py-2 font-medium text-right">Latest</th>
+                <th className="px-3 py-2 font-medium text-right">Change</th>
+                <th className="px-3 py-2 font-medium text-right">As of</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trendTop.map((r, i) => (
+                <tr key={i} className="border-b border-border last:border-0">
+                  <td className="px-3 py-2 font-medium truncate max-w-[200px]">{r.item}<span className="block text-[11px] text-muted-foreground font-normal">{r.n} orders · per {r.unit}</span></td>
+                  <td className="px-3 py-2 text-muted-foreground truncate max-w-[140px]">{r.vendor}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{r.prev != null ? fmtMoney(r.prev) : "—"}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium">{fmtMoney(r.last)}</td>
+                  <td className={"px-3 py-2 text-right tabular-nums " + (r.change == null ? "" : r.change > 0.001 ? "text-red-600" : r.change < -0.001 ? "text-emerald-600" : "")}>
+                    {r.change == null ? "—" : (r.change > 0 ? "+" : "") + Math.round(r.change * 100) + "%"}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtDate(r.lastDate)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <PurchasingClient
         vendors={vendors}
         orders={orders}
