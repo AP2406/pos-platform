@@ -65,6 +65,8 @@ const orderSchema = z.object({
   idempotency_key: z.string().uuid().optional(),
   dining_option: z.enum(DINING_OPTIONS).optional().nullable(),
   open_ticket_id: z.string().uuid().optional().nullable(),
+  // E2: guest's on-screen signature (data URL) captured on the CFD.
+  signature_data: z.string().max(200000).optional().nullable(),
   // The manager who authorized a sensitive action (comp/discount/void) at the
   // register via PIN, when the cashier's own role lacked the permission/cap.
   approver: z.object({ id: z.string().max(64), name: z.string().max(120) }).optional().nullable(),
@@ -826,6 +828,15 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
         .eq("id", result.order_id)
         .eq("business_id", business.id);
     }
+  }
+
+  // E2: store the guest's on-screen signature (non-financial; guard-safe).
+  if (parsed.data.signature_data && !result.replayed && result.order_id) {
+    await supabase
+      .from("orders")
+      .update({ signature_data: parsed.data.signature_data })
+      .eq("id", result.order_id)
+      .eq("business_id", business.id);
   }
 
   // P2-32b: decrement the gift cards used as tenders. Atomic + overdraft-safe via

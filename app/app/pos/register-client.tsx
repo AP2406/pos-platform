@@ -236,6 +236,10 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     } catch {}
   }, [draftKey, cart]);
   const [tip, setTip] = useState(initialTableCart?.tip ?? "");
+  // E2: guest-facing tip + signature on the customer display (CFD).
+  const [cfdTipRequest, setCfdTipRequest] = useState(false);
+  const [signatureData, setSignatureData] = useState<string | null>(null);
+  const [cfdGuestMsg, setCfdGuestMsg] = useState<string | null>(null);
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">(initialTableCart?.discount_mode === "percent" ? "percent" : "amount");
   const [discountValue, setDiscountValue] = useState(initialTableCart?.discount_value ?? "");
   const [discountReason, setDiscountReason] = useState(initialTableCart?.discount_reason ?? "");
@@ -1299,6 +1303,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   function clearCart() {
     setCart([]);
     setTip("");
+    setSignatureData(null);
+    setCfdTipRequest(false);
+    setCfdGuestMsg(null);
     setDiscountValue("");
     setDiscountReason("");
     setDiscountReasonNote("");
@@ -1670,6 +1677,15 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     if (!businessId) return;
     const supabase = createBrowserClient();
     const ch = supabase.channel("cfd-" + businessId, { config: { broadcast: { self: false } } });
+    // E2: the guest's tip + signature come back on the same channel.
+    ch.on("broadcast", { event: "guest_input" }, (msg) => {
+      const p = (msg.payload ?? {}) as { tip?: number; signature?: string | null };
+      const t = Math.max(0, Math.round((Number(p.tip) || 0) * 100) / 100);
+      setTip(t > 0 ? String(t) : "");
+      if (typeof p.signature === "string" && p.signature.length > 0) setSignatureData(p.signature.slice(0, 200000));
+      setCfdTipRequest(false);
+      setCfdGuestMsg("Guest added " + (t > 0 ? "$" + t.toFixed(2) + " tip" : "no tip") + (p.signature ? " + signed" : "") + ".");
+    });
     ch.subscribe();
     cfdChannelRef.current = ch;
     supabase.auth.getSession().then(({ data }) => {
@@ -1698,9 +1714,11 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         customerName: customer?.name ?? null,
         paidTotal: receipt?.total ?? null,
         saleNumber: receipt?.saleNumber ?? null,
+        // E2: when set, the CFD shows a tip-preset + signature step for the guest.
+        tipRequest: cfdTipRequest && status === "cart" ? { base: subtotal, presets: [15, 18, 20] } : null,
       },
     });
-  }, [cart, subtotal, tax, total, receipt, customer, businessId, businessName]);
+  }, [cart, subtotal, tax, total, receipt, customer, businessId, businessName, cfdTipRequest]);
 
   const discountReasonOk =
     discount <= 0 ||
@@ -1955,6 +1973,8 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       approver: approver ?? undefined,
       // Phase A: carry the table ticket so covers / seated-at / section persist on the order.
       open_ticket_id: tableBinding?.ticketId ?? undefined,
+      // E2: the guest's on-screen signature (if captured on the CFD).
+      signature_data: signatureData ?? undefined,
     };
   }
 
@@ -3042,6 +3062,21 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                       <div className="text-[10px] text-muted-foreground">Customer</div>
                       <div className="text-xs font-medium truncate">{customer ? customer.name : "Add"}</div>
                     </button>
+                  </div>
+                )}
+
+                {/* E2: hand the tip + signature step to the guest display. */}
+                {businessId && cart.some((l) => !l.void) && (
+                  <div className="px-2 pb-2">
+                    {!cfdTipRequest ? (
+                      <button type="button" onClick={() => { setCfdGuestMsg(null); setCfdTipRequest(true); }} className="w-full text-xs rounded-md border border-border px-2 py-2 hover:bg-accent">📱 Ask guest to tip &amp; sign on the display</button>
+                    ) : (
+                      <div className="text-xs rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-2 flex items-center justify-between gap-2">
+                        <span className="text-amber-700 dark:text-amber-500">Waiting for the guest on the display…</span>
+                        <button type="button" onClick={() => setCfdTipRequest(false)} className="underline text-muted-foreground">cancel</button>
+                      </div>
+                    )}
+                    {cfdGuestMsg && <p className="text-[11px] text-emerald-600 mt-1">{cfdGuestMsg}</p>}
                   </div>
                 )}
 
