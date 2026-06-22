@@ -44,6 +44,8 @@ export default async function AppLayout({
         extras.push({ href: "/app/exceptions", label: "Exceptions" });
         extras.push({ href: "/app/incidents", label: "Incidents" });
         extras.push({ href: "/app/log", label: "Shift log" });
+        extras.push({ href: "/app/broadcasts", label: "Announcements" });
+        extras.push({ href: "/app/staff-records", label: "Staff records" });
         extras.push({ href: "/app/accounting", label: "Accounting" });
         extras.push({ href: "/app/labor", label: "Labor" });
         extras.push({ href: "/app/schedule", label: "Schedule" });

@@ -3,6 +3,9 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { clockToggle, breakToggle, listOnShift, type OnShift } from "./time-actions";
+import { ackBroadcast } from "../broadcasts/actions";
+
+type Broadcast = { id: string; title: string; body: string };
 
 function sinceLabel(iso: string): string {
   const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
@@ -12,11 +15,22 @@ function sinceLabel(iso: string): string {
   return h + "h " + (m < 10 ? "0" + m : m) + "m";
 }
 
-export function ClockClient({ initialOnShift }: { initialOnShift: OnShift[] }) {
+export function ClockClient({ initialOnShift, broadcasts = [] }: { initialOnShift: OnShift[]; broadcasts?: Broadcast[] }) {
   const [onShift, setOnShift] = useState<OnShift[]>(initialOnShift);
   const [pin, setPin] = useState("");
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [ackMsg, setAckMsg] = useState<string | null>(null);
+
+  function acknowledge(id: string) {
+    if (pin.length < 4) { setAckMsg("Enter your PIN on the pad first."); return; }
+    const p = pin;
+    startTransition(async () => {
+      const res = await ackBroadcast(id, p);
+      setPin("");
+      setAckMsg("error" in res ? res.error : res.name + " acknowledged. Thanks!");
+    });
+  }
   // D1: when an off-schedule clock-in is blocked, hold the staff PIN and prompt
   // for a manager override.
   const [override, setOverride] = useState<{ staffPin: string; text: string } | null>(null);
@@ -83,7 +97,25 @@ export function ClockClient({ initialOnShift }: { initialOnShift: OnShift[] }) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl">
+    <div className="max-w-3xl space-y-6">
+      {broadcasts.length > 0 && (
+        <div className="bg-card border border-border rounded-lg p-4">
+          <h2 className="text-sm font-semibold mb-2">Announcements</h2>
+          <div className="space-y-2">
+            {broadcasts.map((b) => (
+              <div key={b.id} className="rounded-md border border-border p-3">
+                <div className="font-medium text-sm">{b.title}</div>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-0.5">{b.body}</p>
+                <button onClick={() => acknowledge(b.id)} disabled={pending} className="mt-2 text-xs rounded-md border border-border px-2.5 py-1 hover:bg-accent disabled:opacity-50">
+                  Acknowledge (with your PIN)
+                </button>
+              </div>
+            ))}
+          </div>
+          {ackMsg && <p className="text-sm mt-2 text-emerald-600">{ackMsg}</p>}
+        </div>
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {/* PIN pad */}
       <div className="bg-card border border-border rounded-lg p-6">
         <div className="h-12 mb-4 rounded-md border border-border flex items-center justify-center text-2xl tracking-[0.3em] tabular-nums">
@@ -147,6 +179,7 @@ export function ClockClient({ initialOnShift }: { initialOnShift: OnShift[] }) {
             ))}
           </div>
         )}
+      </div>
       </div>
     </div>
   );
