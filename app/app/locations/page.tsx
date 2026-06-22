@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness, listBusinesses } from "@/lib/services/tenancy";
+import { primeCostSummary } from "../accounting/cost";
 
 const RANGES = [
   { key: "7d", label: "7 days", days: 7 },
@@ -97,6 +98,46 @@ export default async function LocationsPage({
     { count: 0, gross: 0, tips: 0, refunds: 0, net: 0 }
   );
 
+  // C5: consolidated prime-cost P&L + league table. For each location compute
+  // COGS (recipe-driven), labor, and the cost ratios over pre-tax sales (gross
+  // subtotal), then rank to surface the outliers. RLS already limits `ids` to
+  // locations this owner/manager belongs to, so per-location queries are safe.
+  const primeByBiz = new Map<string, Awaited<ReturnType<typeof primeCostSummary>>>();
+  await Promise.all(
+    ids.map(async (bid) => {
+      const base = agg[bid]?.gross ?? 0; // pre-tax sales = subtotal sum
+      primeByBiz.set(bid, await primeCostSummary(supabase, bid, since, new Date().toISOString(), base));
+    })
+  );
+  const pnlRows = rows
+    .map((r) => {
+      const p = primeByBiz.get(r.id);
+      const splh = p && p.laborHours > 0 ? round2(r.gross / p.laborHours) : null;
+      return {
+        id: r.id,
+        name: r.name,
+        sales: r.gross,
+        cogs: p?.cogs ?? 0,
+        labor: p?.laborCost ?? 0,
+        foodPct: p?.foodCostPct ?? null,
+        laborPct: p?.laborPct ?? null,
+        primePct: p?.primeCostPct ?? null,
+        coverage: p?.coveragePct ?? null,
+        splh,
+      };
+    })
+    .filter((r) => r.sales > 0)
+    .sort((a, b) => (a.primePct ?? 999) - (b.primePct ?? 999));
+
+  const tCogs = round2(pnlRows.reduce((s, r) => s + r.cogs, 0));
+  const tLabor = round2(pnlRows.reduce((s, r) => s + r.labor, 0));
+  const tSales = round2(pnlRows.reduce((s, r) => s + r.sales, 0));
+  const tFoodPct = tSales > 0 ? round2((tCogs / tSales) * 1000) / 10 : null;
+  const tLaborPct = tSales > 0 ? round2((tLabor / tSales) * 1000) / 10 : null;
+  const tPrimePct = tSales > 0 ? round2(((tCogs + tLabor) / tSales) * 1000) / 10 : null;
+  const minCoverage = pnlRows.reduce((m, r) => (r.coverage != null ? Math.min(m, r.coverage) : m), 100);
+  const pctStr = (n: number | null) => (n == null ? "—" : n.toFixed(1) + "%");
+
   return (
     <div>
       <div className="mb-6 flex items-start justify-between gap-4">
@@ -164,6 +205,54 @@ export default async function LocationsPage({
         Net = collected total minus refunds. Amounts shown in {currency}; locations on a different
         currency are combined at face value.
       </p>
+
+      {pnlRows.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-sm font-semibold mb-1">Prime-cost P&amp;L by location</h2>
+          <p className="text-xs text-muted-foreground mb-3">
+            Food cost (from recipes), labor, and prime cost as a share of pre-tax sales, last {range.label}. Ranked best prime cost first.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <Stat label="Combined food %" value={pctStr(tFoodPct)} />
+            <Stat label="Combined labor %" value={pctStr(tLaborPct)} />
+            <Stat label="Combined prime %" value={pctStr(tPrimePct)} tone={tPrimePct != null && tPrimePct > 65 ? "warning" : undefined} />
+            <Stat label="COGS + labor" value={money(round2(tCogs + tLabor), currency)} />
+          </div>
+          <div className="bg-card border border-border rounded-lg overflow-hidden">
+            <div className="grid grid-cols-12 gap-2 px-4 py-2 text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
+              <div className="col-span-4">Location</div>
+              <div className="col-span-2 text-right">Food %</div>
+              <div className="col-span-2 text-right">Labor %</div>
+              <div className="col-span-2 text-right">Prime %</div>
+              <div className="col-span-2 text-right">SPLH</div>
+            </div>
+            {pnlRows.map((r, i) => {
+              const best = i === 0 && pnlRows.length > 1;
+              const worst = i === pnlRows.length - 1 && pnlRows.length > 1;
+              return (
+                <div key={r.id} className="grid grid-cols-12 gap-2 px-4 py-3 text-sm items-center border-b border-border last:border-0">
+                  <div className="col-span-4 min-w-0">
+                    <div className="font-medium truncate">
+                      {r.name}
+                      {best && <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-600 font-semibold">best</span>}
+                      {worst && <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-600 font-semibold">watch</span>}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{money(r.sales, currency)} sales · {money(round2(r.cogs + r.labor), currency)} prime</div>
+                  </div>
+                  <div className="col-span-2 text-right tabular-nums">{pctStr(r.foodPct)}</div>
+                  <div className="col-span-2 text-right tabular-nums">{pctStr(r.laborPct)}</div>
+                  <div className={"col-span-2 text-right tabular-nums font-medium " + (r.primePct != null && r.primePct > 65 ? "text-amber-600" : "")}>{pctStr(r.primePct)}</div>
+                  <div className="col-span-2 text-right tabular-nums">{r.splh != null ? money(r.splh, currency) : "—"}</div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">
+            Percentages are of pre-tax sales. Food cost only counts items with a defined recipe
+            {minCoverage < 100 ? ` (recipe coverage as low as ${Math.round(minCoverage)}% at one location — add recipes for a fuller picture).` : "."}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

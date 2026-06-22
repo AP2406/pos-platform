@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
 import { displayItemName } from "@/lib/format";
 import { plateCostByItem } from "../accounting/cost";
+import { WhatIfModeler } from "./whatif-modeler";
 
 export const dynamic = "force-dynamic";
 
@@ -143,6 +144,60 @@ export default async function InsightsPage({
   const topMenu = menuRows.sort((a, b) => profitOf(b) - profitOf(a)).slice(0, 25);
   const anyUncosted = mode === "margin" && menuRows.some((r) => r.costedUnits < r.units);
 
+  // C1: sales forecast — trailing 28 days bucketed by (weekday × daypart),
+  // averaged over the days actually seen, then projected onto the next 7 days.
+  const DAYPARTS = [
+    { key: "morning", label: "Morning", lo: 5, hi: 11 },
+    { key: "lunch", label: "Lunch", lo: 11, hi: 15 },
+    { key: "afternoon", label: "Afternoon", lo: 15, hi: 17 },
+    { key: "dinner", label: "Dinner", lo: 17, hi: 22 },
+    { key: "late", label: "Late", lo: 22, hi: 29 },
+  ];
+  const dpKey = (h: number) => { const x = h < 5 ? h + 24 : h; return DAYPARTS.find((d) => x >= d.lo && x < d.hi)?.key ?? "late"; };
+  const { data: fcOrders } = await supabase
+    .from("orders").select("total, created_at, status").eq("business_id", business.id)
+    .neq("status", "voided").gte("created_at", new Date(now - 28 * 86400000).toISOString());
+  const cellSum = new Map<string, number>(); // `${dow}|${daypart}` → $
+  const daysSeen = new Map<string, Set<string>>(); // dow → distinct day keys
+  for (const o of fcOrders ?? []) {
+    const ca = o.created_at as string;
+    const dow = dowFmt.format(new Date(ca));
+    const h = Number(hourFmt.format(new Date(ca))) % 24;
+    cellSum.set(dow + "|" + dpKey(h), (cellSum.get(dow + "|" + dpKey(h)) ?? 0) + (Number(o.total) || 0));
+    if (!daysSeen.has(dow)) daysSeen.set(dow, new Set());
+    daysSeen.get(dow)!.add(dayKey(ca));
+  }
+  const avgCell = (dow: string, dp: string) => {
+    const n = daysSeen.get(dow)?.size ?? 0;
+    return n > 0 ? (cellSum.get(dow + "|" + dp) ?? 0) / n : 0;
+  };
+  const fcDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(now + (i + 1) * 86400000);
+    const dow = dowFmt.format(d);
+    const parts = DAYPARTS.map((p) => ({ label: p.label, val: Math.round(avgCell(dow, p.key) * 100) / 100 }));
+    const total = Math.round(parts.reduce((s, p) => s + p.val, 0) * 100) / 100;
+    return { label: new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", month: "short", day: "numeric" }).format(d), dow, total, parts };
+  });
+  const fcWeekTotal = Math.round(fcDays.reduce((s, d) => s + d.total, 0) * 100) / 100;
+  const fcMaxDay = Math.max(1, ...fcDays.map((d) => d.total));
+  const fcHasData = (fcOrders ?? []).length >= 7 && fcWeekTotal > 0;
+  // Typical-day daypart split (averaged across the projected week) for the mix bar.
+  const fcDpMix = DAYPARTS.map((p) => ({ label: p.label, val: Math.round((fcDays.reduce((s, d) => s + (d.parts.find((x) => x.label === p.label)?.val ?? 0), 0) / 7) * 100) / 100 })).filter((p) => p.val > 0);
+  const fcMaxDp = Math.max(1, ...fcDpMix.map((p) => p.val));
+
+  // C11: feed the break-even + price what-if modeler. Period revenue/COGS give
+  // the contribution-margin ratio; per-item price & unit cost drive the price sim.
+  const periodRevenue = Math.round(menuRows.reduce((s, r) => s + r.revenue, 0) * 100) / 100;
+  const periodCogs = Math.round(menuRows.reduce((s, r) => s + r.cost, 0) * 100) / 100;
+  const orderCount = liveOrders.length;
+  const avgCheck = orderCount > 0 ? Math.round((liveOrders.reduce((s, o) => s + (Number(o.total) || 0), 0) / orderCount) * 100) / 100 : 0;
+  const whatIfItems = menuRows
+    .filter((r) => r.units > 0 && r.costedUnits >= r.units && r.revenue > 0)
+    .map((r) => ({ name: r.name, units: r.units, price: Math.round((r.revenue / r.units) * 100) / 100, unitCost: Math.round((r.cost / Math.max(1, r.costedUnits)) * 100) / 100 }))
+    .sort((a, b) => b.units - a.units)
+    .slice(0, 30);
+  const rangeDays = range === "today" ? 1 : range === "7d" ? 7 : 30;
+
   const tabs = [{ key: "today", label: "Today" }, { key: "7d", label: "7 days" }, { key: "30d", label: "30 days" }];
 
   const Bar = ({ label, value, max }: { label: string; value: number; max: number }) => (
@@ -188,6 +243,45 @@ export default async function InsightsPage({
           </div>
         </div>
       </div>
+
+      {fcHasData && (
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 mb-4">
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <h2 className="font-semibold text-sm">Forecast — next 7 days</h2>
+            <span className="text-xs text-muted-foreground">~{money(fcWeekTotal)} projected · from 4-week trend</span>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              {fcDays.map((d) => (
+                <div key={d.label} className="flex items-center gap-2 text-xs">
+                  <span className="w-24 shrink-0 text-muted-foreground">{d.label}</span>
+                  <div className="flex-1 h-3 rounded bg-muted overflow-hidden">
+                    <div className="h-full bg-foreground/70" style={{ width: Math.round((d.total / fcMaxDay) * 100) + "%" }} />
+                  </div>
+                  <span className="w-16 shrink-0 text-right tabular-nums">{d.total > 0 ? money(d.total) : "—"}</span>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground mb-1">Typical day by daypart</div>
+              <div className="space-y-1">
+                {fcDpMix.map((p) => (
+                  <div key={p.label} className="flex items-center gap-2 text-xs">
+                    <span className="w-20 shrink-0 text-muted-foreground">{p.label}</span>
+                    <div className="flex-1 h-3 rounded bg-muted overflow-hidden">
+                      <div className="h-full bg-sky-500/70" style={{ width: Math.round((p.val / fcMaxDp) * 100) + "%" }} />
+                    </div>
+                    <span className="w-16 shrink-0 text-right tabular-nums">{money(p.val)}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-2">Use this to plan staffing — pair with Labor → daypart.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <WhatIfModeler periodRevenue={periodRevenue} periodCogs={periodCogs} avgCheck={avgCheck} rangeDays={rangeDays} items={whatIfItems} />
 
       <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 mb-4">
         <h2 className="font-semibold mb-2 text-sm">Covers &amp; table turn</h2>
