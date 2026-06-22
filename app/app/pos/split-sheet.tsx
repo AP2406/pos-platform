@@ -11,6 +11,9 @@ export type SplitLine = {
   quantity: number;
   taxable: boolean;
   seat?: number | null;
+  // E3: a line shared by specific seats — the by-seat split allocates it evenly
+  // across just these seats (empty/undefined = its own seat, or all if no seat).
+  shared_seats?: number[] | null;
 };
 
 export type SplitCheck = {
@@ -92,7 +95,12 @@ export function SplitSheet(props: Props) {
     setN(nn);
     setAlloc(lines.map((l, i) => {
       const row = new Array<number>(nn).fill(0);
-      if (typeof l.seat === "number" && idxOf.has(l.seat)) {
+      // E3: a line pre-tagged as shared by specific seats splits across just those.
+      const tagged = Array.isArray(l.shared_seats) ? l.shared_seats.filter((s) => idxOf.has(s)) : [];
+      if (tagged.length >= 2) {
+        const shares = allocateEqual(lineCents[i], tagged.length);
+        tagged.forEach((s, k) => { row[idxOf.get(s) as number] = shares[k]; });
+      } else if (typeof l.seat === "number" && idxOf.has(l.seat)) {
         row[idxOf.get(l.seat) as number] = lineCents[i];
       } else {
         const shares = allocateEqual(lineCents[i], nn);

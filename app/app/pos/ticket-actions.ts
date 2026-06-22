@@ -182,6 +182,8 @@ const tableCartLineSchema = cartLineSchema.extend({
   allergy: z.string().max(120).optional().nullable(),
   // Seat this line belongs to (1-based); null/absent = shared / no seat.
   seat: z.coerce.number().int().min(1).max(99).optional().nullable(),
+  // E3: seats sharing this line — the by-seat split allocates it across just these.
+  shared_seats: z.array(z.coerce.number().int().min(1).max(99)).max(99).optional().nullable(),
   // Coursing (P0-1, full-service): which course this line fires with, and when
   // it was last fired. Kitchen routing only — never affects totals.
   course_id: z.string().uuid().optional().nullable(),

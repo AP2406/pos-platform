@@ -74,6 +74,8 @@ type CartLine = {
   allergy?: string | null;
   // Seat this line belongs to (1-based); null = shared.
   seat?: number | null;
+  // E3: seats sharing this line — the by-seat split allocates it across just these.
+  shared_seats?: number[] | null;
   // Coursing (P0-1): which course this line fires with, and when last fired.
   course_id?: string | null;
   fired_at?: string | null;
@@ -198,6 +200,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
       note: it.note ?? null,
       allergy: it.allergy ?? null,
       seat: it.seat ?? null,
+      shared_seats: (it as { shared_seats?: number[] | null }).shared_seats ?? null,
       course_id: it.course_id ?? null,
       fired_at: it.fired_at ?? null,
       void: it.void ?? null,
@@ -917,6 +920,15 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   function setLineSeat(index: number, seat: number | null) {
     setCart((prev) => prev.map((l, i) => (i === index ? { ...l, seat: seat } : l)));
   }
+  // E3: toggle a seat into/out of a line's shared set (≥2 seats → split across them).
+  function toggleSharedSeat(index: number, seat: number) {
+    setCart((prev) => prev.map((l, i) => {
+      if (i !== index) return l;
+      const cur = Array.isArray(l.shared_seats) ? l.shared_seats : [];
+      const next = cur.includes(seat) ? cur.filter((s) => s !== seat) : [...cur, seat].sort((a, b) => a - b);
+      return { ...l, shared_seats: next.length > 0 ? next : null };
+    }));
+  }
 
   // Move a line to a different course (P0-1). Free while unfired.
   function setLineCourse(index: number, courseId: string) {
@@ -1108,6 +1120,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         note: l.note ?? null,
         allergy: l.allergy ?? null,
         seat: l.seat ?? null,
+        shared_seats: l.shared_seats ?? null,
         course_id: l.course_id ?? null,
         fired_at: l.fired_at ?? null,
         void: l.void ?? null,
@@ -2568,7 +2581,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       <SplitSheet
         open={splitOpen}
         onClose={() => setSplitOpen(false)}
-        lines={cart.map((l) => ({ catalog_item_id: l.catalog_item_id, name: l.name, unit_price: l.unit_price, quantity: l.quantity, taxable: l.taxable, seat: l.seat ?? null }))}
+        lines={cart.map((l) => ({ catalog_item_id: l.catalog_item_id, name: l.name, unit_price: l.unit_price, quantity: l.quantity, taxable: l.taxable, seat: l.seat ?? null, shared_seats: l.shared_seats ?? null }))}
         allowUnits={splitCfg.allowUnits}
         settlementMode={splitCfg.settlementMode}
         pending={pending}
@@ -3128,6 +3141,23 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                         <button key={s} type="button" disabled={(cart[editLineIndex].sent_qty ?? 0) >= cart[editLineIndex].quantity} onClick={() => setLineSeat(editLineIndex, s)} className={"text-xs rounded-md border px-2.5 py-1.5 disabled:opacity-40 " + (cart[editLineIndex].seat === s ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground")}>{s}</button>
                       ))}
                     </div>
+                  </div>
+                )}
+                {tableMode && seatCount >= 2 && (
+                  <div className="space-y-1 mt-3">
+                    <Label className="text-xs">Shared across seats <span className="text-muted-foreground">(splits evenly between them)</span></Label>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {Array.from({ length: seatCount }, (_, i) => i + 1).map((s) => {
+                        const on = (cart[editLineIndex!].shared_seats ?? []).includes(s);
+                        return (
+                          <button key={s} type="button" onClick={() => toggleSharedSeat(editLineIndex!, s)} className={"text-xs rounded-md border px-2.5 py-1.5 " + (on ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground")}>S{s}</button>
+                        );
+                      })}
+                      {(cart[editLineIndex].shared_seats ?? []).length > 0 && (
+                        <button type="button" onClick={() => setCart((prev) => prev.map((l, i) => (i === editLineIndex ? { ...l, shared_seats: null } : l)))} className="text-xs text-muted-foreground underline ml-1">clear</button>
+                      )}
+                    </div>
+                    {(cart[editLineIndex].shared_seats ?? []).length === 1 && <p className="text-[11px] text-muted-foreground">Pick at least two seats to share.</p>}
                   </div>
                 )}
                 {coursingOn && (
