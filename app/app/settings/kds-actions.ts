@@ -11,6 +11,8 @@ export async function setKdsThresholds(input: {
   warnMin: number;
   lateMin: number;
   autoCourse?: boolean;
+  lang?: string;
+  printerFallback?: boolean;
 }): Promise<{ ok: true } | { error: string }> {
   const { business, role } = await requireBusiness();
   assertConfigEditable(business);
@@ -26,7 +28,7 @@ export async function setKdsThresholds(input: {
   const current = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
   const { error } = await supabase
     .from("businesses")
-    .update({ settings: { ...current, kds: { warnMin: warn, lateMin: late }, auto_course: input.autoCourse === true } })
+    .update({ settings: { ...current, kds: { warnMin: warn, lateMin: late }, auto_course: input.autoCourse === true, kds_lang: ["en", "fr", "es"].includes(input.lang || "") ? input.lang : "en", kds_printer_fallback: input.printerFallback === true } })
     .eq("id", business.id);
   if (error) {
     console.error("setKdsThresholds:", error);

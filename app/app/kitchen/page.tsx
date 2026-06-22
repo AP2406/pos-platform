@@ -10,9 +10,12 @@ export default async function KitchenPage() {
   const supabase = await createClient();
 
   // B9: operator-configurable KDS aging thresholds (settings.kds), default 10/18.
-  const kds = (((business as { settings?: Record<string, unknown> }).settings ?? {}).kds ?? {}) as { warnMin?: unknown; lateMin?: unknown };
+  const sset = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
+  const kds = (sset.kds ?? {}) as { warnMin?: unknown; lateMin?: unknown };
   const kdsWarn = Number(kds.warnMin) > 0 ? Number(kds.warnMin) : 10;
   const kdsLate = Number(kds.lateMin) > kdsWarn ? Number(kds.lateMin) : Math.max(kdsWarn + 1, 18);
+  const kdsLang = typeof sset.kds_lang === "string" ? (sset.kds_lang as string) : "en";
+  const printerFallback = sset.kds_printer_fallback === true;
 
   const { data: orders } = await supabase
     .from("orders")
@@ -215,7 +218,7 @@ export default async function KitchenPage() {
           New orders appear here automatically. Tap Done when an order is ready.
         </p>
       </div>
-      <KitchenClient businessId={business.id} initialOrders={initialOrders} stations={stations} recent={recent} menu={menu} kdsWarn={kdsWarn} kdsLate={kdsLate} recipes={recipes} />
+      <KitchenClient businessId={business.id} initialOrders={initialOrders} stations={stations} recent={recent} menu={menu} kdsWarn={kdsWarn} kdsLate={kdsLate} recipes={recipes} lang={kdsLang} printerFallback={printerFallback} />
     </div>
   );
 }

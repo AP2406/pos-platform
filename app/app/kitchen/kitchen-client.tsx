@@ -16,7 +16,16 @@ function allergenText(it: { allergens?: string[] | null; allergy?: string | null
     .join(", ");
 }
 
-function ticketHtml(o: { tableLabel: string | null; id: string; createdAt: string; items: { name: string; quantity: number; note?: string | null; allergens?: string[] | null; allergy?: string | null }[] }): string {
+// B13: fixed kitchen-ticket labels by language (the printed chit; item names come
+// from the menu and aren't translated).
+const TICKET_I18N: Record<string, { allergen: string }> = {
+  en: { allergen: "ALLERGEN" },
+  fr: { allergen: "ALLERGÈNE" },
+  es: { allergen: "ALÉRGENO" },
+};
+
+function ticketHtml(o: { tableLabel: string | null; id: string; createdAt: string; items: { name: string; quantity: number; note?: string | null; allergens?: string[] | null; allergy?: string | null }[] }, lang = "en"): string {
+  const t = TICKET_I18N[lang] ?? TICKET_I18N.en;
   const title = o.tableLabel ? o.tableLabel : "#" + o.id.slice(0, 8);
   const rows = o.items
     .map((it) => {
@@ -25,7 +34,7 @@ function ticketHtml(o: { tableLabel: string | null; id: string; createdAt: strin
         "<div style='display:flex;justify-content:space-between'><span>" +
         it.quantity + "x " + esc(displayItemName(it.name)) + "</span></div>" +
         (it.note ? "<div style='font-size:11px;padding-left:8px'>&rarr; " + esc(it.note) + "</div>" : "") +
-        (allergens ? "<div style='font-size:12px;padding-left:8px;font-weight:bold;color:#c00'>⚠ ALLERGEN: " + esc(allergens) + "</div>" : "")
+        (allergens ? "<div style='font-size:12px;padding-left:8px;font-weight:bold;color:#c00'>⚠ " + t.allergen + ": " + esc(allergens) + "</div>" : "")
       );
     })
     .join("");
@@ -68,6 +77,8 @@ export function KitchenClient({
   kdsWarn = 10,
   kdsLate = 18,
   recipes = {},
+  lang = "en",
+  printerFallback = false,
 }: {
   businessId: string;
   initialOrders: KitchenOrder[];
@@ -77,7 +88,14 @@ export function KitchenClient({
   kdsWarn?: number;
   kdsLate?: number;
   recipes?: Record<string, string[]>;
+  lang?: string;
+  printerFallback?: boolean;
 }) {
+  // B13: realtime-connection health → printer failover. When the KDS loses its
+  // realtime link and the operator enabled fallback, newly-arrived tickets print.
+  const [degraded, setDegraded] = useState(false);
+  const degradedRef = useRef(false);
+  useEffect(() => { degradedRef.current = degraded; }, [degraded]);
   // B5: which item's build card is open (keyed by base name).
   const [recipeItem, setRecipeItem] = useState<string | null>(null);
   const recipeLines = recipeItem ? recipes[recipeItem.toLowerCase()] ?? [] : [];
@@ -214,16 +232,21 @@ export function KitchenClient({
     let freshNormal = false;
     let freshVoid = false;
     const voidNames: string[] = [];
+    const freshTickets: KitchenOrder[] = [];
     for (const o of orders) {
       if (!seenIds.current.has(o.id)) {
         const vs = o.items.filter((it) => it.void === true).map((it) => displayItemName(it.name));
         if (vs.length > 0) {
           freshVoid = true;
           voidNames.push(...vs);
-        } else freshNormal = true;
+        } else { freshNormal = true; freshTickets.push(o); }
       }
     }
     seenIds.current = new Set(orders.map((o) => o.id));
+    // B13: printer failover — when the realtime link is down, print incoming tickets.
+    if (degradedRef.current && freshTickets.length > 0) {
+      for (const o of freshTickets) { try { printReceiptHtml(ticketHtml(o, lang)); } catch {} }
+    }
     if (freshVoid) alarm();
     else if (freshNormal) chime();
     if (voidNames.length > 0) {
@@ -377,15 +400,19 @@ export function KitchenClient({
           refresh();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // B13: a dropped/errored channel flips the KDS into printer-fallback mode.
+        const ok = status === "SUBSCRIBED";
+        setDegraded(printerFallback ? !ok : false);
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [businessId, refresh]);
+  }, [businessId, refresh, printerFallback]);
 
   function handleReprint(o: KitchenOrder) {
-    printReceiptHtml(ticketHtml(o));
+    printReceiptHtml(ticketHtml(o, lang));
   }
 
   function handleRefire(o: KitchenOrder) {
@@ -611,6 +638,13 @@ export function KitchenClient({
       </button>
     </div>
   );
+
+  // B13: printer-fallback banner.
+  const degradedBanner = degraded ? (
+    <div className="mb-4 rounded-xl border-2 border-amber-500 bg-amber-500/15 px-4 py-2 text-sm font-semibold text-amber-800 dark:text-amber-300">
+      🖨️ KDS connection lost — new tickets are printing to the kitchen printer until it reconnects.
+    </div>
+  ) : null;
 
   // B8: message-the-server modal.
   const msgModal = msgFor ? (
@@ -879,6 +913,7 @@ export function KitchenClient({
         {stopBanner}
         {recipeModal}
         {msgModal}
+        {degradedBanner}
         {board86}
         {recallStrip}
         {allDayPanel}
@@ -942,6 +977,7 @@ export function KitchenClient({
       {stopBanner}
         {recipeModal}
         {msgModal}
+        {degradedBanner}
       {board86}
       {recallStrip}
       {stationStrip}
