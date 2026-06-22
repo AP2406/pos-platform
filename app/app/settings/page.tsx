@@ -18,6 +18,7 @@ import { parseOvertime } from "@/lib/services/overtime";
 import { OnlineBookingCard } from "./online-booking-card";
 import { KdsCard } from "./kds-card";
 import { ScheduledReportCard } from "./scheduled-report-card";
+import { ClockEnforcementCard } from "./clock-enforcement-card";
 import { ExceptionCard } from "./exception-card";
 import { parseThresholds } from "@/lib/services/exception-thresholds";
 import { FloorCard } from "./floor-card";
@@ -156,6 +157,9 @@ export default async function SettingsPage() {
   const schedReportRecipients = Array.isArray(schedRep.recipients)
     ? (schedRep.recipients as unknown[]).filter((e): e is string => typeof e === "string").join(", ")
     : "";
+  const clockEnf = (daySettings.clock_enforcement ?? {}) as { enabled?: unknown; graceMin?: unknown };
+  const clockEnfEnabled = clockEnf.enabled === true;
+  const clockEnfGrace = Number(clockEnf.graceMin) >= 0 ? Number(clockEnf.graceMin) : 5;
   const kdsPrinterFallback = daySettings.kds_printer_fallback === true;
   const bookingUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://surgetechpos.com") + "/book/" + business.id;
   const coaRows = (Object.keys(COA_DEFAULTS) as CoaKey[]).map((k) => ({ key: k, name: coa[k].name, code: coa[k].code }));
@@ -401,6 +405,12 @@ export default async function SettingsPage() {
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
               <SectionHeader>Scheduled report email</SectionHeader>
               <ScheduledReportCard enabled={schedReportEnabled} frequency={schedReportFreq} weekday={schedReportWeekday} recipients={schedReportRecipients} />
+            </div>
+          )}
+          {hasFloorService(business) && (role === "owner" || role === "manager") && (
+            <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
+              <SectionHeader>Schedule-enforced clock-in</SectionHeader>
+              <ClockEnforcementCard enabled={clockEnfEnabled} graceMin={clockEnfGrace} />
             </div>
           )}
           {hasFloorService(business) && (

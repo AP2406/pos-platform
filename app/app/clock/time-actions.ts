@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { approverByPin } from "@/lib/services/permissions-server";
 import { revalidatePath } from "next/cache";
 
 export type OnShift = { staffId: string; name: string; since: string; onBreakSince: string | null };
@@ -9,9 +10,12 @@ export type OnShift = { staffId: string; name: string; since: string; onBreakSin
 // P1-24: clock a staff member in or out. They're identified by their own PIN
 // (same RPC as the register staff switch). If they have an open shift it's
 // closed (clock out); otherwise a new shift opens (clock in).
+// D1: when schedule-enforced clock-in is on, an off-schedule/too-early clock-in
+// is blocked unless a manager PIN (edit_staff) overrides it.
 export async function clockToggle(
-  pin: string
-): Promise<{ ok: true; action: "in" | "out"; name: string; at: string } | { error: string }> {
+  pin: string,
+  overridePin?: string
+): Promise<{ ok: true; action: "in" | "out"; name: string; at: string } | { error: string; needsOverride?: true }> {
   if (!/^[0-9]{4,6}$/.test(pin)) return { error: "Enter your 4 to 6 digit PIN." };
   const { business } = await requireBusiness();
   const supabase = await createClient();
@@ -38,6 +42,49 @@ export async function clockToggle(
     .maybeSingle();
 
   const now = new Date().toISOString();
+
+  // D1 schedule-enforced clock-in (clocking IN only; never blocks a clock-out).
+  if (!open) {
+    const settings = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
+    const enf = (settings.clock_enforcement ?? {}) as { enabled?: unknown; graceMin?: unknown };
+    if (enf.enabled === true) {
+      const graceMin = Number(enf.graceMin) >= 0 ? Number(enf.graceMin) : 5;
+      const nowMs = Date.now();
+      const { data: shifts } = await supabase
+        .from("shifts")
+        .select("starts_at, ends_at")
+        .eq("business_id", business.id)
+        .eq("staff_id", staffId)
+        .gte("ends_at", new Date(nowMs - 60 * 60000).toISOString())
+        .lte("starts_at", new Date(nowMs + 16 * 3600000).toISOString())
+        .order("starts_at", { ascending: true });
+      const eligible = (shifts ?? []).some((s) => {
+        const st = new Date(s.starts_at as string).getTime();
+        const en = new Date(s.ends_at as string).getTime();
+        return nowMs >= st - graceMin * 60000 && nowMs <= en;
+      });
+      if (!eligible) {
+        const approver = await approverByPin(supabase, business.id, overridePin, "edit_staff");
+        if (!approver) {
+          const tz = (business as { timezone?: string }).timezone || "America/Toronto";
+          const upcoming = (shifts ?? []).find((s) => new Date(s.starts_at as string).getTime() > nowMs);
+          const msg = upcoming
+            ? `${name} is scheduled at ${new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(new Date(upcoming.starts_at as string))} — too early to clock in. A manager can override.`
+            : `${name} isn't scheduled to work now. A manager can override.`;
+          return { error: msg, needsOverride: true };
+        }
+        await supabase.from("audit_events").insert({
+          business_id: business.id,
+          actor_id: null,
+          actor_role: "manager",
+          action: "clock_override",
+          reason_code: "off_schedule_clock_in",
+          metadata: { staff_id: staffId, staff_name: name, approver_id: approver.id, approver_name: approver.name },
+        });
+      }
+    }
+  }
+
   if (open) {
     // Clocking out while on break folds the open break into the total first.
     let breakMin = Number(open.break_minutes) || 0;

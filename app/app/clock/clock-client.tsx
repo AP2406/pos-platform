@@ -17,6 +17,10 @@ export function ClockClient({ initialOnShift }: { initialOnShift: OnShift[] }) {
   const [pin, setPin] = useState("");
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
+  // D1: when an off-schedule clock-in is blocked, hold the staff PIN and prompt
+  // for a manager override.
+  const [override, setOverride] = useState<{ staffPin: string; text: string } | null>(null);
+  const [mgrPin, setMgrPin] = useState("");
 
   function press(d: string) {
     setMsg(null);
@@ -29,14 +33,37 @@ export function ClockClient({ initialOnShift }: { initialOnShift: OnShift[] }) {
 
   function submit() {
     if (pin.length < 4) return;
+    const staffPin = pin;
     startTransition(async () => {
-      const res = await clockToggle(pin);
-      setPin("");
+      const res = await clockToggle(staffPin);
       if ("error" in res) {
+        if ("needsOverride" in res && res.needsOverride) {
+          setOverride({ staffPin, text: res.error });
+          setPin("");
+          return;
+        }
+        setPin("");
         setMsg({ kind: "err", text: res.error });
         return;
       }
+      setPin("");
       setMsg({ kind: "ok", text: res.name + (res.action === "in" ? " clocked in." : " clocked out.") });
+      setOnShift(await listOnShift());
+    });
+  }
+
+  function confirmOverride() {
+    if (!override || mgrPin.length < 4) return;
+    startTransition(async () => {
+      const res = await clockToggle(override.staffPin, mgrPin);
+      setMgrPin("");
+      if ("error" in res) {
+        setMsg({ kind: "err", text: res.error });
+        if (!("needsOverride" in res && res.needsOverride)) setOverride(null);
+        return;
+      }
+      setOverride(null);
+      setMsg({ kind: "ok", text: res.name + " clocked in (manager override)." });
       setOnShift(await listOnShift());
     });
   }
@@ -78,6 +105,24 @@ export function ClockClient({ initialOnShift }: { initialOnShift: OnShift[] }) {
         <Button variant="outline" className="w-full h-11 mt-2" onClick={submitBreak} disabled={pending || pin.length < 4}>
           Start / end break
         </Button>
+        {override && (
+          <div className="mt-3 rounded-md border border-amber-500/50 bg-amber-500/10 p-3">
+            <p className="text-sm text-amber-700 dark:text-amber-500">{override.text}</p>
+            <p className="text-xs text-muted-foreground mt-1 mb-2">Manager PIN to override:</p>
+            <div className="flex gap-2">
+              <input
+                value={mgrPin}
+                onChange={(e) => setMgrPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                inputMode="numeric"
+                type="password"
+                placeholder="••••"
+                className="h-9 flex-1 rounded-md border border-border bg-transparent px-2 text-sm tracking-widest"
+              />
+              <Button onClick={confirmOverride} disabled={pending || mgrPin.length < 4} className="h-9">Override</Button>
+              <Button variant="outline" onClick={() => { setOverride(null); setMgrPin(""); }} disabled={pending} className="h-9">Cancel</Button>
+            </div>
+          </div>
+        )}
         {msg && (
           <p className={"text-sm mt-3 text-center " + (msg.kind === "ok" ? "text-emerald-600" : "text-red-600")}>{msg.text}</p>
         )}
