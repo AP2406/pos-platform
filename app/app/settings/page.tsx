@@ -17,6 +17,7 @@ import { OvertimeCard } from "./overtime-card";
 import { parseOvertime } from "@/lib/services/overtime";
 import { OnlineBookingCard } from "./online-booking-card";
 import { KdsCard } from "./kds-card";
+import { ScheduledReportCard } from "./scheduled-report-card";
 import { ExceptionCard } from "./exception-card";
 import { parseThresholds } from "@/lib/services/exception-thresholds";
 import { FloorCard } from "./floor-card";
@@ -148,6 +149,13 @@ export default async function SettingsPage() {
   const kdsLateMin = Number(kdsCfg.lateMin) > kdsWarnMin ? Number(kdsCfg.lateMin) : 18;
   const autoCourse = daySettings.auto_course === true;
   const kdsLang = typeof daySettings.kds_lang === "string" ? (daySettings.kds_lang as string) : "en";
+  const schedRep = (daySettings.scheduled_report ?? {}) as { enabled?: unknown; frequency?: unknown; weekday?: unknown; recipients?: unknown };
+  const schedReportEnabled = schedRep.enabled === true;
+  const schedReportFreq = schedRep.frequency === "weekly" ? "weekly" : "daily";
+  const schedReportWeekday = Number(schedRep.weekday) >= 0 && Number(schedRep.weekday) <= 6 ? Number(schedRep.weekday) : 1;
+  const schedReportRecipients = Array.isArray(schedRep.recipients)
+    ? (schedRep.recipients as unknown[]).filter((e): e is string => typeof e === "string").join(", ")
+    : "";
   const kdsPrinterFallback = daySettings.kds_printer_fallback === true;
   const bookingUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://surgetechpos.com") + "/book/" + business.id;
   const coaRows = (Object.keys(COA_DEFAULTS) as CoaKey[]).map((k) => ({ key: k, name: coa[k].name, code: coa[k].code }));
@@ -387,6 +395,12 @@ export default async function SettingsPage() {
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
               <SectionHeader>Day close &amp; Z-report</SectionHeader>
               <DayCloseCard cutoff={dayCutoff} emails={dayEmails} blind={dayBlind} largeTxnEmail={largeTxnEmail} />
+            </div>
+          )}
+          {hasFloorService(business) && (role === "owner" || role === "manager") && (
+            <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
+              <SectionHeader>Scheduled report email</SectionHeader>
+              <ScheduledReportCard enabled={schedReportEnabled} frequency={schedReportFreq} weekday={schedReportWeekday} recipients={schedReportRecipients} />
             </div>
           )}
           {hasFloorService(business) && (
