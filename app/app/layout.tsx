@@ -36,6 +36,7 @@ export default async function AppLayout({
     // Full-service time clock — any role can open it (staff clock in by PIN).
     if (hasFloorService(business)) {
       extras.push({ href: "/app/clock", label: "Time clock" });
+      extras.push({ href: "/app/checklists", label: "Checklists" });
       extras.push({ href: "/app/reservations", label: "Reservations" });
     }
     if (role === "owner" || role === "manager") {
