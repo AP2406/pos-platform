@@ -7,6 +7,7 @@ import { listPendingApprovals, decideApproval, type ApprovalRow } from "./action
 function labelKind(k: string): string {
   if (k === "void") return "Void";
   if (k === "shift_swap") return "Shift swap";
+  if (k === "manager_call") return "🛎️ Manager needed";
   return k.charAt(0).toUpperCase() + k.slice(1);
 }
 
@@ -58,8 +59,10 @@ export function ApprovalsClient({ initial }: { initial: ApprovalRow[] }) {
   return (
     <div className="space-y-3 max-w-2xl">
       {err && <p className="text-sm text-red-600">{err}</p>}
-      {rows.map((r) => (
-        <div key={r.id} className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 flex items-center justify-between gap-3">
+      {rows.map((r) => {
+        const isCall = r.kind === "manager_call";
+        return (
+        <div key={r.id} className={"bg-card ring-1 shadow-elevation rounded-xl p-4 flex items-center justify-between gap-3 " + (isCall ? "ring-amber-500/40" : "ring-line")}>
           <div className="min-w-0">
             <div className="font-medium">
               {labelKind(r.kind)}
@@ -72,15 +75,24 @@ export function ApprovalsClient({ initial }: { initial: ApprovalRow[] }) {
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
-            <Button size="sm" variant="outline" onClick={() => decide(r.id, false)} disabled={pending}>
-              Deny
-            </Button>
-            <Button size="sm" onClick={() => decide(r.id, true)} disabled={pending}>
-              Approve
-            </Button>
+            {isCall ? (
+              <Button size="sm" onClick={() => decide(r.id, true)} disabled={pending}>
+                Acknowledge
+              </Button>
+            ) : (
+              <>
+                <Button size="sm" variant="outline" onClick={() => decide(r.id, false)} disabled={pending}>
+                  Deny
+                </Button>
+                <Button size="sm" onClick={() => decide(r.id, true)} disabled={pending}>
+                  Approve
+                </Button>
+              </>
+            )}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -11,7 +11,7 @@ import { createOrder, searchCustomers, quickCreateCustomer } from "./actions";
 import { finalizeSplitCheck, type SplitResultOrder } from "./split-actions";
 import { SplitSheet, type SplitCheck } from "./split-sheet";
 import { verifyManagerPin } from "./approval-actions";
-import { requestRegisterApproval, getApprovalStatus } from "../approvals/actions";
+import { requestRegisterApproval, getApprovalStatus, requestManagerCall } from "../approvals/actions";
 import { ALLERGENS, allergenLabels } from "@/lib/allergens";
 import {
   holdTicket,
@@ -369,6 +369,14 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   // Server assigned to this table/to-go ticket (change-server).
   const [serverName, setServerName] = useState<string | null>(tableBinding?.serverName ?? null);
   const [serverSheet, setServerSheet] = useState(false);
+  // E5: one-tap silent "call manager" alert with table context.
+  const [mgrCalled, setMgrCalled] = useState(false);
+  async function callManager() {
+    if (mgrCalled) return;
+    setMgrCalled(true);
+    try { await requestManagerCall({ context: tableBinding?.tableLabel ?? undefined }); } catch { /* best-effort */ }
+    setTimeout(() => setMgrCalled(false), 5000);
+  }
   // Seat-level ordering: a real table (not takeout) splits its order by seat.
   const tableMode = !!(tableBinding && tableBinding.tableId);
   const [seatCount, setSeatCount] = useState<number>(() => {
@@ -2499,6 +2507,17 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
               {tableMode && (
                 <button type="button" onClick={openMoveTable} disabled={pending} className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent disabled:opacity-50">
                   Move
+                </button>
+              )}
+              {hasStaff && (
+                <button
+                  type="button"
+                  onClick={callManager}
+                  disabled={mgrCalled}
+                  title="Silently alert a manager"
+                  className={"flex items-center gap-1.5 text-xs rounded-md border px-2.5 py-1.5 " + (mgrCalled ? "border-emerald-500/50 text-emerald-400" : "border-sidebar-border hover:bg-sidebar-accent")}
+                >
+                  {mgrCalled ? "✓ Manager alerted" : "🛎️ Manager"}
                 </button>
               )}
               <RegisterRefund businessName={businessName} />

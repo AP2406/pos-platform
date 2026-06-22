@@ -126,6 +126,52 @@ export async function requestRegisterApproval(input: {
   return { ok: true, id: data.id as string };
 }
 
+// E5: a general-purpose "call manager / need help" silent alert from the
+// register — no approval to execute, just a request the manager acknowledges.
+// Reuses the approval queue (kind 'manager_call') + push, with table context.
+export async function requestManagerCall(input: {
+  context?: string;
+  note?: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const active = await getActiveStaff();
+
+  // Avoid stacking duplicate pending calls from the same staff for the same table.
+  const { data: dup } = await supabase
+    .from("approval_requests")
+    .select("id")
+    .eq("business_id", business.id)
+    .eq("kind", "manager_call")
+    .eq("status", "pending")
+    .eq("requested_by", active ? active.id : "")
+    .maybeSingle();
+  if (dup) return { ok: true };
+
+  const { error } = await supabase.from("approval_requests").insert({
+    business_id: business.id,
+    kind: "manager_call",
+    order_id: null,
+    reason_note: input.note ? input.note.slice(0, 500) : null,
+    requested_by: active ? active.id : null,
+    requested_by_name: active ? active.name : null,
+    status: "pending",
+    payload: { source: "register", context: input.context ?? null },
+  });
+  if (error) {
+    console.error("requestManagerCall:", error);
+    return { error: "Could not send the alert." };
+  }
+
+  await notifyBusiness(business.id, "exception", {
+    title: "🛎️ Manager needed",
+    body: (input.context ? input.context + " — " : "") + (active ? active.name : "Register") + (input.note ? ": " + input.note : ""),
+    url: "/app/approvals",
+  });
+  revalidatePath("/app/approvals");
+  return { ok: true };
+}
+
 // Polled by the register while it waits on a sent approval.
 export async function getApprovalStatus(
   id: string
