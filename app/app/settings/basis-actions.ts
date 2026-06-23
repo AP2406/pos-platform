@@ -37,3 +37,16 @@ export async function setLegalEntity(name: string): Promise<{ ok: true } | { err
   revalidatePath("/app/settings");
   return { ok: true };
 }
+
+// F9: fiscal-year start month (1–12). settings.fiscal_year_start.
+export async function setFiscalYearStart(month: number): Promise<{ ok: true } | { error: string }> {
+  const { business, role } = await requireBusiness();
+  if (role !== "owner" && role !== "manager") return { error: "Not allowed." };
+  const m = Math.min(12, Math.max(1, Math.round(Number(month) || 1)));
+  const supabase = await createClient();
+  const current = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
+  const { error } = await supabase.from("businesses").update({ settings: { ...current, fiscal_year_start: m } }).eq("id", business.id);
+  if (error) return { error: "Could not save." };
+  revalidatePath("/app/accounting/year-end");
+  return { ok: true };
+}

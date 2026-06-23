@@ -137,6 +137,9 @@ export default async function AccountingPage({
           <Link href="/app/accounting/payroll" className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent">
             Payroll
           </Link>
+          <Link href="/app/accounting/year-end" className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent">
+            Year-end
+          </Link>
         </div>
       </div>
 
