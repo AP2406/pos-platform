@@ -35,6 +35,25 @@ export default async function AccountingPage({
   const pc = await primeCostSummary(supabase, business.id, period.startIso, period.endIso, s.netSales);
   const fv = await foodCostVariance(supabase, business.id, period.startIso, period.endIso);
 
+  // F5: GST34 remittance worksheet — net tax = tax collected on sales − input
+  // tax credits (recoverable GST/HST on vendor invoices dated in the period).
+  const { data: itcRows } = await supabase
+    .from("vendor_invoices")
+    .select("tax, total, itc_eligible, invoice_date")
+    .eq("business_id", business.id)
+    .neq("status", "void")
+    .not("invoice_date", "is", null)
+    .gte("invoice_date", period.startIso.slice(0, 10))
+    .lt("invoice_date", period.endIso.slice(0, 10));
+  let itcTotal = 0, purchaseTotal = 0, itcCount = 0;
+  for (const r of itcRows ?? []) {
+    purchaseTotal += Number(r.total) || 0;
+    if (r.itc_eligible !== false) { itcTotal += Number(r.tax) || 0; itcCount++; }
+  }
+  itcTotal = Math.round(itcTotal * 100) / 100;
+  purchaseTotal = Math.round(purchaseTotal * 100) / 100;
+  const netTax = Math.round((s.taxTotal - itcTotal) * 100) / 100;
+
   // Period-over-period / YoY comparison (optional).
   const cmpMode = sp.cmp === "prev" || sp.cmp === "yoy" ? sp.cmp : null;
   const cmpPeriod = cmpMode ? comparePeriod(period, cmpMode) : null;
@@ -198,6 +217,19 @@ export default async function AccountingPage({
           <Line label="Taxable base" value={money(s.taxableBase)} />
           <Line label="Exempt / zero-rated" value={money(s.exemptBase)} />
           <Line label="Total tax payable" value={money(s.taxTotal)} strong />
+        </div>
+
+        {/* F5: GST34 remittance worksheet */}
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-5 text-sm">
+          <h2 className="font-semibold mb-2">GST/HST return (GST34) <span className="text-xs font-normal text-muted-foreground">{period.label}</span></h2>
+          <Line label="Line 101 — Sales &amp; other revenue" sub="(pre-tax)" value={money(s.netSales)} />
+          <Line label="Line 105 — GST/HST collected" value={money(s.taxTotal)} />
+          <Line label="Line 108 — Input tax credits (ITCs)" sub={itcCount + " bill" + (itcCount === 1 ? "" : "s") + " · " + money(purchaseTotal) + " purchases"} value={"(" + money(itcTotal) + ")"} />
+          <div className="border-t border-border my-1" />
+          <Line label="Line 109 — Net tax" value={money(netTax)} strong />
+          <p className="text-[11px] text-muted-foreground mt-2">
+            {netTax >= 0 ? "Amount to remit to CRA." : "Refund expected from CRA."} ITCs are the recoverable GST/HST on vendor bills dated in this period (toggle a bill&apos;s ITC eligibility under Purchasing → Invoices). Worksheet only — confirm against your filing.
+          </p>
         </div>
 
         <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-5 text-sm">

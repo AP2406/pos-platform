@@ -19,6 +19,9 @@ export type InvoiceInput = {
   glAccount?: string | null;
   attachmentUrl?: string | null;
   notes?: string | null;
+  itcEligible?: boolean;
+  expenseCategory?: string | null;
+  mealsEntertainment?: boolean;
 };
 
 export async function createVendorInvoice(input: InvoiceInput): Promise<{ ok: true } | { error: string }> {
@@ -45,6 +48,9 @@ export async function createVendorInvoice(input: InvoiceInput): Promise<{ ok: tr
     gl_account: (input.glAccount || "").trim().slice(0, 120) || null,
     attachment_url: (input.attachmentUrl || "").trim().slice(0, 1000) || null,
     notes: (input.notes || "").trim().slice(0, 1000) || null,
+    itc_eligible: input.itcEligible !== false,
+    expense_category: (input.expenseCategory || "").trim().slice(0, 80) || null,
+    meals_entertainment: input.mealsEntertainment === true,
     status: "open",
     created_by: user ? user.id : null,
   });
@@ -52,6 +58,16 @@ export async function createVendorInvoice(input: InvoiceInput): Promise<{ ok: tr
     console.error("createVendorInvoice:", error);
     return { error: "Could not save the invoice." };
   }
+  revalidatePath("/app/purchasing/invoices");
+  return { ok: true };
+}
+
+export async function setInvoiceItc(id: string, itcEligible: boolean): Promise<{ ok: true } | { error: string }> {
+  const { business, role } = await requireBusiness();
+  if (role !== "owner" && role !== "manager") return { error: "Not allowed." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("vendor_invoices").update({ itc_eligible: itcEligible }).eq("id", id).eq("business_id", business.id);
+  if (error) return { error: "Could not update." };
   revalidatePath("/app/purchasing/invoices");
   return { ok: true };
 }

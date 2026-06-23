@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createVendorInvoice, setInvoiceStatus, deleteVendorInvoice } from "./actions";
+import { createVendorInvoice, setInvoiceStatus, deleteVendorInvoice, setInvoiceItc } from "./actions";
 
 export type Invoice = {
   id: string;
@@ -19,19 +19,23 @@ export type Invoice = {
   attachment_url: string | null;
   status: string;
   notes: string | null;
+  itc_eligible: boolean;
 };
 type Vendor = { id: string; name: string };
+type Aging = { current: number; b30: number; b60: number; b90: number; over: number; total: number };
 
 export function InvoicesClient({
   invoices,
   vendors,
   currency,
   canManage,
+  aging,
 }: {
   invoices: Invoice[];
   vendors: Vendor[];
   currency: string;
   canManage: boolean;
+  aging: Aging;
 }) {
   const money = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency }).format(Math.round((Number(n) || 0) * 100) / 100);
   const [adding, setAdding] = useState(false);
@@ -47,11 +51,14 @@ export function InvoicesClient({
   const [gl, setGl] = useState("");
   const [url, setUrl] = useState("");
   const [notes, setNotes] = useState("");
+  const [itc, setItc] = useState(true);
+  const [category, setCategory] = useState("");
+  const [meals, setMeals] = useState(false);
 
   const total = (Number(subtotal) || 0) + (Number(tax) || 0);
 
   function reset() {
-    setVendorId(""); setNum(""); setInvDate(""); setDueDate(""); setSubtotal(""); setTax(""); setGl(""); setUrl(""); setNotes("");
+    setVendorId(""); setNum(""); setInvDate(""); setDueDate(""); setSubtotal(""); setTax(""); setGl(""); setUrl(""); setNotes(""); setItc(true); setCategory(""); setMeals(false);
   }
   function save() {
     setErr(null);
@@ -59,6 +66,7 @@ export function InvoicesClient({
       const res = await createVendorInvoice({
         vendorId: vendorId || null, invoiceNumber: num, invoiceDate: invDate || null, dueDate: dueDate || null,
         subtotal: Number(subtotal) || 0, tax: Number(tax) || 0, glAccount: gl || null, attachmentUrl: url || null, notes: notes || null,
+        itcEligible: itc, expenseCategory: category || null, mealsEntertainment: meals,
       });
       if ("error" in res) { setErr(res.error); return; }
       reset(); setAdding(false);
@@ -86,6 +94,28 @@ export function InvoicesClient({
         <Stat label="Overdue" value={money(overdueTotal)} hint={overdue.length + " past due"} tone={overdue.length > 0 ? "warn" : undefined} />
         <Stat label="Invoices" value={String(invoices.length)} />
       </div>
+
+      {/* F3: AP aging */}
+      {aging.total > 0 && (
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 mb-5">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">AP aging — open bills by age</div>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-sm">
+            {[
+              { k: "Current", v: aging.current },
+              { k: "1–30", v: aging.b30 },
+              { k: "31–60", v: aging.b60 },
+              { k: "61–90", v: aging.b90, warn: true },
+              { k: "90+", v: aging.over, warn: true },
+              { k: "Total", v: aging.total, strong: true },
+            ].map((c) => (
+              <div key={c.k}>
+                <div className="text-[11px] text-muted-foreground">{c.k}</div>
+                <div className={"tabular-nums " + (c.strong ? "font-semibold" : "") + (c.warn && c.v > 0 ? " text-amber-600" : "")}>{money(c.v)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {canManage && (
         <div className="mb-5">
@@ -129,6 +159,20 @@ export function InvoicesClient({
                   <Label className="text-xs">Attachment link <span className="text-muted-foreground">(optional)</span></Label>
                   <Input value={url} onChange={(e) => setUrl(e.target.value)} className="h-9" placeholder="https://…" />
                 </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Expense category <span className="text-muted-foreground">(P&amp;L)</span></Label>
+                  <Input value={category} onChange={(e) => setCategory(e.target.value)} className="h-9" placeholder="Rent / Supplies / Utilities" />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-4">
+                <label className="flex items-center gap-2 text-sm select-none">
+                  <input type="checkbox" checked={itc} onChange={(e) => setItc(e.target.checked)} className="h-4 w-4" />
+                  <span>GST/HST is a recoverable ITC</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm select-none">
+                  <input type="checkbox" checked={meals} onChange={(e) => setMeals(e.target.checked)} className="h-4 w-4" />
+                  <span>Meals &amp; entertainment (50%)</span>
+                </label>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Notes</Label>
@@ -175,7 +219,19 @@ export function InvoicesClient({
                       </td>
                       <td className="px-3 py-2">{i.vendorName ?? <span className="text-muted-foreground">—</span>}</td>
                       <td className="px-3 py-2 text-muted-foreground">{i.gl_account ?? "—"}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium">{money(i.total)}{i.tax > 0 && <span className="block text-[11px] text-muted-foreground font-normal">incl {money(i.tax)} tax</span>}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-medium">
+                        {money(i.total)}
+                        {i.tax > 0 && (
+                          <span className="block text-[11px] text-muted-foreground font-normal">
+                            incl {money(i.tax)} tax{" "}
+                            {canManage ? (
+                              <button onClick={() => start(async () => { await setInvoiceItc(i.id, !i.itc_eligible); })} disabled={pending} className={"underline " + (i.itc_eligible ? "text-emerald-600" : "text-muted-foreground")}>
+                                {i.itc_eligible ? "ITC" : "no ITC"}
+                              </button>
+                            ) : (i.itc_eligible ? "· ITC" : "· no ITC")}
+                          </span>
+                        )}
+                      </td>
                       <td className={"px-3 py-2 text-right tabular-nums " + (isOverdue ? "text-amber-600 font-medium" : "text-muted-foreground")}>{fmtDate(i.due_date)}</td>
                       <td className="px-3 py-2 text-right">
                         <StatusPill status={i.status} overdue={!!isOverdue} />
