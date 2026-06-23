@@ -125,6 +125,9 @@ export default async function AccountingPage({
           <Link href="/app/accounting/deposits" className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent">
             Bank deposits
           </Link>
+          <Link href="/app/accounting/journal-entries" className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent">
+            Journal entries
+          </Link>
         </div>
       </div>
 
