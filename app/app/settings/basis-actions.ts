@@ -23,3 +23,17 @@ export async function setAccountingBasis(basis: "accrual" | "cash"): Promise<{ o
   revalidatePath("/app/accounting");
   return { ok: true };
 }
+
+// F7: a legal-entity name so several locations can roll up to one entity in the
+// consolidated books. settings.legal_entity.
+export async function setLegalEntity(name: string): Promise<{ ok: true } | { error: string }> {
+  const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
+  if (role !== "owner" && role !== "manager") return { error: "Only an owner or manager can change this." };
+  const supabase = await createClient();
+  const current = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
+  const { error } = await supabase.from("businesses").update({ settings: { ...current, legal_entity: (name || "").trim().slice(0, 80) || null } }).eq("id", business.id);
+  if (error) return { error: "Could not save." };
+  revalidatePath("/app/settings");
+  return { ok: true };
+}

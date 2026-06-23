@@ -169,6 +169,7 @@ export default async function SettingsPage() {
   const bookingUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://surgetechpos.com") + "/book/" + business.id;
   const coaRows = (Object.keys(COA_DEFAULTS) as CoaKey[]).map((k) => ({ key: k, name: coa[k].name, code: coa[k].code }));
   const accountingBasis = (daySettings.accounting_basis === "cash" ? "cash" : "accrual") as "accrual" | "cash";
+  const legalEntity = typeof daySettings.legal_entity === "string" ? (daySettings.legal_entity as string) : "";
   const exTh = parseThresholds(daySettings);
 
   const showFloor =
@@ -446,7 +447,7 @@ export default async function SettingsPage() {
           {hasFloorService(business) && (role === "owner" || role === "manager") && (
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
               <SectionHeader>Accounting basis</SectionHeader>
-              <BasisCard basis={accountingBasis} />
+              <BasisCard basis={accountingBasis} legalEntity={legalEntity} />
             </div>
           )}
           {hasFloorService(business) && (
