@@ -3,7 +3,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { accountingSummary, resolvePeriod } from "../data";
 import { primeCostSummary } from "../cost";
-import { buildJournal, resolveCoa } from "../journal";
+import { buildJournal, resolveCoa, compDiscountAccount, type CoaKey } from "../journal";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,26 @@ export async function GET(request: Request) {
   end.setUTCDate(end.getUTCDate() - 1);
   const dateStr = end.toISOString().slice(0, 10);
   const memo = "DSJE " + period.label + " — " + business.name;
-  const lines = buildJournal(s, pc.cogs, coa, memo);
+
+  // F10: split comps/discounts by reason into their mapped contra accounts.
+  const { data: cdRows } = await supabase
+    .from("audit_events")
+    .select("action, metadata, reason_code")
+    .eq("business_id", business.id)
+    .in("action", ["comp", "discount"])
+    .gte("created_at", period.startIso)
+    .lt("created_at", period.endIso);
+  const contraMap = new Map<CoaKey, number>();
+  for (const e of cdRows ?? []) {
+    const action = e.action as "comp" | "discount";
+    const amt = Number((e.metadata as { amount?: number } | null)?.amount) || 0;
+    if (amt <= 0) continue;
+    const key = compDiscountAccount(action, (e.reason_code as string | null) ?? null);
+    contraMap.set(key, (contraMap.get(key) ?? 0) + amt);
+  }
+  const contra = Array.from(contraMap.entries()).map(([key, amount]) => ({ key, amount: Math.round(amount * 100) / 100 }));
+
+  const lines = buildJournal(s, pc.cogs, coa, memo, contra);
 
   const esc = (v: string) => '"' + String(v).replace(/"/g, '""') + '"';
   const n = (x: number) => (x ? (Math.round(x * 100) / 100).toFixed(2) : "");

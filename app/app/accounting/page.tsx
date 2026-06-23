@@ -35,24 +35,37 @@ export default async function AccountingPage({
   const pc = await primeCostSummary(supabase, business.id, period.startIso, period.endIso, s.netSales);
   const fv = await foodCostVariance(supabase, business.id, period.startIso, period.endIso);
 
-  // F5: GST34 remittance worksheet — net tax = tax collected on sales − input
-  // tax credits (recoverable GST/HST on vendor invoices dated in the period).
-  const { data: itcRows } = await supabase
+  // F4/F5: vendor bills in the period on the configured basis (accrual = invoice
+  // date; cash = payment date) → input tax credits + operating expenses.
+  const basis = (((business as { settings?: Record<string, unknown> }).settings ?? {}).accounting_basis === "cash" ? "cash" : "accrual") as "accrual" | "cash";
+  let viQuery = supabase
     .from("vendor_invoices")
-    .select("tax, total, itc_eligible, invoice_date")
-    .eq("business_id", business.id)
-    .neq("status", "void")
-    .not("invoice_date", "is", null)
-    .gte("invoice_date", period.startIso.slice(0, 10))
-    .lt("invoice_date", period.endIso.slice(0, 10));
+    .select("subtotal, tax, total, itc_eligible, expense_category, meals_entertainment, invoice_date, paid_at, status")
+    .eq("business_id", business.id);
+  if (basis === "cash") {
+    viQuery = viQuery.eq("status", "paid").not("paid_at", "is", null).gte("paid_at", period.startIso).lt("paid_at", period.endIso);
+  } else {
+    viQuery = viQuery.neq("status", "void").not("invoice_date", "is", null).gte("invoice_date", period.startIso.slice(0, 10)).lt("invoice_date", period.endIso.slice(0, 10));
+  }
+  const { data: itcRows } = await viQuery;
   let itcTotal = 0, purchaseTotal = 0, itcCount = 0;
+  const opexByCat = new Map<string, number>();
   for (const r of itcRows ?? []) {
     purchaseTotal += Number(r.total) || 0;
-    if (r.itc_eligible !== false) { itcTotal += Number(r.tax) || 0; itcCount++; }
+    const recoverable = r.itc_eligible !== false;
+    if (recoverable) { itcTotal += Number(r.tax) || 0; itcCount++; }
+    // Book expense = pre-tax cost, plus tax when it's NOT a recoverable credit.
+    const expense = (Number(r.subtotal) || 0) + (recoverable ? 0 : Number(r.tax) || 0);
+    const cat = (r.expense_category as string | null)?.trim() || "Uncategorized";
+    opexByCat.set(cat, (opexByCat.get(cat) ?? 0) + expense);
   }
   itcTotal = Math.round(itcTotal * 100) / 100;
   purchaseTotal = Math.round(purchaseTotal * 100) / 100;
   const netTax = Math.round((s.taxTotal - itcTotal) * 100) / 100;
+  const opexRows = Array.from(opexByCat.entries()).map(([cat, amt]) => ({ cat, amt: Math.round(amt * 100) / 100 })).sort((a, b) => b.amt - a.amt);
+  const opexTotal = Math.round(opexRows.reduce((s2, r) => s2 + r.amt, 0) * 100) / 100;
+  const grossProfit = Math.round((s.netSales - pc.cogs) * 100) / 100;
+  const operatingIncome = Math.round((grossProfit - opexTotal) * 100) / 100;
 
   // Period-over-period / YoY comparison (optional).
   const cmpMode = sp.cmp === "prev" || sp.cmp === "yoy" ? sp.cmp : null;
@@ -217,6 +230,26 @@ export default async function AccountingPage({
           <Line label="Taxable base" value={money(s.taxableBase)} />
           <Line label="Exempt / zero-rated" value={money(s.exemptBase)} />
           <Line label="Total tax payable" value={money(s.taxTotal)} strong />
+        </div>
+
+        {/* F4: income statement (accrual or cash basis) */}
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-5 text-sm">
+          <h2 className="font-semibold mb-2">Income statement <span className="text-xs font-normal text-muted-foreground">{basis} basis · {period.label}</span></h2>
+          <Line label="Revenue" sub="(net sales)" value={money(s.netSales)} />
+          <Line label="Cost of goods sold" value={"(" + money(pc.cogs) + ")"} />
+          <div className="border-t border-border my-1" />
+          <Line label="Gross profit" value={money(grossProfit)} strong />
+          {opexRows.length > 0 ? (
+            <div className="mt-1 pt-1 border-t border-dashed border-border">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground mb-0.5">Operating expenses</div>
+              {opexRows.map((r) => <Line key={r.cat} label={r.cat} value={"(" + money(r.amt) + ")"} />)}
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground mt-1">No vendor bills {basis === "cash" ? "paid" : "dated"} in this period — record bills under Purchasing → Invoices with an expense category.</p>
+          )}
+          <div className="border-t border-border my-1" />
+          <Line label="Operating income" value={money(operatingIncome)} strong />
+          <p className="text-[11px] text-muted-foreground mt-2">Before labor/payroll, depreciation, interest &amp; tax. Labor is in the prime-cost card. Switch basis under Settings → Accounting basis.</p>
         </div>
 
         {/* F5: GST34 remittance worksheet */}

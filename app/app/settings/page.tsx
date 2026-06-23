@@ -12,6 +12,7 @@ import { RolesCard } from "./roles-card";
 import { listRoles } from "./roles-actions";
 import { DayCloseCard } from "./day-close-card";
 import { CoaCard } from "./coa-card";
+import { BasisCard } from "./basis-card";
 import { resolveCoa, COA_DEFAULTS, type CoaKey } from "../accounting/journal";
 import { OvertimeCard } from "./overtime-card";
 import { parseOvertime } from "@/lib/services/overtime";
@@ -167,6 +168,7 @@ export default async function SettingsPage() {
   const kdsPrinterFallback = daySettings.kds_printer_fallback === true;
   const bookingUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://surgetechpos.com") + "/book/" + business.id;
   const coaRows = (Object.keys(COA_DEFAULTS) as CoaKey[]).map((k) => ({ key: k, name: coa[k].name, code: coa[k].code }));
+  const accountingBasis = (daySettings.accounting_basis === "cash" ? "cash" : "accrual") as "accrual" | "cash";
   const exTh = parseThresholds(daySettings);
 
   const showFloor =
@@ -439,6 +441,12 @@ export default async function SettingsPage() {
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
               <SectionHeader>Chart of accounts (QBO/Xero export)</SectionHeader>
               <CoaCard rows={coaRows} />
+            </div>
+          )}
+          {hasFloorService(business) && (role === "owner" || role === "manager") && (
+            <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
+              <SectionHeader>Accounting basis</SectionHeader>
+              <BasisCard basis={accountingBasis} />
             </div>
           )}
           {hasFloorService(business) && (

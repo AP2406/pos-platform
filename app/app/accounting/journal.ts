@@ -9,7 +9,9 @@ import type { AccountingSummary } from "./data";
 export type CoaKey =
   | "sales" | "service_charge" | "tax_payable" | "tips_payable"
   | "cash" | "card" | "gift_card" | "store_credit" | "other"
-  | "cogs" | "inventory" | "sales_returns" | "clearing";
+  | "cogs" | "inventory" | "sales_returns" | "clearing"
+  // F10: comp/discount/promo contra-revenue accounts, by reason.
+  | "comp_manager" | "comp_meal" | "discount_loyalty" | "discount_promo";
 
 export const COA_DEFAULTS: Record<CoaKey, { name: string; code: string }> = {
   sales: { name: "Food & beverage sales", code: "4000" },
@@ -25,7 +27,18 @@ export const COA_DEFAULTS: Record<CoaKey, { name: string; code: string }> = {
   inventory: { name: "Inventory", code: "1200" },
   sales_returns: { name: "Sales returns & refunds", code: "4900" },
   clearing: { name: "Over/short clearing", code: "9999" },
+  comp_manager: { name: "Comps — manager", code: "4700" },
+  comp_meal: { name: "Comps — employee meals", code: "4710" },
+  discount_loyalty: { name: "Discounts — loyalty", code: "4720" },
+  discount_promo: { name: "Discounts — promo", code: "4730" },
 };
+
+// F10: map a comp/discount audit reason code to its contra-revenue account.
+export function compDiscountAccount(action: "comp" | "discount", reasonCode: string | null): CoaKey {
+  const r = (reasonCode || "").toLowerCase();
+  if (action === "comp") return /meal|staff|employee|shift/.test(r) ? "comp_meal" : "comp_manager";
+  return /loyal|reward|point|member/.test(r) ? "discount_loyalty" : "discount_promo";
+}
 
 export type Coa = Record<CoaKey, { name: string; code: string }>;
 
@@ -51,7 +64,8 @@ export function buildJournal(
   s: AccountingSummary,
   cogs: number,
   coa: Coa,
-  memo: string
+  memo: string,
+  contra?: { key: CoaKey; amount: number }[]
 ): JournalLine[] {
   const lines: JournalLine[] = [];
   const debit = (k: CoaKey, amt: number) => { if (r2(amt) !== 0) lines.push({ account: coa[k].name, code: coa[k].code, debit: r2(amt), credit: 0, memo }); };
@@ -64,10 +78,15 @@ export function buildJournal(
     debit(k, t.amount);
     totalDebit += t.amount;
   }
-  // Revenue / liabilities (credits).
+  // F10: comps/discounts post to their own contra-revenue accounts (debits),
+  // grossing sales up — instead of disappearing into the clearing line.
+  let contraTotal = 0;
+  for (const c of contra ?? []) { debit(c.key, c.amount); contraTotal += r2(c.amount); totalDebit += r2(c.amount); }
+
+  // Revenue / liabilities (credits). Sales is grossed up by the contra total.
   let totalCredit = 0;
   const addCredit = (k: CoaKey, amt: number) => { credit(k, amt); totalCredit += amt; };
-  addCredit("sales", s.netSales);
+  addCredit("sales", r2(s.netSales + contraTotal));
   addCredit("service_charge", s.serviceCharge);
   addCredit("tax_payable", s.taxTotal);
   addCredit("tips_payable", s.tips);
