@@ -131,6 +131,9 @@ export default async function AccountingPage({
           <Link href="/app/accounting/consolidated" className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent">
             Consolidated
           </Link>
+          <Link href="/app/accounting/deferred" className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent">
+            Deferred &amp; breakage
+          </Link>
         </div>
       </div>
 
