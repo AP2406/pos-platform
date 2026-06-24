@@ -12,12 +12,14 @@ import {
 import {
   updateRolePermissions,
   setRoleCaps,
+  setRoleHiddenNav,
   createRole,
   cloneRole,
   renameRole,
   deleteRole,
   type RoleRow,
 } from "./roles-actions";
+import { NAV_MODULES } from "@/lib/nav-modules";
 
 export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
   const [roles, setRoles] = useState<RoleRow[]>(initialRoles);
@@ -28,6 +30,7 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
   const [draftDiscountPct, setDraftDiscountPct] = useState("");
   const [draftRefundCap, setDraftRefundCap] = useState("");
   const [draftVoidWindow, setDraftVoidWindow] = useState("");
+  const [draftHidden, setDraftHidden] = useState<Set<string>>(new Set());
   const [rowError, setRowError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +49,7 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
     setDraftDiscountPct(r.discountPctCap != null ? String(r.discountPctCap) : "");
     setDraftRefundCap(r.refundCap != null ? String(r.refundCap) : "");
     setDraftVoidWindow(r.voidWindowMin != null ? String(r.voidWindowMin) : "");
+    setDraftHidden(new Set(r.hiddenNav ?? []));
   }
 
   function toggle(p: PermissionKey) {
@@ -68,7 +72,10 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
       if ("error" in res) { setRowError(res.error); return; }
       const capsRes = await setRoleCaps(r.id, { compCap, discountCap, discountPctCap, refundCap, voidWindowMin });
       if ("error" in capsRes) { setRowError(capsRes.error); return; }
-      setRoles((prev) => prev.map((x) => (x.id === r.id ? { ...x, permissions: perms, compCap, discountCap, discountPctCap, refundCap, voidWindowMin } : x)));
+      const hidden = Array.from(draftHidden);
+      const navRes = await setRoleHiddenNav(r.id, hidden);
+      if ("error" in navRes) { setRowError(navRes.error); return; }
+      setRoles((prev) => prev.map((x) => (x.id === r.id ? { ...x, permissions: perms, compCap, discountCap, discountPctCap, refundCap, voidWindowMin, hiddenNav: hidden } : x)));
       setOpenId(null);
     });
   }
@@ -225,6 +232,20 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
                   <p className="text-[11px] text-muted-foreground">
                     A comp/discount/refund over its cap (or a void past the window) requires approval. Blank = no limit. Approval routing is configured in Customization → Access &amp; roles.
                   </p>
+
+                  <div className="pt-1">
+                    <Label className="text-xs">Visible modules</Label>
+                    <p className="text-[11px] text-muted-foreground mb-1">Uncheck a module to hide it from this role&apos;s navigation. Core screens always stay visible.</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-0.5">
+                      {NAV_MODULES.map((m) => (
+                        <label key={m.href} className="flex items-center gap-2 text-xs py-0.5 cursor-pointer select-none">
+                          <input type="checkbox" checked={!draftHidden.has(m.href)} onChange={() => setDraftHidden((prev) => { const next = new Set(prev); if (next.has(m.href)) next.delete(m.href); else next.add(m.href); return next; })} className="h-3.5 w-3.5" />
+                          {m.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
                   {rowError && <p className="text-sm text-red-600">{rowError}</p>}
                   <div className="flex items-center gap-2">
                     <Button size="sm" onClick={() => save(r)} disabled={pending}>

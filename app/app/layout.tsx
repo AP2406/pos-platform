@@ -5,6 +5,7 @@ import { AssistantWidget } from "./_components/assistant-widget";
 import { VocabProvider } from "./_components/vocab-provider";
 import { resolveNav, getVocab, getFields } from "@/lib/modules/resolve";
 import { hasFloorService } from "@/lib/modules/modes";
+import { systemRoleForLegacy } from "@/lib/services/permissions";
 
 export default async function AppLayout({
   children,
@@ -60,7 +61,24 @@ export default async function AppLayout({
       extras.push({ href: "/app/audit", label: "Activity log" });
     }
   }
-  const finalNav = [...nav, ...extras];
+
+  // CUST-1: per-role nav visibility — hide the optional modules this viewer's
+  // role marked hidden (core nav is never hide-able). Migration-resilient.
+  let hiddenNav: string[] = [];
+  try {
+    const navClient = await createClient();
+    const { data: roleRow } = await navClient
+      .from("roles")
+      .select("hidden_nav")
+      .eq("business_id", business.id)
+      .eq("key", systemRoleForLegacy(role))
+      .maybeSingle();
+    if (roleRow && Array.isArray((roleRow as { hidden_nav?: unknown }).hidden_nav)) {
+      hiddenNav = (roleRow as { hidden_nav: unknown[] }).hidden_nav as string[];
+    }
+  } catch { /* pre-0070 or no role row — show everything */ }
+  const visibleExtras = hiddenNav.length ? extras.filter((e) => !hiddenNav.includes(e.href)) : extras;
+  const finalNav = [...nav, ...visibleExtras];
 
   let showOnboarding = false;
   const onboarding =

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { PERMISSION_KEYS } from "@/lib/services/permissions";
+import { NAV_MODULES } from "@/lib/nav-modules";
 
 export type RoleRow = {
   id: string;
@@ -121,6 +122,28 @@ export async function setRoleCaps(
     return { error: "Could not save the caps." };
   }
   revalidatePath("/app/settings");
+  return { ok: true };
+}
+
+// CUST-1: per-role nav visibility — the optional modules this role can't see.
+export async function setRoleHiddenNav(roleId: string, hidden: string[]): Promise<{ ok: true } | { error: string }> {
+  if (!roleId) return { error: "Missing role." };
+  const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
+  if (!canManage(role)) return { error: "Only an owner or manager can change visibility." };
+  const allowed = new Set(NAV_MODULES.map((m) => m.href));
+  const clean = Array.from(new Set((hidden || []).filter((h) => allowed.has(h))));
+  const supabase = await createClient();
+  const { error } = await supabase.from("roles").update({ hidden_nav: clean }).eq("id", roleId).eq("business_id", business.id);
+  if (error) {
+    // Pre-0070 (column doesn't exist): degrade silently so the rest of the role
+    // save still succeeds; nav visibility activates once the migration runs.
+    if ((error as { code?: string }).code === "42703") return { ok: true };
+    console.error("setRoleHiddenNav:", error);
+    return { error: "Could not save nav visibility." };
+  }
+  revalidatePath("/app/settings");
+  revalidatePath("/app", "layout");
   return { ok: true };
 }
 
