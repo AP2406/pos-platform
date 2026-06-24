@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, SectionHeader } from "../_components/ui";
@@ -558,6 +559,12 @@ export default async function SettingsPage() {
         title="Settings"
         subtitle="Manage your business profile and account."
       />
+      {hasFloorService(business) && (
+        <Link href="/app/settings/customization" className="block bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 mb-4 hover:bg-accent/40">
+          <div className="font-medium text-sm">Customization →</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Shape settings, access, workflow, layout &amp; branding at the business / location / role / user level — with sensible defaults.</div>
+        </Link>
+      )}
       <SettingsTabs sections={sections} />
     </div>
   );

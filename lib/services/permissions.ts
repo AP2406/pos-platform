@@ -19,6 +19,7 @@ export const PERMISSION_KEYS = [
   "edit_staff",
   "change_tax",
   "close_day",
+  "manage_settings",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -40,6 +41,7 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   edit_staff: "Edit staff & PINs",
   change_tax: "Change tax",
   close_day: "Close the day",
+  manage_settings: "Manage settings & customization",
 };
 
 // The 6 default system roles and their permission sets (the matrix approved in
