@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createStaff, updateStaff, setStaffPin, setStaffActive, setStaffPayRate } from "./staff-actions";
+import { createStaff, updateStaff, setStaffPin, setStaffActive, setStaffPayRate, setStaffPermissionOverride } from "./staff-actions";
+import { PERMISSION_KEYS, PERMISSION_LABELS, type PermissionKey } from "@/lib/services/permissions";
 
 type Staff = {
   id: string;
@@ -14,8 +15,9 @@ type Staff = {
   is_active: boolean;
   has_pin: boolean;
   pay_rate: number | null;
+  overrides: Record<string, boolean>;
 };
-type RolePick = { id: string; name: string; key: string | null };
+type RolePick = { id: string; name: string; key: string | null; permissions?: string[] };
 
 const LEGACY_ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
@@ -49,6 +51,27 @@ export function StaffCard({
   const [editPayRate, setEditPayRate] = useState("");
   const [newPin, setNewPin] = useState("");
   const [rowError, setRowError] = useState<string | null>(null);
+  const [showOverrides, setShowOverrides] = useState(false);
+
+  const roleById = new Map(roles.map((r) => [r.id, r]));
+  function roleGrants(s: Staff, key: string): boolean {
+    const r = s.role_id ? roleById.get(s.role_id) : null;
+    if (r?.key === "owner") return true;
+    return !!r?.permissions?.includes(key);
+  }
+  function setOverride(s: Staff, key: PermissionKey, value: boolean | null) {
+    setRowError(null);
+    startTransition(async () => {
+      const res = await setStaffPermissionOverride(s.id, key, value);
+      if ("error" in res) { setRowError(res.error); return; }
+      setStaff((prev) => prev.map((x) => {
+        if (x.id !== s.id) return x;
+        const ov = { ...x.overrides };
+        if (value === null) delete ov[key]; else ov[key] = value;
+        return { ...x, overrides: ov };
+      }));
+    });
+  }
 
   function roleLabel(s: Staff): string {
     const r = roles.find((x) => x.id === s.role_id);
@@ -78,7 +101,7 @@ export function StaffCard({
       }
       setStaff((prev) => [
         ...prev,
-        { id: res.id, name: name.trim(), role: "staff", role_id: roleId, is_active: true, has_pin: true, pay_rate: null },
+        { id: res.id, name: name.trim(), role: "staff", role_id: roleId, is_active: true, has_pin: true, pay_rate: null, overrides: {} },
       ]);
       setName("");
       setRoleId(defaultRoleId);
@@ -213,6 +236,35 @@ export function StaffCard({
                       <Button size="sm" variant="outline" onClick={() => handleToggleActive(s)} disabled={pending}>
                         {s.is_active ? "Disable" : "Enable"}
                       </Button>
+                    </div>
+
+                    {/* CUST-1: per-user permission overrides */}
+                    <div>
+                      <button type="button" onClick={() => setShowOverrides((v) => !v)} className="text-xs text-muted-foreground underline hover:text-foreground">
+                        {showOverrides ? "Hide" : "Permission overrides"}
+                      </button>
+                      {showOverrides && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-[11px] text-muted-foreground">Grant or revoke a single permission for {s.name} without changing their role. &ldquo;Inherit&rdquo; uses the role.</p>
+                          {(PERMISSION_KEYS as readonly PermissionKey[]).map((k) => {
+                            const ov = s.overrides[k]; // true | false | undefined
+                            const base = roleGrants(s, k);
+                            const btn = (label: string, active: boolean, on: () => void, tone?: string) => (
+                              <button type="button" onClick={on} disabled={pending} className={"text-[11px] rounded px-1.5 py-0.5 border " + (active ? (tone ?? "border-foreground bg-accent font-medium") : "border-border text-muted-foreground")}>{label}</button>
+                            );
+                            return (
+                              <div key={k} className="flex items-center justify-between gap-2 py-0.5">
+                                <span className="text-xs">{PERMISSION_LABELS[k]} <span className="text-[10px] text-muted-foreground">(role: {base ? "✓" : "✗"})</span></span>
+                                <span className="flex gap-1 shrink-0">
+                                  {btn("Inherit", ov === undefined, () => setOverride(s, k, null))}
+                                  {btn("Grant", ov === true, () => setOverride(s, k, true), "border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-medium")}
+                                  {btn("Revoke", ov === false, () => setOverride(s, k, false), "border-red-500 bg-red-500/15 text-red-700 dark:text-red-400 font-medium")}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                     {rowError && <p className="text-sm text-red-600">{rowError}</p>}
                   </div>

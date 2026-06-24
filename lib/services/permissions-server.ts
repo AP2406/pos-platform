@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import {
   resolvePermissions,
+  PERMISSION_KEYS,
   type PermissionKey,
 } from "@/lib/services/permissions";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -16,54 +17,63 @@ export type StaffPermissions = {
   keys: PermissionKey[];
   compCap: number | null; // max $ this role can comp without approval (null = unlimited)
   discountCap: number | null;
+  discountPctCap: number | null; // CUST-1
+  refundCap: number | null;
+  voidWindowMin: number | null;
   can: (perm: PermissionKey) => boolean;
 };
 
-// Resolves a staff member's effective permissions: prefers their assigned role's
-// permissions (roles.permissions via role_id), else falls back to the default
-// matrix keyed on the legacy role enum. Returns null if the staff id is unknown
-// or inactive for this business.
+const PERM_SET = new Set<string>(PERMISSION_KEYS as readonly string[]);
+
+// Resolves a staff member's effective permissions: their role's permissions
+// (roles.permissions via role_id), else the default matrix on the legacy role
+// enum, with per-user overrides (CUST-1) applied on top. Migration-resilient:
+// the new staff_members/roles columns are read defensively so the register's
+// sign-in path never breaks before 0070 is applied. Null if unknown/inactive.
 export async function staffPermissionsById(
   supabase: SupabaseClient,
   businessId: string,
   staffId: string
 ): Promise<StaffPermissions | null> {
-  const { data: st } = await supabase
-    .from("staff_members")
-    .select("id, name, role, role_id, is_active")
-    .eq("id", staffId)
-    .eq("business_id", businessId)
-    .maybeSingle();
+  let st = (await supabase.from("staff_members").select("id, name, role, role_id, is_active, permission_overrides").eq("id", staffId).eq("business_id", businessId).maybeSingle()).data as Record<string, unknown> | null;
+  if (st === null) {
+    st = (await supabase.from("staff_members").select("id, name, role, role_id, is_active").eq("id", staffId).eq("business_id", businessId).maybeSingle()).data as Record<string, unknown> | null;
+  }
   if (!st || st.is_active === false) return null;
 
   let customPermissions: string[] | null = null;
-  let compCap: number | null = null;
-  let discountCap: number | null = null;
+  let compCap: number | null = null, discountCap: number | null = null;
+  let discountPctCap: number | null = null, refundCap: number | null = null, voidWindowMin: number | null = null;
   if (st.role_id) {
-    const { data: r } = await supabase
-      .from("roles")
-      .select("permissions, comp_cap, discount_cap")
-      .eq("id", st.role_id as string)
-      .eq("business_id", businessId)
-      .maybeSingle();
-    if (r && Array.isArray(r.permissions)) {
-      customPermissions = r.permissions as string[];
+    let r = (await supabase.from("roles").select("permissions, comp_cap, discount_cap, discount_pct_cap, refund_cap, void_window_min").eq("id", st.role_id as string).eq("business_id", businessId).maybeSingle()).data as Record<string, unknown> | null;
+    if (r === null) {
+      r = (await supabase.from("roles").select("permissions, comp_cap, discount_cap").eq("id", st.role_id as string).eq("business_id", businessId).maybeSingle()).data as Record<string, unknown> | null;
     }
-    if (r && r.comp_cap != null) compCap = Number(r.comp_cap);
-    if (r && r.discount_cap != null) discountCap = Number(r.discount_cap);
+    if (r) {
+      if (Array.isArray(r.permissions)) customPermissions = r.permissions as string[];
+      if (r.comp_cap != null) compCap = Number(r.comp_cap);
+      if (r.discount_cap != null) discountCap = Number(r.discount_cap);
+      if (r.discount_pct_cap != null) discountPctCap = Number(r.discount_pct_cap);
+      if (r.refund_cap != null) refundCap = Number(r.refund_cap);
+      if (r.void_window_min != null) voidWindowMin = Number(r.void_window_min);
+    }
   }
 
-  const set = resolvePermissions({
-    legacyRole: st.role as string,
-    customPermissions,
-  });
+  const set = resolvePermissions({ legacyRole: st.role as string, customPermissions });
+  // CUST-1: per-user overrides — true grants, false revokes a single key.
+  const overrides = (st.permission_overrides ?? {}) as Record<string, unknown>;
+  for (const [k, v] of Object.entries(overrides)) {
+    if (!PERM_SET.has(k)) continue;
+    if (v === true) set.add(k as PermissionKey);
+    else if (v === false) set.delete(k as PermissionKey);
+  }
+
   return {
     staffId: st.id as string,
     name: st.name as string,
     legacyRole: st.role as string,
     keys: Array.from(set),
-    compCap,
-    discountCap,
+    compCap, discountCap, discountPctCap, refundCap, voidWindowMin,
     can: (perm: PermissionKey) => set.has(perm),
   };
 }

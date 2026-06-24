@@ -192,3 +192,47 @@ export async function setStaffActive(
   revalidatePath("/app/settings");
   return { ok: true };
 }
+// CUST-1: grant or revoke a single permission for one staff member, on top of
+// their role (value true = grant, false = revoke, null = clear → inherit). Never
+// changes the role; audited as a permission_override. Owner/manager only.
+export async function setStaffPermissionOverride(
+  staffId: string,
+  key: string,
+  value: boolean | null
+): Promise<{ ok: true } | { error: string }> {
+  const { PERMISSION_KEYS } = await import("@/lib/services/permissions");
+  if (!staffId) return { error: "Missing staff member." };
+  if (!(PERMISSION_KEYS as readonly string[]).includes(key)) return { error: "Unknown permission." };
+  const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
+  if (!canManage(role)) return { error: "Only an owner or manager can change access." };
+
+  const supabase = await createClient();
+  const { data: row, error: readErr } = await supabase
+    .from("staff_members")
+    .select("permission_overrides")
+    .eq("id", staffId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (readErr) return { error: "Per-user overrides need migration 0070 applied." };
+  const overrides = { ...(((row?.permission_overrides ?? {}) as Record<string, boolean>)) };
+  if (value === null) delete overrides[key];
+  else overrides[key] = value;
+
+  const { error } = await supabase
+    .from("staff_members")
+    .update({ permission_overrides: overrides })
+    .eq("id", staffId)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("setStaffPermissionOverride:", error);
+    return { error: "Could not save the override." };
+  }
+  const { data: { user } } = await supabase.auth.getUser();
+  await supabase.from("audit_events").insert({
+    business_id: business.id, actor_id: user ? user.id : null, actor_role: role,
+    action: "permission_override", metadata: { staff_id: staffId, key, value },
+  });
+  revalidatePath("/app/settings");
+  return { ok: true };
+}

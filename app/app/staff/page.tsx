@@ -13,12 +13,11 @@ export default async function StaffPage() {
   if (role !== "owner" && role !== "manager") redirect("/app");
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("staff_members")
-    .select("id, name, role, role_id, is_active, pin_hash, pay_rate")
-    .eq("business_id", business.id)
-    .order("created_at", { ascending: true });
-  const staffList = (data ?? []).map((s) => ({
+  // Migration-resilient: permission_overrides (0070) may not exist yet.
+  const fetchStaff = async (cols: string) => supabase.from("staff_members").select(cols).eq("business_id", business.id).order("created_at", { ascending: true });
+  const full = await fetchStaff("id, name, role, role_id, is_active, pin_hash, pay_rate, permission_overrides");
+  const data = (full.error ? (await fetchStaff("id, name, role, role_id, is_active, pin_hash, pay_rate")).data : full.data) as Record<string, unknown>[] | null;
+  const staffList = ((data ?? []) as Record<string, unknown>[]).map((s) => ({
     id: s.id as string,
     name: s.name as string,
     role: s.role as string,
@@ -26,6 +25,7 @@ export default async function StaffPage() {
     is_active: s.is_active as boolean,
     has_pin: !!s.pin_hash,
     pay_rate: (s.pay_rate as number | null) ?? null,
+    overrides: (s.permission_overrides ?? {}) as Record<string, boolean>,
   }));
   const rolesList = await listRoles();
 
@@ -40,7 +40,7 @@ export default async function StaffPage() {
       <div className="bg-card border border-border rounded-lg p-6 mb-4">
         <StaffCard
           initialStaff={staffList}
-          roles={rolesList.map((r) => ({ id: r.id, name: r.name, key: r.key }))}
+          roles={rolesList.map((r) => ({ id: r.id, name: r.name, key: r.key, permissions: r.permissions }))}
         />
       </div>
       <div className="bg-card border border-border rounded-lg p-6">

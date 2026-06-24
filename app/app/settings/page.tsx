@@ -118,15 +118,14 @@ export default async function SettingsPage() {
   const showItemPhotos =
     (business as { show_item_photos?: boolean }).show_item_photos !== false;
 
-  let staffList: { id: string; name: string; role: string; role_id: string | null; is_active: boolean; has_pin: boolean; pay_rate: number | null }[] = [];
+  let staffList: { id: string; name: string; role: string; role_id: string | null; is_active: boolean; has_pin: boolean; pay_rate: number | null; overrides: Record<string, boolean> }[] = [];
   let rolesList: Awaited<ReturnType<typeof listRoles>> = [];
   if (role === "owner" || role === "manager") {
-    const { data: staffData } = await supabase
-      .from("staff_members")
-      .select("id, name, role, role_id, is_active, pin_hash, pay_rate")
-      .eq("business_id", business.id)
-      .order("created_at", { ascending: true });
-    staffList = (staffData ?? []).map((s) => ({
+    // Migration-resilient: permission_overrides (0070) may not exist yet.
+    const fetchStaff = async (cols: string) => supabase.from("staff_members").select(cols).eq("business_id", business.id).order("created_at", { ascending: true });
+    const full = await fetchStaff("id, name, role, role_id, is_active, pin_hash, pay_rate, permission_overrides");
+    const sdata = (full.error ? (await fetchStaff("id, name, role, role_id, is_active, pin_hash, pay_rate")).data : full.data) as Record<string, unknown>[] | null;
+    staffList = ((sdata ?? []) as Record<string, unknown>[]).map((s) => ({
       id: s.id as string,
       name: s.name as string,
       role: s.role as string,
@@ -134,6 +133,7 @@ export default async function SettingsPage() {
       is_active: s.is_active as boolean,
       has_pin: !!s.pin_hash,
       pay_rate: (s.pay_rate as number | null) ?? null,
+      overrides: (s.permission_overrides ?? {}) as Record<string, boolean>,
     }));
     rolesList = await listRoles();
   }
@@ -331,7 +331,7 @@ export default async function SettingsPage() {
             <SectionHeader>Staff and PINs</SectionHeader>
             <StaffCard
               initialStaff={staffList}
-              roles={rolesList.map((r) => ({ id: r.id, name: r.name, key: r.key }))}
+              roles={rolesList.map((r) => ({ id: r.id, name: r.name, key: r.key, permissions: r.permissions }))}
             />
           </div>
           <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
