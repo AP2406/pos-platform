@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { actorCan, approverByPin } from "@/lib/services/permissions-server";
+import { requiresApproval } from "@/lib/services/config/approval";
 import { refundTransfer } from "@/lib/services/finix";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
@@ -129,9 +130,14 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   const active = await getActiveStaffRow(supabase, business.id);
   let approver: { id: string; name: string } | null = null;
   if (active && !(await actorCan(supabase, business.id, active.id, "refund"))) {
-    if (!input.approver_pin) return { needs_approval: true };
-    approver = await approverByPin(supabase, business.id, input.approver_pin, "refund");
-    if (!approver) return { error: "That PIN can't approve a refund." };
+    // CUST-1 approval matrix: default mode requires a manager (today); an owner
+    // can set mode 'none' to drop the requirement. (Threshold wiring is later.)
+    const { mode } = await requiresApproval("refund", null);
+    if (mode !== "none") {
+      if (!input.approver_pin) return { needs_approval: true };
+      approver = await approverByPin(supabase, business.id, input.approver_pin, "refund");
+      if (!approver) return { error: "That PIN can't approve a refund." };
+    }
   }
 
   const { data: order } = await supabase
