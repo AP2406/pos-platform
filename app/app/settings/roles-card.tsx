@@ -13,6 +13,8 @@ import {
   updateRolePermissions,
   setRoleCaps,
   createRole,
+  cloneRole,
+  renameRole,
   deleteRole,
   type RoleRow,
 } from "./roles-actions";
@@ -23,6 +25,9 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
   const [draft, setDraft] = useState<Set<PermissionKey>>(new Set());
   const [draftCompCap, setDraftCompCap] = useState("");
   const [draftDiscountCap, setDraftDiscountCap] = useState("");
+  const [draftDiscountPct, setDraftDiscountPct] = useState("");
+  const [draftRefundCap, setDraftRefundCap] = useState("");
+  const [draftVoidWindow, setDraftVoidWindow] = useState("");
   const [rowError, setRowError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +43,9 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
     setDraft(new Set(r.permissions as PermissionKey[]));
     setDraftCompCap(r.compCap != null ? String(r.compCap) : "");
     setDraftDiscountCap(r.discountCap != null ? String(r.discountCap) : "");
+    setDraftDiscountPct(r.discountPctCap != null ? String(r.discountPctCap) : "");
+    setDraftRefundCap(r.refundCap != null ? String(r.refundCap) : "");
+    setDraftVoidWindow(r.voidWindowMin != null ? String(r.voidWindowMin) : "");
   }
 
   function toggle(p: PermissionKey) {
@@ -52,25 +60,37 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
   function save(r: RoleRow) {
     setRowError(null);
     const perms = Array.from(draft);
-    const cc = draftCompCap.trim() === "" ? null : Number(draftCompCap);
-    const dc = draftDiscountCap.trim() === "" ? null : Number(draftDiscountCap);
-    const compCap = cc != null && cc > 0 ? cc : null;
-    const discountCap = dc != null && dc > 0 ? dc : null;
+    const num = (s: string) => { const n = s.trim() === "" ? null : Number(s); return n != null && n > 0 ? n : null; };
+    const compCap = num(draftCompCap), discountCap = num(draftDiscountCap);
+    const discountPctCap = num(draftDiscountPct), refundCap = num(draftRefundCap), voidWindowMin = num(draftVoidWindow);
     startTransition(async () => {
       const res = await updateRolePermissions(r.id, perms);
-      if ("error" in res) {
-        setRowError(res.error);
-        return;
-      }
-      const capsRes = await setRoleCaps(r.id, compCap, discountCap);
-      if ("error" in capsRes) {
-        setRowError(capsRes.error);
-        return;
-      }
-      setRoles((prev) =>
-        prev.map((x) => (x.id === r.id ? { ...x, permissions: perms, compCap, discountCap } : x))
-      );
+      if ("error" in res) { setRowError(res.error); return; }
+      const capsRes = await setRoleCaps(r.id, { compCap, discountCap, discountPctCap, refundCap, voidWindowMin });
+      if ("error" in capsRes) { setRowError(capsRes.error); return; }
+      setRoles((prev) => prev.map((x) => (x.id === r.id ? { ...x, permissions: perms, compCap, discountCap, discountPctCap, refundCap, voidWindowMin } : x)));
       setOpenId(null);
+    });
+  }
+
+  function handleClone(r: RoleRow) {
+    const name = prompt("Name for the cloned role?", r.name + " copy");
+    if (!name) return;
+    setRowError(null);
+    startTransition(async () => {
+      const res = await cloneRole(r.id, name);
+      if ("error" in res) { setRowError(res.error); return; }
+      setRoles((prev) => [...prev, { ...r, id: res.id, name, key: null, is_system: false, sort_order: prev.length }]);
+    });
+  }
+  function handleRename(r: RoleRow) {
+    const name = prompt("Rename role", r.name);
+    if (!name || name.trim() === r.name) return;
+    setRowError(null);
+    startTransition(async () => {
+      const res = await renameRole(r.id, name);
+      if ("error" in res) { setRowError(res.error); return; }
+      setRoles((prev) => prev.map((x) => (x.id === r.id ? { ...x, name: name.trim() } : x)));
     });
   }
 
@@ -89,14 +109,9 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
       setRoles((prev) => [
         ...prev,
         {
-          id: res.id,
-          name: newName.trim(),
-          key: null,
-          is_system: false,
-          permissions: [],
-          compCap: null,
-          discountCap: null,
-          sort_order: prev.length,
+          id: res.id, name: newName.trim(), key: null, is_system: false, permissions: [],
+          compCap: null, discountCap: null, discountPctCap: null, refundCap: null, voidWindowMin: null,
+          hiddenNav: [], sort_order: prev.length,
         },
       ]);
       setNewName("");
@@ -142,15 +157,15 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
                     {isOwner ? "All permissions" : `${r.permissions.length} permission${r.permissions.length === 1 ? "" : "s"}`}
                   </span>
                 </div>
-                {!isOwner && (
-                  <button
-                    type="button"
-                    onClick={() => openRole(r)}
-                    className="text-xs text-muted-foreground underline hover:text-foreground"
-                  >
-                    {open ? "Close" : "Edit"}
-                  </button>
-                )}
+                <div className="flex items-center gap-2.5 shrink-0">
+                  {!isOwner && (
+                    <button type="button" onClick={() => openRole(r)} className="text-xs text-muted-foreground underline hover:text-foreground">
+                      {open ? "Close" : "Edit"}
+                    </button>
+                  )}
+                  <button type="button" onClick={() => handleRename(r)} disabled={pending} className="text-xs text-muted-foreground underline hover:text-foreground">Rename</button>
+                  <button type="button" onClick={() => handleClone(r)} disabled={pending} className="text-xs text-muted-foreground underline hover:text-foreground">Clone</button>
+                </div>
               </div>
 
               {open && !isOwner && (
@@ -194,9 +209,21 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
                         className="h-9 w-32"
                       />
                     </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Discount cap (%)</Label>
+                      <Input type="number" min="0" max="100" value={draftDiscountPct} onChange={(e) => setDraftDiscountPct(e.target.value)} placeholder="No limit" className="h-9 w-28" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Refund cap ($)</Label>
+                      <Input type="number" min="0" value={draftRefundCap} onChange={(e) => setDraftRefundCap(e.target.value)} placeholder="No limit" className="h-9 w-28" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Void window (min)</Label>
+                      <Input type="number" min="0" value={draftVoidWindow} onChange={(e) => setDraftVoidWindow(e.target.value)} placeholder="Any time" className="h-9 w-28" />
+                    </div>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    A comp/discount over the cap requires a manager&apos;s approval at the register.
+                    A comp/discount/refund over its cap (or a void past the window) requires approval. Blank = no limit. Approval routing is configured in Customization → Access &amp; roles.
                   </p>
                   {rowError && <p className="text-sm text-red-600">{rowError}</p>}
                   <div className="flex items-center gap-2">

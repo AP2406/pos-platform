@@ -13,6 +13,10 @@ export type RoleRow = {
   permissions: string[];
   compCap: number | null;
   discountCap: number | null;
+  discountPctCap: number | null;
+  refundCap: number | null;
+  voidWindowMin: number | null;
+  hiddenNav: string[];
   sort_order: number;
 };
 
@@ -28,12 +32,12 @@ function cleanPerms(perms: string[]): string[] {
 export async function listRoles(): Promise<RoleRow[]> {
   const { business } = await requireBusiness();
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("roles")
-    .select("id, name, key, is_system, permissions, comp_cap, discount_cap, sort_order")
-    .eq("business_id", business.id)
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: true });
+  // Migration-resilient: fall back to the pre-0070 columns if the new ones
+  // aren't there yet (the new caps/nav just read as null until applied).
+  const fetchRoles = async (cols: string) =>
+    supabase.from("roles").select(cols).eq("business_id", business.id).order("sort_order", { ascending: true }).order("created_at", { ascending: true });
+  const full = await fetchRoles("id, name, key, is_system, permissions, comp_cap, discount_cap, discount_pct_cap, refund_cap, void_window_min, hidden_nav, sort_order");
+  const data = (full.error ? (await fetchRoles("id, name, key, is_system, permissions, comp_cap, discount_cap, sort_order")).data : full.data) as Record<string, unknown>[] | null;
   return (data ?? []).map((r) => ({
     id: r.id as string,
     name: r.name as string,
@@ -42,6 +46,10 @@ export async function listRoles(): Promise<RoleRow[]> {
     permissions: Array.isArray(r.permissions) ? (r.permissions as string[]) : [],
     compCap: r.comp_cap != null ? Number(r.comp_cap) : null,
     discountCap: r.discount_cap != null ? Number(r.discount_cap) : null,
+    discountPctCap: r.discount_pct_cap != null ? Number(r.discount_pct_cap) : null,
+    refundCap: r.refund_cap != null ? Number(r.refund_cap) : null,
+    voidWindowMin: r.void_window_min != null ? Number(r.void_window_min) : null,
+    hiddenNav: Array.isArray(r.hidden_nav) ? (r.hidden_nav as string[]) : [],
     sort_order: Number(r.sort_order) || 0,
   }));
 }
@@ -71,30 +79,105 @@ export async function updateRolePermissions(
 
 export async function setRoleCaps(
   roleId: string,
-  compCap: number | null,
-  discountCap: number | null
+  caps: { compCap?: number | null; discountCap?: number | null; discountPctCap?: number | null; refundCap?: number | null; voidWindowMin?: number | null }
 ): Promise<{ ok: true } | { error: string }> {
   if (!roleId) return { error: "Missing role." };
   const { business, role } = await requireBusiness();
   assertConfigEditable(business);
   if (!canManage(role)) return { error: "Only an owner or manager can edit roles." };
 
-  const clamp = (v: number | null): number | null => {
+  const clamp = (v: number | null | undefined): number | null => {
     if (v == null || !Number.isFinite(v) || v <= 0) return null; // 0/blank = unlimited
     return Math.min(100000, Math.round(v * 100) / 100);
   };
+  const clampPct = (v: number | null | undefined): number | null => {
+    if (v == null || !Number.isFinite(v) || v <= 0) return null;
+    return Math.min(100, Math.round(v * 100) / 100);
+  };
+  const clampInt = (v: number | null | undefined): number | null => {
+    if (v == null || !Number.isFinite(v) || v <= 0) return null;
+    return Math.min(1440, Math.round(v));
+  };
   const supabase = await createClient();
-  const { error } = await supabase
+  let res = await supabase
     .from("roles")
-    .update({ comp_cap: clamp(compCap), discount_cap: clamp(discountCap) })
+    .update({
+      comp_cap: clamp(caps.compCap), discount_cap: clamp(caps.discountCap),
+      discount_pct_cap: clampPct(caps.discountPctCap), refund_cap: clamp(caps.refundCap),
+      void_window_min: clampInt(caps.voidWindowMin),
+    })
     .eq("id", roleId)
     .eq("business_id", business.id);
-  if (error) {
-    console.error("setRoleCaps:", error);
+  if (res.error) {
+    // Pre-0070 fallback: persist the original two caps so existing behavior holds.
+    res = await supabase
+      .from("roles")
+      .update({ comp_cap: clamp(caps.compCap), discount_cap: clamp(caps.discountCap) })
+      .eq("id", roleId)
+      .eq("business_id", business.id);
+  }
+  if (res.error) {
+    console.error("setRoleCaps:", res.error);
     return { error: "Could not save the caps." };
   }
   revalidatePath("/app/settings");
   return { ok: true };
+}
+
+// Rename any role (display name only; key/is_system unchanged).
+export async function renameRole(roleId: string, name: string): Promise<{ ok: true } | { error: string }> {
+  if (!roleId) return { error: "Missing role." };
+  const clean = (name || "").trim().slice(0, 40);
+  if (!clean) return { error: "Name is required." };
+  const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
+  if (!canManage(role)) return { error: "Only an owner or manager can rename roles." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("roles").update({ name: clean }).eq("id", roleId).eq("business_id", business.id);
+  if (error) {
+    const dup = (error as { code?: string } | null)?.code === "23505";
+    return { error: dup ? "A role with that name already exists." : "Could not rename the role." };
+  }
+  revalidatePath("/app/settings");
+  return { ok: true };
+}
+
+// Clone a role's permissions + caps into a new custom role.
+export async function cloneRole(roleId: string, name: string): Promise<{ ok: true; id: string } | { error: string }> {
+  if (!roleId) return { error: "Missing role." };
+  const clean = (name || "").trim().slice(0, 40);
+  if (!clean) return { error: "Name is required." };
+  const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
+  if (!canManage(role)) return { error: "Only an owner or manager can clone roles." };
+
+  const supabase = await createClient();
+  const { data: src } = await supabase
+    .from("roles")
+    .select("permissions, comp_cap, discount_cap, discount_pct_cap, refund_cap, void_window_min, hidden_nav")
+    .eq("id", roleId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!src) return { error: "Role to clone not found." };
+
+  const { data: maxRow } = await supabase.from("roles").select("sort_order").eq("business_id", business.id).order("sort_order", { ascending: false }).limit(1).maybeSingle();
+  const { data, error } = await supabase
+    .from("roles")
+    .insert({
+      business_id: business.id, name: clean, is_system: false,
+      permissions: cleanPerms(Array.isArray(src.permissions) ? (src.permissions as string[]) : []),
+      comp_cap: src.comp_cap, discount_cap: src.discount_cap, discount_pct_cap: src.discount_pct_cap,
+      refund_cap: src.refund_cap, void_window_min: src.void_window_min, hidden_nav: src.hidden_nav ?? [],
+      sort_order: (Number(maxRow?.sort_order) || 0) + 1,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    const dup = (error as { code?: string } | null)?.code === "23505";
+    return { error: dup ? "A role with that name already exists." : "Could not clone the role." };
+  }
+  revalidatePath("/app/settings");
+  return { ok: true, id: data.id as string };
 }
 
 export async function createRole(
