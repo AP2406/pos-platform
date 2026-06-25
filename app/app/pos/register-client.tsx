@@ -43,6 +43,7 @@ import { DISCOUNT_REASONS, COMP_REASONS, SERVICE_CHARGE_WAIVE_REASONS, TAX_EXEMP
 import { setActiveStaff, clearActiveStaff, type ActiveStaff } from "./staff-session";
 import { CardPaymentModal } from "./card-payment-modal";
 import { getCardConfig } from "./finix-pos-actions";
+import { tapToPayAvailable } from "@/lib/services/tap-to-pay";
 import { TenderSheet } from "./tender-sheet";
 import { getPrinterConfig, printReceiptHtml } from "./qz-print";
 import { buildReceiptHtml, type ReceiptSettings } from "./receipt-template";
@@ -152,6 +153,7 @@ type CardModalState = {
     customerName: string | null;
   };
   defaultName: string;
+  tapToPay?: boolean;
 };
 type Snap = {
   items: CartLine[];
@@ -605,6 +607,12 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       active = false;
     };
   }, []);
+
+  // GAP-1 (5/5): Tap to Pay is only available inside the native app (the Finix
+  // Tap to Pay SDK bridge). On the web this stays false and the register behaves
+  // exactly as today.
+  const [tapCapable, setTapCapable] = useState(false);
+  useEffect(() => { setTapCapable(tapToPayAvailable()); }, []);
 
   async function refreshTickets() {
     const t = await listOpenTickets();
@@ -1733,6 +1741,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     (taxExemptReason !== "" && (taxExemptReason !== "other" || taxExemptNote.trim().length > 0));
 
   const cardEnabled = !!(cardCfg && cardCfg.enabled);
+  const tapToPayEnabled = cardEnabled && tapCapable;
 
   const cashierRole = staff ? (staff as { role?: string }).role : null;
   const cashierPerms = staff ? ((staff as { permissions?: string[] }).permissions ?? []) : [];
@@ -2106,11 +2115,17 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     });
   }
 
-  function recordCardManual() {
+  function recordCardManual() { openCardCollect(false); }
+  function recordTapToPay() { openCardCollect(true); }
+
+  // Opens the card-collection modal for either manual entry or Tap to Pay; both
+  // build the identical order snapshot and run the same createCardOrder charge.
+  function openCardCollect(tap: boolean) {
     setError(null);
     if (cart.length === 0) return;
     setTenderOpen(false);
     setCardModal({
+      tapToPay: tap,
       amount: total,
       order: {
         items: cart.filter((l) => !l.void),
@@ -2580,6 +2595,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
             merchantId: cardCfg.merchantId,
           }}
           defaultName={cardModal.defaultName}
+          tapToPay={cardModal.tapToPay}
           onClose={() => setCardModal(null)}
           onSuccess={handleCardSuccess}
         />
@@ -2591,10 +2607,12 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         total={total}
         pending={pending}
         cardEnabled={cardEnabled}
+        tapToPayEnabled={tapToPayEnabled}
         storeCreditBalance={storeCreditBalance}
         onCash={recordCash}
         onSplit={recordSplit}
         onCardManual={recordCardManual}
+        onTapToPay={recordTapToPay}
         onCardRecord={recordCardNoCharge}
       />
 
