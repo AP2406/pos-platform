@@ -1,4 +1,6 @@
 import { isFinixConfigured, getFinixConfig } from "./finix";
+import { isEmailConfigured } from "./email";
+import { isSmsConfigured } from "./sms";
 
 // P2 external-integration registry. Each connector reports whether its server
 // credentials are present (env), what env vars it needs, and a finish-up
@@ -7,12 +9,12 @@ import { isFinixConfigured, getFinixConfig } from "./finix";
 // connector or sends data on its own.
 
 export type IntegrationKey =
-  | "finix_cards" | "bar_tab" | "qbo" | "xero" | "settlement" | "delivery" | "reservations_sync";
+  | "finix_cards" | "bar_tab" | "qbo" | "xero" | "settlement" | "delivery" | "reservations_sync" | "messaging";
 
 export type IntegrationStatus = {
   key: IntegrationKey;
   label: string;
-  group: "Payments" | "Accounting" | "Delivery" | "Reservations";
+  group: "Payments" | "Accounting" | "Delivery" | "Reservations" | "Messaging";
   description: string;
   configured: boolean; // server credentials present
   detail: string | null; // e.g. "sandbox" / "live"
@@ -116,6 +118,20 @@ export function integrationStatuses(): IntegrationStatus[] {
       ],
     },
     {
+      key: "messaging",
+      label: "SMS (Twilio)",
+      group: "Messaging",
+      description: "Send real texts: waitlist 'table ready' paging + SMS marketing campaigns. Falls back to email until configured.",
+      configured: isSmsConfigured(),
+      detail: null,
+      envVars: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM"],
+      checklist: [
+        "Create a Twilio account + a messaging-capable phone number.",
+        "Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM to the server env.",
+        "Enable; waitlist paging + Marketing → Text (SMS) start sending real messages.",
+      ],
+    },
+    {
       key: "reservations_sync",
       label: "OpenTable / Resy",
       group: "Reservations",
@@ -129,6 +145,18 @@ export function integrationStatuses(): IntegrationStatus[] {
         "Enable; bookings sync both ways.",
       ],
     },
+  ];
+}
+
+// GAP-0: app-wide environment essentials surfaced on the Integrations page so an
+// operator can see at a glance what's configured. Server-side only (reads env).
+export function envEssentials(): { label: string; ok: boolean; env: string }[] {
+  return [
+    { label: "Card processing (Finix)", ok: isFinixConfigured(), env: "FINIX_*" },
+    { label: "Email (Resend)", ok: isEmailConfigured(), env: "RESEND_API_KEY" },
+    { label: "SMS (Twilio)", ok: isSmsConfigured(), env: "TWILIO_*" },
+    { label: "Scheduled jobs", ok: !!process.env.CRON_SECRET, env: "CRON_SECRET" },
+    { label: "Public links (booking, online order)", ok: !!process.env.NEXT_PUBLIC_SITE_URL, env: "NEXT_PUBLIC_SITE_URL" },
   ];
 }
 

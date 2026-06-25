@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { isEmailConfigured } from "@/lib/services/email";
+import { isSmsConfigured } from "@/lib/services/sms";
 import { MarketingClient } from "./marketing-client";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,7 @@ export default async function MarketingPage() {
         tags={tags}
         consentedCount={consentedCount ?? 0}
         emailConfigured={isEmailConfigured()}
+        smsConfigured={isSmsConfigured()}
       />
     </div>
   );

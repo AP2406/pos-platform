@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { hasFloorService } from "@/lib/modules/modes";
-import { integrationStatuses, integrationEnabled } from "@/lib/services/integrations";
+import { integrationStatuses, integrationEnabled, envEssentials } from "@/lib/services/integrations";
 import { getCardConfig } from "../pos/finix-pos-actions";
 import { IntegrationCard } from "./integration-card";
 
@@ -32,7 +32,8 @@ export default async function IntegrationsPage() {
     enabled: integrationEnabled(settings, s.key),
     liveNote: s.key === "finix_cards" ? cardLive : null,
   }));
-  const groups = ["Payments", "Accounting", "Delivery", "Reservations"] as const;
+  const groups = ["Payments", "Messaging", "Accounting", "Delivery", "Reservations"] as const;
+  const env = envEssentials();
 
   return (
     <div className="max-w-3xl">
@@ -41,6 +42,21 @@ export default async function IntegrationsPage() {
         <p className="text-muted-foreground text-sm mt-1">
           Connect external services. Each is off until you add credentials and enable it — nothing here sends data on its own.
         </p>
+      </div>
+
+      {/* GAP-0: environment essentials at a glance */}
+      <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 mb-6">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Environment</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+          {env.map((e) => (
+            <div key={e.env} className="flex items-center justify-between text-sm">
+              <span>{e.label}</span>
+              <span className={"text-xs tabular-nums " + (e.ok ? "text-emerald-600" : "text-muted-foreground")}>
+                {e.ok ? "configured ✓" : e.env + " missing"}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {groups.map((g) => {

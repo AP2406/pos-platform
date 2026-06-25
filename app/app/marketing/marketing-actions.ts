@@ -3,14 +3,16 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { sendEmail, isEmailConfigured } from "@/lib/services/email";
+import { sendSms, isSmsConfigured } from "@/lib/services/sms";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 
-// P2-34 email marketing. CASL: only customers who gave express consent and have
-// an email are ever messaged, and every message carries a working unsubscribe
-// link plus sender identification.
+// P2-34 email marketing + GAP-0 SMS. CASL: only customers who gave express
+// consent are ever messaged; email carries an unsubscribe link + sender id, SMS
+// carries a STOP opt-out + sender name.
 
-export type MarketingRecipient = { id: string; name: string; email: string; unsubscribe_token: string };
+export type Channel = "email" | "sms";
+export type MarketingRecipient = { id: string; name: string; email: string | null; phone: string | null; unsubscribe_token: string };
 
 // C7: dynamic segments derived from order history, alongside the existing tag
 // segments. These keys are recognised in addition to a raw tag UUID.
@@ -38,21 +40,21 @@ async function loadRecipients(
 
   let q = supabase
     .from("customers")
-    .select("id, name, email, unsubscribe_token")
+    .select("id, name, email, phone, unsubscribe_token")
     .eq("business_id", businessId)
-    .eq("marketing_consent", true)
-    .not("email", "is", null);
+    .eq("marketing_consent", true);
   if (customerIds) q = q.in("id", customerIds);
 
   const { data } = await q;
-  let recipients = (data ?? [])
-    .filter((c) => (c.email as string | null) && (c.email as string).includes("@"))
+  let recipients: MarketingRecipient[] = (data ?? [])
     .map((c) => ({
       id: c.id as string,
       name: (c.name as string | null) ?? "",
-      email: c.email as string,
+      email: (c.email as string | null) && (c.email as string).includes("@") ? (c.email as string) : null,
+      phone: (c.phone as string | null) || null,
       unsubscribe_token: c.unsubscribe_token as string,
-    }));
+    }))
+    .filter((c) => c.email || c.phone); // reachable on at least one channel
 
   // Dynamic, history-based segments.
   const dyn = segment as DynamicSegment;
@@ -106,11 +108,12 @@ async function loadRecipients(
   return recipients;
 }
 
-export async function getMarketingAudience(segment?: string | null): Promise<{ count: number; configured: boolean }> {
+export async function getMarketingAudience(segment?: string | null, channel: Channel = "email"): Promise<{ count: number; configured: boolean; smsConfigured: boolean }> {
   const { business } = await requireBusiness();
   const supabase = await createClient();
   const recipients = await loadRecipients(supabase, business.id, segment || "all");
-  return { count: recipients.length, configured: isEmailConfigured() };
+  const count = recipients.filter((r) => (channel === "sms" ? !!r.phone : !!r.email)).length;
+  return { count, configured: channel === "sms" ? isSmsConfigured() : isEmailConfigured(), smsConfigured: isSmsConfigured() };
 }
 
 // Set a customer's express marketing consent (owner/manager). Records when and
@@ -152,54 +155,55 @@ export async function sendCampaign(input: {
   subject: string;
   body: string;
   segment?: string | null;
+  channel?: Channel;
 }): Promise<{ ok: true; sent: number; failed: number } | { error: string }> {
   const { business, role } = await requireBusiness();
   if (role !== "owner" && role !== "manager") {
     return { error: "Only an owner or manager can send a campaign." };
   }
-  if (!isEmailConfigured()) return { error: "Email isn't configured for this business yet." };
+  const channel: Channel = input.channel === "sms" ? "sms" : "email";
+  if (channel === "email" && !isEmailConfigured()) return { error: "Email isn't configured for this business yet." };
+  if (channel === "sms" && !isSmsConfigured()) return { error: "Texting (Twilio) isn't configured for this business yet." };
   const subject = (input.subject || "").trim().slice(0, 200);
-  const body = (input.body || "").trim().slice(0, 20000);
-  if (!subject) return { error: "Add a subject." };
+  const body = (input.body || "").trim().slice(0, channel === "sms" ? 1000 : 20000);
+  if (channel === "email" && !subject) return { error: "Add a subject." };
   if (!body) return { error: "Write a message." };
 
   const segment = input.segment || "all";
   const supabase = await createClient();
-  const recipients = await loadRecipients(supabase, business.id, segment);
-  if (recipients.length === 0) return { error: "No consented customers in that segment." };
+  const all = await loadRecipients(supabase, business.id, segment);
+  const recipients = all.filter((r) => (channel === "sms" ? !!r.phone : !!r.email));
+  if (recipients.length === 0) return { error: "No consented customers reachable by " + (channel === "sms" ? "text" : "email") + " in that segment." };
 
   const hdrs = await headers();
   const origin = "https://" + (hdrs.get("host") ?? "surgetechpos.com");
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  let sent = 0;
-  let failed = 0;
+  let sent = 0, failed = 0;
   for (const r of recipients) {
-    const unsubUrl = origin + "/unsubscribe/" + r.unsubscribe_token;
-    const html =
-      "<div style=\"font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;color:#111\">" +
-      (r.name ? "<p>Hi " + escapeHtml(r.name) + ",</p>" : "") +
-      "<div>" + body.replace(/\n/g, "<br>") + "</div>" +
-      "<hr style=\"margin:24px 0;border:none;border-top:1px solid #ddd\">" +
-      "<p style=\"font-size:12px;color:#666\">You're receiving this because you opted in to updates from " +
-      escapeHtml(business.name) + ".<br>" +
-      "<a href=\"" + unsubUrl + "\">Unsubscribe</a></p></div>";
-    const res = await sendEmail({
-      to: r.email,
-      from: business.name + " <onboarding@resend.dev>",
-      subject,
-      html,
-    });
-    if ("ok" in res) sent++;
-    else failed++;
+    if (channel === "sms") {
+      // CASL: opted-in only; identify the sender + carrier STOP opt-out.
+      const text = body + "\n\n— " + business.name + ". Reply STOP to opt out.";
+      const res = await sendSms({ to: r.phone as string, body: text });
+      if ("ok" in res) sent++; else failed++;
+    } else {
+      const unsubUrl = origin + "/unsubscribe/" + r.unsubscribe_token;
+      const html =
+        "<div style=\"font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;color:#111\">" +
+        (r.name ? "<p>Hi " + escapeHtml(r.name) + ",</p>" : "") +
+        "<div>" + body.replace(/\n/g, "<br>") + "</div>" +
+        "<hr style=\"margin:24px 0;border:none;border-top:1px solid #ddd\">" +
+        "<p style=\"font-size:12px;color:#666\">You're receiving this because you opted in to updates from " +
+        escapeHtml(business.name) + ".<br>" +
+        "<a href=\"" + unsubUrl + "\">Unsubscribe</a></p></div>";
+      const res = await sendEmail({ to: r.email as string, from: business.name + " <onboarding@resend.dev>", subject, html });
+      if ("ok" in res) sent++; else failed++;
+    }
   }
 
   await supabase.from("marketing_campaigns").insert({
     business_id: business.id,
-    subject,
+    subject: channel === "sms" ? "[SMS] " + body.slice(0, 60) : subject,
     body,
     segment_tag: UUID_RE.test(segment) ? segment : null, // dynamic segments aren't tags
     recipient_count: sent,
