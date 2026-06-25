@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
 import { displayItemName } from "@/lib/format";
 import { plateCostByItem } from "../accounting/cost";
+import { isAiConfigured } from "@/lib/services/ai";
 import { WhatIfModeler } from "./whatif-modeler";
+import { AskPanel } from "./ask-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -253,6 +255,8 @@ export default async function InsightsPage({
           </Link>
         ))}
       </div>
+
+      <AskPanel aiConfigured={isAiConfigured()} />
 
       <div className="grid sm:grid-cols-2 gap-4 mb-4">
         <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4">
