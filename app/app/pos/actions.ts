@@ -6,6 +6,7 @@ import { staffPermissionsById } from "@/lib/services/permissions-server";
 import { type PermissionKey } from "@/lib/services/permissions";
 import { parseThresholds } from "@/lib/services/exception-thresholds";
 import { isOrderPeriodLocked } from "@/lib/services/period-lock";
+import { computeCartTax } from "@/lib/services/tax-compute";
 import { notifyBusiness } from "@/lib/push";
 import { emailOwnerAlert } from "@/lib/services/owner-alerts";
 import { revalidatePath } from "next/cache";
@@ -396,36 +397,17 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
 
   const taxF = subtotal > 0 ? netSubtotal / subtotal : 0;
 
-  const rateBuckets: Record<string, { label: string; frac: number; base: number }> = {};
-  for (const i of parsed.data.items) {
-    const meta = i.catalog_item_id ? itemTaxMeta[i.catalog_item_id] : undefined;
-    const isTaxable = meta ? meta.taxable : true;
-    if (!isTaxable) continue;
-    let frac = rate;
-    let label = "Tax";
-    if (meta && meta.tax_rate_id && rateFracById[meta.tax_rate_id] !== undefined) {
-      frac = rateFracById[meta.tax_rate_id];
-      label = rateNameById[meta.tax_rate_id] || "Tax";
-    }
-    if (frac <= 0) continue;
-    const key = label + "@" + frac.toFixed(6);
-    if (!rateBuckets[key]) rateBuckets[key] = { label: label, frac: frac, base: 0 };
-    rateBuckets[key].base += i.unit_price * i.quantity;
-  }
-
-  let tax = 0;
-  let taxableBase = 0;
-  const taxBreakdown: { label: string; rate: number; base: number; amount: number }[] = [];
-  for (const key of Object.keys(rateBuckets)) {
-    const b = rateBuckets[key];
-    const discountedBase = Math.round(b.base * taxF * 100) / 100;
-    const amount = Math.round(discountedBase * b.frac * 100) / 100;
-    tax += amount;
-    taxableBase += discountedBase;
-    taxBreakdown.push({ label: b.label, rate: b.frac, base: discountedBase, amount: amount });
-  }
-  tax = Math.round(tax * 100) / 100;
-  taxableBase = Math.round(taxableBase * 100) / 100;
+  // Tax over the cart at each item's applicable rate. Extracted to a shared pure
+  // helper (lib/services/tax-compute) so the QR pay-at-table guest path computes an
+  // identical, server-authoritative total. taxF prorates for any discount/comp.
+  const _taxRes = computeCartTax(
+    parsed.data.items,
+    { defaultRateFrac: rate, itemTaxMeta, rateFracById, rateNameById },
+    taxF
+  );
+  let tax = _taxRes.tax;
+  let taxableBase = _taxRes.taxableBase;
+  const taxBreakdown = _taxRes.taxBreakdown;
 
   const manualExempt = parsed.data.tax_exempt === true;
   const exemptCode = (parsed.data.tax_exempt_reason_code || "").trim();

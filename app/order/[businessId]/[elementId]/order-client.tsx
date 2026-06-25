@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { PayPanel } from "./pay-panel";
 
 export type GuestMenuItem = { id: string; name: string; price: number; category: string | null };
 
@@ -13,17 +14,22 @@ export function GuestOrderClient({
   businessName,
   tableLabel,
   items,
+  finixAppId,
+  finixEnv,
 }: {
   businessId: string;
   elementId: string;
   businessName: string;
   tableLabel: string | null;
   items: GuestMenuItem[];
+  finixAppId: string;
+  finixEnv: string;
 }) {
   const [qty, setQty] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showPay, setShowPay] = useState(false);
 
   function add(id: string) {
     setErr(null);
@@ -85,10 +91,25 @@ export function GuestOrderClient({
 
   return (
     <div className="min-h-screen bg-background pb-28">
-      <div className="px-4 py-4 border-b border-border sticky top-0 bg-background z-10">
-        <h1 className="text-lg font-semibold">{businessName}</h1>
-        <p className="text-xs text-muted-foreground">{tableLabel ? tableLabel : "Your table"}</p>
+      <div className="px-4 py-4 border-b border-border sticky top-0 bg-background z-10 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold truncate">{businessName}</h1>
+          <p className="text-xs text-muted-foreground">{tableLabel ? tableLabel : "Your table"}</p>
+        </div>
+        <button type="button" onClick={() => setShowPay(true)} className="shrink-0 h-9 px-3 rounded-md border border-foreground text-sm font-medium">
+          Pay check
+        </button>
       </div>
+
+      {showPay && (
+        <PayPanel
+          businessId={businessId}
+          elementId={elementId}
+          finixAppId={finixAppId}
+          finixEnv={finixEnv}
+          onClose={() => setShowPay(false)}
+        />
+      )}
 
       <div className="px-4 py-4 space-y-5 max-w-lg mx-auto">
         {items.length === 0 && <p className="text-sm text-muted-foreground">No items available right now.</p>}

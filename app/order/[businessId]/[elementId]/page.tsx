@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getFinixConfig } from "@/lib/services/finix";
 import { GuestOrderClient, type GuestMenuItem } from "./order-client";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +46,12 @@ export default async function GuestOrderPage({
   if (!menu.enabled) return shell("Online ordering isn't available here right now.");
   if (!menu.open) return shell("Please ask your server to start your table, then scan again.");
 
+  // Finix publishable config for browser card tokenization (GAP-1 chunk 3). The
+  // app id + environment are non-secret; whether card pay is actually live is
+  // re-checked server-side per check (get_guest_check.card_live).
+  const finixCfg = getFinixConfig();
+  const finixEnv = finixCfg.environment === "live" ? "live" : "sandbox";
+
   return (
     <GuestOrderClient
       businessId={businessId}
@@ -52,6 +59,8 @@ export default async function GuestOrderPage({
       businessName={menu.business_name ?? "Menu"}
       tableLabel={menu.table_label ?? null}
       items={menu.items ?? []}
+      finixAppId={finixCfg.applicationId}
+      finixEnv={finixEnv}
     />
   );
 }
