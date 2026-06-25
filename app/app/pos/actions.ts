@@ -830,6 +830,26 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     }
   }
 
+  // GAP-1 (channel): carry the originating channel from the ticket onto the order
+  // (NULL = in-store register sale, exactly as today). Self-contained + guarded so
+  // it no-ops cleanly until migration 0071 adds the channel columns.
+  if (parsed.data.open_ticket_id && !result.replayed && result.order_id) {
+    const { data: ch } = await supabase
+      .from("open_tickets")
+      .select("channel")
+      .eq("id", parsed.data.open_ticket_id)
+      .eq("business_id", business.id)
+      .maybeSingle();
+    const channel = (ch as { channel?: string | null } | null)?.channel ?? null;
+    if (channel) {
+      await supabase
+        .from("orders")
+        .update({ channel })
+        .eq("id", result.order_id)
+        .eq("business_id", business.id);
+    }
+  }
+
   // E2: store the guest's on-screen signature (non-financial; guard-safe).
   if (parsed.data.signature_data && !result.replayed && result.order_id) {
     await supabase

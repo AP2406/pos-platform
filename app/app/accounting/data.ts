@@ -21,9 +21,12 @@ export type AccountingSummary = {
   voids: { n: number; amount: number };
   refunds: number;
   tenders: { method: string; amount: number }[];
+  salesByChannel: { channel: string; label: string; count: number; total: number }[];
   giftCardOutstanding: number;
   storeCreditOutstanding: number;
 };
+
+const CHANNEL_LABELS: Record<string, string> = { instore: "In-store", kiosk: "Kiosk", online: "Online", qr: "QR table", doordash: "DoorDash", ubereats: "Uber Eats", grubhub: "Grubhub" };
 
 const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -33,15 +36,18 @@ export async function accountingSummary(
   startIso: string,
   endIso: string
 ): Promise<AccountingSummary> {
-  const { data: orders } = await supabase
-    .from("orders")
-    .select("id, total, subtotal, tax, tip, discount, comp, service_charge, status, snapshot")
-    .eq("business_id", businessId)
-    .gte("created_at", startIso)
-    .lt("created_at", endIso);
+  // GAP-1: include channel; fall back without it so accounting never breaks before
+  // migration 0071 (channel column) is applied.
+  const ordersBase = (cols: string) =>
+    supabase.from("orders").select(cols).eq("business_id", businessId).gte("created_at", startIso).lt("created_at", endIso);
+  const ordersWithCh = await ordersBase("id, total, subtotal, tax, tip, discount, comp, service_charge, status, snapshot, channel");
+  const orders = (ordersWithCh.error
+    ? (await ordersBase("id, total, subtotal, tax, tip, discount, comp, service_charge, status, snapshot")).data
+    : ordersWithCh.data) as Record<string, unknown>[] | null;
 
   const rows = orders ?? [];
   const liveIds: string[] = [];
+  const channelMap = new Map<string, { count: number; total: number }>();
 
   let grossSales = 0, netSales = 0, discounts = 0, comps = 0, serviceCharge = 0, tips = 0, taxTotal = 0;
   let taxableBase = 0, exemptBase = 0;
@@ -55,6 +61,10 @@ export async function accountingSummary(
       continue;
     }
     liveIds.push(o.id as string);
+    const chKey = (o.channel as string | null) || "instore";
+    const chCur = channelMap.get(chKey) ?? { count: 0, total: 0 };
+    chCur.count += 1; chCur.total += Number(o.total) || 0;
+    channelMap.set(chKey, chCur);
     grossSales += Number(o.total) || 0;
     netSales += Number(o.subtotal) || 0;
     discounts += Number(o.discount) || 0;
@@ -148,6 +158,9 @@ export async function accountingSummary(
     voids: { n: voidN, amount: r2(voidAmt) },
     refunds: r2(refunds),
     tenders: Array.from(tenderMap.entries()).map(([method, amount]) => ({ method, amount: r2(amount) })),
+    salesByChannel: Array.from(channelMap.entries())
+      .map(([channel, v]) => ({ channel, label: CHANNEL_LABELS[channel] ?? channel, count: v.count, total: r2(v.total) }))
+      .sort((a, b) => b.total - a.total),
     giftCardOutstanding: r2(giftCardOutstanding),
     storeCreditOutstanding: r2(storeCreditOutstanding),
   };

@@ -41,8 +41,16 @@ export default async function InsightsPage({
   const todayKey = dayKey(new Date().toISOString());
   const inRange = (iso: string) => (range === "today" ? dayKey(iso) === todayKey : new Date(iso).getTime() >= now - (range === "7d" ? 7 : 30) * 86400000);
 
+  // GAP-1: orders carry a channel; fall back without it so insights never breaks
+  // before migration 0071 (channel column) is applied.
+  const ordersFetch = async (): Promise<{ data: Record<string, unknown>[] | null }> => {
+    const base = (cols: string) => supabase.from("orders").select(cols).eq("business_id", business.id).neq("status", "voided").gte("created_at", since);
+    const withCh = await base("id, total, status, created_at, guest_count, seated_at, channel");
+    const r = withCh.error ? await base("id, total, status, created_at, guest_count, seated_at") : withCh;
+    return { data: (r.data ?? null) as unknown as Record<string, unknown>[] | null };
+  };
   const [{ data: orders }, { data: items }, plate, { data: ktix }, { data: kstations }] = await Promise.all([
-    supabase.from("orders").select("id, total, status, created_at, guest_count, seated_at").eq("business_id", business.id).neq("status", "voided").gte("created_at", since),
+    ordersFetch(),
     supabase.from("order_items").select("order_id, catalog_item_id, name, quantity, unit_price, created_at").eq("business_id", business.id).gte("created_at", since),
     plateCostByItem(supabase, business.id),
     supabase.from("kitchen_tickets").select("station_id, fired_at, fulfilled_at").eq("business_id", business.id).gte("fired_at", since).not("fulfilled_at", "is", null),
@@ -99,6 +107,23 @@ export default async function InsightsPage({
   const avgTurnMin = turnCount > 0 ? turnSum / turnCount : 0;
   const avgPartySize = coverChecks > 0 ? coversTotal / coverChecks : 0;
   const hasCovers = coversTotal > 0 || turnCount > 0;
+
+  // GAP-1: sales by order channel (NULL channel = in-store register). Only shown
+  // once at least one non-store channel has rung up, so existing single-channel
+  // restaurants see no new noise.
+  const CHANNEL_LABEL: Record<string, string> = { kiosk: "Kiosk", online: "Online", qr: "QR table", doordash: "DoorDash", ubereats: "Uber Eats", grubhub: "Grubhub" };
+  const channelAgg = new Map<string, { sales: number; checks: number }>();
+  for (const o of liveOrders) {
+    const key = (o.channel as string | null) || "instore";
+    const cur = channelAgg.get(key) ?? { sales: 0, checks: 0 };
+    cur.sales += Number(o.total) || 0; cur.checks += 1;
+    channelAgg.set(key, cur);
+  }
+  const channelRows = Array.from(channelAgg.entries())
+    .map(([key, v]) => ({ key, label: key === "instore" ? "In-store" : CHANNEL_LABEL[key] ?? key, sales: Math.round(v.sales * 100) / 100, checks: v.checks }))
+    .sort((a, b) => b.sales - a.sales);
+  const channelSalesMax = Math.max(1, ...channelRows.map((r) => r.sales));
+  const hasMultiChannel = channelRows.some((r) => r.key !== "instore");
 
   // Menu mix (exclude voided orders' items). Cost accumulates each line's recipe
   // plate cost × qty (0 when no recipe); costedUnits tracks recipe coverage.
@@ -242,6 +267,14 @@ export default async function InsightsPage({
             {DOW.map((d) => <Bar key={d} label={d} value={byDow.get(d) ?? 0} max={maxDow} />)}
           </div>
         </div>
+        {hasMultiChannel && (
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4">
+            <h2 className="font-semibold mb-2 text-sm">By channel</h2>
+            <div className="space-y-1">
+              {channelRows.map((r) => <Bar key={r.key} label={r.label} value={r.sales} max={channelSalesMax} />)}
+            </div>
+          </div>
+        )}
       </div>
 
       {fcHasData && (

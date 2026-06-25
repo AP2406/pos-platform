@@ -62,7 +62,19 @@ type KitchenOrder = {
   elementId: string | null;
   tableName: string | null;
   rush?: boolean;
+  channel: string | null;
   items: KitchenItem[];
+};
+
+// GAP-1: how each non-register channel is shown on a KDS card. NULL / "pos" = an
+// in-store sale and gets no badge.
+const CHANNEL_META: Record<string, { badge: string; title: string }> = {
+  kiosk: { badge: "🖥 Kiosk", title: "Kiosk" },
+  online: { badge: "🛍 Online", title: "Online order" },
+  qr: { badge: "📱 QR", title: "QR table" },
+  doordash: { badge: "🚗 DoorDash", title: "DoorDash" },
+  ubereats: { badge: "🚗 Uber Eats", title: "Uber Eats" },
+  grubhub: { badge: "🚗 Grubhub", title: "Grubhub" },
 };
 
 type RecentTicket = { id: string; kind: "kitchen" | "order"; label: string; fulfilledAt: string };
@@ -270,15 +282,20 @@ export function KitchenClient({
   const refresh = useCallback(async () => {
     const supabase = createClient();
 
-    const { data: orderRows } = await supabase
-      .from("orders")
-      .select("id, customer_id, created_at, kds_prepared, rush")
-      .eq("business_id", businessId)
-      .eq("status", "paid")
-      .is("fulfilled_at", null)
-      .order("created_at", { ascending: true });
+    // GAP-1: include channel for the per-card badge; fall back without it so the
+    // KDS never goes blank before migration 0071 (channel column) is applied.
+    const ordersQuery = (cols: string) =>
+      supabase
+        .from("orders")
+        .select(cols)
+        .eq("business_id", businessId)
+        .eq("status", "paid")
+        .is("fulfilled_at", null)
+        .order("created_at", { ascending: true });
+    let orderRes = await ordersQuery("id, customer_id, created_at, kds_prepared, rush, channel");
+    if (orderRes.error) orderRes = await ordersQuery("id, customer_id, created_at, kds_prepared, rush");
 
-    const rows = orderRows ?? [];
+    const rows = (orderRes.data ?? []) as unknown as Record<string, unknown>[];
     const ids = rows.map((o) => o.id as string);
 
     // Per-order set of prepared order_item ids (online/takeout per-item bump).
@@ -332,6 +349,7 @@ export function KitchenClient({
       elementId: null,
       tableName: null,
       rush: (o.rush as boolean | null) ?? false,
+      channel: (o.channel as string | null) ?? null,
       items: itemsByOrder[o.id as string] ?? [],
     }));
 
@@ -371,6 +389,7 @@ export function KitchenClient({
       elementId,
       tableName: elementId ? elementLabelById[elementId] ?? "Table" : (k.label as string | null) ?? "Ticket",
       rush: (k.rush as boolean | null) ?? false,
+      channel: null,
       items: Array.isArray(k.items) ? (k.items as KitchenItem[]) : [],
     };
     });
@@ -794,12 +813,15 @@ export function KitchenClient({
             {o.rush && !isVoid && (
               <div className="text-[11px] font-bold uppercase tracking-wide text-orange-600 mb-0.5">🔥 Rush</div>
             )}
+            {o.channel && CHANNEL_META[o.channel] && !isVoid && (
+              <div className="text-[11px] font-bold uppercase tracking-wide text-blue-600 mb-0.5">{CHANNEL_META[o.channel].badge}</div>
+            )}
             {isVoid ? (
               <div className="text-lg font-bold leading-tight truncate text-red-600">⚠ VOID — {o.tableName ?? o.tableLabel ?? "Table"}</div>
             ) : o.kind === "kitchen" ? (
               <div className="text-lg font-bold leading-tight truncate">{o.tableName ?? o.tableLabel ?? "Table"}</div>
             ) : (
-              <div className="text-lg font-bold leading-tight truncate">Online</div>
+              <div className="text-lg font-bold leading-tight truncate">{(o.channel && CHANNEL_META[o.channel]?.title) || "Online"}</div>
             )}
             <div className="text-[11px] text-muted-foreground tabular-nums mt-0.5">
               {(o.kind === "kitchen" ? "" : "#" + o.id.slice(0, 8) + " · ") + timeLabel(o.createdAt)}

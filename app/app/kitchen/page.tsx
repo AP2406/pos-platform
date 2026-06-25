@@ -17,13 +17,12 @@ export default async function KitchenPage() {
   const kdsLang = typeof sset.kds_lang === "string" ? (sset.kds_lang as string) : "en";
   const printerFallback = sset.kds_printer_fallback === true;
 
-  const { data: orders } = await supabase
-    .from("orders")
-    .select("id, total, customer_id, created_at, kds_prepared, rush")
-    .eq("business_id", business.id)
-    .eq("status", "paid")
-    .is("fulfilled_at", null)
-    .order("created_at", { ascending: true });
+  // GAP-1: include channel for the per-card badge; fall back without it so the KDS
+  // never goes blank before migration 0071 (channel column) is applied.
+  const ordersQ = (cols: string) =>
+    supabase.from("orders").select(cols).eq("business_id", business.id).eq("status", "paid").is("fulfilled_at", null).order("created_at", { ascending: true });
+  const ordersRes0 = await ordersQ("id, total, customer_id, created_at, kds_prepared, rush, channel");
+  const orders = (ordersRes0.error ? (await ordersQ("id, total, customer_id, created_at, kds_prepared, rush")).data : ordersRes0.data) as Record<string, unknown>[] | null;
 
   const orderRows = orders ?? [];
   const ids = orderRows.map((o) => o.id as string);
@@ -82,6 +81,7 @@ export default async function KitchenPage() {
     elementId: null as string | null,
     tableName: null as string | null,
     rush: (o.rush as boolean | null) ?? false,
+    channel: (o.channel as string | null) ?? null,
     items: itemsByOrder[o.id as string] ?? [],
   }));
 
@@ -126,6 +126,7 @@ export default async function KitchenPage() {
       elementId,
       tableName: elementId ? elementLabelById[elementId] ?? "Table" : (k.label as string | null) ?? "Ticket",
       rush: (k.rush as boolean | null) ?? false,
+      channel: null as string | null,
       items: Array.isArray(k.items)
         ? (k.items as { name: string; quantity: number; note?: string | null; seat?: number | null; allergens?: string[] | null; allergy?: string | null; prep_minutes?: number | null; void?: boolean }[])
         : [],

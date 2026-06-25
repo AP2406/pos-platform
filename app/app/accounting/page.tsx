@@ -292,6 +292,15 @@ export default async function AccountingPage({
           <Line label={"Voids, pre-tax (" + s.voids.n + ")"} value={s.voids.amount > 0 ? money(s.voids.amount) : money(0)} />
         </div>
 
+        {s.salesByChannel.some((c) => c.channel !== "instore") && (
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-5 text-sm">
+            <h2 className="font-semibold mb-2">Sales by channel</h2>
+            {s.salesByChannel.map((c) => (
+              <Line key={c.channel} label={c.label + " (" + c.count + " sale" + (c.count === 1 ? "" : "s") + ")"} value={money(c.total)} />
+            ))}
+          </div>
+        )}
+
         <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-5 text-sm">
           <h2 className="font-semibold mb-2">Outstanding liabilities</h2>
           <p className="text-xs text-muted-foreground mb-2">Current balances (not for the period).</p>
