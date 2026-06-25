@@ -3,6 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { cleanAllergens } from "@/lib/allergens";
+import { integrationEnabled } from "@/lib/services/integrations";
+import { notifyPlatforms86 } from "@/lib/services/delivery";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -138,6 +140,17 @@ export async function setCatalogItemOutOfStock(
   }
   revalidatePath("/app/catalog");
   revalidatePath("/app/pos");
+
+  // GAP-1: mirror the 86 to any connected delivery platforms. No-op until a
+  // platform is configured; never blocks the toggle.
+  if (integrationEnabled((business as { settings?: unknown }).settings, "delivery")) {
+    try {
+      const { data: item } = await supabase.from("catalog_items").select("name").eq("id", id).eq("business_id", business.id).maybeSingle();
+      await notifyPlatforms86(business.id, (item?.name as string) || "Item", outOfStock);
+    } catch (e) {
+      console.error("notifyPlatforms86:", e);
+    }
+  }
   return { ok: true, at };
 }
 

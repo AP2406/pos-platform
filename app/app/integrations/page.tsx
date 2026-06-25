@@ -4,6 +4,7 @@ import { hasFloorService } from "@/lib/modules/modes";
 import { integrationStatuses, integrationEnabled, envEssentials } from "@/lib/services/integrations";
 import { getCardConfig } from "../pos/finix-pos-actions";
 import { IntegrationCard } from "./integration-card";
+import { DeliveryTestButton } from "./delivery-test-button";
 
 const CARD_REASON: Record<string, string> = {
   demo: "Demo business — never processes real money",
@@ -66,7 +67,12 @@ export default async function IntegrationsPage() {
           <div key={g} className="mb-6">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{g}</h2>
             <div className="space-y-3">
-              {items.map((s) => <IntegrationCard key={s.key} status={s} />)}
+              {items.map((s) => (
+                <div key={s.key}>
+                  <IntegrationCard status={s} />
+                  {s.key === "delivery" && s.enabled && <DeliveryTestButton />}
+                </div>
+              ))}
             </div>
           </div>
         );
