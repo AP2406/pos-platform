@@ -94,6 +94,13 @@ export async function extractMenuItems(file: {
     contents = MENU_PROMPT + "\n\nMenu content:\n\n" + text.slice(0, 100000);
   }
 
+  return runExtraction(ai, contents);
+}
+
+// Run the model on prepared contents (text or multimodal parts) and parse the
+// JSON item list. Shared by file upload and URL import.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function runExtraction(ai: GoogleGenAI, contents: any): Promise<ParsedMenuItem[]> {
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
     contents: contents,
@@ -116,7 +123,7 @@ export async function extractMenuItems(file: {
   try {
     parsed = JSON.parse(cleaned);
   } catch {
-    throw new Error("The menu couldn't be read clearly. Try a clearer photo or file.");
+    throw new Error("The menu couldn't be read clearly. Try a clearer photo, file, or link.");
   }
 
   const rawItems = Array.isArray(parsed)
@@ -148,4 +155,52 @@ export async function extractMenuItems(file: {
     items.push({ name: name.slice(0, 120), price: price, category: category });
   }
   return items;
+}
+
+// Strip a fetched HTML page down to readable text for the menu extractor.
+function htmlToText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<head[\s\S]*?<\/head>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&[a-z]+;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// GAP-2.2: import a menu from a public URL. Fetches the page, reduces it to text,
+// and runs the same extraction as a pasted menu.
+export async function extractMenuItemsFromUrl(url: string): Promise<ParsedMenuItem[]> {
+  if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new Error("That doesn't look like a valid link.");
+  }
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    throw new Error("Only http(s) links are supported.");
+  }
+
+  let html = "";
+  try {
+    const res = await fetch(parsedUrl.toString(), {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; SurgeMenuImport/1.0)", Accept: "text/html" },
+      redirect: "follow",
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error("status " + res.status);
+    html = await res.text();
+  } catch {
+    throw new Error("Couldn't fetch that page. Check the link, or upload the menu file instead.");
+  }
+
+  const text = htmlToText(html);
+  if (text.length < 40) throw new Error("That page didn't have readable menu text. Try uploading the menu instead.");
+
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  return runExtraction(ai, MENU_PROMPT + "\n\nMenu content:\n\n" + text.slice(0, 100000));
 }

@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
-import { extractMenuItems, type ParsedMenuItem } from "@/lib/services/menu-import";
+import { extractMenuItems, extractMenuItemsFromUrl, type ParsedMenuItem } from "@/lib/services/menu-import";
 
 export async function parseMenuUpload(input: {
   name: string;
@@ -29,6 +29,25 @@ export async function parseMenuUpload(input: {
   } catch (e) {
     console.error("parseMenuUpload:", e);
     const msg = e instanceof Error ? e.message : "Could not read that file.";
+    return { error: msg };
+  }
+}
+
+// GAP-2.2: import a menu from a pasted URL (owner/manager).
+export async function parseMenuUrl(url: string): Promise<{ ok: true; items: ParsedMenuItem[] } | { error: string }> {
+  const { role } = await requireBusiness();
+  if (role !== "owner" && role !== "manager") {
+    return { error: "Only an owner or manager can import a menu." };
+  }
+  if (!url || !url.trim()) return { error: "Paste a menu link." };
+
+  try {
+    const items = await extractMenuItemsFromUrl(url.trim());
+    if (items.length === 0) return { error: "No menu items were found at that link." };
+    return { ok: true, items: items };
+  } catch (e) {
+    console.error("parseMenuUrl:", e);
+    const msg = e instanceof Error ? e.message : "Could not read that link.";
     return { error: msg };
   }
 }

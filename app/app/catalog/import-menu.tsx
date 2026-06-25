@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { parseMenuUpload, bulkCreateCatalogItems } from "./import-actions";
+import { parseMenuUpload, parseMenuUrl, bulkCreateCatalogItems } from "./import-actions";
 
 type ReviewItem = { name: string; price: string; category: string; include: boolean };
 
@@ -79,6 +79,7 @@ export function ImportMenu() {
   const [err, setErr] = useState<string | null>(null);
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [fileName, setFileName] = useState("");
+  const [url, setUrl] = useState("");
   const [pending, startTransition] = useTransition();
   const [doneCount, setDoneCount] = useState<number | null>(null);
 
@@ -88,7 +89,25 @@ export function ImportMenu() {
     setErr(null);
     setItems([]);
     setFileName("");
+    setUrl("");
     setDoneCount(null);
+  }
+
+  function showReview(parsed: { name: string; price: number | null; category: string | null }[]) {
+    setItems(parsed.map((i) => ({ name: i.name, price: i.price != null ? String(i.price) : "", category: i.category || "", include: true })));
+    setStage("review");
+  }
+
+  async function handleUrl() {
+    const link = url.trim();
+    if (!link) return;
+    setErr(null);
+    setBusy(true);
+    setFileName(link);
+    const res = await parseMenuUrl(link);
+    setBusy(false);
+    if ("error" in res) { setErr(res.error); return; }
+    showReview(res.items);
   }
 
   function openModal() {
@@ -116,15 +135,7 @@ export function ImportMenu() {
         setErr(res.error);
         return;
       }
-      setItems(
-        res.items.map((i) => ({
-          name: i.name,
-          price: i.price != null ? String(i.price) : "",
-          category: i.category || "",
-          include: true,
-        }))
-      );
-      setStage("review");
+      showReview(res.items);
     } catch (e) {
       setBusy(false);
       setErr(e instanceof Error ? e.message : "Could not read that file.");
@@ -210,6 +221,27 @@ export function ImportMenu() {
                     onChange={(e) => handleFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)}
                   />
                 </label>
+
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">or paste a menu link</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleUrl(); }}
+                    placeholder="https://your-restaurant.com/menu"
+                    inputMode="url"
+                    disabled={busy}
+                    className="h-9"
+                  />
+                  <Button onClick={handleUrl} disabled={busy || url.trim().length < 8}>
+                    {busy && url ? "Reading…" : "Fetch"}
+                  </Button>
+                </div>
+
                 {err && <p className="text-sm text-red-600">{err}</p>}
               </div>
             ) : (
