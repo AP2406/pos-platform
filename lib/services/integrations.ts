@@ -1,6 +1,7 @@
 import { isFinixConfigured, getFinixConfig } from "./finix";
 import { isEmailConfigured } from "./email";
 import { isSmsConfigured } from "./sms";
+import { isAiConfigured } from "./ai";
 
 // P2 external-integration registry. Each connector reports whether its server
 // credentials are present (env), what env vars it needs, and a finish-up
@@ -155,6 +156,7 @@ export function envEssentials(): { label: string; ok: boolean; env: string }[] {
     { label: "Card processing (Finix)", ok: isFinixConfigured(), env: "FINIX_*" },
     { label: "Email (Resend)", ok: isEmailConfigured(), env: "RESEND_API_KEY" },
     { label: "SMS (Twilio)", ok: isSmsConfigured(), env: "TWILIO_*" },
+    { label: "AI (Gemini)", ok: isAiConfigured(), env: "GEMINI_API_KEY" },
     { label: "Scheduled jobs", ok: !!process.env.CRON_SECRET, env: "CRON_SECRET" },
     { label: "Public links (booking, online order)", ok: !!process.env.NEXT_PUBLIC_SITE_URL, env: "NEXT_PUBLIC_SITE_URL" },
   ];
