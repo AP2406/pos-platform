@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
-import { isFinixConfigured, createBuyerIdentity, finix, refundTransfer } from "@/lib/services/finix";
+import { isFinixConfigured, createBuyerIdentity, finix, refundTransfer, resolveMerchantId } from "@/lib/services/finix";
 import { createOrder } from "./actions";
 
 type CardConfig =
@@ -78,12 +78,19 @@ export async function getCardConfig(): Promise<CardConfig> {
     .eq("id", business.id)
     .single();
 
-  if (!biz || !biz.finix_merchant_id) {
+  // Resolve the merchant: the business's own, else the sandbox env fallback so a
+  // test business can charge in sandbox without per-business onboarding.
+  const merchantId = resolveMerchantId((biz?.finix_merchant_id as string | null) ?? null);
+  if (!merchantId) {
     return { enabled: false, reason: "not_onboarded" };
   }
-  const state = (biz.finix_merchant_state as string | null) || "";
-  if (state && state.toUpperCase() !== "APPROVED") {
-    return { enabled: false, reason: "not_approved" };
+  // Only require APPROVED when the business has its own merchant; the sandbox
+  // fallback merchant has no per-business state to check.
+  if (biz?.finix_merchant_id) {
+    const state = (biz.finix_merchant_state as string | null) || "";
+    if (state && state.toUpperCase() !== "APPROVED") {
+      return { enabled: false, reason: "not_approved" };
+    }
   }
 
   return {
@@ -91,7 +98,7 @@ export async function getCardConfig(): Promise<CardConfig> {
     applicationId: process.env.FINIX_APPLICATION_ID || "",
     // Finix.js expects "sandbox" | "live" — must match the SDK's accepted values.
     environment: process.env.FINIX_ENVIRONMENT === "live" ? "live" : "sandbox",
-    merchantId: biz.finix_merchant_id as string,
+    merchantId,
   };
 }
 
@@ -169,14 +176,18 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
     .select("finix_merchant_id, finix_merchant_state")
     .eq("id", business.id)
     .single();
-  if (!biz || !biz.finix_merchant_id) {
+  // Business's own merchant, else the sandbox env fallback (same resolution as
+  // getCardConfig so the charge matches what the register offered).
+  const merchantId = resolveMerchantId((biz?.finix_merchant_id as string | null) ?? null);
+  if (!merchantId) {
     return { error: "This business isn't set up to accept card payments yet." };
   }
-  const state = (biz.finix_merchant_state as string | null) || "";
-  if (state && state.toUpperCase() !== "APPROVED") {
-    return { error: "This business's card account isn't approved yet." };
+  if (biz?.finix_merchant_id) {
+    const state = (biz.finix_merchant_state as string | null) || "";
+    if (state && state.toUpperCase() !== "APPROVED") {
+      return { error: "This business's card account isn't approved yet." };
+    }
   }
-  const merchantId = biz.finix_merchant_id as string;
 
   const amountCents = Math.round((Number(input.expected_total) || 0) * 100);
   if (amountCents < 100) {

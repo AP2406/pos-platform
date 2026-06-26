@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
-import { isFinixConfigured, createBuyerIdentity, finix } from "@/lib/services/finix";
+import { isFinixConfigured, createBuyerIdentity, finix, resolveMerchantId } from "@/lib/services/finix";
 
 type TokenizedChargeConfig = {
   applicationId: string;
@@ -23,7 +23,7 @@ export async function getTokenizedChargeConfig(): Promise<TokenizedChargeConfig>
   return {
     applicationId: process.env.FINIX_APPLICATION_ID || "",
     environment: process.env.FINIX_ENVIRONMENT === "live" ? "live" : "sandbox",
-    merchantId: biz && biz.finix_merchant_id ? (biz.finix_merchant_id as string) : null,
+    merchantId: resolveMerchantId((biz?.finix_merchant_id as string | null) ?? null),
   };
 }
 
@@ -73,19 +73,18 @@ export async function chargeTokenizedCard(
 
   const supabase = await createClient();
 
-  const { data: biz, error: bizErr } = await supabase
+  const { data: biz } = await supabase
     .from("businesses")
     .select("finix_merchant_id")
     .eq("id", business.id)
     .single();
 
-  if (bizErr || !biz || !biz.finix_merchant_id) {
+  const merchantId = resolveMerchantId((biz?.finix_merchant_id as string | null) ?? null);
+  if (!merchantId) {
     return {
-      error: "This business has no Finix merchant yet. Onboard it first at /app/debug/onboard.",
+      error: "This business has no Finix merchant, and no sandbox FINIX_MERCHANT_ID fallback is set. Onboard at /app/debug/onboard or set FINIX_MERCHANT_ID.",
     };
   }
-
-  const merchantId = biz.finix_merchant_id as string;
 
   const amountCents = Math.round(input.amountDollars * 100);
   if (amountCents < 100) {

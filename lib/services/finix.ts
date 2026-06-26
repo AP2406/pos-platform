@@ -25,6 +25,21 @@ export function isFinixConfigured(): boolean {
   );
 }
 
+// Sandbox-only merchant fallback. In sandbox, a business that hasn't been onboarded
+// to its own Finix merchant falls back to the env FINIX_MERCHANT_ID so any test
+// business can take a real sandbox charge (certification, demos). In live this
+// returns null — every business must have its own approved merchant.
+export function sandboxFallbackMerchantId(): string | null {
+  if (process.env.FINIX_ENVIRONMENT === "live") return null;
+  return process.env.FINIX_MERCHANT_ID || null;
+}
+
+// Resolve the merchant to charge: the business's own merchant, else the sandbox
+// fallback. Returns null when neither is available.
+export function resolveMerchantId(businessMerchantId: string | null | undefined): string | null {
+  return (businessMerchantId && String(businessMerchantId)) || sandboxFallbackMerchantId();
+}
+
 export function getFinixConfig() {
   return {
     applicationId: process.env.FINIX_APPLICATION_ID ?? "",
