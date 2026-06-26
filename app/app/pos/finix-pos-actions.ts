@@ -89,7 +89,8 @@ export async function getCardConfig(): Promise<CardConfig> {
   return {
     enabled: true,
     applicationId: process.env.FINIX_APPLICATION_ID || "",
-    environment: process.env.FINIX_ENVIRONMENT === "live" ? "prod" : "sandbox",
+    // Finix.js expects "sandbox" | "live" — must match the SDK's accepted values.
+    environment: process.env.FINIX_ENVIRONMENT === "live" ? "live" : "sandbox",
     merchantId: biz.finix_merchant_id as string,
   };
 }

@@ -67,6 +67,15 @@ export default function TokenizedChargeForm(props: Props) {
       if (formRef.current) return;
 
       try {
+        // Finix requires the fraud-detection Auth to initialize BEFORE the form.
+        try {
+          if (typeof w.Finix.Auth === "function") {
+            fraudRef.current = w.Finix.Auth(props.environment, props.merchantId);
+          }
+        } catch (e2) {
+          fraudRef.current = null;
+        }
+
         if (typeof w.Finix.PaymentForm !== "function") {
           setInitError("The Finix SDK loaded but PaymentForm is not available on it.");
           return;
@@ -78,14 +87,6 @@ export default function TokenizedChargeForm(props: Props) {
           props.applicationId,
           { onUpdate: function () {} }
         );
-
-        try {
-          if (typeof w.Finix.Auth === "function") {
-            fraudRef.current = w.Finix.Auth(props.environment, props.merchantId);
-          }
-        } catch (e2) {
-          fraudRef.current = null;
-        }
       } catch (e) {
         setInitError("Card field setup failed: " + String(e));
       }

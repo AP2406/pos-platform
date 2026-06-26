@@ -77,6 +77,16 @@ export function CardPaymentModal(props: Props) {
       if (!sdkReady || !w.Finix) return;
       if (formRef.current) return;
       try {
+        // Finix requires the fraud-detection Auth to initialize BEFORE the payment
+        // form so it can instrument the page; the session key it produces must ride
+        // on the first charge (fraud_session_id) for certification.
+        try {
+          if (typeof w.Finix.Auth === "function") {
+            fraudRef.current = w.Finix.Auth(props.config.environment, props.config.merchantId);
+          }
+        } catch (e2) {
+          fraudRef.current = null;
+        }
         if (typeof w.Finix.PaymentForm !== "function") {
           setInitError("The card library loaded but is missing the payment form.");
           return;
@@ -87,13 +97,6 @@ export function CardPaymentModal(props: Props) {
           props.config.applicationId,
           { onUpdate: function () {} }
         );
-        try {
-          if (typeof w.Finix.Auth === "function") {
-            fraudRef.current = w.Finix.Auth(props.config.environment, props.config.merchantId);
-          }
-        } catch (e2) {
-          fraudRef.current = null;
-        }
       } catch (e) {
         setInitError("Could not set up the card fields: " + String(e));
       }
@@ -132,6 +135,7 @@ export function CardPaymentModal(props: Props) {
           return;
         }
         const fraudSessionId = readFraudSession();
+        if (!fraudSessionId) console.warn("Finix: fraud_session_id missing at charge time — fraud Auth may not have initialized.");
         chargeWithToken(token, fraudSessionId);
       });
     } catch (e) {

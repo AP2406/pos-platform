@@ -12,13 +12,24 @@ type FinixTransferEmbedded = {
   failure_message?: string;
 };
 
+type FinixDisputeEmbedded = {
+  id?: string;
+  amount?: number;
+  currency?: string;
+  state?: string;
+  reason?: string;
+  respond_by?: string;
+  transfer?: string;
+  _links?: { transfer?: { href?: string } };
+};
+
 type FinixEvent = {
   id?: string;
   system_generated_idempotency_id?: string;
   type?: string;
   entity?: string;
   occurred_at?: string;
-  _embedded?: { transfers?: FinixTransferEmbedded[] };
+  _embedded?: { transfers?: FinixTransferEmbedded[]; disputes?: FinixDisputeEmbedded[] };
 };
 
 function jsonResponse(body: Record<string, unknown>, status: number): Response {
@@ -157,8 +168,41 @@ export async function POST(req: Request) {
         if (updErr) processError = "finix_payments update: " + (updErr.message || "error");
       }
     }
-    // Other entities (merchant, dispute, etc.) are logged in
-    // finix_webhook_events for now; deeper handling can read from there.
+    // Disputes (chargebacks): upsert so they're visible in Surge. Resolve the
+    // business + order from the disputed transfer via finix_payments.
+    if (event.entity === "dispute") {
+      const list = event._embedded && event._embedded.disputes ? event._embedded.disputes : [];
+      const dispute = Array.isArray(list) && list.length > 0 ? list[0] : null;
+      if (dispute && dispute.id) {
+        const transferId = dispute.transfer || (dispute._links?.transfer?.href ? dispute._links.transfer.href.split("/").pop() : null) || null;
+        let businessId: string | null = null;
+        let orderId: string | null = null;
+        if (transferId) {
+          const { data: fp } = await admin
+            .from("finix_payments")
+            .select("business_id, order_id")
+            .eq("finix_transfer_id", transferId)
+            .maybeSingle();
+          businessId = (fp?.business_id as string | null) ?? null;
+          orderId = (fp?.order_id as string | null) ?? null;
+        }
+        const { error: dErr } = await admin.from("finix_disputes").upsert({
+          id: dispute.id,
+          business_id: businessId,
+          finix_transfer_id: transferId,
+          order_id: orderId,
+          amount_cents: typeof dispute.amount === "number" ? dispute.amount : 0,
+          currency: dispute.currency || "USD",
+          state: dispute.state || null,
+          reason: dispute.reason || null,
+          respond_by: dispute.respond_by || null,
+          raw_response: dispute as unknown as Record<string, unknown>,
+          updated_at: new Date().toISOString(),
+        });
+        if (dErr) processError = "finix_disputes upsert: " + (dErr.message || "error");
+      }
+    }
+    // Other entities (merchant, etc.) remain logged in finix_webhook_events.
   } catch (e) {
     processError = String(e);
     console.error("Finix webhook: processing error for event " + event.id, e);

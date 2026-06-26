@@ -27,6 +27,15 @@ export default async function SettlementPage({
   const supabase = await createClient();
   const report = await settlementReconciliation(supabase, business.id, (business as { settings?: unknown }).settings, period.startIso, period.endIso);
 
+  // Disputes/chargebacks (ingested from Finix webhooks). Resilient if 0076 isn't applied.
+  const { data: disputeRows } = await supabase
+    .from("finix_disputes")
+    .select("id, finix_transfer_id, amount_cents, currency, state, reason, respond_by, created_at")
+    .eq("business_id", business.id)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  const disputes = (disputeRows ?? []) as Record<string, unknown>[];
+
   const presets = [
     { key: "this_month", label: "This month" },
     { key: "last_month", label: "Last month" },
@@ -102,6 +111,34 @@ export default async function SettlementPage({
             )}
           </div>
         </>
+      )}
+
+      {disputes.length > 0 && (
+        <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl overflow-hidden mt-4">
+          <div className="px-3 py-2 text-sm font-semibold border-b border-border">Disputes &amp; chargebacks</div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground border-b border-border">
+                <th className="px-3 py-2 font-medium">Date</th>
+                <th className="px-3 py-2 font-medium">State</th>
+                <th className="px-3 py-2 font-medium">Reason</th>
+                <th className="px-3 py-2 font-medium">Transfer</th>
+                <th className="px-3 py-2 font-medium text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {disputes.map((d) => (
+                <tr key={d.id as string} className="border-b border-border last:border-0">
+                  <td className="px-3 py-2 text-muted-foreground">{d.created_at ? new Date(d.created_at as string).toLocaleDateString() : "—"}</td>
+                  <td className="px-3 py-2">{(d.state as string) || "—"}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{(d.reason as string) || "—"}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{(d.finix_transfer_id as string) || "—"}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{money((Number(d.amount_cents) || 0) / 100)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
