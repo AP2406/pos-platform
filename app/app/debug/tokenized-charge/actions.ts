@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { isFinixConfigured, createBuyerIdentity, finix, resolveMerchantId } from "@/lib/services/finix";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type TokenizedChargeConfig = {
   applicationId: string;
@@ -143,7 +144,9 @@ export async function chargeTokenizedCard(
   }
   const transfer = transferResult.data;
 
-  const { data: dbRow, error: dbError } = await supabase
+  // finix_payments writes are service-role only (RLS: members read-only).
+  const admin = createAdminClient();
+  const { data: dbRow, error: dbError } = await admin
     .from("finix_payments")
     .insert({
       business_id: business.id,

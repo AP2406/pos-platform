@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { isFinixConfigured, createBuyerIdentity, finix, refundTransfer, resolveMerchantId, finixErrorMessage } from "@/lib/services/finix";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createOrder } from "./actions";
 
 type CardConfig =
@@ -240,21 +241,24 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
   const stateUpper = (transfer.state || "").toUpperCase();
 
   async function recordFinixPayment(orderId: string | null): Promise<void> {
-    const { data: existingFp } = await supabase
+    // finix_payments writes are service-role only (RLS: members read-only), so use
+    // the admin client for the insert/update of payment records.
+    const admin = createAdminClient();
+    const { data: existingFp } = await admin
       .from("finix_payments")
       .select("id")
       .eq("finix_transfer_id", transfer.id)
       .maybeSingle();
     if (existingFp) {
       if (orderId) {
-        await supabase
+        await admin
           .from("finix_payments")
           .update({ order_id: orderId, status: (transfer.state || "").toLowerCase() })
           .eq("id", existingFp.id);
       }
       return;
     }
-    await supabase.from("finix_payments").insert({
+    await admin.from("finix_payments").insert({
       business_id: business.id,
       order_id: orderId,
       trip_id: null,

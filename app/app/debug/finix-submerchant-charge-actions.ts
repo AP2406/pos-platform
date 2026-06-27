@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireBusiness } from "@/lib/services/tenancy";
 import {
   isFinixConfigured,
@@ -139,7 +140,8 @@ export async function chargeIntoSubMerchant(
   }
   const transfer = transferResult.data;
 
-  const { data: dbRow, error: dbError } = await supabase
+  // finix_payments writes are service-role only under RLS.
+  const { data: dbRow, error: dbError } = await createAdminClient()
     .from("finix_payments")
     .insert({
       business_id: business.id,

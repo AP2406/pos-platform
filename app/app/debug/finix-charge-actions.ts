@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireBusiness } from "@/lib/services/tenancy";
 import {
   createBuyerIdentity,
@@ -124,11 +124,11 @@ export async function chargeTestCard(
 
   const transfer = transferResult.data;
 
-  // 5. Record in Surge DB
+  // 5. Record in Surge DB (finix_payments writes are service-role only under RLS).
   const { business } = await requireBusiness();
-  const supabase = await createClient();
+  const admin = createAdminClient();
 
-  const { data: dbRow, error: dbError } = await supabase
+  const { data: dbRow, error: dbError } = await admin
     .from("finix_payments")
     .insert({
       business_id: business.id,
