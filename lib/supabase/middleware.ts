@@ -30,8 +30,16 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Refreshes auth cookie if expired
-  const { data: { user } } = await supabase.auth.getUser();
+  // Refreshes auth cookie if expired. A stale/invalid refresh token makes
+  // getUser() throw ("Invalid Refresh Token") — treat that as logged out rather
+  // than 500-ing the request.
+  let user = null;
+  try {
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+  } catch {
+    user = null;
+  }
 
   // Protect /app routes — if no user, send them to login
   if (!user && request.nextUrl.pathname.startsWith("/app")) {

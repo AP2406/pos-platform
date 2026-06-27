@@ -9,6 +9,24 @@ const STATUS_RANK: Record<string, number> = {
   completed: 2,
 };
 
+// Retry the Gemini parse on transient provider errors (503 overloaded / 429 rate
+// limit) with exponential back-off. Non-transient errors throw immediately.
+async function parseWithRetry(emailText: string, attempts = 3): Promise<ParsedLead> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await parseEmailWithGemini(emailText);
+    } catch (err) {
+      lastErr = err;
+      const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+      const transient = /\b(503|429|overloaded|unavailable|rate.?limit|timeout)\b/.test(msg);
+      if (!transient || i === attempts - 1) throw err;
+      await new Promise((r) => setTimeout(r, 500 * Math.pow(3, i))); // 0.5s, 1.5s
+    }
+  }
+  throw lastErr;
+}
+
 function serviceClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -150,8 +168,10 @@ export async function POST(req: NextRequest) {
   const emailText = "From: " + from + "\nSubject: " + subject + "\n\n" + body;
   let parsed: ParsedLead;
   try {
-    parsed = await parseEmailWithGemini(emailText);
+    parsed = await parseWithRetry(emailText);
   } catch (err) {
+    // Provider outage (e.g. Gemini 503) after retries: degrade gracefully — never
+    // throw, so the inbound webhook still returns 200 and the email isn't lost.
     console.error("inbound-email parse error:", err);
     const detail = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ ok: true, status: "parse_failed", detail });
