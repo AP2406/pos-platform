@@ -100,6 +100,27 @@ async function finixRequest<T>(
   }
 }
 
+// Pull a human-readable reason out of a Finix error result. Finix returns declines
+// (e.g. 402 PAYMENT_DECLINED / MAX_TRANSACTION_AMOUNT_EXCEEDED) as an HTTP error with
+// the detail under _embedded.errors[0]. Known failure codes get a clean message;
+// otherwise we fall back to Finix's own failure_message.
+const FINIX_FAILURE_TEXT: Record<string, string> = {
+  MAX_TRANSACTION_AMOUNT_EXCEEDED: "This amount is over the card account's per-transaction limit.",
+  DO_NOT_HONOR: "The card was declined (do not honor). Try another card.",
+  INSUFFICIENT_FUNDS: "The card was declined for insufficient funds.",
+  EXPIRED_CARD: "That card is expired.",
+  INVALID_CVV: "The security code (CVV) was incorrect.",
+  GENERIC_DECLINE: "The card was declined. Try another card.",
+};
+
+export function finixErrorMessage(res: { error?: string; details?: unknown }): { code: string | null; message: string | null } {
+  const d = res?.details as { _embedded?: { errors?: { failure_code?: string; failure_message?: string; message?: string }[] } } | undefined;
+  const e = d?._embedded?.errors?.[0];
+  const code = e?.failure_code ?? null;
+  const friendly = code && FINIX_FAILURE_TEXT[code] ? FINIX_FAILURE_TEXT[code] : (e?.failure_message || e?.message || null);
+  return { code, message: friendly };
+}
+
 export const finix = {
   get: <T>(path: string) => finixRequest<T>("GET", path),
   post: <T>(path: string, body: unknown) => finixRequest<T>("POST", path, body),

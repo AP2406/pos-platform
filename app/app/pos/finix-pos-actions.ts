@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
-import { isFinixConfigured, createBuyerIdentity, finix, refundTransfer, resolveMerchantId } from "@/lib/services/finix";
+import { isFinixConfigured, createBuyerIdentity, finix, refundTransfer, resolveMerchantId, finixErrorMessage } from "@/lib/services/finix";
 import { createOrder } from "./actions";
 
 type CardConfig =
@@ -230,6 +230,10 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
 
   const transferResult = await finix.post<FinixTransferResp>("/transfers", transferBody);
   if ("error" in transferResult) {
+    // Surface the real Finix reason (e.g. MAX_TRANSACTION_AMOUNT_EXCEEDED) rather
+    // than a generic message — declines arrive as an HTTP error with the detail.
+    const { message } = finixErrorMessage(transferResult);
+    if (message) return { declined: true, message };
     return { error: "The payment didn't go through. Please try again." };
   }
   const transfer = transferResult.data;
