@@ -41,8 +41,10 @@ export async function updateSession(request: NextRequest) {
     user = null;
   }
 
-  // Protect /app routes — if no user, send them to login
-  if (!user && request.nextUrl.pathname.startsWith("/app")) {
+  // Protect /app and /hq routes — if no user, send them to login. (/hq also has a
+  // platform-admin gate in its layout; this is the logged-out fast path.)
+  const path = request.nextUrl.pathname;
+  if (!user && (path.startsWith("/app") || path.startsWith("/hq"))) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
