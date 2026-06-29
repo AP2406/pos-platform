@@ -12,9 +12,11 @@ export default async function HqLayout({ children }: { children: React.ReactNode
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <header className="border-b border-zinc-800 bg-zinc-900">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <Link href="/hq" className="font-semibold tracking-tight">Surge <span className="text-emerald-400">HQ</span></Link>
-            <span className="text-[10px] uppercase tracking-wide rounded bg-zinc-800 text-zinc-400 px-1.5 py-0.5">Operator console</span>
+            <nav className="flex items-center gap-3 text-sm text-zinc-400">
+              <Link href="/hq/merchants" className="hover:text-zinc-100">Merchants</Link>
+            </nav>
           </div>
           <div className="text-xs text-zinc-400">
             {admin.email} · <span className="text-zinc-200 capitalize">{admin.role}</span>
