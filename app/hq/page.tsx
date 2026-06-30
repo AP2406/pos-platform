@@ -1,13 +1,14 @@
+import Link from "next/link";
 import { requirePlatformAdmin, auditHq } from "@/lib/services/platform";
 
 export const dynamic = "force-dynamic";
 
-const PHASES = [
-  { key: "HQ-1", title: "Merchant directory", desc: "Every tenant: status, plan, Finix state, last activity.", ready: false },
-  { key: "HQ-3", title: "Onboarding funnel", desc: "Apply → KYC → Finix sub-merchant → provision POS tenant.", ready: false },
-  { key: "HQ-2", title: "Portfolio economics", desc: "Volume, net revenue, software MRR, rep residual.", ready: false },
-  { key: "HQ-4", title: "Reps & residuals", desc: "Commission config, referred merchants, payouts.", ready: false },
-  { key: "HQ-5", title: "Cross-tenant ops", desc: "Disputes, incidents, terminal fleet, at-risk merchants.", ready: false },
+const SECTIONS = [
+  { href: "/hq/merchants", title: "Merchants", desc: "Every tenant: status, plan, Finix state, last activity." },
+  { href: "/hq/portfolio", title: "Portfolio economics", desc: "Volume, net revenue, software MRR, rep residual." },
+  { href: "/hq/onboarding", title: "Onboarding funnel", desc: "Apply → KYC → Finix sub-merchant → provision POS tenant." },
+  { href: "/hq/reps", title: "Reps & residuals", desc: "Commission config, referred merchants, payouts." },
+  { href: "/hq/ops", title: "Cross-tenant ops", desc: "Disputes, incidents, at-risk merchants, terminal fleet." },
 ];
 
 export default async function HqHome() {
@@ -18,19 +19,15 @@ export default async function HqHome() {
     <div>
       <h1 className="text-2xl font-semibold">Surge HQ</h1>
       <p className="text-sm text-zinc-400 mt-1">
-        Operator control plane across all merchant tenants. Foundation live — phases roll out next.
+        Operator control plane across all merchant tenants.
       </p>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-6">
-        {PHASES.map((p) => (
-          <div key={p.key} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 opacity-70">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase tracking-wide text-zinc-500">{p.key}</span>
-              <span className="text-[10px] rounded-full bg-zinc-800 text-zinc-400 px-2 py-0.5">Coming soon</span>
-            </div>
-            <div className="font-medium mt-2">{p.title}</div>
+        {SECTIONS.map((p) => (
+          <Link key={p.href} href={p.href} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 hover:border-zinc-600 hover:bg-zinc-900/60 transition-colors">
+            <div className="font-medium">{p.title}</div>
             <div className="text-xs text-zinc-400 mt-1">{p.desc}</div>
-          </div>
+          </Link>
         ))}
       </div>
 
