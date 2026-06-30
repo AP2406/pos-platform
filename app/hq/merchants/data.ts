@@ -13,6 +13,7 @@ export type MerchantRow = {
   status: MerchantStatus;
   plan: string | null;
   customMrr: number | null;
+  repId: string | null;
   locationCount: number;
   finixMerchantId: string | null;
   finixState: string | null;
@@ -34,7 +35,7 @@ export function deriveStatus(accessStatus: string | null, finixState: string | n
 // rollup RPC/materialized view when volume grows.
 export async function listMerchants(db: AdminDb): Promise<MerchantRow[]> {
   const [{ data: biz }, { data: orgs }, { data: orders }] = await Promise.all([
-    db.from("businesses").select("id, name, industry, access_status, is_demo, org_id, finix_merchant_id, finix_merchant_state, plan, custom_mrr, created_at"),
+    db.from("businesses").select("id, name, industry, access_status, is_demo, org_id, finix_merchant_id, finix_merchant_state, plan, custom_mrr, rep_id, created_at"),
     db.from("orgs").select("id, name"),
     db.from("orders").select("business_id, total, created_at, status").neq("status", "voided"),
   ]);
@@ -66,6 +67,7 @@ export async function listMerchants(db: AdminDb): Promise<MerchantRow[]> {
       status: deriveStatus(b.access_status as string | null, b.finix_merchant_state as string | null),
       plan: (b.plan as string | null) ?? null,
       customMrr: (b.custom_mrr as number | null) ?? null,
+      repId: (b.rep_id as string | null) ?? null,
       locationCount: locByOrg.get((b.org_id as string | null) ?? "") ?? 1,
       finixMerchantId: (b.finix_merchant_id as string | null) ?? null,
       finixState: (b.finix_merchant_state as string | null) ?? null,
@@ -81,6 +83,7 @@ export type MerchantDetail = {
   merchant: MerchantRow;
   members: MerchantMember[];
   recentOrders: { id: string; total: number; status: string; createdAt: string; channel: string | null }[];
+  reps: { id: string; name: string }[];
 };
 
 export async function getMerchant(db: AdminDb, id: string): Promise<MerchantDetail | null> {
@@ -111,5 +114,8 @@ export async function getMerchant(db: AdminDb, id: string): Promise<MerchantDeta
     channel: (o.channel as string | null) ?? null,
   }));
 
-  return { merchant, members, recentOrders };
+  const { data: repRows } = await db.from("reps").select("id, name").eq("status", "active").order("name");
+  const reps = (repRows ?? []).map((r) => ({ id: r.id as string, name: (r.name as string) || "—" }));
+
+  return { merchant, members, recentOrders, reps };
 }

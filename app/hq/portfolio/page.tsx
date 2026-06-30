@@ -53,7 +53,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
         {tile("Processing volume", money(totals.volume), totals.activeMerchants + " active · " + totals.merchants + " merchants")}
         {tile("Net processing revenue", money(totals.netProcessing))}
         {tile("Software MRR", money(totals.mrr))}
-        {tile("Rep residual", money(totals.residual), "pending HQ-4")}
+        {tile("Rep residual", money(totals.residual), "owed to reps")}
       </div>
 
       <div className="rounded-xl border border-zinc-800 overflow-hidden">

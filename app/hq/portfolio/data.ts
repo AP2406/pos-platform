@@ -19,6 +19,8 @@ export type PortfolioRow = {
   netProcessing: number;
   mrr: number;
   residual: number;
+  repId: string | null;
+  repName: string | null;
   finixMerchantId: string | null;
 };
 
@@ -44,10 +46,12 @@ async function derivedRate(merchantId: string | null, sinceIso: string, untilIso
 }
 
 export async function buildPortfolio(db: AdminDb, sinceIso: string, untilIso: string): Promise<Portfolio> {
-  const [{ data: biz }, { data: pays }] = await Promise.all([
-    db.from("businesses").select("id, name, plan, custom_mrr, finix_merchant_id, finix_merchant_state, access_status, is_demo"),
+  const [{ data: biz }, { data: pays }, { data: repRows }] = await Promise.all([
+    db.from("businesses").select("id, name, plan, custom_mrr, rep_id, finix_merchant_id, finix_merchant_state, access_status, is_demo"),
     db.from("finix_payments").select("business_id, amount_cents, status, created_at").eq("status", "succeeded").gte("created_at", sinceIso).lt("created_at", untilIso),
+    db.from("reps").select("id, name, residual_pct"),
   ]);
+  const repById = new Map((repRows ?? []).map((r) => [r.id as string, { name: (r.name as string) || "—", pct: Number(r.residual_pct) || 0 }]));
 
   // Volume + txns per business (cents -> dollars immediately).
   const vol = new Map<string, number>();
@@ -74,6 +78,7 @@ export async function buildPortfolio(db: AdminDb, sinceIso: string, untilIso: st
       const np = netProcessing(volume, txns, derived.get(id) ?? null);
       const status = (b.access_status === "suspended" || b.access_status === "past_due") ? "paused"
         : ((b.finix_merchant_state as string | null) || "").toUpperCase() === "APPROVED" ? "live" : "onboarding";
+      const rep = (b.rep_id as string | null) ? repById.get(b.rep_id as string) : undefined;
       return {
         id,
         name: (b.name as string) || "—",
@@ -87,7 +92,9 @@ export async function buildPortfolio(db: AdminDb, sinceIso: string, untilIso: st
         finixCost: finixCost(volume, txns),
         netProcessing: np.net,
         mrr: merchantMrr((b.plan as string | null) ?? null, (b.custom_mrr as number | null) ?? null),
-        residual: 0, // HQ-4
+        residual: rep ? r2(np.net * rep.pct) : 0,
+        repId: (b.rep_id as string | null) ?? null,
+        repName: rep?.name ?? null,
         finixMerchantId: (b.finix_merchant_id as string | null) ?? null,
       };
     })
@@ -97,7 +104,7 @@ export async function buildPortfolio(db: AdminDb, sinceIso: string, untilIso: st
     volume: r2(rows.reduce((s, r) => s + r.volume, 0)),
     netProcessing: r2(rows.reduce((s, r) => s + r.netProcessing, 0)),
     mrr: r2(rows.reduce((s, r) => s + r.mrr, 0)),
-    residual: 0,
+    residual: r2(rows.reduce((s, r) => s + r.residual, 0)),
     activeMerchants: rows.filter((r) => r.volume > 0).length,
     churned: rows.filter((r) => r.status === "live" && r.volume === 0).length,
     merchants: rows.length,

@@ -2,22 +2,28 @@
 
 import { useState, useTransition } from "react";
 import { setTenantAccessStatus, setTenantPlan, setTenantCustomMrr } from "./actions";
+import { setMerchantRep } from "../reps/actions";
 
 export function MerchantActions({
   businessId,
   paused,
   plan,
   customMrr,
+  repId,
+  reps,
   canWrite,
 }: {
   businessId: string;
   paused: boolean;
   plan: string | null;
   customMrr: number | null;
+  repId: string | null;
+  reps: { id: string; name: string }[];
   canWrite: boolean;
 }) {
   const [planVal, setPlanVal] = useState(plan ?? "");
   const [mrrVal, setMrrVal] = useState(customMrr != null ? String(customMrr) : "");
+  const [repVal, setRepVal] = useState(repId ?? "");
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -51,6 +57,15 @@ export function MerchantActions({
     });
   }
 
+  function saveRep(next: string) {
+    setRepVal(next);
+    setMsg(null);
+    start(async () => {
+      const r = await setMerchantRep(businessId, next || null);
+      setMsg("error" in r ? r.error : "Rep attribution saved.");
+    });
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
@@ -71,6 +86,13 @@ export function MerchantActions({
           className="h-9 rounded-md bg-zinc-950 border border-zinc-700 px-3 text-sm w-56"
         />
         <button type="button" onClick={saveMrr} disabled={pending} className="h-9 px-3 rounded-md border border-zinc-700 text-sm hover:bg-zinc-800 disabled:opacity-50">Save MRR</button>
+      </div>
+      <div className="flex items-center gap-2">
+        <select value={repVal} onChange={(e) => saveRep(e.target.value)} disabled={pending} className="h-9 rounded-md bg-zinc-950 border border-zinc-700 px-2 text-sm w-56">
+          <option value="">No rep attributed</option>
+          {reps.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </select>
+        <span className="text-xs text-zinc-500">referring rep</span>
       </div>
       <button
         type="button"

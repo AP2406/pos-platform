@@ -18,6 +18,7 @@ export default async function HqLayout({ children }: { children: React.ReactNode
               <Link href="/hq/merchants" className="hover:text-zinc-100">Merchants</Link>
               <Link href="/hq/portfolio" className="hover:text-zinc-100">Portfolio</Link>
               <Link href="/hq/onboarding" className="hover:text-zinc-100">Onboarding</Link>
+              <Link href="/hq/reps" className="hover:text-zinc-100">Reps</Link>
             </nav>
           </div>
           <div className="text-xs text-zinc-400">

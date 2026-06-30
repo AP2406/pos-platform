@@ -134,6 +134,15 @@ export async function provisionApplication(id: string, kyc: ProvisionKyc, bank: 
     } catch { /* link is a convenience */ }
 
     const mode = pickMode(app.industry as string | null);
+
+    // Attribute to the referring rep (by code) so residuals flow (HQ-4).
+    let repId: string | null = null;
+    const repCode = (app.referred_by_rep as string | null) ?? null;
+    if (repCode) {
+      const { data: rep } = await db.from("reps").select("id").eq("code", repCode.toLowerCase()).maybeSingle();
+      repId = (rep?.id as string | null) ?? null;
+    }
+
     const { data: org } = await db.from("orgs").insert({ name: kyc.businessName }).select("id").single();
     const orgId = (org?.id as string) ?? null;
 
@@ -142,6 +151,7 @@ export async function provisionApplication(id: string, kyc: ProvisionKyc, bank: 
       industry: mode.industry,
       owner_id: ownerId,
       org_id: orgId,
+      rep_id: repId,
       plan: (app.plan as string | null) ?? null,
       config: { ...mode.config, mode: mode.key },
       finix_identity_id: finixIdentityId,
