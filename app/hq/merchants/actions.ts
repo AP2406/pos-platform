@@ -44,3 +44,29 @@ export async function setTenantPlan(
   revalidatePath("/hq/merchants");
   return { ok: true };
 }
+
+// Per-merchant MRR override (hand-priced tenants). Empty clears it (back to plan tier).
+export async function setTenantCustomMrr(
+  businessId: string,
+  value: string
+): Promise<{ ok: true } | { error: string }> {
+  const { admin, db } = await requirePlatformAdmin();
+  if (admin.role !== "owner" && admin.role !== "ops") return { error: "Your platform role can't change MRR." };
+  if (!businessId) return { error: "Missing merchant." };
+  const trimmed = (value || "").trim();
+  let mrr: number | null = null;
+  if (trimmed !== "") {
+    const n = Number(trimmed);
+    if (!isFinite(n) || n < 0) return { error: "Enter a non-negative dollar amount, or blank to clear." };
+    mrr = Math.round(n * 100) / 100;
+  }
+
+  const { error } = await db.from("businesses").update({ custom_mrr: mrr }).eq("id", businessId);
+  if (error) {
+    console.error("setTenantCustomMrr:", error);
+    return { error: "Could not update the MRR override." };
+  }
+  await auditHq(db, admin, "tenant_set_custom_mrr", businessId, { custom_mrr: mrr });
+  revalidatePath("/hq/merchants/" + businessId);
+  return { ok: true };
+}

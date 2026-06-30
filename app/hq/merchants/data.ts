@@ -12,6 +12,7 @@ export type MerchantRow = {
   isDemo: boolean;
   status: MerchantStatus;
   plan: string | null;
+  customMrr: number | null;
   locationCount: number;
   finixMerchantId: string | null;
   finixState: string | null;
@@ -33,7 +34,7 @@ export function deriveStatus(accessStatus: string | null, finixState: string | n
 // rollup RPC/materialized view when volume grows.
 export async function listMerchants(db: AdminDb): Promise<MerchantRow[]> {
   const [{ data: biz }, { data: orgs }, { data: orders }] = await Promise.all([
-    db.from("businesses").select("id, name, industry, access_status, is_demo, org_id, finix_merchant_id, finix_merchant_state, plan, created_at"),
+    db.from("businesses").select("id, name, industry, access_status, is_demo, org_id, finix_merchant_id, finix_merchant_state, plan, custom_mrr, created_at"),
     db.from("orgs").select("id, name"),
     db.from("orders").select("business_id, total, created_at, status").neq("status", "voided"),
   ]);
@@ -64,6 +65,7 @@ export async function listMerchants(db: AdminDb): Promise<MerchantRow[]> {
       isDemo: (b.is_demo as boolean) === true,
       status: deriveStatus(b.access_status as string | null, b.finix_merchant_state as string | null),
       plan: (b.plan as string | null) ?? null,
+      customMrr: (b.custom_mrr as number | null) ?? null,
       locationCount: locByOrg.get((b.org_id as string | null) ?? "") ?? 1,
       finixMerchantId: (b.finix_merchant_id as string | null) ?? null,
       finixState: (b.finix_merchant_state as string | null) ?? null,

@@ -85,7 +85,7 @@ export default async function MerchantDetailPage({ params }: { params: Promise<{
       </Card>
 
       <Card title="Operator actions">
-        <MerchantActions businessId={m.id} paused={m.status === "paused"} plan={m.plan} canWrite={canWrite} />
+        <MerchantActions businessId={m.id} paused={m.status === "paused"} plan={m.plan} customMrr={m.customMrr} canWrite={canWrite} />
       </Card>
     </div>
   );
