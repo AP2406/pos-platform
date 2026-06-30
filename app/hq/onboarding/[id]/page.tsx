@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePlatformAdmin, auditHq } from "@/lib/services/platform";
 import { getApplication } from "../data";
 import { StatusControl } from "../status-control";
+import { ProvisionForm } from "../provision-form";
 
 export const dynamic = "force-dynamic";
 
@@ -41,10 +42,22 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
         {app.notes && row("Notes", app.notes)}
       </div>
 
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 mb-4">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">Pipeline</h2>
         <StatusControl id={app.id} status={app.status} canWrite={canWrite} />
       </div>
+
+      {canWrite && (app.status === "approved" || app.status === "provisioned") && !app.provisionedBusinessId && (
+        <div className="rounded-xl border border-emerald-900/60 bg-zinc-900 p-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-emerald-400 mb-2">Approve &amp; provision</h2>
+          <ProvisionForm
+            applicationId={app.id}
+            defaultBusinessName={app.businessName}
+            defaultOwnerFirst={(app.contactName ?? "").split(/\s+/)[0] ?? ""}
+            defaultOwnerLast={(app.contactName ?? "").split(/\s+/).slice(1).join(" ")}
+          />
+        </div>
+      )}
     </div>
   );
 }
