@@ -19,7 +19,7 @@ const REASONS = [
 
 type Line = { order_item_id: string; name: string; unit_price: number; sold: number; returned: number; returnable: number };
 type OrderInfo = { id: string; sale_number: number | null; status: string; subtotal: number; discount: number; tax: number; tip: number; total: number; refunded_amount: number; has_customer: boolean };
-type DoneInfo = { amount: number; fully: boolean; discount_portion: number; tax_portion: number; returned_subtotal: number; items: { name: string; quantity: number; line_subtotal: number }[]; reason: string; at: string };
+type DoneInfo = { refund_id: string | null; amount: number; fully: boolean; discount_portion: number; tax_portion: number; returned_subtotal: number; items: { name: string; quantity: number; line_subtotal: number }[]; reason: string; at: string };
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -194,16 +194,22 @@ export function RegisterRefund({ businessName }: { businessName: string }) {
     const selected = lines.filter((l) => (qty[l.order_item_id] || 0) > 0).map((l) => ({ order_item_id: l.order_item_id, quantity: qty[l.order_item_id] || 0 }));
     const selectedForReceipt = lines.filter((l) => (qty[l.order_item_id] || 0) > 0).map((l) => ({ name: l.name, quantity: qty[l.order_item_id] || 0, line_subtotal: round2((qty[l.order_item_id] || 0) * l.unit_price) }));
     startTransition(async () => {
-      const res = await refundItems({ order_id: oid, lines: selected, reason, note, restock, approver_pin: approverPin, to_store_credit: toStoreCredit });
-      if ("needs_approval" in res) {
-        setNeedsApproval(true);
-        return;
+      try {
+        const res = await refundItems({ order_id: oid, lines: selected, reason, note, restock, approver_pin: approverPin, to_store_credit: toStoreCredit });
+        if ("needs_approval" in res) {
+          setNeedsApproval(true);
+          return;
+        }
+        if ("error" in res) {
+          setErr(res.error);
+          return;
+        }
+        setNeedsApproval(false);
+        setDone({ refund_id: res.refund_id, amount: res.amount, fully: res.fully, discount_portion: res.discount_portion, tax_portion: res.tax_portion, returned_subtotal: res.returned_subtotal, items: selectedForReceipt, reason: reason, at: new Date().toLocaleString() });
+      } catch (e) {
+        // Never fail silently — surface any unexpected error in the modal.
+        setErr("Refund failed: " + (e instanceof Error ? e.message : "unexpected error") + ". Nothing was charged; please retry.");
       }
-      if ("error" in res) {
-        setErr(res.error);
-        return;
-      }
-      setDone({ amount: res.amount, fully: res.fully, discount_portion: res.discount_portion, tax_portion: res.tax_portion, returned_subtotal: res.returned_subtotal, items: selectedForReceipt, reason: reason, at: new Date().toLocaleString() });
     });
   }
 
@@ -311,7 +317,8 @@ export function RegisterRefund({ businessName }: { businessName: string }) {
             ) : done ? (
               <div className="space-y-3">
                 <h3 className="font-medium">{done.fully ? "Full refund recorded" : "Partial refund recorded"}</h3>
-                <div className="text-sm text-muted-foreground">{"Sale #" + saleNumber + " - refunded " + cad(done.amount)}</div>
+                <div className="text-sm text-emerald-600">{"✓ Refund " + (done.refund_id ? "#" + done.refund_id.slice(0, 8) + " " : "") + "recorded · " + cad(done.amount)}</div>
+                <div className="text-sm text-muted-foreground">{"Sale #" + saleNumber}</div>
                 <div className="flex gap-2">
                   <Button className="flex-1" onClick={() => printRefundReceipt({ businessName, saleNumber, info: done })}>Print receipt</Button>
                   <Button variant="outline" className="flex-1" onClick={backToPick}>Refund another</Button>

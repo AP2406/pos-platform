@@ -36,7 +36,7 @@ type RefundLineInput = { order_item_id: string; quantity: number };
 
 type RefundOrderResult = { ok: true; order: { id: string; sale_number: number | null; status: string; subtotal: number; discount: number; tax: number; tip: number; total: number; refunded_amount: number; has_customer: boolean }; lines: { order_item_id: string; name: string; unit_price: number; sold: number; returned: number; returnable: number }[] } | { error: string };
 
-type RefundItemsResult = { ok: true; amount: number; fully: boolean; returned_subtotal: number; discount_portion: number; tax_portion: number; card_refunded: number } | { needs_approval: true } | { error: string };
+type RefundItemsResult = { ok: true; refund_id: string | null; amount: number; fully: boolean; returned_subtotal: number; discount_portion: number; tax_portion: number; card_refunded: number } | { needs_approval: true } | { error: string };
 
 export async function getOrderForRefund(orderId: string): Promise<RefundOrderResult> {
   if (!orderId) return { error: "Missing sale." };
@@ -112,6 +112,7 @@ export async function getOrderForRefund(orderId: string): Promise<RefundOrderRes
 }
 
 export async function refundItems(input: { order_id: string; lines: RefundLineInput[]; reason: string; note?: string; restock: boolean; approver_pin?: string; to_store_credit?: boolean }): Promise<RefundItemsResult> {
+ try {
   const orderId = input.order_id;
   if (!orderId) return { error: "Missing sale." };
   if (!input.reason || !REASONS.includes(input.reason)) {
@@ -366,7 +367,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { error: refundError } = await supabase.from("refunds").insert({
+  const { data: refundRow, error: refundError } = await supabase.from("refunds").insert({
     business_id: business.id,
     order_id: orderId,
     amount: amount,
@@ -377,7 +378,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     snapshot: snapshot,
     drawer_session_id: refundDrawerSessionId,
     created_by: user ? user.id : null,
-  });
+  }).select("id").single();
   if (refundError) {
     // If the card was already reversed at Finix but this row failed to write,
     // the money DID go back to the customer; this needs manual reconciliation.
@@ -436,5 +437,11 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   if (refundAuditError) console.error("refundItems audit:", refundAuditError);
 
   revalidatePath("/app/pos/sales");
-  return { ok: true, amount: amount, fully: fully, returned_subtotal: returnedSubtotal, discount_portion: discountPortion, tax_portion: taxPortion, card_refunded: round2(finixReversedCents / 100) };
+  return { ok: true, refund_id: (refundRow?.id as string | null) ?? null, amount: amount, fully: fully, returned_subtotal: returnedSubtotal, discount_portion: discountPortion, tax_portion: taxPortion, card_refunded: round2(finixReversedCents / 100) };
+ } catch (e) {
+  // Surface unexpected server errors as a returned error (Next masks thrown server
+  // action exceptions in prod, which is what made the refund fail silently).
+  console.error("refundItems unexpected:", e);
+  return { error: "Couldn't record the refund — " + (e instanceof Error ? e.message : "unexpected error") + ". Please try again." };
+ }
 }

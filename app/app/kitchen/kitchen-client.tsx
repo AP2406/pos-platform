@@ -113,6 +113,7 @@ export function KitchenClient({
   const recipeLines = recipeItem ? recipes[recipeItem.toLowerCase()] ?? [] : [];
   // B3: bump-bar / keyboard nav — which ticket is focused (stations view).
   const [focusIdx, setFocusIdx] = useState(-1);
+  const [showStale, setShowStale] = useState(false);
   // B8: which ticket the kitchen is messaging the server about.
   const [msgFor, setMsgFor] = useState<KitchenOrder | null>(null);
   function sendMsg(body: string) {
@@ -514,6 +515,13 @@ export function KitchenClient({
     .slice()
     .sort((a, b) => (a.rush === b.rush ? 0 : a.rush ? -1 : 1)); // rush floats to front (stable)
 
+  // Only tickets from the current service day (< 24h) are "active" and drive the
+  // board, oldest-first. Anything older is a stale straggler (a missed bump or a
+  // pre-day-close ticket) — collapsed below so it never buries fresh tickets.
+  const STALE_MS = 24 * 60 * 60 * 1000;
+  const activeVisible = visible.filter((o) => now - new Date(o.createdAt).getTime() < STALE_MS);
+  const staleVisible = visible.filter((o) => now - new Date(o.createdAt).getTime() >= STALE_MS);
+
   // B3: bump-bar — arrow keys move focus, Enter/Space bumps the focused ticket,
   // R recalls the last bump, Esc clears. Ignored while typing in a field.
   useEffect(() => {
@@ -521,16 +529,16 @@ export function KitchenClient({
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if (view !== "stations") return;
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); setFocusIdx((i) => Math.min(visible.length - 1, i < 0 ? 0 : i + 1)); }
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); setFocusIdx((i) => Math.min(activeVisible.length - 1, i < 0 ? 0 : i + 1)); }
       else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); setFocusIdx((i) => Math.max(0, i < 0 ? 0 : i - 1)); }
-      else if (e.key === "Enter" || e.key === " ") { if (focusIdx >= 0 && visible[focusIdx]) { e.preventDefault(); handleDone(visible[focusIdx]); setFocusIdx((i) => Math.min(i, visible.length - 2)); } }
+      else if (e.key === "Enter" || e.key === " ") { if (focusIdx >= 0 && activeVisible[focusIdx]) { e.preventDefault(); handleDone(activeVisible[focusIdx]); setFocusIdx((i) => Math.min(i, activeVisible.length - 2)); } }
       else if (e.key === "r" || e.key === "R") { if (recentList[0]) { e.preventDefault(); handleRecall(recentList[0]); } }
       else if (e.key === "Escape") setFocusIdx(-1);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, focusIdx, recentList, view]);
+  }, [activeVisible, focusIdx, recentList, view]);
 
   // P1-15: all-day counts — total ORDERED quantity of each item across every
   // visible (unfulfilled) ticket, so the line sees full demand at a glance.
@@ -620,7 +628,7 @@ export function KitchenClient({
               const ld = stationLoad.get(s.id);
               if (!ld) return null;
               const hot = ld.oldest >= kdsLate;
-              return <span className={"ml-1.5 text-[11px] tabular-nums " + (stationFilter === s.id ? "opacity-90" : hot ? "text-red-600 font-semibold" : "text-muted-foreground")}>{ld.items}·{ld.oldest}m</span>;
+              return <span className={"ml-1.5 text-[11px] tabular-nums " + (stationFilter === s.id ? "opacity-90" : hot ? "text-red-600 font-semibold" : "text-muted-foreground")}>{ld.items}·{formatDuration(ld.oldest)}</span>;
             })()}
           </button>
         ))}
@@ -1004,12 +1012,32 @@ export function KitchenClient({
       {recallStrip}
       {stationStrip}
       {allDayPanel}
-      {visible.length === 0 ? (
+      {activeVisible.length === 0 && staleVisible.length === 0 ? (
         emptyCard
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {visible.map((o, idx) => card(o, idx === focusIdx))}
-        </div>
+        <>
+          {activeVisible.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {activeVisible.map((o, idx) => card(o, idx === focusIdx))}
+            </div>
+          )}
+          {staleVisible.length > 0 && (
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={() => setShowStale((s) => !s)}
+                className="text-xs text-muted-foreground hover:text-foreground border border-dashed border-border rounded-md px-3 py-1.5"
+              >
+                {(showStale ? "▾ " : "▸ ") + staleVisible.length + " stale ticket" + (staleVisible.length === 1 ? "" : "s") + " (older than 24h)"}
+              </button>
+              {showStale && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-2 opacity-60">
+                  {staleVisible.map((o) => card(o))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
