@@ -311,7 +311,7 @@ export default function LoginPage() {
               >
                 Accounts are set up by Surge. Need access?{" "}
                 <a
-                  href="mailto:hello@surgetechpos.com"
+                  href="mailto:info@surgetechpos.com"
                   className="font-medium text-foreground hover:underline"
                 >
                   Contact us
