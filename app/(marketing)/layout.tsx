@@ -58,7 +58,10 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             <div className="text-xs uppercase tracking-widest text-white/40">Solutions</div>
             <ul className="mt-4 space-y-2 text-sm text-white/70">
               <li><Link href="/payment-processing-toronto" className="hover:text-white">Payment processing Toronto</Link></li>
+              <li><Link href="/payment-processing-mississauga" className="hover:text-white">Payment processing Mississauga</Link></li>
+              <li><Link href="/merchant-services-durham" className="hover:text-white">Merchant services Durham</Link></li>
               <li><Link href="/pos-for-restaurants" className="hover:text-white">POS for restaurants</Link></li>
+              <li><Link href="/pos-for-retail" className="hover:text-white">POS for retail</Link></li>
             </ul>
           </div>
           <div>

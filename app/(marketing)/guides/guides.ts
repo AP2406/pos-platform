@@ -17,6 +17,34 @@ export const GUIDES: Guide[] = [
     description: "A plain-English guide to cutting credit card processing fees for Ontario small businesses — interchange, junk fees, Interac, and what to negotiate.",
     datePublished: "2026-07-07",
   },
+  {
+    slug: "interac-vs-credit-card-fees",
+    title: "Interac vs credit-card fees, explained",
+    excerpt: "Canadian debit and credit are priced completely differently. Here's why Interac is usually cheaper, and how blended pricing quietly erases the difference.",
+    description: "Interac debit vs credit card fees for Canadian small businesses — flat-fee vs percentage pricing, why blended rates cost you, and how to keep debit cheap.",
+    datePublished: "2026-07-07",
+  },
+  {
+    slug: "how-to-read-your-merchant-statement",
+    title: "How to read your merchant statement (and spot junk fees)",
+    excerpt: "A section-by-section walkthrough of a merchant statement, how to compute your real effective rate, and the line items worth challenging.",
+    description: "How to read a merchant processing statement: find your effective rate, decode the fee sections, and spot the junk fees you can get removed.",
+    datePublished: "2026-07-07",
+  },
+  {
+    slug: "what-is-a-junk-fee-on-a-merchant-account",
+    title: "What is a junk fee on a merchant account?",
+    excerpt: "PCI fees, statement fees, monthly minimums, batch fees — a field guide to the padding on a merchant account and what's actually negotiable.",
+    description: "A field guide to merchant-account junk fees — PCI, statement, minimum, batch and gateway fees — what they are, which are padding, and how to remove them.",
+    datePublished: "2026-07-07",
+  },
+  {
+    slug: "flat-rate-vs-interchange-plus-pricing",
+    title: "Flat-rate vs interchange-plus pricing for small business",
+    excerpt: "The two main ways processors price your account, the real trade-offs, and which one tends to win for a typical small business.",
+    description: "Flat-rate vs interchange-plus card processing pricing for small business — how each works, the trade-offs, and which usually costs less.",
+    datePublished: "2026-07-07",
+  },
 ];
 
 export function getGuide(slug: string): Guide | undefined {
