@@ -38,7 +38,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-400/50 to-transparent" />
         <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={footerDots} />
         <div className="pointer-events-none absolute -right-32 -top-24 h-[24rem] w-[24rem] rounded-full bg-blue-500/15 blur-[120px]" />
-        <div className="relative mx-auto grid max-w-6xl gap-10 px-6 py-16 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="relative mx-auto grid max-w-6xl gap-10 px-6 py-16 sm:grid-cols-2 lg:grid-cols-5">
           <div className="lg:col-span-2">
             <div className="flex items-center gap-2">
               <SurgeMark className="h-[28px] w-[47px]" />
@@ -55,9 +55,17 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             </ul>
           </div>
           <div>
+            <div className="text-xs uppercase tracking-widest text-white/40">Solutions</div>
+            <ul className="mt-4 space-y-2 text-sm text-white/70">
+              <li><Link href="/payment-processing-toronto" className="hover:text-white">Payment processing Toronto</Link></li>
+              <li><Link href="/pos-for-restaurants" className="hover:text-white">POS for restaurants</Link></li>
+            </ul>
+          </div>
+          <div>
             <div className="text-xs uppercase tracking-widest text-white/40">Get started</div>
             <ul className="mt-4 space-y-2 text-sm text-white/70">
               <li><Link href="/book" className="hover:text-white">Book a call</Link></li>
+              <li><Link href="/guides" className="hover:text-white">Guides</Link></li>
               <li><Link href="/login" className="hover:text-white">Sign in</Link></li>
             </ul>
           </div>

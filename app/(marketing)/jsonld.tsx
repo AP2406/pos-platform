@@ -55,6 +55,49 @@ export function breadcrumb(name: string, path: string) {
   };
 }
 
+// Multi-level breadcrumb (e.g. Home → Guides → Post). Pass "" as the Home path
+// so it resolves to the bare canonical host (no trailing slash).
+export function breadcrumbTrail(items: { name: string; path: string }[]) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items.map((it, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name: it.name,
+      item: SITE + it.path,
+    })),
+  };
+}
+
+// Service offered in a specific area — used by the local landing pages.
+export function localService({ name, description, areaServed, path }: { name: string; description: string; areaServed: string[]; path: string }) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    name,
+    serviceType: name,
+    description,
+    provider: { "@type": "LocalBusiness", name: "Surge", url: SITE },
+    areaServed,
+    url: SITE + path,
+  };
+}
+
+// Article schema for /guides posts.
+export function article({ headline, description, path, datePublished }: { headline: string; description: string; path: string; datePublished: string }) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline,
+    description,
+    datePublished,
+    author: { "@type": "Organization", name: "Surge", url: SITE },
+    publisher: { "@type": "Organization", name: "Surge", logo: { "@type": "ImageObject", url: SITE + "/brand/surge-appicon.svg" } },
+    mainEntityOfPage: SITE + path,
+  };
+}
+
 // Convert the HTML entities used in the on-page FAQ copy to plain text for JSON-LD.
 export function decodeEntities(s: string): string {
   return s
