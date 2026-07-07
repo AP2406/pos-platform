@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import { BookWizard } from "./book-wizard";
+import { OG_BASE } from "../shared-metadata";
+import { JsonLd, breadcrumb } from "../jsonld";
 
 export const metadata: Metadata = {
-  title: "Book a Call",
+  title: { absolute: "Book a Free Savings Call | Surge" },
   description: "Book a free 15-minute call with Surge. We will review your numbers and show you exactly how much you could save on payment processing, plus the right POS or custom build for your business.",
   alternates: { canonical: "/book" },
+  openGraph: { ...OG_BASE, url: "/book" },
 };
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
@@ -21,6 +24,7 @@ const points = ["A clear quote on your lower rate", "Your exact savings vs what 
 export default function BookPage() {
   return (
     <section className="relative overflow-hidden pb-28 pt-36">
+      <JsonLd data={breadcrumb("Book a Call", "/book")} />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[85%] bg-gradient-to-b from-blue-50 via-sky-50/50 to-transparent" />
       <div className="pointer-events-none absolute -left-32 top-10 h-[34rem] w-[34rem] rounded-full bg-blue-300/30 blur-[120px] [animation:surge-drift_24s_ease-in-out_infinite]" />
       <div className="pointer-events-none absolute right-0 top-28 h-[30rem] w-[30rem] rounded-full bg-cyan-300/25 blur-[120px] [animation:surge-drift_28s_ease-in-out_infinite_reverse]" />

@@ -129,14 +129,14 @@ export default function LoginPage() {
               className="oa-rise text-white/60 mt-4 text-sm leading-relaxed"
               style={{ animationDelay: "0.2s" }}
             >
-              Trips, leads, customers, payments — one clean dashboard to run the
-              whole operation.
+              Sales, inventory, payments — one clean dashboard to run the whole
+              operation.
             </p>
             <div
               className="oa-rise flex flex-wrap gap-2 mt-6"
               style={{ animationDelay: "0.3s" }}
             >
-              {["Trips & dispatch", "Leads from email", "Payments & invoicing"].map(
+              {["Sales & checkout", "Inventory & menu", "Payments & reports"].map(
                 (f) => (
                   <span
                     key={f}

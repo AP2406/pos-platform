@@ -3,22 +3,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { SavingsEstimator } from "./savings-estimator";
 import { Reveal } from "./reveal";
+import { OG_BASE } from "./shared-metadata";
 
 export const metadata: Metadata = {
   title: { absolute: "Payment Processing & Point of Sale for the GTA | Surge" },
   description: "Surge delivers transparent payment processing and point-of-sale software for local businesses across the GTA — lower card rates, no junk fees. Book a free call.",
-  keywords: ["payment processing", "point of sale", "POS system", "payment solutions", "merchant services", "card processing", "credit card processing", "GTA", "Toronto", "Durham", "Ontario"],
   alternates: { canonical: "/" },
-  openGraph: { title: "Payment Processing & Point of Sale for the GTA | Surge", description: "Transparent payment processing and point-of-sale software for local business. Lower card rates, no junk fees, no lock-in.", url: "https://surgetechpos.com", type: "website" },
-};
-
-const org = {
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  name: "Surge",
-  description: "Transparent payment processing and point-of-sale (POS) software for local businesses in the Greater Toronto Area.",
-  url: "https://surgetechpos.com",
-  areaServed: "Greater Toronto Area, Ontario, Canada",
+  openGraph: { ...OG_BASE, title: "Payment Processing & Point of Sale for the GTA | Surge", description: "Transparent payment processing and point-of-sale software for local business. Lower card rates, no junk fees, no lock-in.", url: "/" },
 };
 
 const darkDots = { backgroundImage: "radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)", backgroundSize: "22px 22px", maskImage: "radial-gradient(ellipse at 50% 50%, black, transparent 80%)", WebkitMaskImage: "radial-gradient(ellipse at 50% 50%, black, transparent 80%)" };
@@ -36,7 +27,6 @@ function Eyebrow({ children, color = "blue" }: { children: React.ReactNode; colo
 export default function HomePage() {
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(org) }} />
 
       <section className="relative overflow-hidden">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[85%] bg-gradient-to-b from-blue-50 via-sky-50/50 to-transparent" />

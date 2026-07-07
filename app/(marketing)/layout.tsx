@@ -2,14 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { SiteNav } from "./site-nav";
 import { SurgeMark } from "./surge-mark";
+import { OG_BASE } from "./shared-metadata";
+import { JsonLd, LOCAL_BUSINESS } from "./jsonld";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://surgetechpos.com"),
+  metadataBase: new URL("https://www.surgetechpos.com"),
   title: { default: "Surge \u2014 Transparent payments for local business", template: "%s \u2014 Surge" },
   description: "Surge gives local businesses lower card processing rates, real human support, and built-in software that shows exactly how much you save on every sale.",
   icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }], apple: "/icon-192.png" },
-  openGraph: { title: "Surge \u2014 Transparent payments for local business", description: "Lower card processing rates, real local support, and software that shows your savings on every sale.", url: "https://surgetechpos.com", siteName: "Surge", type: "website" },
-  twitter: { card: "summary_large_image", title: "Surge \u2014 Transparent payments for local business", description: "Lower card processing rates and software that shows your savings on every sale." },
+  openGraph: { ...OG_BASE, url: "/" },
+  // No title/description \u2014 Twitter tags inherit each page's own title/description.
+  twitter: { card: "summary_large_image" },
 };
 
 const keyframes = "@keyframes surge-drift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(4%,-3%) scale(1.06)}66%{transform:translate(-3%,4%) scale(0.96)}}@keyframes surge-rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}@keyframes surge-fade{from{opacity:0}to{opacity:1}}@keyframes surge-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}@keyframes surge-shimmer{0%{background-position:0% center}100%{background-position:200% center}}@keyframes surge-spin{from{transform:translate(-50%,-50%) rotate(0deg)}to{transform:translate(-50%,-50%) rotate(360deg)}}";
@@ -20,6 +23,7 @@ const footerDots = { backgroundImage: "radial-gradient(rgba(255,255,255,0.05) 1p
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative min-h-screen overflow-hidden bg-white text-slate-900 antialiased selection:bg-blue-200">
+      <JsonLd data={LOCAL_BUSINESS} />
       <style dangerouslySetInnerHTML={{ __html: keyframes }} />
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0" style={grid} />

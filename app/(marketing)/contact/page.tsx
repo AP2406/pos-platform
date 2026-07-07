@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ContactForm } from "./contact-form";
+import { OG_BASE } from "../shared-metadata";
+import { JsonLd, breadcrumb } from "../jsonld";
 
 export const metadata: Metadata = {
-  title: "Contact",
+  title: { absolute: "Contact Surge — Payments & POS, Toronto/GTA" },
   description: "Get in touch with Surge for payment processing, point of sale, or custom software in the GTA. Send a message and we will get back to you, or book a free call.",
   alternates: { canonical: "/contact" },
+  openGraph: { ...OG_BASE, url: "/contact" },
 };
 
-const CONTACT_EMAIL = "hello@surgetechpos.com";
-const CONTACT_PHONE = "(289) 555-0123";
+const CONTACT_EMAIL = "info@surgetechpos.com";
+const CONTACT_PHONE = "(647) 371-5982";
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
@@ -23,6 +26,7 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
 export default function ContactPage() {
   return (
     <>
+      <JsonLd data={breadcrumb("Contact", "/contact")} />
       <section className="relative overflow-hidden pb-10 pt-36">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[80%] bg-gradient-to-b from-blue-50 via-sky-50/50 to-transparent" />
         <div className="pointer-events-none absolute -right-24 top-16 h-[28rem] w-[28rem] rounded-full bg-cyan-300/25 blur-[120px]" />

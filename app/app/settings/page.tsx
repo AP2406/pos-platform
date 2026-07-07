@@ -168,7 +168,7 @@ export default async function SettingsPage() {
   const laborTargetEnabled = laborTarget.enabled === true;
   const laborTargetPct = Number(laborTarget.targetPct) > 0 ? Number(laborTarget.targetPct) : 30;
   const kdsPrinterFallback = daySettings.kds_printer_fallback === true;
-  const bookingUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://surgetechpos.com") + "/book/" + business.id;
+  const bookingUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.surgetechpos.com") + "/book/" + business.id;
   const coaRows = (Object.keys(COA_DEFAULTS) as CoaKey[]).map((k) => ({ key: k, name: coa[k].name, code: coa[k].code }));
   const accountingBasis = (daySettings.accounting_basis === "cash" ? "cash" : "accrual") as "accrual" | "cash";
   const legalEntity = typeof daySettings.legal_entity === "string" ? (daySettings.legal_entity as string) : "";

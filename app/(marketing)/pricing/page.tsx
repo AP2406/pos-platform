@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { OG_BASE } from "../shared-metadata";
+import { JsonLd, breadcrumb, decodeEntities } from "../jsonld";
 
 export const metadata: Metadata = {
-  title: "Pricing",
+  title: { absolute: "Pricing — 2.5% + 15¢ Payment Processing | Surge" },
   description: "One honest rate: 2.5% + $0.15 in person, plus a one-time $10 setup. Free Basic POS, optional Advanced features, and custom software, CRM and SaaS builds. No monthly fees on payments, no lock-in. Book a free call.",
   alternates: { canonical: "/pricing" },
+  openGraph: { ...OG_BASE, url: "/pricing" },
 };
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
@@ -57,9 +60,39 @@ const faqs = [
   { q: "Am I locked into a contract?", a: "No. There is no term contract and no early-termination fee. If Surge is not saving you money, you walk away." },
 ];
 
+// FAQPage generated from the SAME `faqs` array that renders on the page, so the
+// markup and structured data can't drift.
+const faqSchema = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqs.map((f) => ({
+    "@type": "Question",
+    name: decodeEntities(f.q),
+    acceptedAnswer: { "@type": "Answer", text: decodeEntities(f.a) },
+  })),
+};
+
+const serviceSchema = {
+  "@context": "https://schema.org",
+  "@type": "Service",
+  name: "Payment processing",
+  serviceType: "Payment processing",
+  provider: { "@type": "LocalBusiness", name: "Surge Payment Solutions", url: "https://www.surgetechpos.com" },
+  areaServed: ["Greater Toronto Area", "Ontario"],
+  offers: {
+    "@type": "Offer",
+    priceCurrency: "CAD",
+    description: "2.5% + $0.15 per in-person transaction, $10 one-time setup, no monthly fee.",
+    url: "https://www.surgetechpos.com/pricing",
+  },
+};
+
 export default function PricingPage() {
   return (
     <>
+      <JsonLd data={faqSchema} />
+      <JsonLd data={serviceSchema} />
+      <JsonLd data={breadcrumb("Pricing", "/pricing")} />
       <section className="relative overflow-hidden pb-12 pt-36">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[80%] bg-gradient-to-b from-blue-50 via-sky-50/50 to-transparent" />
         <div className="pointer-events-none absolute -right-24 top-16 h-[28rem] w-[28rem] rounded-full bg-cyan-300/25 blur-[120px]" />

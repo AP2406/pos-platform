@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { OG_BASE } from "../shared-metadata";
+import { JsonLd, breadcrumb } from "../jsonld";
 
 export const metadata: Metadata = {
-  title: "Point of Sale",
+  title: { absolute: "Free POS System for Small Business (GTA) | Surge" },
   description: "A full point-of-sale built into your payments. Fast checkout, every payment type, inventory, receipts, reports and refunds. Free Basic POS, runs on the device you already have.",
   alternates: { canonical: "/pos" },
+  openGraph: { ...OG_BASE, url: "/pos" },
 };
 
 function Eyebrow({ children, color = "blue" }: { children: React.ReactNode; color?: "blue" | "cyan" | "sky" }) {
@@ -55,6 +58,7 @@ const advanced = [
 export default function PosPage() {
   return (
     <>
+      <JsonLd data={breadcrumb("Point of Sale", "/pos")} />
       <section className="relative overflow-hidden pb-20 pt-36">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[80%] bg-gradient-to-b from-blue-50 via-sky-50/50 to-transparent" />
         <div className="pointer-events-none absolute -left-28 top-12 h-[32rem] w-[32rem] rounded-full bg-blue-300/25 blur-[120px]" />
