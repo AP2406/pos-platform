@@ -7,7 +7,7 @@ import { OG_BASE } from "./shared-metadata";
 
 export const metadata: Metadata = {
   title: { absolute: "Payment Processing & Point of Sale for the GTA | Surge" },
-  description: "Surge delivers transparent payment processing and point-of-sale software for local businesses across the GTA — lower card rates, no junk fees. Book a free call.",
+  description: "Transparent payment processing and point-of-sale software for local GTA businesses — lower card rates, no junk fees, no lock-in. Book a free call.",
   alternates: { canonical: "/" },
   openGraph: { ...OG_BASE, title: "Payment Processing & Point of Sale for the GTA | Surge", description: "Transparent payment processing and point-of-sale software for local business. Lower card rates, no junk fees, no lock-in.", url: "/" },
 };
@@ -38,7 +38,7 @@ export default function HomePage() {
         <div className="relative mx-auto max-w-6xl px-6 pb-24 pt-36">
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <div className="text-center lg:text-left">
-              <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white/80 px-4 py-1.5 text-xs font-medium text-blue-700 shadow-sm backdrop-blur [animation:surge-fade_1s_ease-out_both]"><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" /></span>Payment processing &amp; point of sale</span>
+              <h2 className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white/80 px-4 py-1.5 text-xs font-medium text-blue-700 shadow-sm backdrop-blur [animation:surge-fade_1s_ease-out_both]"><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" /></span>Payment processing &amp; point of sale</h2>
               <h1 className="mt-6 text-5xl font-bold leading-[1.03] tracking-tight text-slate-900 sm:text-6xl lg:text-7xl [animation:surge-rise_0.8s_ease-out_both]">Stop <span className="bg-[linear-gradient(90deg,#2563eb,#06b6d4,#38bdf8,#06b6d4,#2563eb)] bg-[length:200%_auto] bg-clip-text text-transparent [animation:surge-shimmer_5s_linear_infinite]">overpaying</span> to get paid.</h1>
               <p className="mt-6 max-w-xl text-lg text-slate-600 [animation:surge-rise_0.8s_ease-out_0.12s_both]">Hidden rates and junk monthly fees, gone. Surge is the all-in-one payment solution for local business &mdash; transparent card payment processing and built-in point-of-sale software, at a lower rate, with a real person who answers the phone.</p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start [animation:surge-rise_0.8s_ease-out_0.24s_both]">

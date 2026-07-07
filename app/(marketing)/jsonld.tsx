@@ -10,7 +10,8 @@ export function JsonLd({ data }: { data: object }) {
 export const LOCAL_BUSINESS = {
   "@context": "https://schema.org",
   "@type": "LocalBusiness",
-  name: "Surge Payment Solutions",
+  name: "Surge",
+  legalName: "Surge Payment Solutions",
   url: SITE,
   logo: SITE + "/brand/surge-appicon.svg",
   image: SITE + "/brand/surge-appicon.svg",
