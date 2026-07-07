@@ -5,7 +5,7 @@ import { OG_BASE } from "../shared-metadata";
 import { JsonLd, breadcrumb } from "../jsonld";
 
 export const metadata: Metadata = {
-  title: { absolute: "Contact Surge — Payments & POS, Toronto/GTA" },
+  title: { absolute: "Contact Surge — Payments & POS in the GTA" },
   description: "Get in touch with Surge for payment processing, point of sale, or custom software in the GTA. Send a message and we will get back to you, or book a free call.",
   alternates: { canonical: "/contact" },
   openGraph: { ...OG_BASE, url: "/contact" },

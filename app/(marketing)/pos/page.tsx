@@ -55,9 +55,28 @@ const advanced = [
   { title: "Built to scale", body: "Add registers and locations as you grow, all reporting back to one clean dashboard." },
 ];
 
+const productSchema = {
+  "@context": "https://schema.org",
+  "@type": "Product",
+  name: "Surge POS",
+  description:
+    "A full point-of-sale built into your payments — fast checkout, every payment type, inventory, receipts, reports and item-level refunds. Free Basic POS on the device you already have.",
+  brand: { "@type": "Brand", name: "Surge" },
+  category: "Point of sale software",
+  offers: {
+    "@type": "Offer",
+    priceCurrency: "CAD",
+    price: "0",
+    availability: "https://schema.org/InStock",
+    description: "Free Basic POS included with Surge payments; Advanced tier available.",
+    url: "https://www.surgetechpos.com/pos",
+  },
+};
+
 export default function PosPage() {
   return (
     <>
+      <JsonLd data={productSchema} />
       <JsonLd data={breadcrumb("Point of Sale", "/pos")} />
       <section className="relative overflow-hidden pb-20 pt-36">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[80%] bg-gradient-to-b from-blue-50 via-sky-50/50 to-transparent" />

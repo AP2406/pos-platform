@@ -4,7 +4,7 @@ import { OG_BASE } from "../shared-metadata";
 import { JsonLd, breadcrumb, decodeEntities } from "../jsonld";
 
 export const metadata: Metadata = {
-  title: { absolute: "Pricing — 2.5% + 15¢ Payment Processing | Surge" },
+  title: { absolute: "Payment Processing Rates & Pricing (GTA) | Surge" },
   description: "One honest rate: 2.5% + $0.15 in person, plus a one-time $10 setup. Free Basic POS, optional Advanced features, and custom software, CRM and SaaS builds. No monthly fees on payments, no lock-in. Book a free call.",
   alternates: { canonical: "/pricing" },
   openGraph: { ...OG_BASE, url: "/pricing" },

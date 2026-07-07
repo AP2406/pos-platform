@@ -18,7 +18,20 @@ export const LOCAL_BUSINESS = {
   email: "info@surgetechpos.com",
   telephone: "+1-647-371-5982",
   priceRange: "$$",
-  areaServed: ["Greater Toronto Area", "Durham Region", "Toronto", "Ontario"],
+  areaServed: [
+    "Greater Toronto Area",
+    "Durham Region",
+    "Toronto",
+    "Mississauga",
+    "Scarborough",
+    "Markham",
+    "Vaughan",
+    "Pickering",
+    "Ajax",
+    "Whitby",
+    "Oshawa",
+    "Ontario",
+  ],
   openingHoursSpecification: [
     {
       "@type": "OpeningHoursSpecification",
