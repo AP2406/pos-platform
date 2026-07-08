@@ -9,38 +9,56 @@ export function JsonLd({ data }: { data: object }) {
 // Site-wide LocalBusiness. Real contact details supplied by the operator.
 export const LOCAL_BUSINESS = {
   "@context": "https://schema.org",
-  "@type": "LocalBusiness",
-  name: "Surge",
-  legalName: "Surge Payment Solutions",
+  // FinancialService is a subtype of LocalBusiness — more accurate for a payment
+  // processor, and Google still gives it LocalBusiness rich-result treatment.
+  "@type": "FinancialService",
+  "@id": SITE + "/#business",
+  name: "Surge Payment Solutions",
+  alternateName: "Surge",
   url: SITE,
-  logo: SITE + "/brand/surge-appicon.svg",
-  image: SITE + "/brand/surge-appicon.svg",
-  email: "info@surgetechpos.com",
+  logo: SITE + "/icon-512.png",
+  image: SITE + "/jpg18.png",
+  description: "Transparent payment processing and point-of-sale software for local businesses across the GTA — lower card rates, real human support, no junk fees.",
   telephone: "+1-888-648-8097",
+  email: "info@surgetechpos.com",
   priceRange: "$$",
+  address: {
+    "@type": "PostalAddress",
+    addressLocality: "Toronto",
+    addressRegion: "ON",
+    addressCountry: "CA",
+  },
+  geo: {
+    "@type": "GeoCoordinates",
+    latitude: 43.6532,
+    longitude: -79.3832,
+  },
   areaServed: [
     "Greater Toronto Area",
-    "Durham Region",
     "Toronto",
     "Mississauga",
-    "Scarborough",
+    "Brampton",
     "Markham",
     "Vaughan",
+    "Richmond Hill",
+    "Scarborough",
+    "North York",
+    "Etobicoke",
     "Pickering",
     "Ajax",
     "Whitby",
     "Oshawa",
-    "Ontario",
+    "Durham Region",
   ],
   openingHoursSpecification: [
     {
       "@type": "OpeningHoursSpecification",
-      dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
       opens: "09:00",
-      closes: "18:00",
+      closes: "20:00",
     },
   ],
-  description: "Transparent payment processing and point-of-sale software for local businesses across the GTA.",
+  // sameAs: pending real profile URLs (LinkedIn/Facebook/Instagram) — do not ship guessed links.
 };
 
 // Home → Page breadcrumb for subpages.
