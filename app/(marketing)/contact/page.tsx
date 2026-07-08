@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 const CONTACT_EMAIL = "info@surgetechpos.com";
-const CONTACT_PHONE = "(647) 371-5982";
+const CONTACT_PHONE = "(888) 648-8097";
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (

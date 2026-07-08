@@ -16,7 +16,7 @@ export const LOCAL_BUSINESS = {
   logo: SITE + "/brand/surge-appicon.svg",
   image: SITE + "/brand/surge-appicon.svg",
   email: "info@surgetechpos.com",
-  telephone: "+1-647-371-5982",
+  telephone: "+1-888-648-8097",
   priceRange: "$$",
   areaServed: [
     "Greater Toronto Area",
