@@ -5,7 +5,6 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { sendEmail, isEmailConfigured } from "@/lib/services/email";
 import { sendSms, isSmsConfigured } from "@/lib/services/sms";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 
 // P2-34 email marketing + GAP-0 SMS. CASL: only customers who gave express
 // consent are ever messaged; email carries an unsubscribe link + sender id, SMS
@@ -175,8 +174,9 @@ export async function sendCampaign(input: {
   const recipients = all.filter((r) => (channel === "sms" ? !!r.phone : !!r.email));
   if (recipients.length === 0) return { error: "No consented customers reachable by " + (channel === "sms" ? "text" : "email") + " in that segment." };
 
-  const hdrs = await headers();
-  const origin = "https://" + (hdrs.get("host") ?? "surgetechpos.com");
+  // Public unsubscribe links must always point at the canonical marketing host,
+  // never the request host (which could be a vercel.app deployment URL).
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://www.surgetechpos.com";
   const { data: { user } } = await supabase.auth.getUser();
 
   let sent = 0, failed = 0;

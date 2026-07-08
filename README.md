@@ -34,3 +34,23 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Canonical hosts & public URLs
+
+The app serves three domains — `surgetechpos.com` and `www.surgetechpos.com`
+(marketing) and `app.surgetechpos.com` (the dashboard). Public/shareable URLs
+are built from env vars, never from the request host, so a `*.vercel.app`
+deployment URL can never leak into a link, canonical, email, or redirect.
+
+Set both (server + client — `NEXT_PUBLIC_` so they're available in the browser):
+
+- `NEXT_PUBLIC_SITE_URL` = `https://www.surgetechpos.com`
+  — canonical marketing host. Used for booking/order/kiosk/menu/CFD links,
+  marketing-email unsubscribe links, canonical/OG/sitemap (those are also
+  hardcoded to www as a backstop).
+- `NEXT_PUBLIC_APP_URL` = `https://app.surgetechpos.com`
+  — the dashboard host. Used for the Supabase auth `redirectTo` and the
+  `/auth/callback` redirect target.
+
+A middleware host guard 308-redirects any `*.vercel.app` host to
+`https://www.surgetechpos.com` + the same path/query (see `middleware.ts`).

@@ -22,7 +22,7 @@ export function KioskCard({
     });
   }
 
-  const url = (typeof window !== "undefined" ? window.location.origin : "") + "/kiosk/" + businessId;
+  const url = (process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "")) + "/kiosk/" + businessId;
 
   async function copy() {
     try {
