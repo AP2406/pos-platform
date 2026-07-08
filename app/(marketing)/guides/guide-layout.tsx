@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { OG_BASE } from "../shared-metadata";
 import { JsonLd, article, breadcrumbTrail } from "../jsonld";
 import { LandingEyebrow, LandingCTA } from "../local-landing";
-import { getGuide } from "./guides";
+import { getGuide, GUIDES } from "./guides";
 
 // Shared chrome for every /guides post: metadata, Article + breadcrumb JSON-LD,
 // the header, and the closing CTA. Each guide page only writes its own body.
@@ -26,6 +26,27 @@ export function GuideP({ children }: { children: React.ReactNode }) {
   return <p className="mt-4 leading-relaxed text-slate-600">{children}</p>;
 }
 
+function RelatedGuides({ currentSlug }: { currentSlug: string }) {
+  const others = GUIDES.filter((g) => g.slug !== currentSlug).slice(0, 3);
+  if (!others.length) return null;
+  return (
+    <section className="relative border-t border-slate-100 bg-slate-50/70 py-14">
+      <div className="mx-auto max-w-2xl px-6">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Keep reading</h2>
+        <ul className="mt-4 space-y-3">
+          {others.map((g) => (
+            <li key={g.slug}>
+              <Link href={"/guides/" + g.slug} className="group block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
+                <span className="font-semibold text-slate-900 group-hover:text-blue-700">{g.title}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
 export function GuideArticle({ slug, lede, cta, children }: { slug: string; lede: React.ReactNode; cta: { heading: string; sub: string }; children: React.ReactNode }) {
   const g = getGuide(slug)!;
   const path = "/guides/" + slug;
@@ -46,6 +67,7 @@ export function GuideArticle({ slug, lede, cta, children }: { slug: string; lede
         </div>
       </article>
 
+      <RelatedGuides currentSlug={slug} />
       <LandingCTA heading={cta.heading} sub={cta.sub} />
     </>
   );

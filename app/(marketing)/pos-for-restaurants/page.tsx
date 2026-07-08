@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
 import { JsonLd, localService, breadcrumb } from "../jsonld";
-import { LandingHero, LandingSection, LandingPoints, LandingCTA } from "../local-landing";
+import { LandingHero, LandingSection, LandingPoints, LandingGuides, LandingCTA } from "../local-landing";
 
 export const metadata: Metadata = {
   title: { absolute: "POS for Restaurants (GTA) — Free Point of Sale | Surge" },
@@ -50,6 +50,8 @@ export default function PosForRestaurantsPage() {
       <LandingSection title="One rate, whether you have one register or five">
         <p>Add registers, handhelds and a second location as you grow, all on the same account and the same rate. Curious what it costs versus what you pay now? Start with <Link href="/pricing" className="font-semibold text-blue-600 hover:text-blue-700">pricing</Link>, or see the full <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link> feature set.</p>
       </LandingSection>
+
+      <LandingGuides slugs={["lower-credit-card-processing-fees-ontario", "flat-rate-vs-interchange-plus-pricing"]} />
 
       <LandingCTA
         heading="See your restaurant's real card cost"

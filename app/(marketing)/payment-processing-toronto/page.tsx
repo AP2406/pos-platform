@@ -3,7 +3,7 @@ import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
 import { JsonLd, localService, breadcrumb } from "../jsonld";
 import { SavingsEstimator } from "../savings-estimator";
-import { LandingHero, LandingSection, LandingPoints, LandingCTA } from "../local-landing";
+import { LandingHero, LandingSection, LandingPoints, LandingGuides, LandingCTA } from "../local-landing";
 
 export const metadata: Metadata = {
   title: { absolute: "Payment Processing in Toronto — Lower Card Rates | Surge" },
@@ -53,6 +53,8 @@ export default function PaymentProcessingTorontoPage() {
       <LandingSection title="Payments and point of sale, together">
         <p>Every Surge account includes a built-in <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link>: fast checkout, inventory, receipts, and daily reports on the device you already have. Run a restaurant? Our <Link href="/pos-for-restaurants" className="font-semibold text-blue-600 hover:text-blue-700">POS for restaurants</Link> handles tabs, tips and the kitchen. It&rsquo;s the same lower rate whether you&rsquo;re a single register or several across the city.</p>
       </LandingSection>
+
+      <LandingGuides slugs={["lower-credit-card-processing-fees-ontario", "interac-vs-credit-card-fees"]} />
 
       <LandingCTA
         heading="Find out what you're overpaying in Toronto"

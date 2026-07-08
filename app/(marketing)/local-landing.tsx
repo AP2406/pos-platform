@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getGuide } from "./guides/guides";
 
 // Shared building blocks for the local/industry landing pages. Layout stays
 // consistent; each page supplies its own unique H1, intro and body copy so the
@@ -56,6 +57,30 @@ export function LandingPoints({ items }: { items: { title: string; body: string 
         </div>
       ))}
     </div>
+  );
+}
+
+// A short "learn the fees" band that links a landing page into the /guides
+// cluster. Titles come from the shared GUIDES list so they can't drift.
+export function LandingGuides({ slugs, heading = "Learn the fees before you switch" }: { slugs: string[]; heading?: string }) {
+  const guides = slugs.map(getGuide).filter((g): g is NonNullable<typeof g> => Boolean(g));
+  if (!guides.length) return null;
+  return (
+    <section className="relative border-t border-slate-100 bg-white py-16">
+      <div className="relative mx-auto max-w-3xl px-6">
+        <h2 className="text-3xl font-semibold tracking-tight text-slate-900">{heading}</h2>
+        <ul className="mt-6 space-y-3">
+          {guides.map((g) => (
+            <li key={g.slug}>
+              <Link href={"/guides/" + g.slug} className="group flex items-baseline gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
+                <span className="font-semibold text-slate-900 group-hover:text-blue-700">{g.title}</span>
+                <span className="text-sm font-semibold text-blue-600">&rarr;</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
   );
 }
 

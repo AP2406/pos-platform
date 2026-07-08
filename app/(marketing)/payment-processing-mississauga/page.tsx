@@ -3,7 +3,7 @@ import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
 import { JsonLd, localService, breadcrumb } from "../jsonld";
 import { SavingsEstimator } from "../savings-estimator";
-import { LandingHero, LandingSection, LandingPoints, LandingCTA } from "../local-landing";
+import { LandingHero, LandingSection, LandingPoints, LandingGuides, LandingCTA } from "../local-landing";
 
 export const metadata: Metadata = {
   title: { absolute: "Payment Processing in Mississauga — Lower Card Rates | Surge" },
@@ -53,6 +53,8 @@ export default function PaymentProcessingMississaugaPage() {
       <LandingSection title="Payments and point of sale, together">
         <p>Every account includes a built-in <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link> — fast checkout, inventory and daily reports on the hardware you already own. Running a restaurant? See <Link href="/pos-for-restaurants" className="font-semibold text-blue-600 hover:text-blue-700">POS for restaurants</Link>. Same rate whether you have one register or several across Peel.</p>
       </LandingSection>
+
+      <LandingGuides slugs={["lower-credit-card-processing-fees-ontario", "what-is-a-junk-fee-on-a-merchant-account"]} />
 
       <LandingCTA
         heading="Find out what you're overpaying in Mississauga"

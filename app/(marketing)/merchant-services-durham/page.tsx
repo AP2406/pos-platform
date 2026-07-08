@@ -3,7 +3,7 @@ import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
 import { JsonLd, localService, breadcrumb } from "../jsonld";
 import { SavingsEstimator } from "../savings-estimator";
-import { LandingHero, LandingSection, LandingPoints, LandingCTA } from "../local-landing";
+import { LandingHero, LandingSection, LandingPoints, LandingGuides, LandingCTA } from "../local-landing";
 
 export const metadata: Metadata = {
   title: { absolute: "Merchant Services in Durham Region — Payments & POS | Surge" },
@@ -53,6 +53,8 @@ export default function MerchantServicesDurhamPage() {
       <LandingSection title="Payments and point of sale, together">
         <p>Every Surge account includes a built-in <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link>: checkout, inventory, receipts and reports on the device you already have. Restaurants can use <Link href="/pos-for-restaurants" className="font-semibold text-blue-600 hover:text-blue-700">POS for restaurants</Link> for tabs, tips and the kitchen. One rate, whether you run one counter or several across Durham.</p>
       </LandingSection>
+
+      <LandingGuides slugs={["lower-credit-card-processing-fees-ontario", "how-to-read-your-merchant-statement"]} />
 
       <LandingCTA
         heading="Find out what you're overpaying in Durham"

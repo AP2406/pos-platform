@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
 import { JsonLd, localService, breadcrumb } from "../jsonld";
-import { LandingHero, LandingSection, LandingPoints, LandingCTA } from "../local-landing";
+import { LandingHero, LandingSection, LandingPoints, LandingGuides, LandingCTA } from "../local-landing";
 
 export const metadata: Metadata = {
   title: { absolute: "POS for Retail (GTA) — Free Point of Sale & Inventory | Surge" },
@@ -49,6 +49,8 @@ export default function PosForRetailPage() {
       <LandingSection title="Grows with your shop">
         <p>Add registers and a second location as you grow, all reporting to one dashboard on the same rate. Compare the numbers on the <Link href="/pricing" className="font-semibold text-blue-600 hover:text-blue-700">pricing page</Link>, or see the full <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link> feature set.</p>
       </LandingSection>
+
+      <LandingGuides slugs={["lower-credit-card-processing-fees-ontario", "what-is-a-junk-fee-on-a-merchant-account"]} />
 
       <LandingCTA
         heading="See the POS on your own inventory"
