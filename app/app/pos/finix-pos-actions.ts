@@ -3,11 +3,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { isFinixConfigured, createBuyerIdentity, finix, refundTransfer, resolveMerchantId, finixErrorMessage } from "@/lib/services/finix";
+import { getTerminalTransfer, resolveDeviceId } from "@/lib/services/finix-terminal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createOrder } from "./actions";
 
 type CardConfig =
-  | { enabled: true; applicationId: string; environment: string; merchantId: string }
+  | { enabled: true; applicationId: string; environment: string; merchantId: string; terminalEnabled: boolean }
   | { enabled: false; reason: string };
 
 type FinixPiResp = { id: string };
@@ -94,12 +95,24 @@ export async function getCardConfig(): Promise<CardConfig> {
     }
   }
 
+  // Is a card-present terminal configured for this location? Read the device
+  // column separately so a pre-migration (missing column) just falls back to the
+  // env default and never disables card entirely.
+  let deviceCol: string | null = null;
+  const { data: dev } = await supabase
+    .from("businesses")
+    .select("finix_device_id")
+    .eq("id", business.id)
+    .maybeSingle();
+  deviceCol = (dev?.finix_device_id as string | null | undefined) ?? null;
+
   return {
     enabled: true,
     applicationId: process.env.FINIX_APPLICATION_ID || "",
     // Finix.js expects "sandbox" | "live" — must match the SDK's accepted values.
     environment: process.env.FINIX_ENVIRONMENT === "live" ? "live" : "sandbox",
     merchantId,
+    terminalEnabled: !!resolveDeviceId(deviceCol),
   };
 }
 
@@ -340,5 +353,159 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
   }
 
   await recordFinixPayment(rec.id);
+  return { ok: true, id: rec.id, sale_number: rec.sale_number, transferId: transfer.id };
+}
+
+// ---------- Card-present (PAX terminal) finalize ----------
+// The card is captured on the physical device and the transfer is created +
+// polled over REST (see /api/terminal/*). Once the transfer SUCCEEDS the client
+// calls this to record the sale — mirroring createCardOrder's safety model:
+// record only after a confirmed charge, and reverse the charge if recording fails.
+
+type TerminalOrderInput = {
+  items: CardItem[];
+  tip?: number;
+  discount_type?: "amount" | "percent";
+  discount_value?: number;
+  discount_reason_code?: string;
+  discount_reason_note?: string;
+  tax_exempt?: boolean;
+  tax_exempt_reason_code?: string;
+  tax_exempt_reason_note?: string;
+  customer_id?: string | null;
+  idempotency_key: string;
+  expected_total: number;
+  transferId: string;
+};
+
+export async function recordTerminalSale(input: TerminalOrderInput): Promise<CardOrderResult> {
+  const { business } = await requireBusiness();
+
+  if (!isFinixConfigured()) return { error: "Card payments are not configured." };
+  if (!input.transferId) return { error: "Missing terminal transfer." };
+
+  const supabase = await createClient();
+  const admin = createAdminClient();
+
+  // Double-record guard: if this order key already recorded, return it (the
+  // terminal transfer succeeded and the sale exists — don't create a duplicate).
+  {
+    const { data: priorOrder } = await supabase
+      .from("orders")
+      .select("id, sale_number")
+      .eq("business_id", business.id)
+      .eq("idempotency_key", input.idempotency_key)
+      .maybeSingle();
+    if (priorOrder) {
+      return { ok: true, id: priorOrder.id as string, sale_number: Number(priorOrder.sale_number), transferId: input.transferId };
+    }
+  }
+
+  // The transfer must belong to this business (guards a spoofed transfer id).
+  const { data: fp } = await admin
+    .from("finix_payments")
+    .select("business_id")
+    .eq("finix_transfer_id", input.transferId)
+    .maybeSingle();
+  if (fp && fp.business_id && fp.business_id !== business.id) {
+    return { error: "This sale doesn't belong to this business." };
+  }
+
+  // Re-confirm SUCCEEDED server-side — never trust the client's poll alone.
+  const tRes = await getTerminalTransfer(input.transferId);
+  if ("error" in tRes) return { error: "Couldn't confirm the terminal sale. Check the terminal and try again." };
+  const transfer = tRes.transfer;
+  if (transfer.state !== "SUCCEEDED") {
+    return { declined: true, message: transfer.failureMessage || "The terminal sale didn't complete." };
+  }
+  const chargedCents = transfer.amountCents;
+
+  // Insert-or-update the payment row keyed on the transfer. The sale endpoint
+  // usually inserts a pending row up front, but upsert here so the payment is
+  // still recorded if that insert never landed.
+  async function linkPayment(orderId: string | null): Promise<void> {
+    const { data: existing } = await admin
+      .from("finix_payments")
+      .select("id")
+      .eq("finix_transfer_id", transfer.id)
+      .maybeSingle();
+    if (existing) {
+      await admin
+        .from("finix_payments")
+        .update({
+          order_id: orderId,
+          status: transfer.state.toLowerCase(),
+          raw_response: transfer as unknown as Record<string, unknown>,
+        })
+        .eq("id", existing.id);
+      return;
+    }
+    await admin.from("finix_payments").insert({
+      business_id: business.id,
+      order_id: orderId,
+      trip_id: null,
+      finix_transfer_id: transfer.id,
+      finix_payment_instrument_id: null,
+      finix_merchant_id: null,
+      amount_cents: chargedCents,
+      currency: transfer.currency,
+      status: transfer.state.toLowerCase(),
+      raw_response: transfer as unknown as Record<string, unknown>,
+    });
+  }
+
+  async function reverse(reason: string): Promise<void> {
+    await refundTransfer(transfer.id, {
+      refundAmount: chargedCents,
+      idempotency_id: "surge-refund-" + transfer.id,
+      tags: { reason },
+    });
+  }
+
+  let rec: Awaited<ReturnType<typeof createOrder>>;
+  try {
+    rec = await createOrder({
+      items: input.items,
+      tip: input.tip,
+      payment_method: "card",
+      idempotency_key: input.idempotency_key,
+      discount_type: input.discount_type,
+      discount_value: input.discount_value,
+      discount_reason_code: input.discount_reason_code,
+      discount_reason_note: input.discount_reason_note,
+      tax_exempt: input.tax_exempt,
+      tax_exempt_reason_code: input.tax_exempt_reason_code,
+      tax_exempt_reason_note: input.tax_exempt_reason_note,
+      customer_id: input.customer_id ?? null,
+    });
+  } catch (e) {
+    console.error("recordTerminalSale: createOrder threw after successful charge " + transfer.id, e);
+    await reverse("terminal_order_record_exception");
+    await linkPayment(null);
+    return { error: "The card was charged but the sale couldn't be saved, so the charge was reversed. Please try again." };
+  }
+
+  if ("error" in rec) {
+    await reverse("terminal_order_record_failed");
+    await linkPayment(null);
+    return { error: "The card was charged but the sale couldn't be saved, so the charge was reversed. Please try again." };
+  }
+
+  const { data: savedOrder } = await supabase
+    .from("orders")
+    .select("total")
+    .eq("id", rec.id)
+    .eq("business_id", business.id)
+    .single();
+  const savedCents = savedOrder ? Math.round((Number(savedOrder.total) || 0) * 100) : chargedCents;
+  if (savedCents !== chargedCents) {
+    console.error("recordTerminalSale amount mismatch: charged " + chargedCents + " vs sale total " + savedCents + " (order " + rec.id + ")");
+    await reverse("amount_mismatch");
+    await supabase.from("orders").update({ status: "voided" }).eq("id", rec.id).eq("business_id", business.id);
+    await linkPayment(null);
+    return { error: "The charged amount didn't match the sale, so the charge was reversed. Please ring the sale up again." };
+  }
+
+  await linkPayment(rec.id);
   return { ok: true, id: rec.id, sale_number: rec.sale_number, transferId: transfer.id };
 }

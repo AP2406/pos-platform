@@ -42,6 +42,7 @@ import { setCatalogItemOutOfStock } from "../catalog/actions";
 import { DISCOUNT_REASONS, COMP_REASONS, SERVICE_CHARGE_WAIVE_REASONS, TAX_EXEMPT_REASONS, VOID_REASONS } from "./reason-codes";
 import { setActiveStaff, clearActiveStaff, type ActiveStaff } from "./staff-session";
 import { CardPaymentModal } from "./card-payment-modal";
+import { TerminalPaymentModal } from "./terminal-payment-modal";
 import { getCardConfig } from "./finix-pos-actions";
 import { tapToPayAvailable } from "@/lib/services/tap-to-pay";
 import { TenderSheet } from "./tender-sheet";
@@ -114,7 +115,7 @@ type Receipt = {
   bill?: boolean;
 };
 type CardCfg =
-  | { enabled: true; applicationId: string; environment: string; merchantId: string }
+  | { enabled: true; applicationId: string; environment: string; merchantId: string; terminalEnabled: boolean }
   | { enabled: false; reason: string };
 type CardModalState = {
   amount: number;
@@ -324,6 +325,8 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const [staffBusy, setStaffBusy] = useState(false);
   const [cardCfg, setCardCfg] = useState<CardCfg | null>(null);
   const [cardModal, setCardModal] = useState<CardModalState | null>(null);
+  const [terminalModal, setTerminalModal] = useState<CardModalState | null>(null);
+  const [terminalReady, setTerminalReady] = useState<boolean | null>(null);
   const [tenderOpen, setTenderOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("All");
@@ -607,6 +610,18 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       active = false;
     };
   }, []);
+
+  // When a physical terminal is configured, check its connection for the
+  // "Ready" / "Terminal offline" badge on the Card reader tile.
+  useEffect(() => {
+    if (!(cardCfg && cardCfg.enabled && cardCfg.terminalEnabled)) return;
+    let active = true;
+    fetch("/api/terminal/status", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (active) setTerminalReady(!!d?.ready); })
+      .catch(() => { if (active) setTerminalReady(false); });
+    return () => { active = false; };
+  }, [cardCfg]);
 
   // GAP-1 (5/5): Tap to Pay is only available inside the native app (the Finix
   // Tap to Pay SDK bridge). On the web this stays false and the register behaves
@@ -1742,6 +1757,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
 
   const cardEnabled = !!(cardCfg && cardCfg.enabled);
   const tapToPayEnabled = cardEnabled && tapCapable;
+  const terminalEnabled = !!(cardCfg && cardCfg.enabled && cardCfg.terminalEnabled);
 
   const cashierRole = staff ? (staff as { role?: string }).role : null;
   const cashierPerms = staff ? ((staff as { permissions?: string[] }).permissions ?? []) : [];
@@ -2117,14 +2133,15 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
 
   function recordCardManual() { openCardCollect(false); }
   function recordTapToPay() { openCardCollect(true); }
+  function recordTerminal() { openCardCollect(false, true); }
 
   // Opens the card-collection modal for either manual entry or Tap to Pay; both
   // build the identical order snapshot and run the same createCardOrder charge.
-  function openCardCollect(tap: boolean) {
+  function openCardCollect(tap: boolean, terminal: boolean = false) {
     setError(null);
     if (cart.length === 0) return;
     setTenderOpen(false);
-    setCardModal({
+    const modalState: CardModalState = {
       tapToPay: tap,
       amount: total,
       order: {
@@ -2166,7 +2183,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         customerName: customer ? customer.name : null,
       },
       defaultName: customer ? customer.name : "",
-    });
+    };
+    if (terminal) setTerminalModal(modalState);
+    else setCardModal(modalState);
   }
 
   function handleCardSuccess(res: { id: string; sale_number: number; transferId: string }) {
@@ -2193,6 +2212,37 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     };
     setReceipt(rec);
     setCardModal(null);
+    setTenderOpen(false);
+    clearCart();
+    closeTableAfterCharge(res.id);
+    const cfg = getPrinterConfig();
+    if (cfg && cfg.autoPrint) doPrint(rec);
+  }
+
+  function handleTerminalSuccess(res: { id: string; sale_number: number; transferId: string; card: { brand: string | null; last4: string | null } | null }) {
+    const m = terminalModal;
+    if (!m) return;
+    const rec: Receipt = {
+      id: res.id,
+      saleNumber: res.sale_number,
+      businessName,
+      customerName: m.receipt.customerName,
+      items: m.receipt.items,
+      subtotal: m.receipt.subtotal,
+      discount: m.receipt.discount,
+      comp: m.receipt.comp,
+      serviceCharge: m.receipt.serviceCharge,
+      serviceLabel: m.receipt.serviceLabel,
+      tax: m.receipt.tax,
+      tip: m.receipt.tip,
+      total: m.receipt.total,
+      paymentMethod: "card",
+      payments: [{ method: "card", amount: m.receipt.total, tendered: null, change: null }],
+      at: new Date().toLocaleString(),
+      diningOption: diningOption,
+    };
+    setReceipt(rec);
+    setTerminalModal(null);
     setTenderOpen(false);
     clearCart();
     closeTableAfterCharge(res.id);
@@ -2601,6 +2651,15 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         />
       )}
 
+      {terminalModal && terminalEnabled && (
+        <TerminalPaymentModal
+          amount={terminalModal.amount}
+          order={terminalModal.order}
+          onClose={() => setTerminalModal(null)}
+          onSuccess={handleTerminalSuccess}
+        />
+      )}
+
       <TenderSheet
         open={tenderOpen}
         onClose={() => setTenderOpen(false)}
@@ -2608,11 +2667,14 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         pending={pending}
         cardEnabled={cardEnabled}
         tapToPayEnabled={tapToPayEnabled}
+        terminalEnabled={terminalEnabled}
+        terminalReady={terminalReady}
         storeCreditBalance={storeCreditBalance}
         onCash={recordCash}
         onSplit={recordSplit}
         onCardManual={recordCardManual}
         onTapToPay={recordTapToPay}
+        onTerminal={recordTerminal}
         onCardRecord={recordCardNoCharge}
       />
 
