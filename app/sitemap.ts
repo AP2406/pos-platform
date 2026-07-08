@@ -17,6 +17,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: SITE_URL + "/merchant-services-durham", lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: SITE_URL + "/pos-for-restaurants", lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: SITE_URL + "/pos-for-retail", lastModified: now, changeFrequency: "monthly", priority: 0.8 },
+    { url: SITE_URL + "/moneris-alternative", lastModified: now, changeFrequency: "monthly", priority: 0.8 },
+    { url: SITE_URL + "/square-alternative", lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: SITE_URL + "/contact", lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     { url: SITE_URL + "/book", lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: SITE_URL + "/guides", lastModified: now, changeFrequency: "weekly", priority: 0.6 },

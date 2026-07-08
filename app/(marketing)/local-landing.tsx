@@ -84,6 +84,47 @@ export function LandingGuides({ slugs, heading = "Learn the fees before you swit
   );
 }
 
+// Responsive competitor-comparison table (Surge column highlighted). Scrolls
+// horizontally on narrow screens so the page body never overflows.
+export function LandingCompare({ competitor, rows, note }: { competitor: string; rows: [string, string, string][]; note?: string }) {
+  return (
+    <div className="mt-8">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
+        <table className="w-full min-w-[540px] border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="px-4 py-3 font-semibold text-slate-400"></th>
+              <th className="px-4 py-3 font-semibold text-blue-700">Surge</th>
+              <th className="px-4 py-3 font-semibold text-slate-500">{competitor}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r[0]} className="border-b border-slate-100 last:border-0">
+                <td className="px-4 py-3 font-medium text-slate-700">{r[0]}</td>
+                <td className="bg-blue-50/40 px-4 py-3 font-semibold text-slate-900">{r[1]}</td>
+                <td className="px-4 py-3 text-slate-600">{r[2]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {note ? <p className="mt-3 text-xs text-slate-400">{note}</p> : null}
+    </div>
+  );
+}
+
+// Fine-print disclaimer band for the competitor-comparison pages.
+export function LandingDisclaimer({ children }: { children: React.ReactNode }) {
+  return (
+    <section className="relative bg-white py-10">
+      <div className="mx-auto max-w-3xl px-6">
+        <p className="text-xs leading-relaxed text-slate-400">{children}</p>
+      </div>
+    </section>
+  );
+}
+
 export function LandingCTA({ heading, sub }: { heading: string; sub: string }) {
   return (
     <section className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-sky-500 to-cyan-500 py-20 text-white">

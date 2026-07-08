@@ -62,6 +62,8 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
               <li><Link href="/merchant-services-durham" className="hover:text-white">Merchant services Durham</Link></li>
               <li><Link href="/pos-for-restaurants" className="hover:text-white">POS for restaurants</Link></li>
               <li><Link href="/pos-for-retail" className="hover:text-white">POS for retail</Link></li>
+              <li><Link href="/moneris-alternative" className="hover:text-white">Moneris alternative</Link></li>
+              <li><Link href="/square-alternative" className="hover:text-white">Square alternative</Link></li>
             </ul>
           </div>
           <div>
