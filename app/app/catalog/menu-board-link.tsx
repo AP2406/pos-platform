@@ -7,7 +7,7 @@ export function MenuBoardLink({ businessId }: { businessId: string }) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
-    const url = (typeof window !== "undefined" ? window.location.origin : "") + "/menu/" + businessId;
+    const url = (process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "")) + "/menu/" + businessId;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);

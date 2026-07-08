@@ -22,7 +22,7 @@ export function OnlineOrderingCard({
     });
   }
 
-  const url = (typeof window !== "undefined" ? window.location.origin : "") + "/order/" + businessId;
+  const url = (process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "")) + "/order/" + businessId;
 
   async function copy() {
     try {

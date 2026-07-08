@@ -4,7 +4,7 @@ import { useState } from "react";
 
 export function CfdCard({ businessId }: { businessId: string }) {
   const [copied, setCopied] = useState(false);
-  const url = (typeof window !== "undefined" ? window.location.origin : "") + "/cfd/" + businessId;
+  const url = (process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "")) + "/cfd/" + businessId;
 
   async function copy() {
     try {

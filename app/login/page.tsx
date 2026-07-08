@@ -20,7 +20,7 @@ export default function LoginPage() {
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: window.location.origin + "/auth/callback",
+        redirectTo: (process.env.NEXT_PUBLIC_APP_URL || window.location.origin) + "/auth/callback",
       },
     });
     if (oauthError) {
@@ -57,7 +57,7 @@ export default function LoginPage() {
     const supabase = createClient();
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(
       email,
-      { redirectTo: window.location.origin + "/auth/callback?next=/auth/reset" }
+      { redirectTo: (process.env.NEXT_PUBLIC_APP_URL || window.location.origin) + "/auth/callback?next=/auth/reset" }
     );
     setLoading(false);
     if (resetError) {

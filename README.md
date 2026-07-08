@@ -93,3 +93,23 @@ Notes:
 - The handler keeps `finix_payments` in sync on `transfer` state changes and
   upserts `finix_disputes` on chargebacks. Terminal sales are recorded in Surge
   by the register on `SUCCEEDED` (poll), so the webhook is the durable backstop.
+
+## Canonical hosts & public URLs
+
+The app serves three domains — `surgetechpos.com` and `www.surgetechpos.com`
+(marketing) and `app.surgetechpos.com` (the dashboard). Public/shareable URLs
+are built from env vars, never from the request host, so a `*.vercel.app`
+deployment URL can never leak into a link, canonical, email, or redirect.
+
+Set both (server + client — `NEXT_PUBLIC_` so they're available in the browser):
+
+- `NEXT_PUBLIC_SITE_URL` = `https://www.surgetechpos.com`
+  — canonical marketing host. Used for booking/order/kiosk/menu/CFD links,
+  marketing-email unsubscribe links, canonical/OG/sitemap (those are also
+  hardcoded to www as a backstop).
+- `NEXT_PUBLIC_APP_URL` = `https://app.surgetechpos.com`
+  — the dashboard host. Used for the Supabase auth `redirectTo` and the
+  `/auth/callback` redirect target.
+
+A middleware host guard 308-redirects any `*.vercel.app` host to
+`https://www.surgetechpos.com` + the same path/query (see `middleware.ts`).
