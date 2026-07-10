@@ -3,18 +3,22 @@
 // In dev/sandbox everything is soft — missing vars only warn — so local work and
 // sandbox testing stay flexible. Called once from instrumentation.ts.
 
-// Core infra the app cannot safely run without in production — a miss here throws
-// at boot. Deliberately does NOT include Finix: this same app hosts the Pearson
-// (transportation) tenant, and a Finix misconfig must never take the whole
-// deployment down. Payment routes fail closed on their own (STEP 4).
+// Core infra the app genuinely cannot run without — a miss here throws at boot.
+// Kept minimal on purpose: only Supabase, without which nothing works (and which
+// is always set in any working deploy). Deliberately excludes Finix (a payments
+// misconfig must not take down the Pearson tenant), the canonical hosts (the code
+// has its own https://www.surgetechpos.com fallbacks), and CRON_SECRET (enforced
+// at the cron routes in STEP 4, not at boot) — crashing the whole deploy over
+// those would cause an outage worse than the misconfig.
 const PRODUCTION_REQUIRED = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
-  "NEXT_PUBLIC_SITE_URL",
-  "NEXT_PUBLIC_APP_URL",
-  "CRON_SECRET",
 ] as const;
+
+// Should be set in production, but warn (loudly) rather than crash the deploy:
+// the hosts have code fallbacks and CRON_SECRET is enforced at the route.
+const PROD_WARN = ["NEXT_PUBLIC_SITE_URL", "NEXT_PUBLIC_APP_URL", "CRON_SECRET"] as const;
 
 // Required to take real cards, but enforced at the payment routes (webhook +
 // getCardConfig fail closed), not at boot. Missing in production warns LOUDLY so
@@ -66,6 +70,15 @@ export function validateEnv(): void {
   if (missingRequired.length > 0) {
     console.warn(
       "[env] Missing (dev): " + missingRequired.join(", ") + " — some features will be unavailable."
+    );
+  }
+  const missingProdWarn = PROD_WARN.filter((n) => !isSet(n));
+  if (missingProdWarn.length > 0) {
+    console.warn(
+      (isProd ? "[env] PRODUCTION: " : "[env] ") +
+        "recommended vars not set: " +
+        missingProdWarn.join(", ") +
+        " (hosts fall back to www.surgetechpos.com; CRON_SECRET is checked at the cron routes)."
     );
   }
   if (missingPayments.length > 0) {
