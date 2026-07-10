@@ -5,8 +5,9 @@ import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 
 // Register-behavior toggles (TouchBistro "Advanced" parity). Stored on
-// businesses.settings.register {...}. All booleans; the register/checkout read
-// them to adjust behavior. Additive — unset = the prior default.
+// businesses.settings.register {...}. All booleans. This persists the config;
+// register/checkout consumption of each toggle is wired incrementally (a toggle
+// with no consumer yet is a no-op). Additive — unset = the prior default.
 export type RegisterPrefs = {
   auto_proceed: boolean; // jump straight into order entry when a table/tile is tapped
   send_all: boolean; // show a "Send all" button in order entry

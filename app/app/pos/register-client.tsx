@@ -243,6 +243,10 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const [approver, setApprover] = useState<{ id: string; name: string } | null>(null);
   // The action to run once a manager PIN authorizes it (set by authorizeAction).
   const pendingCommitRef = useRef<(() => void) | null>(null);
+  // True while the manager modal is gating an add-restricted item (not a comp/
+  // discount/void). Such approvals must NOT set the sale-level `approver`, or the
+  // manager gets falsely recorded as the approver of unrelated comps/discounts.
+  const addApprovalRef = useRef(false);
   // Service charge / auto-gratuity. Auto-applies for large parties; turning it
   // off (a waiver) is the sensitive, reason-coded action.
   const scCfg: ServiceChargeCfg = serviceCharge ?? { enabled: false, pct: 0, autoParty: 0, postTax: false, label: "Service charge" };
@@ -453,6 +457,14 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     if (sugg.length > 0) setUpsellModal(sugg);
   }
   function addSuggested(s: Suggestion) {
+    // Gated items (approval-required or open-price) can't be dropped at a combo
+    // price without their gate — route them through the normal add flow (the
+    // combo discount is skipped for these, which is correct).
+    if (s.item.open_price || s.item.requires_manager_approval) {
+      setUpsellModal(null);
+      addItem(s.item);
+      return;
+    }
     // Items needing choices open their picker (combo discount skipped there);
     // simple items add directly at the combo price.
     if (s.item.variations.length > 0 || s.item.modifiers.length > 0) {
@@ -658,8 +670,11 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   }
 
   function addItem(item: Item) {
-    // Open-price item: ask the cashier for the amount first.
-    if (item.open_price) {
+    // Open-price item: ask the cashier for the amount first. Only for simple
+    // items — an item with variations/modifiers must go through the picker so
+    // required choices + upcharges are enforced (open-price + modifiers on the
+    // same item isn't supported; the picker wins).
+    if (item.open_price && item.variations.length === 0 && item.modifiers.length === 0) {
       setOpenPriceItem(item);
       setOpenPriceInput("");
       return;
@@ -675,6 +690,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   // Gate an add behind the manager-PIN modal, reusing the sensitive-action path.
   function gateAddApproval(item: Item, commit: () => void) {
     pendingCommitRef.current = commit;
+    addApprovalRef.current = true;
     setMgrAction("add " + item.name);
     setMgrIntent("action");
     setMgrErr(null);
@@ -1498,8 +1514,12 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       setMgrPin("");
       return;
     }
-    // Record the approving manager for the audit trail (logged with the sale).
-    setApprover({ id: res.id, name: res.name });
+    // Record the approving manager for the audit trail (logged with the sale) —
+    // but NOT for an add-restricted-item gate (that manager didn't approve any
+    // comp/discount/void on this check).
+    if (!addApprovalRef.current) {
+      setApprover({ id: res.id, name: res.name });
+    }
     setMgrOpen(false);
     setMgrPin("");
     setMgrErr(null);
@@ -1508,6 +1528,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     if (mgrIntent === "action") {
       const commit = pendingCommitRef.current;
       pendingCommitRef.current = null;
+      addApprovalRef.current = false;
       setMgrIntent("tender");
       commit?.();
       return;

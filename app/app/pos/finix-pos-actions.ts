@@ -128,11 +128,13 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
   {
     const { data: priorOrder } = await supabase
       .from("orders")
-      .select("id, sale_number")
+      .select("id, sale_number, status")
       .eq("business_id", business.id)
       .eq("idempotency_key", input.idempotency_key)
       .maybeSingle();
-    if (priorOrder) {
+    // A voided order means a prior attempt charged then REVERSED (amount mismatch/
+    // record failure) and refunded the card — never report that as a paid sale.
+    if (priorOrder && String((priorOrder as { status?: string }).status || "").toLowerCase() !== "voided") {
       const { data: priorPay } = await supabase
         .from("finix_payments")
         .select("finix_transfer_id, status")
@@ -340,11 +342,13 @@ export async function recordTerminalSale(input: TerminalOrderInput): Promise<Car
   {
     const { data: priorOrder } = await supabase
       .from("orders")
-      .select("id, sale_number")
+      .select("id, sale_number, status")
       .eq("business_id", business.id)
       .eq("idempotency_key", input.idempotency_key)
       .maybeSingle();
-    if (priorOrder) {
+    // Skip a voided order: a prior attempt reversed/refunded the terminal charge,
+    // so it is NOT a completed sale — fall through and re-confirm the transfer.
+    if (priorOrder && String((priorOrder as { status?: string }).status || "").toLowerCase() !== "voided") {
       return { ok: true, id: priorOrder.id as string, sale_number: Number(priorOrder.sale_number), transferId: input.transferId };
     }
   }
