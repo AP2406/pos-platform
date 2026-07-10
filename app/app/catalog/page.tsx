@@ -49,7 +49,7 @@ export default async function CatalogPage() {
 
   const { data: modGroupsData } = await supabase
     .from("catalog_modifier_groups")
-    .select("id, catalog_item_id, name, required, min_select, max_select, sort_order")
+    .select("id, catalog_item_id, name, required, min_select, max_select, allow_split, sort_order")
     .eq("business_id", business.id)
     .order("sort_order", { ascending: true });
 
@@ -85,7 +85,7 @@ export default async function CatalogPage() {
     }
   }
 
-  type CatModGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; options: { id: string; name: string; price: number; child_group_id: string | null }[] };
+  type CatModGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; allow_split: boolean; options: { id: string; name: string; price: number; child_group_id: string | null }[] };
   const groupsByItem: Record<string, CatModGroup[]> = {};
   for (const g of modGroupsData ?? []) {
     const itemId = g.catalog_item_id as string;
@@ -96,6 +96,7 @@ export default async function CatalogPage() {
       required: (g.required as boolean | null) ?? false,
       min_select: Number(g.min_select) || 0,
       max_select: g.max_select === null || g.max_select === undefined ? null : Number(g.max_select),
+      allow_split: (g.allow_split as boolean | null) ?? false,
       options: modsByGroup[g.id as string] ?? [],
     });
   }

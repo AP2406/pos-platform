@@ -509,11 +509,13 @@ const groupSchema = z.object({
   required: z.coerce.boolean().optional(),
   min_select: z.coerce.number().int().min(0).max(50).optional(),
   max_select: z.coerce.number().int().min(1).max(50).optional().nullable(),
+  // Half/left-right (pizza-style) — each chosen option can be placed Whole/Left/Right.
+  allow_split: z.coerce.boolean().optional(),
 });
 
 export async function createModifierGroup(
   catalogItemId: string,
-  input: { name: string; required?: boolean; min_select?: number; max_select?: number | null }
+  input: { name: string; required?: boolean; min_select?: number; max_select?: number | null; allow_split?: boolean }
 ): Promise<{ ok: true; id: string } | { error: string }> {
   const parsed = groupSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -545,6 +547,7 @@ export async function createModifierGroup(
       required: required,
       min_select: parsed.data.min_select ?? (required ? 1 : 0),
       max_select: parsed.data.max_select ?? null,
+      allow_split: parsed.data.allow_split ?? false,
       sort_order: sort,
     })
     .select("id")
@@ -559,7 +562,7 @@ export async function createModifierGroup(
 
 export async function updateModifierGroup(
   id: string,
-  input: { name?: string; required?: boolean; min_select?: number; max_select?: number | null }
+  input: { name?: string; required?: boolean; min_select?: number; max_select?: number | null; allow_split?: boolean }
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing group." };
   const { business } = await requireBusiness();
@@ -570,6 +573,7 @@ export async function updateModifierGroup(
   if (input.required !== undefined) patch.required = !!input.required;
   if (input.min_select !== undefined) patch.min_select = Math.max(0, Math.min(50, Math.round(input.min_select)));
   if (input.max_select !== undefined) patch.max_select = input.max_select === null ? null : Math.max(1, Math.min(50, Math.round(input.max_select)));
+  if (input.allow_split !== undefined) patch.allow_split = !!input.allow_split;
   const { error } = await supabase
     .from("catalog_modifier_groups")
     .update(patch)

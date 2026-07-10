@@ -20,6 +20,7 @@ export type ModGroup = {
   required: boolean;
   min_select: number;
   max_select: number | null;
+  allow_split: boolean;
   options: ModOption[];
 };
 
@@ -45,7 +46,7 @@ export function ModifierGroupsEditor({ itemId, initial }: { itemId: string; init
     startTransition(async () => {
       const res = await createModifierGroup(itemId, { name, required: false });
       if ("error" in res) { setErr(res.error); return; }
-      setGroups((prev) => [...prev, { id: res.id, name, required: false, min_select: 0, max_select: null, options: [] }]);
+      setGroups((prev) => [...prev, { id: res.id, name, required: false, min_select: 0, max_select: null, allow_split: false, options: [] }]);
       setNewGroup("");
     });
   }
@@ -58,6 +59,7 @@ export function ModifierGroupsEditor({ itemId, initial }: { itemId: string; init
         required: fields.required,
         min_select: fields.min_select,
         max_select: fields.max_select,
+        allow_split: fields.allow_split,
       });
     });
   }
@@ -124,6 +126,10 @@ export function ModifierGroupsEditor({ itemId, initial }: { itemId: string; init
               <label className="flex items-center gap-1">
                 Max
                 <Input type="number" min="1" max="50" value={g.max_select ?? ""} placeholder="∞" onChange={(e) => patch(g.id, { max_select: e.target.value ? parseInt(e.target.value) : null })} onBlur={(e) => saveGroup(g.id, { max_select: e.target.value ? parseInt(e.target.value) : null })} className="h-8 w-16 text-right" />
+              </label>
+              <label className="flex items-center gap-1.5" title="Let staff place each choice on the whole item, left half, or right half (pizza-style).">
+                <input type="checkbox" checked={g.allow_split} onChange={(e) => saveGroup(g.id, { allow_split: e.target.checked })} className="h-4 w-4" />
+                Split ½ L/R
               </label>
             </div>
 
