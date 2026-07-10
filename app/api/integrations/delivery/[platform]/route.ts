@@ -1,5 +1,5 @@
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { isDeliveryPlatform, verifyDeliverySignature, type DeliveryPlatform } from "@/lib/services/delivery";
+import { isDeliveryPlatform, verifyDeliverySignature, mapDeliverectOrder, type DeliveryPlatform, type NormalizedDeliveryOrder } from "@/lib/services/delivery";
 import { integrationEnabled } from "@/lib/services/integrations";
 
 export const runtime = "nodejs";
@@ -50,14 +50,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ platform: stri
     console.warn(`delivery webhook ${plat}: no signing secret set — accepting unverified. Set one in production.`);
   }
 
-  let body: { business_id?: string; external_id?: string; display_id?: string; items?: { name?: string; quantity?: number; unit_price?: number; note?: string }[]; subtotal?: number; tax?: number; total?: number } | null = null;
+  let parsed: unknown = null;
   try {
-    body = rawBody ? JSON.parse(rawBody) : null;
+    parsed = rawBody ? JSON.parse(rawBody) : null;
   } catch {
     return json({ ok: true, note: "non-json body ignored" }, 200);
   }
-  if (!body || !body.business_id || !body.external_id || !Array.isArray(body.items)) {
-    return json({ error: "missing business_id, external_id, or items" }, 400);
+  if (!parsed || typeof parsed !== "object") {
+    return json({ error: "invalid body" }, 400);
   }
 
   const admin = getAdmin();
@@ -66,23 +66,56 @@ export async function POST(req: Request, ctx: { params: Promise<{ platform: stri
     return json({ ok: false, note: "storage unavailable" }, 503);
   }
 
+  // Resolve to a normalized order + the target business. Deliverect sends its own
+  // channel-order shape and identifies the store by a Deliverect location id — we
+  // map THAT to a Surge business (never trust a business_id from the payload). The
+  // other platforms use our test-harness normalized shape with an explicit business_id.
+  let businessId: string | null = null;
+  let order: NormalizedDeliveryOrder | null = null;
+  if (plat === "deliverect") {
+    order = mapDeliverectOrder(parsed);
+    if (!order || order.items.length === 0) return json({ error: "unmappable deliverect order" }, 400);
+    if (!order.location_ref) return json({ error: "missing deliverect location" }, 400);
+    const { data: match } = await admin
+      .from("businesses")
+      .select("id")
+      .eq("settings->>deliverect_location_id", String(order.location_ref))
+      .maybeSingle();
+    businessId = (match?.id as string | null) ?? null;
+    if (!businessId) return json({ error: "no business mapped to this deliverect location" }, 404);
+  } else {
+    const b = parsed as { business_id?: string; external_id?: string; display_id?: string; items?: { name?: string; quantity?: number; unit_price?: number; note?: string }[]; subtotal?: number; tax?: number; total?: number };
+    if (!b.business_id || !b.external_id || !Array.isArray(b.items)) {
+      return json({ error: "missing business_id, external_id, or items" }, 400);
+    }
+    businessId = b.business_id;
+    order = {
+      external_id: b.external_id,
+      display_id: b.display_id ?? null,
+      items: b.items.map((i) => ({ name: i.name ?? "Item", quantity: i.quantity ?? 1, unit_price: i.unit_price ?? 0, note: i.note ?? null })),
+      subtotal: b.subtotal ?? null,
+      tax: b.tax ?? null,
+      total: b.total ?? null,
+      location_ref: null,
+    };
+  }
+
   // Only ingest when the business has the delivery connector enabled.
-  const { data: biz } = await admin.from("businesses").select("settings").eq("id", body.business_id).maybeSingle();
+  const { data: biz } = await admin.from("businesses").select("settings").eq("id", businessId).maybeSingle();
   if (!biz) return json({ error: "unknown business" }, 404);
   if (!integrationEnabled((biz as { settings?: unknown }).settings, "delivery")) {
     return json({ ok: true, note: "delivery connector disabled for business" }, 200);
   }
 
-  const items = body.items.map((i) => ({ name: i.name ?? "Item", quantity: i.quantity ?? 1, unit_price: i.unit_price ?? 0, note: i.note ?? null }));
   const { data, error } = await admin.rpc("inject_delivery_order", {
-    p_business_id: body.business_id,
+    p_business_id: businessId,
     p_platform: plat,
-    p_external_id: body.external_id,
-    p_display_id: body.display_id ?? null,
-    p_items: items,
-    p_subtotal: body.subtotal ?? 0,
-    p_tax: body.tax ?? 0,
-    p_total: body.total ?? 0,
+    p_external_id: order.external_id,
+    p_display_id: order.display_id ?? null,
+    p_items: order.items,
+    p_subtotal: order.subtotal ?? 0,
+    p_tax: order.tax ?? 0,
+    p_total: order.total ?? 0,
   });
   if (error) {
     console.error(`delivery webhook ${plat}: inject failed`, error);
