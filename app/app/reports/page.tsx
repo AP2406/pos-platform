@@ -102,6 +102,8 @@ export default async function ReportsPage({
   let refunds = 0;
   const itemAgg: Record<string, { name: string; qty: number; revenue: number; catId: string | null }> = {};
   const catAgg: Record<string, { qty: number; revenue: number }> = {};
+  // Reporting/tax sales category (food/alcohol/merch), distinct from display category.
+  const salesCatAgg: Record<string, { qty: number; revenue: number }> = {};
 
   if (orderIds.length > 0) {
     const { data: payData } = await supabase
@@ -148,14 +150,16 @@ export default async function ReportsPage({
       )
     );
     const catById: Record<string, string | null> = {};
+    const salesCatById: Record<string, string | null> = {};
     if (catItemIds.length > 0) {
       const { data: cats } = await supabase
         .from("catalog_items")
-        .select("id, category")
+        .select("id, category, sales_category")
         .eq("business_id", business.id)
         .in("id", catItemIds);
       for (const c of cats ?? []) {
         catById[c.id as string] = (c.category as string | null) ?? null;
+        salesCatById[c.id as string] = (c.sales_category as string | null) ?? null;
       }
     }
 
@@ -176,6 +180,11 @@ export default async function ReportsPage({
       if (!catAgg[catLabel]) catAgg[catLabel] = { qty: 0, revenue: 0 };
       catAgg[catLabel].qty += qty;
       catAgg[catLabel].revenue += revenue;
+
+      const salesLabel = cid ? salesCatById[cid] || "Uncategorized" : "Custom";
+      if (!salesCatAgg[salesLabel]) salesCatAgg[salesLabel] = { qty: 0, revenue: 0 };
+      salesCatAgg[salesLabel].qty += qty;
+      salesCatAgg[salesLabel].revenue += revenue;
     }
   }
 
@@ -195,6 +204,12 @@ export default async function ReportsPage({
   const categories = Object.keys(catAgg)
     .map((k) => ({ name: k, qty: catAgg[k].qty, revenue: catAgg[k].revenue }))
     .sort((a, b) => b.revenue - a.revenue);
+  const salesCategories = Object.keys(salesCatAgg)
+    .map((k) => ({ name: k, qty: salesCatAgg[k].qty, revenue: salesCatAgg[k].revenue }))
+    .sort((a, b) => b.revenue - a.revenue);
+  // Only show the sales-category card once at least one item has a real sales
+  // category set (otherwise it's all "Uncategorized"/"Custom" and adds noise).
+  const hasSalesCategories = salesCategories.some((c) => c.name !== "Uncategorized" && c.name !== "Custom");
 
   // P1-23: per-server sales (full service). Each server's net sales, tips,
   // order count and average check, from the order's attributed staff_id.
@@ -431,6 +446,23 @@ export default async function ReportsPage({
             </div>
           )}
         </div>
+
+        {hasSalesCategories && (
+          <div>
+            <h2 className="text-sm font-medium text-muted-foreground mb-2">By sales category</h2>
+            <div className="bg-card border border-border rounded-lg divide-y divide-border">
+              {salesCategories.map((c, i) => (
+                <div key={i} className="flex items-center justify-between gap-3 p-4">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{c.name}</div>
+                    <div className="text-xs text-muted-foreground">{c.qty + " items"}</div>
+                  </div>
+                  <div className="text-sm tabular-nums shrink-0">{money(round2(c.revenue))}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {showServers && (

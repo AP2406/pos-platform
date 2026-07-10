@@ -3,15 +3,11 @@
 import { useState, useTransition } from "react";
 import { setRegisterPrefs, type RegisterPrefs } from "./register-prefs-actions";
 
+// Only toggles that are actually wired into register behavior are shown — no
+// dead switches. More are added here as their behaviors land (the RegisterPrefs
+// type keeps the full set for forward-compat).
 const TOGGLES: { key: keyof RegisterPrefs; label: string; help: string }[] = [
-  { key: "auto_proceed", label: "Auto-proceed to order entry", help: "Tapping a table or the register opens order entry immediately." },
-  { key: "send_all", label: "Show “Send all” button", help: "Adds a one-tap button to fire every unsent item to the kitchen." },
-  { key: "email_receipt_prompt", label: "Offer email receipt at checkout", help: "Prompt to email the receipt once a sale completes." },
-  { key: "auto_close_forced_modifiers", label: "Auto-close forced modifiers", help: "Close the modifier sheet automatically once required groups are satisfied." },
-  { key: "allow_discounts_on_alcohol", label: "Allow discounts on alcohol", help: "Permit line discounts on items whose sales category is alcohol." },
-  { key: "show_modifier_category", label: "Show modifier category on line", help: "Display the modifier group name alongside each choice." },
-  { key: "default_to_seat", label: "Default to Seat 1", help: "New items default to Seat 1 when a table is open." },
-  { key: "lock_menu_view", label: "Lock menu view", help: "Hide the grid/list menu-view toggle in the register." },
+  { key: "default_to_seat", label: "Default to Seat 1", help: "New items default to Seat 1 when a table is open (off = start on Shared)." },
 ];
 
 export function RegisterBehaviorCard({ initial }: { initial: Partial<RegisterPrefs> }) {
