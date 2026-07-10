@@ -15,6 +15,13 @@ const itemSchema = z.object({
   taxable: z.boolean().optional(),
   barcode: z.string().max(120).optional().or(z.literal("")),
   image_url: z.string().url().max(2000).optional().or(z.literal("")),
+  // TouchBistro-parity per-item fields (all optional/additive).
+  sales_category: z.string().max(60).optional().or(z.literal("")),
+  short_name: z.string().max(60).optional().or(z.literal("")),
+  open_price: z.boolean().optional(),
+  requires_manager_approval: z.boolean().optional(),
+  allow_returns: z.boolean().optional(),
+  print_separate_ticket: z.boolean().optional(),
 });
 
 type ItemInput = {
@@ -24,7 +31,32 @@ type ItemInput = {
   taxable?: boolean;
   barcode?: string;
   image_url?: string;
+  sales_category?: string;
+  short_name?: string;
+  open_price?: boolean;
+  requires_manager_approval?: boolean;
+  allow_returns?: boolean;
+  print_separate_ticket?: boolean;
 };
+
+// The additive per-item columns, normalized for insert/update.
+function itemExtraFields(d: {
+  sales_category?: string;
+  short_name?: string;
+  open_price?: boolean;
+  requires_manager_approval?: boolean;
+  allow_returns?: boolean;
+  print_separate_ticket?: boolean;
+}): Record<string, unknown> {
+  return {
+    sales_category: d.sales_category ? d.sales_category.trim().slice(0, 60) : null,
+    short_name: d.short_name ? d.short_name.trim().slice(0, 60) : null,
+    open_price: !!d.open_price,
+    requires_manager_approval: !!d.requires_manager_approval,
+    allow_returns: !!d.allow_returns,
+    print_separate_ticket: !!d.print_separate_ticket,
+  };
+}
 
 function cleanBarcode(raw: string | undefined | null): string | null {
   if (!raw) return null;
@@ -66,6 +98,7 @@ export async function createCatalogItem(
       taxable: parsed.data.taxable === false ? false : true,
       barcode: code,
       image_url: parsed.data.image_url || null,
+      ...itemExtraFields(parsed.data),
     })
     .select("id")
     .single();
@@ -103,6 +136,7 @@ export async function updateCatalogItem(
   if (typeof parsed.data.image_url === "string") {
     updateData.image_url = parsed.data.image_url || null;
   }
+  Object.assign(updateData, itemExtraFields(parsed.data));
 
   const { error } = await supabase
     .from("catalog_items")
