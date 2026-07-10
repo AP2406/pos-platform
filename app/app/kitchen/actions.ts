@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { sendEmail, isEmailConfigured } from "@/lib/services/email";
+import { sendSms, isSmsConfigured } from "@/lib/services/sms";
 import { autoFireNextCourseIfReady } from "../pos/ticket-actions";
 
 export async function markOrderFulfilled(
@@ -25,10 +26,12 @@ export async function markOrderFulfilled(
     return { error: "Could not update the order." };
   }
 
-  // B7: ready-for-pickup email for takeout/pickup/delivery orders, when the guest
-  // has an email on file. Best-effort; toggle via settings.pickup_notify (default on).
+  // B7: ready-for-pickup notification (email + SMS) for takeout/pickup/delivery
+  // orders when the guest has contact info. Best-effort; toggle via
+  // settings.pickup_notify (default on). A configured settings.review_url adds a
+  // "leave a review" link (order-ready → review-generation).
   const settings = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
-  if (settings.pickup_notify !== false && isEmailConfigured()) {
+  if (settings.pickup_notify !== false) {
     const { data: ord } = await supabase
       .from("orders")
       .select("dining_option, customer_id, sale_number")
@@ -37,16 +40,27 @@ export async function markOrderFulfilled(
       .maybeSingle();
     const dopt = (ord?.dining_option as string | null) ?? null;
     if (ord?.customer_id && (dopt === "takeout" || dopt === "pickup" || dopt === "delivery")) {
-      const { data: cust } = await supabase.from("customers").select("name, email").eq("id", ord.customer_id as string).maybeSingle();
+      const { data: cust } = await supabase.from("customers").select("name, email, phone").eq("id", ord.customer_id as string).maybeSingle();
+      const biz = (business as { name?: string }).name || "your order";
+      const label = ord.sale_number ? "Order #" + ord.sale_number : "Your order";
+      const readyWord = dopt === "delivery" ? "on its way" : "ready for pickup";
+      const reviewUrl = typeof settings.review_url === "string" && settings.review_url.trim() ? settings.review_url.trim() : null;
+
       const email = (cust?.email as string | null) ?? null;
-      if (email) {
-        const biz = (business as { name?: string }).name || "your order";
-        const label = ord.sale_number ? "Order #" + ord.sale_number : "Your order";
+      if (email && isEmailConfigured()) {
         await sendEmail({
           to: email,
           subject: (dopt === "delivery" ? "Out for delivery" : "Ready for pickup") + " — " + biz,
-          html: `<p>Hi ${(cust?.name as string | null) ?? "there"},</p><p><strong>${label}</strong> at ${biz} is ${dopt === "delivery" ? "on its way" : "ready for pickup"}. See you soon!</p>`,
+          html:
+            `<p>Hi ${(cust?.name as string | null) ?? "there"},</p><p><strong>${label}</strong> at ${biz} is ${readyWord}. See you soon!</p>` +
+            (reviewUrl ? `<p>Enjoyed it? <a href="${reviewUrl}">Leave us a review</a> — it really helps.</p>` : ""),
         });
+      }
+
+      const phone = (cust?.phone as string | null) ?? null;
+      if (phone && isSmsConfigured()) {
+        const smsBody = `${label} at ${biz} is ${readyWord}.` + (reviewUrl ? ` Loved it? Review us: ${reviewUrl}` : "");
+        await sendSms({ to: phone, body: smsBody });
       }
     }
   }
