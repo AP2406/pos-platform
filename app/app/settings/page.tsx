@@ -19,6 +19,8 @@ import { OvertimeCard } from "./overtime-card";
 import { parseOvertime } from "@/lib/services/overtime";
 import { OnlineBookingCard } from "./online-booking-card";
 import { KdsCard } from "./kds-card";
+import { RegisterBehaviorCard } from "./register-behavior-card";
+import type { RegisterPrefs } from "./register-prefs-actions";
 import { ScheduledReportCard } from "./scheduled-report-card";
 import { ClockEnforcementCard } from "./clock-enforcement-card";
 import { LaborTargetCard } from "./labor-target-card";
@@ -140,6 +142,7 @@ export default async function SettingsPage() {
   }
 
   const daySettings = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
+  const registerPrefs = (daySettings.register ?? {}) as Partial<RegisterPrefs>;
   const dayCutoff = typeof daySettings.business_day_cutoff === "string" ? daySettings.business_day_cutoff : "00:00";
   const dayEmails = Array.isArray(daySettings.z_report_emails)
     ? (daySettings.z_report_emails as unknown[]).filter((e): e is string => typeof e === "string")
@@ -477,6 +480,10 @@ export default async function SettingsPage() {
               <KdsCard warnMin={kdsWarnMin} lateMin={kdsLateMin} autoCourse={autoCourse} lang={kdsLang} printerFallback={kdsPrinterFallback} />
             </div>
           )}
+
+          <div className="mb-4">
+            <RegisterBehaviorCard initial={registerPrefs} />
+          </div>
           {business.industry === "transportation" && (
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
               <SectionHeader>Features</SectionHeader>
