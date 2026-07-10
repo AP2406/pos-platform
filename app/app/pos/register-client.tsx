@@ -60,7 +60,7 @@ type Variation = { id: string; name: string; price: number };
 type ModOption = { id: string; name: string; price: number; child_group?: ModifierGroup };
 type ModifierGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; allow_split: boolean; options: ModOption[] };
 type ModPosition = "whole" | "left" | "right";
-type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null; track_inventory?: boolean; stock_qty?: number | null; reorder_point?: number | null };
+type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null; track_inventory?: boolean; stock_qty?: number | null; reorder_point?: number | null; open_price?: boolean; requires_manager_approval?: boolean; short_name?: string | null };
 type Course = { id: string; name: string; sort_order: number };
 type CartLine = {
   catalog_item_id: string | null;
@@ -284,6 +284,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [pickerItem, setPickerItem] = useState<Item | null>(null);
+  // Open-price entry (an item flagged open_price prompts for its amount).
+  const [openPriceItem, setOpenPriceItem] = useState<Item | null>(null);
+  const [openPriceInput, setOpenPriceInput] = useState("");
   const [pickerVariationId, setPickerVariationId] = useState<string | null>(null);
   const [pickerMods, setPickerMods] = useState<string[]>([]);
   // Half/left-right placement per selected option (split-enabled groups only); missing = "whole".
@@ -655,7 +658,34 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   }
 
   function addItem(item: Item) {
-    if (item.variations.length > 0 || item.modifiers.length > 0) {
+    // Open-price item: ask the cashier for the amount first.
+    if (item.open_price) {
+      setOpenPriceItem(item);
+      setOpenPriceInput("");
+      return;
+    }
+    // Requires a manager approval to order: gate, then add on approval.
+    if (item.requires_manager_approval) {
+      gateAddApproval(item, () => reallyAddItem(item));
+      return;
+    }
+    reallyAddItem(item);
+  }
+
+  // Gate an add behind the manager-PIN modal, reusing the sensitive-action path.
+  function gateAddApproval(item: Item, commit: () => void) {
+    pendingCommitRef.current = commit;
+    setMgrAction("add " + item.name);
+    setMgrIntent("action");
+    setMgrErr(null);
+    setMgrPin("");
+    setMgrOpen(true);
+  }
+
+  // The actual add. With variations/modifiers (and no explicit price) it opens the
+  // picker; otherwise it drops a line, honoring an open-price override.
+  function reallyAddItem(item: Item, priceOverride?: number) {
+    if (priceOverride == null && (item.variations.length > 0 || item.modifiers.length > 0)) {
       setReceipt(null);
       setPickerVariationId(null);
       setPickerMods([]);
@@ -666,8 +696,23 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       return;
     }
     const win = activeWindow(item);
-    addLine({ catalog_item_id: item.id, variation_id: null, name: item.name, unit_price: win ? windowPrice(item.price, win) : item.price, taxable: item.taxable, taxFrac: item.taxFrac });
+    const base = priceOverride != null ? priceOverride : win ? windowPrice(item.price, win) : item.price;
+    addLine({ catalog_item_id: item.id, variation_id: null, name: item.name, unit_price: base, taxable: item.taxable, taxFrac: item.taxFrac });
     maybeUpsell(item);
+  }
+
+  function submitOpenPrice() {
+    const item = openPriceItem;
+    if (!item) return;
+    const price = Math.round((parseFloat(openPriceInput) || 0) * 100) / 100;
+    if (!(price > 0)) return;
+    setOpenPriceItem(null);
+    setOpenPriceInput("");
+    if (item.requires_manager_approval) {
+      gateAddApproval(item, () => reallyAddItem(item, price));
+      return;
+    }
+    reallyAddItem(item, price);
   }
 
   function isOos(item: Item): boolean {
@@ -2403,6 +2448,25 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                 {mgrErr && <p className="text-sm text-red-600 mt-2">{mgrErr}</p>}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {openPriceItem && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setOpenPriceItem(null)}>
+          <div className="bg-card border border-border rounded-lg p-4 w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium">{openPriceItem.name}</h3>
+              <button type="button" onClick={() => setOpenPriceItem(null)} className="text-xs text-muted-foreground underline">Cancel</button>
+            </div>
+            <label className="text-xs text-muted-foreground">Enter price</label>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-lg">$</span>
+              <Input autoFocus type="number" inputMode="decimal" min="0" step="0.01" value={openPriceInput} onChange={(e) => setOpenPriceInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submitOpenPrice(); }} className="h-11 text-lg" />
+            </div>
+            <Button className="w-full mt-3 h-11" disabled={!(parseFloat(openPriceInput) > 0)} onClick={submitOpenPrice}>
+              {"Add" + (parseFloat(openPriceInput) > 0 ? " · $" + (Math.round(parseFloat(openPriceInput) * 100) / 100).toFixed(2) : "")}
+            </Button>
           </div>
         </div>
       )}
