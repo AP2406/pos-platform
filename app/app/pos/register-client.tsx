@@ -58,7 +58,8 @@ import { tileClassesFor } from "./category-colors";
 
 type Variation = { id: string; name: string; price: number };
 type ModOption = { id: string; name: string; price: number; child_group?: ModifierGroup };
-type ModifierGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; options: ModOption[] };
+type ModifierGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; allow_split: boolean; options: ModOption[] };
+type ModPosition = "whole" | "left" | "right";
 type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null; track_inventory?: boolean; stock_qty?: number | null; reorder_point?: number | null };
 type Course = { id: string; name: string; sort_order: number };
 type CartLine = {
@@ -285,6 +286,8 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const [pickerItem, setPickerItem] = useState<Item | null>(null);
   const [pickerVariationId, setPickerVariationId] = useState<string | null>(null);
   const [pickerMods, setPickerMods] = useState<string[]>([]);
+  // Half/left-right placement per selected option (split-enabled groups only); missing = "whole".
+  const [pickerPos, setPickerPos] = useState<Record<string, ModPosition>>({});
   // P1: kitchen note + allergen flags captured at add-item time (not just line-edit).
   const [pickerNote, setPickerNote] = useState("");
   const [pickerAllergens, setPickerAllergens] = useState<string[]>([]);
@@ -656,6 +659,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       setReceipt(null);
       setPickerVariationId(null);
       setPickerMods([]);
+      setPickerPos({});
       setPickerNote("");
       setPickerAllergens([]);
       setPickerItem(item);
@@ -720,7 +724,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   // P0-2: modifier groups for an item (falls back to one loose "Add-ons" group).
   function modGroupsOf(item: Item): ModifierGroup[] {
     if (item.modifierGroups && item.modifierGroups.length) return item.modifierGroups;
-    if (item.modifiers.length) return [{ id: "all", name: "Add-ons", required: false, min_select: 0, max_select: null, options: item.modifiers }];
+    if (item.modifiers.length) return [{ id: "all", name: "Add-ons", required: false, min_select: 0, max_select: null, allow_split: false, options: item.modifiers }];
     return [];
   }
   // P0-3: the group an option belongs to, searching the whole nested tree.
@@ -819,6 +823,18 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                 </span>
                 {m.price > 0 && <span className="text-sm tabular-nums text-muted-foreground">{"+$" + m.price.toFixed(2)}</span>}
               </button>
+              {checked && g.allow_split && (
+                <div className="flex gap-1 pl-6">
+                  {(["whole", "left", "right"] as const).map((p) => {
+                    const active = (pickerPos[m.id] ?? "whole") === p;
+                    return (
+                      <button key={p} type="button" onClick={() => setPickerPos((prev) => ({ ...prev, [m.id]: p }))} className={"px-2 py-0.5 text-[11px] rounded border transition-colors " + (active ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:border-foreground/40")}>
+                        {p === "whole" ? "Whole" : p === "left" ? "½ Left" : "½ Right"}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               {checked && m.child_group && renderModGroup(m.child_group, depth + 1)}
             </div>
           );
@@ -856,7 +872,14 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     const modTotal = chosen.reduce((s, m) => s + m.price, 0);
     if (chosen.length > 0) {
       unit = unit + modTotal;
-      label = label + " (" + chosen.map((m) => "+ " + m.name).join(", ") + ")";
+      // Half/left-right placement rides in the line name (½L / ½R); price is the
+      // option price regardless of position (a topping is a topping).
+      label = label + " (" + chosen.map((m) => {
+        const grp = pickerGroupOf(m.id);
+        const pos = grp?.allow_split ? (pickerPos[m.id] ?? "whole") : "whole";
+        const posLabel = pos === "left" ? "½L " : pos === "right" ? "½R " : "";
+        return "+ " + posLabel + m.name;
+      }).join(", ") + ")";
     }
     // E1: happy-hour — percent applies to the whole line; a set price replaces the
     // base (modifiers still add on top).

@@ -41,7 +41,7 @@ export default async function PosPage() {
 
   const { data: groupsData } = await supabase
     .from("catalog_modifier_groups")
-    .select("id, catalog_item_id, name, required, min_select, max_select, sort_order")
+    .select("id, catalog_item_id, name, required, min_select, max_select, allow_split, sort_order")
     .eq("business_id", business.id)
     .order("sort_order", { ascending: true });
 
@@ -100,7 +100,7 @@ export default async function PosPage() {
 
   // P0-2/P0-3: modifier groups (required/min/max) and nested follow-up groups.
   type ModOpt = { id: string; name: string; price: number; child_group?: ModGroup };
-  type ModGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; options: ModOpt[] };
+  type ModGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; allow_split: boolean; options: ModOpt[] };
 
   type RawOpt = { id: string; name: string; price: number; child_group_id: string | null };
   const modsByItem: Record<string, { id: string; name: string; price: number }[]> = {};
@@ -121,7 +121,7 @@ export default async function PosPage() {
     }
   }
 
-  type RawGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null };
+  type RawGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; allow_split: boolean };
   const rawGroupById = new Map<string, RawGroup>();
   const groupIdsByItem: Record<string, string[]> = {};
   for (const g of groupsData ?? []) {
@@ -132,6 +132,7 @@ export default async function PosPage() {
       required: (g.required as boolean | null) ?? false,
       min_select: Number(g.min_select) || 0,
       max_select: g.max_select === null || g.max_select === undefined ? null : Number(g.max_select),
+      allow_split: (g.allow_split as boolean | null) ?? false,
     });
     if (!groupIdsByItem[itemId]) groupIdsByItem[itemId] = [];
     groupIdsByItem[itemId].push(g.id as string);
@@ -151,7 +152,7 @@ export default async function PosPage() {
       }
       return { id: o.id, name: o.name, price: o.price, child_group: child };
     });
-    return { id: rg.id, name: rg.name, required: rg.required, min_select: rg.min_select, max_select: rg.max_select, options };
+    return { id: rg.id, name: rg.name, required: rg.required, min_select: rg.min_select, max_select: rg.max_select, allow_split: rg.allow_split, options };
   }
 
   function modifierGroupsFor(itemId: string): ModGroup[] {
@@ -163,7 +164,7 @@ export default async function PosPage() {
     }
     const loose = looseByItem[itemId] ?? [];
     if (loose.length > 0) {
-      out.push({ id: "loose:" + itemId, name: "Add-ons", required: false, min_select: 0, max_select: null, options: loose.map((o) => ({ id: o.id, name: o.name, price: o.price })) });
+      out.push({ id: "loose:" + itemId, name: "Add-ons", required: false, min_select: 0, max_select: null, allow_split: false, options: loose.map((o) => ({ id: o.id, name: o.name, price: o.price })) });
     }
     return out;
   }
