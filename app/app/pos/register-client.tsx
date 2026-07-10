@@ -43,6 +43,7 @@ import { DISCOUNT_REASONS, COMP_REASONS, SERVICE_CHARGE_WAIVE_REASONS, TAX_EXEMP
 import { setActiveStaff, clearActiveStaff, type ActiveStaff } from "./staff-session";
 import { CardPaymentModal } from "./card-payment-modal";
 import { TerminalPaymentModal } from "./terminal-payment-modal";
+import type { CanonicalOrderInput } from "@/lib/pos/canonical-order";
 import { getCardConfig } from "./finix-pos-actions";
 import { tapToPayAvailable } from "@/lib/services/tap-to-pay";
 import { TenderSheet } from "./tender-sheet";
@@ -119,28 +120,8 @@ type CardCfg =
   | { enabled: false; reason: string };
 type CardModalState = {
   amount: number;
-  order: {
-    items: CartLine[];
-    voids?: { name: string; unit_price: number; quantity: number; reason_code?: string; reason_note?: string }[];
-    tip?: number;
-    discount_type: "amount" | "percent";
-    discount_value: number;
-    discount_reason_code?: string;
-    discount_reason_note?: string;
-    comp_value?: number;
-    comp_reason_code?: string;
-    comp_reason_note?: string;
-    service_charge?: boolean;
-    service_charge_auto?: boolean;
-    service_charge_waive_reason_code?: string;
-    service_charge_waive_reason_note?: string;
-    tax_exempt?: boolean;
-    tax_exempt_reason_code?: string;
-    tax_exempt_reason_note?: string;
-    customer_id: string | null;
-    idempotency_key: string;
-    dining_option?: "dine_in" | "takeout" | "delivery" | "pickup";
-  };
+  // The full canonical order — same shape cash/split build via commonOrderFields().
+  order: CanonicalOrderInput;
   receipt: {
     items: CartLine[];
     subtotal: number;
@@ -1969,7 +1950,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     if (cfg && cfg.autoPrint) doPrint(rec);
   }
 
-  function commonOrderFields() {
+  function commonOrderFields(): CanonicalOrderInput {
     return {
       items: cart.filter((l) => !l.void),
       voids: voidLines.length > 0 ? voidLines.map((l) => ({ name: l.name, unit_price: l.unit_price, quantity: l.quantity, reason_code: l.void?.reason_code, reason_note: l.void?.reason_note })) : undefined,
@@ -2144,32 +2125,10 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     const modalState: CardModalState = {
       tapToPay: tap,
       amount: total,
-      order: {
-        items: cart.filter((l) => !l.void),
-        voids: voidLines.length > 0 ? voidLines.map((l) => ({ name: l.name, unit_price: l.unit_price, quantity: l.quantity, reason_code: l.void?.reason_code, reason_note: l.void?.reason_note })) : undefined,
-        tip: tipNum,
-        discount_type: discountMode,
-        discount_value: discountInput,
-        discount_reason_code: discount > 0 ? discountReason : undefined,
-        discount_reason_note:
-          discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
-        comp_value: comp > 0 ? comp : undefined,
-        comp_reason_code: comp > 0 ? compReason : undefined,
-        comp_reason_note:
-          comp > 0 && compReason === "other" ? compReasonNote.trim() : undefined,
-        service_charge: serviceApplied || undefined,
-        service_charge_auto: scIsAuto || undefined,
-        service_charge_waive_reason_code: scWaived ? serviceWaiveReason : undefined,
-        service_charge_waive_reason_note:
-          scWaived && serviceWaiveReason === "other" ? serviceWaiveNote.trim() : undefined,
-        tax_exempt: taxExempt || undefined,
-        tax_exempt_reason_code: taxExempt ? taxExemptReason : undefined,
-        tax_exempt_reason_note:
-          taxExempt && taxExemptReason === "other" ? taxExemptNote.trim() : undefined,
-        customer_id: customer ? customer.id : null,
-        idempotency_key: nextIdemKey(),
-        dining_option: diningOption,
-      },
+      // Single source of truth: the same payload cash/split send — so card and
+      // terminal save an identical order (comp, service charge, voids, dining
+      // option, open ticket, signature, approver all carried through).
+      order: commonOrderFields(),
       receipt: {
         items: cart,
         subtotal: subtotal,
