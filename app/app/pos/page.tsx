@@ -275,6 +275,9 @@ export default async function PosPage() {
     priceWindows,
     timezone: (business as { timezone?: string }).timezone || "America/Toronto",
     upsellPrompts,
+    // Advanced register toggle: default new items to Seat 1 (vs Shared) in table
+    // mode. Unset = the prior default (Seat 1).
+    defaultToSeat: (((business as { settings?: { register?: { default_to_seat?: boolean } } }).settings?.register?.default_to_seat) ?? true),
   };
 
   // Full-service restaurants get the table floor first; every other mode (and

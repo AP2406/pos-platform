@@ -194,7 +194,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
   });
 }
 
-export function RegisterClient({ items, taxRate, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto", upsellPrompts = [] }: { items: Item[]; taxRate: number; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string; upsellPrompts?: UpsellPrompt[] }) {
+export function RegisterClient({ items, taxRate, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto", upsellPrompts = [], defaultToSeat = true }: { items: Item[]; taxRate: number; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string; upsellPrompts?: UpsellPrompt[]; defaultToSeat?: boolean }) {
   const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
   const online = useOnlineStatus();
   // P1-22: back up the quick-service cart (no table/tab — nothing server-side
@@ -398,7 +398,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     for (const it of initialTableCart?.items ?? []) m = Math.max(m, Number(it.seat) || 0);
     return Math.max(m, 1);
   });
-  const [activeSeat, setActiveSeat] = useState<number | null>(tableMode ? 1 : null);
+  // Advanced toggle "Default to Seat 1": on (default) starts on Seat 1 in table
+  // mode; off starts on Shared.
+  const [activeSeat, setActiveSeat] = useState<number | null>(tableMode && defaultToSeat ? 1 : null);
   // P3: optional guest name per seat (keyed by seat number as a string).
   const [seatNames, setSeatNames] = useState<Record<string, string>>(initialTableCart?.seat_names ?? {});
   const seatName = (s: number | null) => (s != null ? (seatNames[String(s)] || "").trim() : "");
