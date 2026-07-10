@@ -204,7 +204,7 @@ export async function runAnalytics(
     if (k == null) continue;
     (groups.get(k) ?? groups.set(k, []).get(k)!).push(o);
   }
-  let rows = Array.from(groups.entries()).map(([k, g]) => ({ label: k, value: computeMetric(g) }));
+  const rows = Array.from(groups.entries()).map(([k, g]) => ({ label: k, value: computeMetric(g) }));
   if (spec.dimension === "weekday") rows.sort((a, b) => WEEKDAYS.indexOf(a.label) - WEEKDAYS.indexOf(b.label));
   else rows.sort((a, b) => (spec.sort === "asc" ? a.value - b.value : b.value - a.value));
   return { metric: spec.metric, metricLabel: label, isMoney, dimension: spec.dimension, scalar: null, rows: rows.slice(0, spec.limit), spec };

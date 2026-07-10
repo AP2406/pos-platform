@@ -15,7 +15,7 @@ export default function GuidePage() {
       <GuideH2>Start with the one number that matters</GuideH2>
       <GuideP>Before decoding anything, find two figures: your <strong>total card sales</strong> for the month and the <strong>total fees</strong> charged. Divide fees by sales and you have your <strong>effective rate</strong> &mdash; the all-in percentage you actually paid. This single number cuts through every marketing rate and is how you compare processors honestly.</GuideP>
 
-      <GuideH2>The sections you'll see</GuideH2>
+      <GuideH2>The sections you&rsquo;ll see</GuideH2>
       <GuideP><strong>Sales / deposits summary:</strong> what you processed and what was deposited. Confirm the deposits match your own records &mdash; timing and holds live here.</GuideP>
       <GuideP><strong>Interchange &amp; assessments:</strong> the pass-through costs set by the card networks. These aren&rsquo;t your processor&rsquo;s margin; everyone pays them. On an interchange-plus statement they&rsquo;re itemized; on a flat/blended statement they&rsquo;re hidden inside your rate.</GuideP>
       <GuideP><strong>Processor fees / markup:</strong> the part your processor keeps. This is what you&rsquo;re actually shopping when you compare providers.</GuideP>

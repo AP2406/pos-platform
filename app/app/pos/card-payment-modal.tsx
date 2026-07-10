@@ -272,7 +272,7 @@ export function CardPaymentModal(props: Props) {
           </p>
         )}
         <p className="text-[11px] text-muted-foreground mt-2">
-          Card details are entered in a secure field hosted by the payment processor and never touch Surge's servers.
+          Card details are entered in a secure field hosted by the payment processor and never touch Surge&rsquo;s servers.
         </p>
         </>
         )}

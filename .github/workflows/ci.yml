@@ -1,0 +1,46 @@
+name: CI
+
+# Blocks merge/deploy on typecheck, lint, unit-test, or build failure.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Build
+        run: npm run build
+        env:
+          # Dummy build-time values so static generation doesn't fail on missing
+          # public env. Real secrets live in the deploy environment (Vercel); the
+          # runtime env contract is enforced at boot by instrumentation.ts, not here.
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: build-placeholder
+          NEXT_PUBLIC_SITE_URL: https://www.surgetechpos.com
+          NEXT_PUBLIC_APP_URL: https://app.surgetechpos.com
+
+  # E2E (Playwright) is added in STEP 7 as a separate job:
+  #   - run: npx playwright install --with-deps
+  #   - run: npm run test:e2e

@@ -77,7 +77,7 @@ export default async function SquareDebugPage() {
       )}
 
       <div className="text-xs text-slate-500">
-        If your .env.local Location ID doesn't match any above, copy the correct ID
+        If your .env.local Location ID doesn&rsquo;t match any above, copy the correct ID
         from this list into <code>SQUARE_LOCATION_ID</code> in <code>.env.local</code>
         and restart the dev server.
       </div>
