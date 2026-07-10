@@ -3,9 +3,10 @@ import { redirect } from "next/navigation";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { hasFloorService } from "@/lib/modules/modes";
 import { ChevronLeft } from "lucide-react";
-import { CONFIG_KEYS, HUB_SECTIONS } from "@/lib/services/config/registry";
+import { CONFIG_KEYS, HUB_SECTIONS, APPROVAL_ACTIONS, APPROVAL_LABELS, APPROVAL_DEFAULTS, approvalKey } from "@/lib/services/config/registry";
 import { getConfigOverview } from "@/lib/services/config/actions";
 import { ConfigField, type ClientConfigDef } from "./config-field";
+import { ApprovalMatrixCard, type Rule } from "./approval-matrix-card";
 
 export const dynamic = "force-dynamic";
 
@@ -33,13 +34,26 @@ export default async function CustomizationPage() {
   // Resolve every registered key for the active context (one batched read each).
   const keys = Object.values(CONFIG_KEYS);
   const overviews = await Promise.all(keys.map((d) => getConfigOverview(d.key)));
+  const ovByKey = new Map(keys.map((d, i) => [d.key, overviews[i]]));
   const bySection = new Map<string, { def: ClientConfigDef; overviewIdx: number }[]>();
   keys.forEach((d, i) => {
+    // Approval-rule keys ({mode, threshold} JSON) get the dedicated matrix card
+    // below — the generic field can't edit them.
+    if (d.key.startsWith("approval.")) return;
     const cd: ClientConfigDef = { key: d.key, type: d.type, label: d.label, description: d.description, options: d.options, scopes: d.scopes.filter((s): s is "business" | "location" | "user" => s !== "role") };
     const arr = bySection.get(d.section) ?? [];
     arr.push({ def: cd, overviewIdx: i });
     bySection.set(d.section, arr);
   });
+
+  // Seed the approval matrix from the effective (resolved) rule for each action.
+  const approvalRules: Record<string, Rule> = {};
+  for (const a of APPROVAL_ACTIONS) {
+    const r = ovByKey.get(approvalKey(a))?.resolved;
+    const rule = r && typeof r === "object" ? (r as Partial<Rule>) : APPROVAL_DEFAULTS[a];
+    approvalRules[a] = { mode: (rule.mode as Rule["mode"]) ?? APPROVAL_DEFAULTS[a].mode, threshold: Number(rule.threshold) || 0 };
+  }
+  const approvalActions = APPROVAL_ACTIONS.map((a) => ({ key: a, label: APPROVAL_LABELS[a] }));
 
   return (
     <div className="max-w-3xl">
@@ -61,6 +75,9 @@ export default async function CustomizationPage() {
             <section key={section}>
               <h2 className="text-sm font-semibold mb-1">{section}</h2>
               <p className="text-xs text-muted-foreground mb-2">{SECTION_HINT[section]}</p>
+              {section === "Access & roles" && (
+                <ApprovalMatrixCard actions={approvalActions} initial={approvalRules} orgId={orgId} canManage={canManage} />
+              )}
               {fields.length > 0 && (
                 <div className="space-y-3">
                   {fields.map(({ def, overviewIdx }) => {
