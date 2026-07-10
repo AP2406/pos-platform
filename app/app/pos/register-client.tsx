@@ -43,6 +43,7 @@ import { DISCOUNT_REASONS, COMP_REASONS, SERVICE_CHARGE_WAIVE_REASONS, TAX_EXEMP
 import { setActiveStaff, clearActiveStaff, type ActiveStaff } from "./staff-session";
 import { CardPaymentModal } from "./card-payment-modal";
 import { TerminalPaymentModal } from "./terminal-payment-modal";
+import type { CanonicalOrderInput } from "@/lib/pos/canonical-order";
 import { getCardConfig } from "./finix-pos-actions";
 import { tapToPayAvailable } from "@/lib/services/tap-to-pay";
 import { TenderSheet } from "./tender-sheet";
@@ -57,8 +58,9 @@ import { tileClassesFor } from "./category-colors";
 
 type Variation = { id: string; name: string; price: number };
 type ModOption = { id: string; name: string; price: number; child_group?: ModifierGroup };
-type ModifierGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; options: ModOption[] };
-type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null; track_inventory?: boolean; stock_qty?: number | null; reorder_point?: number | null };
+type ModifierGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; allow_split: boolean; options: ModOption[] };
+type ModPosition = "whole" | "left" | "right";
+type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null; track_inventory?: boolean; stock_qty?: number | null; reorder_point?: number | null; open_price?: boolean; requires_manager_approval?: boolean; short_name?: string | null };
 type Course = { id: string; name: string; sort_order: number };
 type CartLine = {
   catalog_item_id: string | null;
@@ -119,28 +121,8 @@ type CardCfg =
   | { enabled: false; reason: string };
 type CardModalState = {
   amount: number;
-  order: {
-    items: CartLine[];
-    voids?: { name: string; unit_price: number; quantity: number; reason_code?: string; reason_note?: string }[];
-    tip?: number;
-    discount_type: "amount" | "percent";
-    discount_value: number;
-    discount_reason_code?: string;
-    discount_reason_note?: string;
-    comp_value?: number;
-    comp_reason_code?: string;
-    comp_reason_note?: string;
-    service_charge?: boolean;
-    service_charge_auto?: boolean;
-    service_charge_waive_reason_code?: string;
-    service_charge_waive_reason_note?: string;
-    tax_exempt?: boolean;
-    tax_exempt_reason_code?: string;
-    tax_exempt_reason_note?: string;
-    customer_id: string | null;
-    idempotency_key: string;
-    dining_option?: "dine_in" | "takeout" | "delivery" | "pickup";
-  };
+  // The full canonical order — same shape cash/split build via commonOrderFields().
+  order: CanonicalOrderInput;
   receipt: {
     items: CartLine[];
     subtotal: number;
@@ -261,6 +243,10 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const [approver, setApprover] = useState<{ id: string; name: string } | null>(null);
   // The action to run once a manager PIN authorizes it (set by authorizeAction).
   const pendingCommitRef = useRef<(() => void) | null>(null);
+  // True while the manager modal is gating an add-restricted item (not a comp/
+  // discount/void). Such approvals must NOT set the sale-level `approver`, or the
+  // manager gets falsely recorded as the approver of unrelated comps/discounts.
+  const addApprovalRef = useRef(false);
   // Service charge / auto-gratuity. Auto-applies for large parties; turning it
   // off (a waiver) is the sensitive, reason-coded action.
   const scCfg: ServiceChargeCfg = serviceCharge ?? { enabled: false, pct: 0, autoParty: 0, postTax: false, label: "Service charge" };
@@ -302,8 +288,13 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [pickerItem, setPickerItem] = useState<Item | null>(null);
+  // Open-price entry (an item flagged open_price prompts for its amount).
+  const [openPriceItem, setOpenPriceItem] = useState<Item | null>(null);
+  const [openPriceInput, setOpenPriceInput] = useState("");
   const [pickerVariationId, setPickerVariationId] = useState<string | null>(null);
   const [pickerMods, setPickerMods] = useState<string[]>([]);
+  // Half/left-right placement per selected option (split-enabled groups only); missing = "whole".
+  const [pickerPos, setPickerPos] = useState<Record<string, ModPosition>>({});
   // P1: kitchen note + allergen flags captured at add-item time (not just line-edit).
   const [pickerNote, setPickerNote] = useState("");
   const [pickerAllergens, setPickerAllergens] = useState<string[]>([]);
@@ -466,6 +457,14 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     if (sugg.length > 0) setUpsellModal(sugg);
   }
   function addSuggested(s: Suggestion) {
+    // Gated items (approval-required or open-price) can't be dropped at a combo
+    // price without their gate — route them through the normal add flow (the
+    // combo discount is skipped for these, which is correct).
+    if (s.item.open_price || s.item.requires_manager_approval) {
+      setUpsellModal(null);
+      addItem(s.item);
+      return;
+    }
     // Items needing choices open their picker (combo discount skipped there);
     // simple items add directly at the combo price.
     if (s.item.variations.length > 0 || s.item.modifiers.length > 0) {
@@ -671,18 +670,65 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   }
 
   function addItem(item: Item) {
-    if (item.variations.length > 0 || item.modifiers.length > 0) {
+    // Open-price item: ask the cashier for the amount first. Only for simple
+    // items — an item with variations/modifiers must go through the picker so
+    // required choices + upcharges are enforced (open-price + modifiers on the
+    // same item isn't supported; the picker wins).
+    if (item.open_price && item.variations.length === 0 && item.modifiers.length === 0) {
+      setOpenPriceItem(item);
+      setOpenPriceInput("");
+      return;
+    }
+    // Requires a manager approval to order: gate, then add on approval.
+    if (item.requires_manager_approval) {
+      gateAddApproval(item, () => reallyAddItem(item));
+      return;
+    }
+    reallyAddItem(item);
+  }
+
+  // Gate an add behind the manager-PIN modal, reusing the sensitive-action path.
+  function gateAddApproval(item: Item, commit: () => void) {
+    pendingCommitRef.current = commit;
+    addApprovalRef.current = true;
+    setMgrAction("add " + item.name);
+    setMgrIntent("action");
+    setMgrErr(null);
+    setMgrPin("");
+    setMgrOpen(true);
+  }
+
+  // The actual add. With variations/modifiers (and no explicit price) it opens the
+  // picker; otherwise it drops a line, honoring an open-price override.
+  function reallyAddItem(item: Item, priceOverride?: number) {
+    if (priceOverride == null && (item.variations.length > 0 || item.modifiers.length > 0)) {
       setReceipt(null);
       setPickerVariationId(null);
       setPickerMods([]);
+      setPickerPos({});
       setPickerNote("");
       setPickerAllergens([]);
       setPickerItem(item);
       return;
     }
     const win = activeWindow(item);
-    addLine({ catalog_item_id: item.id, variation_id: null, name: item.name, unit_price: win ? windowPrice(item.price, win) : item.price, taxable: item.taxable, taxFrac: item.taxFrac });
+    const base = priceOverride != null ? priceOverride : win ? windowPrice(item.price, win) : item.price;
+    addLine({ catalog_item_id: item.id, variation_id: null, name: item.name, unit_price: base, taxable: item.taxable, taxFrac: item.taxFrac });
     maybeUpsell(item);
+  }
+
+  function submitOpenPrice() {
+    const item = openPriceItem;
+    if (!item) return;
+    const price = Math.round((parseFloat(openPriceInput) || 0) * 100) / 100;
+    if (!(price > 0)) return;
+    setOpenPriceItem(null);
+    setOpenPriceInput("");
+    if (item.requires_manager_approval) {
+      gateAddApproval(item, () => reallyAddItem(item, price));
+      return;
+    }
+    reallyAddItem(item, price);
   }
 
   function isOos(item: Item): boolean {
@@ -739,7 +785,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   // P0-2: modifier groups for an item (falls back to one loose "Add-ons" group).
   function modGroupsOf(item: Item): ModifierGroup[] {
     if (item.modifierGroups && item.modifierGroups.length) return item.modifierGroups;
-    if (item.modifiers.length) return [{ id: "all", name: "Add-ons", required: false, min_select: 0, max_select: null, options: item.modifiers }];
+    if (item.modifiers.length) return [{ id: "all", name: "Add-ons", required: false, min_select: 0, max_select: null, allow_split: false, options: item.modifiers }];
     return [];
   }
   // P0-3: the group an option belongs to, searching the whole nested tree.
@@ -838,6 +884,18 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                 </span>
                 {m.price > 0 && <span className="text-sm tabular-nums text-muted-foreground">{"+$" + m.price.toFixed(2)}</span>}
               </button>
+              {checked && g.allow_split && (
+                <div className="flex gap-1 pl-6">
+                  {(["whole", "left", "right"] as const).map((p) => {
+                    const active = (pickerPos[m.id] ?? "whole") === p;
+                    return (
+                      <button key={p} type="button" onClick={() => setPickerPos((prev) => ({ ...prev, [m.id]: p }))} className={"px-2 py-0.5 text-[11px] rounded border transition-colors " + (active ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:border-foreground/40")}>
+                        {p === "whole" ? "Whole" : p === "left" ? "½ Left" : "½ Right"}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               {checked && m.child_group && renderModGroup(m.child_group, depth + 1)}
             </div>
           );
@@ -875,7 +933,14 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     const modTotal = chosen.reduce((s, m) => s + m.price, 0);
     if (chosen.length > 0) {
       unit = unit + modTotal;
-      label = label + " (" + chosen.map((m) => "+ " + m.name).join(", ") + ")";
+      // Half/left-right placement rides in the line name (½L / ½R); price is the
+      // option price regardless of position (a topping is a topping).
+      label = label + " (" + chosen.map((m) => {
+        const grp = pickerGroupOf(m.id);
+        const pos = grp?.allow_split ? (pickerPos[m.id] ?? "whole") : "whole";
+        const posLabel = pos === "left" ? "½L " : pos === "right" ? "½R " : "";
+        return "+ " + posLabel + m.name;
+      }).join(", ") + ")";
     }
     // E1: happy-hour — percent applies to the whole line; a set price replaces the
     // base (modifiers still add on top).
@@ -1449,8 +1514,12 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       setMgrPin("");
       return;
     }
-    // Record the approving manager for the audit trail (logged with the sale).
-    setApprover({ id: res.id, name: res.name });
+    // Record the approving manager for the audit trail (logged with the sale) —
+    // but NOT for an add-restricted-item gate (that manager didn't approve any
+    // comp/discount/void on this check).
+    if (!addApprovalRef.current) {
+      setApprover({ id: res.id, name: res.name });
+    }
     setMgrOpen(false);
     setMgrPin("");
     setMgrErr(null);
@@ -1459,6 +1528,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     if (mgrIntent === "action") {
       const commit = pendingCommitRef.current;
       pendingCommitRef.current = null;
+      addApprovalRef.current = false;
       setMgrIntent("tender");
       commit?.();
       return;
@@ -1969,7 +2039,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     if (cfg && cfg.autoPrint) doPrint(rec);
   }
 
-  function commonOrderFields() {
+  function commonOrderFields(): CanonicalOrderInput {
     return {
       items: cart.filter((l) => !l.void),
       voids: voidLines.length > 0 ? voidLines.map((l) => ({ name: l.name, unit_price: l.unit_price, quantity: l.quantity, reason_code: l.void?.reason_code, reason_note: l.void?.reason_note })) : undefined,
@@ -2144,32 +2214,10 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     const modalState: CardModalState = {
       tapToPay: tap,
       amount: total,
-      order: {
-        items: cart.filter((l) => !l.void),
-        voids: voidLines.length > 0 ? voidLines.map((l) => ({ name: l.name, unit_price: l.unit_price, quantity: l.quantity, reason_code: l.void?.reason_code, reason_note: l.void?.reason_note })) : undefined,
-        tip: tipNum,
-        discount_type: discountMode,
-        discount_value: discountInput,
-        discount_reason_code: discount > 0 ? discountReason : undefined,
-        discount_reason_note:
-          discount > 0 && discountReason === "other" ? discountReasonNote.trim() : undefined,
-        comp_value: comp > 0 ? comp : undefined,
-        comp_reason_code: comp > 0 ? compReason : undefined,
-        comp_reason_note:
-          comp > 0 && compReason === "other" ? compReasonNote.trim() : undefined,
-        service_charge: serviceApplied || undefined,
-        service_charge_auto: scIsAuto || undefined,
-        service_charge_waive_reason_code: scWaived ? serviceWaiveReason : undefined,
-        service_charge_waive_reason_note:
-          scWaived && serviceWaiveReason === "other" ? serviceWaiveNote.trim() : undefined,
-        tax_exempt: taxExempt || undefined,
-        tax_exempt_reason_code: taxExempt ? taxExemptReason : undefined,
-        tax_exempt_reason_note:
-          taxExempt && taxExemptReason === "other" ? taxExemptNote.trim() : undefined,
-        customer_id: customer ? customer.id : null,
-        idempotency_key: nextIdemKey(),
-        dining_option: diningOption,
-      },
+      // Single source of truth: the same payload cash/split send — so card and
+      // terminal save an identical order (comp, service charge, voids, dining
+      // option, open ticket, signature, approver all carried through).
+      order: commonOrderFields(),
       receipt: {
         items: cart,
         subtotal: subtotal,
@@ -2421,6 +2469,25 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                 {mgrErr && <p className="text-sm text-red-600 mt-2">{mgrErr}</p>}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {openPriceItem && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setOpenPriceItem(null)}>
+          <div className="bg-card border border-border rounded-lg p-4 w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium">{openPriceItem.name}</h3>
+              <button type="button" onClick={() => setOpenPriceItem(null)} className="text-xs text-muted-foreground underline">Cancel</button>
+            </div>
+            <label className="text-xs text-muted-foreground">Enter price</label>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-lg">$</span>
+              <Input autoFocus type="number" inputMode="decimal" min="0" step="0.01" value={openPriceInput} onChange={(e) => setOpenPriceInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submitOpenPrice(); }} className="h-11 text-lg" />
+            </div>
+            <Button className="w-full mt-3 h-11" disabled={!(parseFloat(openPriceInput) > 0)} onClick={submitOpenPrice}>
+              {"Add" + (parseFloat(openPriceInput) > 0 ? " · $" + (Math.round(parseFloat(openPriceInput) * 100) / 100).toFixed(2) : "")}
+            </Button>
           </div>
         </div>
       )}

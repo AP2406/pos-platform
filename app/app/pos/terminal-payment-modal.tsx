@@ -3,20 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { recordTerminalSale } from "./finix-pos-actions";
+import type { CanonicalOrderInput } from "@/lib/pos/canonical-order";
 
-type OrderSnapshot = {
-  items: { catalog_item_id?: string | null; name: string; unit_price: number; quantity: number }[];
-  tip?: number;
-  discount_type?: "amount" | "percent";
-  discount_value?: number;
-  discount_reason_code?: string;
-  discount_reason_note?: string;
-  tax_exempt?: boolean;
-  tax_exempt_reason_code?: string;
-  tax_exempt_reason_note?: string;
-  customer_id?: string | null;
-  idempotency_key: string;
-};
+// The full canonical order — identical to what cash/split/manual-card save.
+type OrderSnapshot = CanonicalOrderInput;
 
 type Card = { brand: string | null; last4: string | null } | null;
 
@@ -52,17 +42,7 @@ export function TerminalPaymentModal(props: Props) {
       setPhase("recording");
       try {
         const res = await recordTerminalSale({
-          items: props.order.items,
-          tip: props.order.tip,
-          discount_type: props.order.discount_type,
-          discount_value: props.order.discount_value,
-          discount_reason_code: props.order.discount_reason_code,
-          discount_reason_note: props.order.discount_reason_note,
-          tax_exempt: props.order.tax_exempt,
-          tax_exempt_reason_code: props.order.tax_exempt_reason_code,
-          tax_exempt_reason_note: props.order.tax_exempt_reason_note,
-          customer_id: props.order.customer_id ?? null,
-          idempotency_key: props.order.idempotency_key,
+          ...props.order,
           expected_total: props.amount,
           transferId: transferRef.current || "",
         });

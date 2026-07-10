@@ -6,6 +6,7 @@ import { isFinixConfigured, createBuyerIdentity, finix, refundTransfer, resolveM
 import { getTerminalTransfer, resolveDeviceId } from "@/lib/services/finix-terminal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createOrder } from "./actions";
+import { type CanonicalOrderInput, forwardOrderFields } from "@/lib/pos/canonical-order";
 
 type CardConfig =
   | { enabled: true; applicationId: string; environment: string; merchantId: string; terminalEnabled: boolean }
@@ -22,25 +23,8 @@ type FinixTransferResp = {
   failure_message?: string;
 };
 
-type CardItem = {
-  catalog_item_id?: string | null;
-  name: string;
-  unit_price: number;
-  quantity: number;
-};
-
-type CreateCardOrderInput = {
-  items: CardItem[];
-  tip?: number;
-  discount_type?: "amount" | "percent";
-  discount_value?: number;
-  discount_reason_code?: string;
-  discount_reason_note?: string;
-  tax_exempt?: boolean;
-  tax_exempt_reason_code?: string;
-  tax_exempt_reason_note?: string;
-  customer_id?: string | null;
-  idempotency_key: string;
+// Manual/tap card charge = the full canonical order + card-specific bits.
+type CreateCardOrderInput = CanonicalOrderInput & {
   expected_total: number;
   attempt: number;
   card: {
@@ -128,20 +112,7 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
 
   const isTraining = (business as { training_mode?: boolean }).training_mode === true;
   if (isTraining) {
-    const recT = await createOrder({
-      items: input.items,
-      tip: input.tip,
-      payment_method: "card",
-      idempotency_key: input.idempotency_key,
-      discount_type: input.discount_type,
-      discount_value: input.discount_value,
-      discount_reason_code: input.discount_reason_code,
-      discount_reason_note: input.discount_reason_note,
-      tax_exempt: input.tax_exempt,
-      tax_exempt_reason_code: input.tax_exempt_reason_code,
-      tax_exempt_reason_note: input.tax_exempt_reason_note,
-      customer_id: input.customer_id ?? null,
-    });
+    const recT = await createOrder({ ...forwardOrderFields(input), payment_method: "card" });
     if ("error" in recT) return { error: recT.error };
     return { ok: true, id: recT.id, sale_number: recT.sale_number, transferId: "" };
   }
@@ -157,11 +128,13 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
   {
     const { data: priorOrder } = await supabase
       .from("orders")
-      .select("id, sale_number")
+      .select("id, sale_number, status")
       .eq("business_id", business.id)
       .eq("idempotency_key", input.idempotency_key)
       .maybeSingle();
-    if (priorOrder) {
+    // A voided order means a prior attempt charged then REVERSED (amount mismatch/
+    // record failure) and refunded the card — never report that as a paid sale.
+    if (priorOrder && String((priorOrder as { status?: string }).status || "").toLowerCase() !== "voided") {
       const { data: priorPay } = await supabase
         .from("finix_payments")
         .select("finix_transfer_id, status")
@@ -298,20 +271,7 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
   // keep money without a matching sale.
   let rec: Awaited<ReturnType<typeof createOrder>>;
   try {
-    rec = await createOrder({
-      items: input.items,
-      tip: input.tip,
-      payment_method: "card",
-      idempotency_key: input.idempotency_key,
-      discount_type: input.discount_type,
-      discount_value: input.discount_value,
-      discount_reason_code: input.discount_reason_code,
-      discount_reason_note: input.discount_reason_note,
-      tax_exempt: input.tax_exempt,
-      tax_exempt_reason_code: input.tax_exempt_reason_code,
-      tax_exempt_reason_note: input.tax_exempt_reason_note,
-      customer_id: input.customer_id ?? null,
-    });
+    rec = await createOrder({ ...forwardOrderFields(input), payment_method: "card" });
   } catch (e) {
     console.error("createCardOrder: createOrder threw after successful charge " + transfer.id, e);
     await refundTransfer(transfer.id, {
@@ -362,18 +322,8 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
 // calls this to record the sale — mirroring createCardOrder's safety model:
 // record only after a confirmed charge, and reverse the charge if recording fails.
 
-type TerminalOrderInput = {
-  items: CardItem[];
-  tip?: number;
-  discount_type?: "amount" | "percent";
-  discount_value?: number;
-  discount_reason_code?: string;
-  discount_reason_note?: string;
-  tax_exempt?: boolean;
-  tax_exempt_reason_code?: string;
-  tax_exempt_reason_note?: string;
-  customer_id?: string | null;
-  idempotency_key: string;
+// Physical-terminal charge = the full canonical order + the transfer to finalize.
+type TerminalOrderInput = CanonicalOrderInput & {
   expected_total: number;
   transferId: string;
 };
@@ -392,11 +342,13 @@ export async function recordTerminalSale(input: TerminalOrderInput): Promise<Car
   {
     const { data: priorOrder } = await supabase
       .from("orders")
-      .select("id, sale_number")
+      .select("id, sale_number, status")
       .eq("business_id", business.id)
       .eq("idempotency_key", input.idempotency_key)
       .maybeSingle();
-    if (priorOrder) {
+    // Skip a voided order: a prior attempt reversed/refunded the terminal charge,
+    // so it is NOT a completed sale — fall through and re-confirm the transfer.
+    if (priorOrder && String((priorOrder as { status?: string }).status || "").toLowerCase() !== "voided") {
       return { ok: true, id: priorOrder.id as string, sale_number: Number(priorOrder.sale_number), transferId: input.transferId };
     }
   }
@@ -464,20 +416,7 @@ export async function recordTerminalSale(input: TerminalOrderInput): Promise<Car
 
   let rec: Awaited<ReturnType<typeof createOrder>>;
   try {
-    rec = await createOrder({
-      items: input.items,
-      tip: input.tip,
-      payment_method: "card",
-      idempotency_key: input.idempotency_key,
-      discount_type: input.discount_type,
-      discount_value: input.discount_value,
-      discount_reason_code: input.discount_reason_code,
-      discount_reason_note: input.discount_reason_note,
-      tax_exempt: input.tax_exempt,
-      tax_exempt_reason_code: input.tax_exempt_reason_code,
-      tax_exempt_reason_note: input.tax_exempt_reason_note,
-      customer_id: input.customer_id ?? null,
-    });
+    rec = await createOrder({ ...forwardOrderFields(input), payment_method: "card" });
   } catch (e) {
     console.error("recordTerminalSale: createOrder threw after successful charge " + transfer.id, e);
     await reverse("terminal_order_record_exception");

@@ -6,20 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createCardOrder } from "./finix-pos-actions";
 import { collectTapToPay } from "@/lib/services/tap-to-pay";
+import type { CanonicalOrderInput } from "@/lib/pos/canonical-order";
 
-type OrderSnapshot = {
-  items: { catalog_item_id?: string | null; name: string; unit_price: number; quantity: number }[];
-  tip?: number;
-  discount_type?: "amount" | "percent";
-  discount_value?: number;
-  discount_reason_code?: string;
-  discount_reason_note?: string;
-  tax_exempt?: boolean;
-  tax_exempt_reason_code?: string;
-  tax_exempt_reason_note?: string;
-  customer_id?: string | null;
-  idempotency_key: string;
-};
+// The full canonical order — carries comp/service-charge/voids/dining/ticket/
+// signature so a card sale saves exactly what cash/split would.
+type OrderSnapshot = CanonicalOrderInput;
 
 type Props = {
   amount: number;
@@ -148,17 +139,7 @@ export function CardPaymentModal(props: Props) {
   // token, then run the identical createCardOrder (charge + record + reverse-on-fail).
   function chargeWithToken(token: string, fraudSessionId?: string) {
     createCardOrder({
-      items: props.order.items,
-      tip: props.order.tip,
-      discount_type: props.order.discount_type,
-      discount_value: props.order.discount_value,
-      discount_reason_code: props.order.discount_reason_code,
-      discount_reason_note: props.order.discount_reason_note,
-      tax_exempt: props.order.tax_exempt,
-      tax_exempt_reason_code: props.order.tax_exempt_reason_code,
-      tax_exempt_reason_note: props.order.tax_exempt_reason_note,
-      customer_id: props.order.customer_id ?? null,
-      idempotency_key: props.order.idempotency_key,
+      ...props.order,
       expected_total: props.amount,
       attempt: attemptRef.current,
       card: {
@@ -272,7 +253,7 @@ export function CardPaymentModal(props: Props) {
           </p>
         )}
         <p className="text-[11px] text-muted-foreground mt-2">
-          Card details are entered in a secure field hosted by the payment processor and never touch Surge's servers.
+          Card details are entered in a secure field hosted by the payment processor and never touch Surge&rsquo;s servers.
         </p>
         </>
         )}

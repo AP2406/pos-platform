@@ -48,7 +48,7 @@ export function JournalClient({ entries, templates, accounts, currency, today }:
     if (!name) return;
     start(async () => { await createJournalTemplate({ name, memo, autoReverse, lines: toLines() }); });
   }
-  function usePost(t: JTemplate) {
+  function handlePostTemplate(t: JTemplate) {
     const d = prompt("Entry date (YYYY-MM-DD)?", today);
     if (!d) return;
     start(async () => { await postTemplate(t.id, d); });
@@ -107,7 +107,7 @@ export function JournalClient({ entries, templates, accounts, currency, today }:
                   <div className="text-[11px] text-muted-foreground">{t.lines.length} lines · {money(t.lines.reduce((s, l) => s + l.debit, 0))}</div>
                 </div>
                 <div className="flex gap-2 text-[11px] shrink-0">
-                  <button onClick={() => usePost(t)} disabled={pending} className="underline">post</button>
+                  <button onClick={() => handlePostTemplate(t)} disabled={pending} className="underline">post</button>
                   <button onClick={() => { if (confirm("Delete template?")) start(async () => { await deleteJournalTemplate(t.id); }); }} disabled={pending} className="underline text-red-600">delete</button>
                 </div>
               </div>

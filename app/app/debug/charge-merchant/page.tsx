@@ -58,7 +58,7 @@ export default function ChargeMerchantPage() {
     <div style={{ padding: 24, maxWidth: 560 }}>
       <h1 style={{ fontSize: 20, fontWeight: 600 }}>Charge into sub-merchant</h1>
       <p style={{ color: "#666", fontSize: 14, marginTop: 4 }}>
-        Charges a sandbox card into the current business's own Finix merchant
+        Charges a sandbox card into the current business&rsquo;s own Finix merchant
         (its stored MU id), in CAD, and records it in finix_payments.
       </p>
 

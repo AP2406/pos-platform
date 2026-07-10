@@ -15,6 +15,13 @@ const itemSchema = z.object({
   taxable: z.boolean().optional(),
   barcode: z.string().max(120).optional().or(z.literal("")),
   image_url: z.string().url().max(2000).optional().or(z.literal("")),
+  // TouchBistro-parity per-item fields (all optional/additive).
+  sales_category: z.string().max(60).optional().or(z.literal("")),
+  short_name: z.string().max(60).optional().or(z.literal("")),
+  open_price: z.boolean().optional(),
+  requires_manager_approval: z.boolean().optional(),
+  allow_returns: z.boolean().optional(),
+  print_separate_ticket: z.boolean().optional(),
 });
 
 type ItemInput = {
@@ -24,7 +31,34 @@ type ItemInput = {
   taxable?: boolean;
   barcode?: string;
   image_url?: string;
+  sales_category?: string;
+  short_name?: string;
+  open_price?: boolean;
+  requires_manager_approval?: boolean;
+  allow_returns?: boolean;
+  print_separate_ticket?: boolean;
 };
+
+// The additive per-item columns, normalized. Only fields actually PRESENT in the
+// input are patched, so an update that doesn't send them (e.g. an inline name/
+// price edit) never wipes them to defaults.
+function itemExtraFields(d: {
+  sales_category?: string;
+  short_name?: string;
+  open_price?: boolean;
+  requires_manager_approval?: boolean;
+  allow_returns?: boolean;
+  print_separate_ticket?: boolean;
+}): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (d.sales_category !== undefined) out.sales_category = d.sales_category ? d.sales_category.trim().slice(0, 60) : null;
+  if (d.short_name !== undefined) out.short_name = d.short_name ? d.short_name.trim().slice(0, 60) : null;
+  if (d.open_price !== undefined) out.open_price = !!d.open_price;
+  if (d.requires_manager_approval !== undefined) out.requires_manager_approval = !!d.requires_manager_approval;
+  if (d.allow_returns !== undefined) out.allow_returns = !!d.allow_returns;
+  if (d.print_separate_ticket !== undefined) out.print_separate_ticket = !!d.print_separate_ticket;
+  return out;
+}
 
 function cleanBarcode(raw: string | undefined | null): string | null {
   if (!raw) return null;
@@ -66,6 +100,7 @@ export async function createCatalogItem(
       taxable: parsed.data.taxable === false ? false : true,
       barcode: code,
       image_url: parsed.data.image_url || null,
+      ...itemExtraFields(parsed.data),
     })
     .select("id")
     .single();
@@ -103,6 +138,7 @@ export async function updateCatalogItem(
   if (typeof parsed.data.image_url === "string") {
     updateData.image_url = parsed.data.image_url || null;
   }
+  Object.assign(updateData, itemExtraFields(parsed.data));
 
   const { error } = await supabase
     .from("catalog_items")
@@ -509,11 +545,13 @@ const groupSchema = z.object({
   required: z.coerce.boolean().optional(),
   min_select: z.coerce.number().int().min(0).max(50).optional(),
   max_select: z.coerce.number().int().min(1).max(50).optional().nullable(),
+  // Half/left-right (pizza-style) — each chosen option can be placed Whole/Left/Right.
+  allow_split: z.coerce.boolean().optional(),
 });
 
 export async function createModifierGroup(
   catalogItemId: string,
-  input: { name: string; required?: boolean; min_select?: number; max_select?: number | null }
+  input: { name: string; required?: boolean; min_select?: number; max_select?: number | null; allow_split?: boolean }
 ): Promise<{ ok: true; id: string } | { error: string }> {
   const parsed = groupSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -545,6 +583,7 @@ export async function createModifierGroup(
       required: required,
       min_select: parsed.data.min_select ?? (required ? 1 : 0),
       max_select: parsed.data.max_select ?? null,
+      allow_split: parsed.data.allow_split ?? false,
       sort_order: sort,
     })
     .select("id")
@@ -559,7 +598,7 @@ export async function createModifierGroup(
 
 export async function updateModifierGroup(
   id: string,
-  input: { name?: string; required?: boolean; min_select?: number; max_select?: number | null }
+  input: { name?: string; required?: boolean; min_select?: number; max_select?: number | null; allow_split?: boolean }
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing group." };
   const { business } = await requireBusiness();
@@ -570,6 +609,7 @@ export async function updateModifierGroup(
   if (input.required !== undefined) patch.required = !!input.required;
   if (input.min_select !== undefined) patch.min_select = Math.max(0, Math.min(50, Math.round(input.min_select)));
   if (input.max_select !== undefined) patch.max_select = input.max_select === null ? null : Math.max(1, Math.min(50, Math.round(input.max_select)));
+  if (input.allow_split !== undefined) patch.allow_split = !!input.allow_split;
   const { error } = await supabase
     .from("catalog_modifier_groups")
     .update(patch)
