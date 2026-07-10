@@ -45,6 +45,12 @@ type Item = {
   prep_minutes?: number | null;
   default_course_id: string | null;
   station_id: string | null;
+  sales_category: string | null;
+  short_name: string | null;
+  open_price: boolean;
+  requires_manager_approval: boolean;
+  allow_returns: boolean;
+  print_separate_ticket: boolean;
   variations: Option[];
   modifiers: Option[];
   modifierGroups: ModGroup[];
@@ -94,6 +100,13 @@ export function CatalogClient({
   const [barcode, setBarcode] = useState("");
   const [taxable, setTaxable] = useState(true);
   const [imageUrl, setImageUrl] = useState("");
+  const [salesCategory, setSalesCategory] = useState("");
+  const [shortName, setShortName] = useState("");
+  const [openPrice, setOpenPrice] = useState(false);
+  const [reqApproval, setReqApproval] = useState(false);
+  const [allowReturns, setAllowReturns] = useState(false);
+  const [printSeparate, setPrintSeparate] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [addUploading, setAddUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -136,6 +149,12 @@ export function CatalogClient({
         taxable,
         barcode,
         image_url: imageUrl,
+        sales_category: salesCategory,
+        short_name: shortName,
+        open_price: openPrice,
+        requires_manager_approval: reqApproval,
+        allow_returns: allowReturns,
+        print_separate_ticket: printSeparate,
       });
       if ("error" in res) {
         setError(res.error);
@@ -156,6 +175,12 @@ export function CatalogClient({
           out_of_stock: false,
           default_course_id: null,
           station_id: null,
+          sales_category: salesCategory.trim() || null,
+          short_name: shortName.trim() || null,
+          open_price: openPrice,
+          requires_manager_approval: reqApproval,
+          allow_returns: allowReturns,
+          print_separate_ticket: printSeparate,
           modifierGroups: [],
           variations: [],
           modifiers: [],
@@ -167,6 +192,13 @@ export function CatalogClient({
       setBarcode("");
       setTaxable(true);
       setImageUrl("");
+      setSalesCategory("");
+      setShortName("");
+      setOpenPrice(false);
+      setReqApproval(false);
+      setAllowReturns(false);
+      setPrintSeparate(false);
+      setShowAdvanced(false);
     });
   }
 
@@ -526,6 +558,30 @@ export function CatalogClient({
               )}
             </div>
           </div>
+        </div>
+
+        <div className="mt-3">
+          <button type="button" onClick={() => setShowAdvanced((v) => !v)} className="text-xs font-medium text-muted-foreground underline">
+            {showAdvanced ? "Hide advanced options" : "Advanced item options"}
+          </button>
+          {showAdvanced && (
+            <div className="mt-2 space-y-2 rounded-md border border-border p-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Sales category (reporting)</Label>
+                  <Input value={salesCategory} onChange={(e) => setSalesCategory(e.target.value)} placeholder="Food / Alcohol / Merch" className="h-8" />
+                </div>
+                <div>
+                  <Label className="text-xs">Short name (kitchen)</Label>
+                  <Input value={shortName} onChange={(e) => setShortName(e.target.value)} placeholder="e.g. Chz Brgr" className="h-8" />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={openPrice} onChange={(e) => setOpenPrice(e.target.checked)} className="h-4 w-4" /><span>Open price (ask cashier for the amount)</span></label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={reqApproval} onChange={(e) => setReqApproval(e.target.checked)} className="h-4 w-4" /><span>Requires manager approval to order</span></label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={allowReturns} onChange={(e) => setAllowReturns(e.target.checked)} className="h-4 w-4" /><span>Allows returns (negative price)</span></label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={printSeparate} onChange={(e) => setPrintSeparate(e.target.checked)} className="h-4 w-4" /><span>Print on a separate order ticket</span></label>
+            </div>
+          )}
         </div>
 
         <div className="mt-3">

@@ -39,7 +39,9 @@ type ItemInput = {
   print_separate_ticket?: boolean;
 };
 
-// The additive per-item columns, normalized for insert/update.
+// The additive per-item columns, normalized. Only fields actually PRESENT in the
+// input are patched, so an update that doesn't send them (e.g. an inline name/
+// price edit) never wipes them to defaults.
 function itemExtraFields(d: {
   sales_category?: string;
   short_name?: string;
@@ -48,14 +50,14 @@ function itemExtraFields(d: {
   allow_returns?: boolean;
   print_separate_ticket?: boolean;
 }): Record<string, unknown> {
-  return {
-    sales_category: d.sales_category ? d.sales_category.trim().slice(0, 60) : null,
-    short_name: d.short_name ? d.short_name.trim().slice(0, 60) : null,
-    open_price: !!d.open_price,
-    requires_manager_approval: !!d.requires_manager_approval,
-    allow_returns: !!d.allow_returns,
-    print_separate_ticket: !!d.print_separate_ticket,
-  };
+  const out: Record<string, unknown> = {};
+  if (d.sales_category !== undefined) out.sales_category = d.sales_category ? d.sales_category.trim().slice(0, 60) : null;
+  if (d.short_name !== undefined) out.short_name = d.short_name ? d.short_name.trim().slice(0, 60) : null;
+  if (d.open_price !== undefined) out.open_price = !!d.open_price;
+  if (d.requires_manager_approval !== undefined) out.requires_manager_approval = !!d.requires_manager_approval;
+  if (d.allow_returns !== undefined) out.allow_returns = !!d.allow_returns;
+  if (d.print_separate_ticket !== undefined) out.print_separate_ticket = !!d.print_separate_ticket;
+  return out;
 }
 
 function cleanBarcode(raw: string | undefined | null): string | null {

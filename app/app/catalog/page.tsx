@@ -21,7 +21,7 @@ export default async function CatalogPage() {
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, is_active, taxable, tax_rate_id, barcode, image_url, out_of_stock, out_of_stock_at, allergens, prep_minutes, default_course_id, station_id")
+    .select("id, name, price, category, is_active, taxable, tax_rate_id, barcode, image_url, out_of_stock, out_of_stock_at, allergens, prep_minutes, default_course_id, station_id, sales_category, short_name, open_price, requires_manager_approval, allow_returns, print_separate_ticket")
     .eq("business_id", business.id)
     .order("created_at", { ascending: true });
 
@@ -117,6 +117,12 @@ export default async function CatalogPage() {
     prep_minutes: (i.prep_minutes as number | null) ?? null,
     default_course_id: (i.default_course_id as string | null) ?? null,
     station_id: (i.station_id as string | null) ?? null,
+    sales_category: (i.sales_category as string | null) ?? null,
+    short_name: (i.short_name as string | null) ?? null,
+    open_price: (i.open_price as boolean | null) ?? false,
+    requires_manager_approval: (i.requires_manager_approval as boolean | null) ?? false,
+    allow_returns: (i.allow_returns as boolean | null) ?? false,
+    print_separate_ticket: (i.print_separate_ticket as boolean | null) ?? false,
     variations: varsByItem[i.id as string] ?? [],
     modifiers: modsByItem[i.id as string] ?? [],
     modifierGroups: groupsByItem[i.id as string] ?? [],
