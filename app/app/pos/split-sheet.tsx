@@ -73,7 +73,7 @@ export function SplitSheet(props: Props) {
   // Change the number of seats, preserving allocation (cents on removed seats
   // move back onto seat 1).
   function changeN(next: number) {
-    const nn = Math.max(2, Math.min(8, next));
+    const nn = Math.max(2, Math.min(10, next));
     setN(nn);
     setAlloc((prev) => lines.map((_, i) => {
       const row = new Array<number>(nn).fill(0);
@@ -158,10 +158,10 @@ export function SplitSheet(props: Props) {
     if (nextMembers.length === 0) return; // keep at least one guest on the item
     shareAmong(i, nextMembers);
   }
-  // By item: put each line on its own check (capped at 8; extra lines pile onto
+  // By item: put each line on its own check (capped at 10; extra lines pile onto
   // the last check, which the server can then re-assign by hand).
   function byItem() {
-    const nn = Math.max(2, Math.min(8, lines.length));
+    const nn = Math.max(2, Math.min(10, lines.length));
     setN(nn);
     setAlloc(lines.map((_, i) => {
       const row = new Array<number>(nn).fill(0);

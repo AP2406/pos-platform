@@ -55,6 +55,7 @@ import { getLoyaltyBalance } from "./loyalty-actions";
 import { getStoreCreditBalance } from "./store-credit-actions";
 import Link from "next/link";
 import { tileClassesFor } from "./category-colors";
+import { EmailReceiptButton } from "./sales/email-receipt-button";
 
 type Variation = { id: string; name: string; price: number };
 type ModOption = { id: string; name: string; price: number; child_group?: ModifierGroup };
@@ -115,6 +116,9 @@ type Receipt = {
   at: string;
   diningOption?: string | null;
   bill?: boolean;
+  tableName?: string | null;
+  serverName?: string | null;
+  orderNote?: string | null;
 };
 type CardCfg =
   | { enabled: true; applicationId: string; environment: string; merchantId: string; terminalEnabled: boolean }
@@ -149,6 +153,7 @@ type Snap = {
   tip: number;
   total: number;
   customerName: string | null;
+  orderNote?: string | null;
 };
 
 function methodLabel(m: string): string {
@@ -221,6 +226,12 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     } catch {}
   }, [draftKey, cart]);
   const [tip, setTip] = useState(initialTableCart?.tip ?? "");
+  // Tip sheet entry mode: enter a flat dollar amount or a % of the pre-tip total.
+  const [tipMode, setTipMode] = useState<"amount" | "percent">("amount");
+  const [tipPct, setTipPct] = useState("");
+  // Whole-check note (TouchBistro "Add Note") — stored on the order snapshot and
+  // printed on the bill/receipt. Not a per-line kitchen note.
+  const [checkNote, setCheckNote] = useState("");
   // E2: guest-facing tip + signature on the customer display (CFD).
   const [cfdTipRequest, setCfdTipRequest] = useState(false);
   const [signatureData, setSignatureData] = useState<string | null>(null);
@@ -333,7 +344,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   const [awaitApprovalId, setAwaitApprovalId] = useState<string | null>(null);
   const [approvalState, setApprovalState] = useState<"idle" | "waiting" | "denied">("idle");
   // Which compact cart action sheet is open, and which cart line is being edited.
-  const [sheet, setSheet] = useState<null | "discount" | "tip" | "tax" | "customer" | "comp" | "service">(null);
+  const [sheet, setSheet] = useState<null | "discount" | "tip" | "tax" | "customer" | "comp" | "service" | "note">(null);
   const [editLineIndex, setEditLineIndex] = useState<number | null>(null);
   const [diningOption, setDiningOption] = useState<"dine_in" | "takeout" | "delivery" | "pickup">("dine_in");
   // Custom (open) item entry.
@@ -1196,6 +1207,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       at: new Date().toLocaleString(),
       diningOption: diningOption,
       bill: true,
+      tableName: tableBinding ? tableBinding.tableLabel : null,
+      serverName: serverName,
+      orderNote: checkNote.trim() || null,
     };
     doPrint(rec);
   }
@@ -1393,6 +1407,8 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   function clearCart() {
     setCart([]);
     setTip("");
+    setTipPct("");
+    setCheckNote("");
     setSignatureData(null);
     setCfdTipRequest(false);
     setCfdGuestMsg(null);
@@ -2005,6 +2021,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       tip: tipNum,
       total: total,
       customerName: customer ? customer.name : null,
+      orderNote: checkNote.trim() || null,
     };
   }
 
@@ -2032,6 +2049,9 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       payments: payments,
       at: new Date().toLocaleString(),
       diningOption: diningOption,
+      tableName: tableBinding ? tableBinding.tableLabel : null,
+      serverName: serverName,
+      orderNote: snap.orderNote ?? null,
     };
     setReceipt(rec);
     setTenderOpen(false);
@@ -2362,6 +2382,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       })
     );
     setTip(c.tip ?? "");
+    setTipPct("");
     setDiscountMode(c.discount_mode === "percent" ? "percent" : "amount");
     setDiscountValue(c.discount_value ?? "");
     setDiscountReason(c.discount_reason ?? "");
@@ -2851,6 +2872,11 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                 {tableBinding ? "Back to tables" : "New sale"}
               </Button>
             </div>
+            {receipt.id && receipt.id !== "bill" && (
+              <div className="flex justify-center pt-1">
+                <EmailReceiptButton orderId={receipt.id} />
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -3210,6 +3236,10 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                     <button type="button" onClick={() => setSheet("customer")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (customer ? "border-foreground" : "border-border")}>
                       <div className="text-[10px] text-muted-foreground">Customer</div>
                       <div className="text-xs font-medium truncate">{customer ? customer.name : "Add"}</div>
+                    </button>
+                    <button type="button" onClick={() => setSheet("note")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (checkNote.trim() ? "border-foreground" : "border-border")}>
+                      <div className="text-[10px] text-muted-foreground">Note</div>
+                      <div className="text-xs font-medium truncate">{checkNote.trim() ? checkNote.trim() : "Add"}</div>
                     </button>
                   </div>
                 )}
@@ -3590,15 +3620,62 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
             </div>
           )}
 
-          {/* Tip sheet */}
-          {sheet === "tip" && (
+          {/* Tip sheet — flat $ or % of the pre-tip total, with quick presets. */}
+          {sheet === "tip" && (() => {
+            const tipBase = Math.round((netSubtotal + tax + manualScAmt + autoGratAmt) * 100) / 100;
+            const applyPct = (p: number) => {
+              setTipPct(p > 0 ? String(p) : "");
+              const amt = Math.round((tipBase * p) / 100 * 100) / 100;
+              setTip(amt > 0 ? amt.toFixed(2) : "");
+            };
+            return (
             <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setSheet(null)}>
               <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-medium">Tip</h3>
                   <button type="button" onClick={() => setSheet(null)} className="text-xs text-muted-foreground underline">Done</button>
                 </div>
-                <Input type="number" min="0" step="0.01" value={tip} onChange={(e) => setTip(e.target.value)} placeholder="0.00" className="h-11 text-right" />
+                {/* $ / % entry-mode toggle */}
+                <div className="flex rounded-md border border-border overflow-hidden mb-3 text-sm">
+                  <button type="button" onClick={() => setTipMode("amount")} className={"flex-1 py-2 " + (tipMode === "amount" ? "bg-foreground text-background" : "hover:bg-accent")}>$ Amount</button>
+                  <button type="button" onClick={() => setTipMode("percent")} className={"flex-1 py-2 border-l border-border " + (tipMode === "percent" ? "bg-foreground text-background" : "hover:bg-accent")}>% of {"$" + tipBase.toFixed(2)}</button>
+                </div>
+                {/* Presets */}
+                <div className="grid grid-cols-4 gap-2 mb-3">
+                  <button type="button" onClick={() => applyPct(0)} className="rounded-md border border-border py-2 text-sm hover:bg-accent">No Tip</button>
+                  {[10, 15, 20].map((p) => (
+                    <button key={p} type="button" onClick={() => applyPct(p)} className={"rounded-md border py-2 text-sm hover:bg-accent " + (tipPct === String(p) ? "border-foreground bg-accent" : "border-border")}>{p}%</button>
+                  ))}
+                </div>
+                {tipMode === "amount" ? (
+                  <Input type="number" min="0" step="0.01" value={tip} onChange={(e) => { setTip(e.target.value); setTipPct(""); }} placeholder="0.00" className="h-11 text-right" />
+                ) : (
+                  <div className="relative">
+                    <Input type="number" min="0" step="1" value={tipPct} onChange={(e) => applyPct(parseFloat(e.target.value) || 0)} placeholder="0" className="h-11 text-right pr-16" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">% = ${(parseFloat(tip) || 0).toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            );
+          })()}
+
+          {/* Whole-check note sheet */}
+          {sheet === "note" && (
+            <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setSheet(null)}>
+              <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium">Check note</h3>
+                  <button type="button" onClick={() => setSheet(null)} className="text-xs text-muted-foreground underline">Done</button>
+                </div>
+                <textarea
+                  value={checkNote}
+                  onChange={(e) => setCheckNote(e.target.value.slice(0, 280))}
+                  placeholder="Note for this check (prints on the bill & receipt)"
+                  rows={3}
+                  className="w-full rounded-md border border-border bg-transparent text-foreground px-2 py-2 text-sm resize-none"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">Prints on the bill and receipt. Not a kitchen note — use a line note for the kitchen.</p>
               </div>
             </div>
           )}
