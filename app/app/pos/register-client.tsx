@@ -61,7 +61,7 @@ type Variation = { id: string; name: string; price: number };
 type ModOption = { id: string; name: string; price: number; child_group?: ModifierGroup };
 type ModifierGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; allow_split: boolean; options: ModOption[] };
 type ModPosition = "whole" | "left" | "right";
-type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null; track_inventory?: boolean; stock_qty?: number | null; reorder_point?: number | null; open_price?: boolean; requires_manager_approval?: boolean; short_name?: string | null };
+type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null; track_inventory?: boolean; stock_qty?: number | null; reorder_point?: number | null; open_price?: boolean; requires_manager_approval?: boolean; short_name?: string | null; off_hours?: boolean };
 type Course = { id: string; name: string; sort_order: number };
 type CartLine = {
   catalog_item_id: string | null;
@@ -3027,6 +3027,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                                 <img src={item.image_url} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
                                 {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">{lowN} left</span>}
                                 {hhWin && !oos && <span className="absolute top-1 left-1 text-[10px] rounded-full bg-emerald-600 text-white px-1.5 py-0.5 font-medium">HH</span>}
+                                {item.off_hours && !oos && !hhWin && <span className="absolute top-1 left-1 text-[10px] rounded-full bg-zinc-600 text-white px-1.5 py-0.5 font-medium">Off hrs</span>}
                                 <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white text-left px-2 py-1.5">
                                   <div className="font-semibold text-sm leading-snug line-clamp-2">{item.name}</div>
                                   <div className="text-xs text-white/90">{oos ? "86'd" : priceLabel}</div>
@@ -3038,6 +3039,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                             <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative text-left p-3 min-h-[110px] rounded-xl border shadow-elevation-sm active:scale-[0.97] transition-all flex flex-col justify-between " + tileClassesFor(item.category, categoryColors) + (oos ? " opacity-50" : "")}>
                               {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">{lowN} left</span>}
                               {hhWin && !oos && <span className="absolute top-1 left-1 text-[10px] rounded-full bg-emerald-600 text-white px-1.5 py-0.5 font-medium">HH</span>}
+                              {item.off_hours && !oos && !hhWin && <span className="absolute top-1 left-1 text-[10px] rounded-full bg-zinc-600 text-white px-1.5 py-0.5 font-medium">Off hrs</span>}
                               <div className="font-semibold text-sm leading-snug line-clamp-3">{item.name}</div>
                               <div className="text-sm opacity-80 mt-1 tabular-nums">{oos ? "86'd" : priceLabel}{hhPrice != null && <span className="ml-1 text-xs line-through opacity-50">${item.price.toFixed(2)}</span>}</div>
                             </button>

@@ -25,6 +25,41 @@ export default async function PosPage() {
     .eq("is_active", true)
     .order("name", { ascending: true });
 
+  // Menu dayparting: flag items outside their availability window right now
+  // (business-local time). Non-blocking — the register shows an "off hours" badge
+  // but still lets staff ring it. No window targeting an item = always available.
+  const dpTz = (business as { timezone?: string }).timezone || "America/Toronto";
+  const { data: winData } = await supabase
+    .from("availability_windows")
+    .select("scope, target_item_id, target_category, days, start_min, end_min")
+    .eq("business_id", business.id)
+    .eq("active", true);
+  const offHoursIds = new Set<string>();
+  if (winData && winData.length > 0) {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: dpTz, weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
+    const dowMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const dow = dowMap[parts.find((p) => p.type === "weekday")?.value ?? "Sun"] ?? 0;
+    const nowMin = (Number(parts.find((p) => p.type === "hour")?.value ?? "0") % 24) * 60 + Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+    const inWindow = (w: { days?: unknown; start_min?: unknown; end_min?: unknown }) => {
+      const days = Array.isArray(w.days) ? (w.days as number[]) : [];
+      if (days.length > 0 && !days.includes(dow)) return false;
+      const s = Number(w.start_min) || 0;
+      const e = w.end_min == null ? 1440 : Number(w.end_min);
+      if (s === e) return true;
+      if (e > s) return nowMin >= s && nowMin < e;
+      return nowMin >= s || nowMin < e; // window wraps past midnight
+    };
+    for (const it of itemsData ?? []) {
+      const id = it.id as string;
+      const cat = (it.category as string | null) || "";
+      const targeting = winData.filter((w) =>
+        (w.scope === "item" && w.target_item_id === id) ||
+        (w.scope === "category" && w.target_category && w.target_category === cat)
+      );
+      if (targeting.length > 0 && !targeting.some(inWindow)) offHoursIds.add(id);
+    }
+  }
+
   const { data: varsData } = await supabase
     .from("catalog_item_variations")
     .select("id, catalog_item_id, name, price")
@@ -189,6 +224,7 @@ export default async function PosPage() {
       open_price: (i.open_price as boolean | null) ?? false,
       requires_manager_approval: (i.requires_manager_approval as boolean | null) ?? false,
       short_name: (i.short_name as string | null) ?? null,
+      off_hours: offHoursIds.has(i.id as string),
       variations: varsByItem[i.id as string] ?? [],
       modifiers: modsByItem[i.id as string] ?? [],
       modifierGroups: modifierGroupsFor(i.id as string),
