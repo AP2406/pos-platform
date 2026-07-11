@@ -147,6 +147,7 @@ export type DayTotals = {
   card_sales: number;
   gift_sales: number;
   store_credit_sales: number;
+  house_account_sales: number;
   other_sales: number;
   refunds: number;
   pay_ins: number;
@@ -196,12 +197,13 @@ async function computeDayTotals(
 
   // Tender split — cash / card / gift card / store credit / other, kept
   // separate (the Z-report breaks them out individually).
-  const tender = { cash: 0, card: 0, gift: 0, store_credit: 0, other: 0 };
+  const tender = { cash: 0, card: 0, gift: 0, store_credit: 0, house_account: 0, other: 0 };
   const bucket = (m: string): keyof typeof tender =>
     m === "cash" ? "cash"
     : m === "card" ? "card"
     : m === "gift_card" ? "gift"
     : m === "store_credit" ? "store_credit"
+    : m === "house_account" ? "house_account"
     : "other";
   for (const p of payments) tender[bucket(p.method)] += p.amount;
   for (const o of live) {
@@ -292,6 +294,7 @@ async function computeDayTotals(
     card_sales: r2(tender.card),
     gift_sales: r2(tender.gift),
     store_credit_sales: r2(tender.store_credit),
+    house_account_sales: r2(tender.house_account),
     other_sales: r2(tender.other),
     refunds: r2(refunds),
     pay_ins: r2(payIns),
@@ -497,6 +500,7 @@ export async function closeDrawerSession(input: {
       ["Card", fmt(totals.card_sales)],
       ["Gift card", fmt(totals.gift_sales)],
       ["Store credit", fmt(totals.store_credit_sales)],
+      ["House account", fmt(totals.house_account_sales)],
       ["Other tender", fmt(totals.other_sales)],
       ["Refunds", fmt(totals.refunds)],
       ["Pay in / out", `${fmt(totals.pay_ins)} / ${fmt(totals.pay_outs)}`],

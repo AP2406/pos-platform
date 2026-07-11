@@ -27,6 +27,7 @@ export function formatPaymentMethod(method: string | null | undefined): string {
     cash: "Cash",
     card: "Card",
     store_credit: "Store credit",
+    house_account: "House account",
     gift_card: "Gift card",
     split: "Split",
     other: "Other",
