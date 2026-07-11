@@ -115,6 +115,7 @@ function methodLabel(m: string): string {
   if (m === "split") return "Split";
   if (m === "gift_card") return "Gift card";
   if (m === "store_credit") return "Store credit";
+  if (m === "house_account") return "House account";
   return "Other";
 }
 

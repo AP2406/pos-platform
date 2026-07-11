@@ -7,6 +7,7 @@ import { CustomerControls } from "./customer-controls";
 import { CustomerNotes } from "./customer-notes";
 import { CustomerTags } from "./customer-tags";
 import { StoreCreditCard } from "./store-credit-card";
+import { HouseAccountCard } from "./house-account-card";
 import { MarketingConsent } from "./marketing-consent";
 import { MergeCustomer } from "./merge-customer";
 import { StatusBadge, SectionHeader } from "../../_components/ui";
@@ -57,6 +58,18 @@ export default async function CustomerDetailPage({
     .eq("customer_id", id)
     .maybeSingle();
   const storeCreditBalance = scAcct ? (scAcct.balance_cents as number) / 100 : 0;
+
+  const { data: haAcct } = await supabase
+    .from("house_accounts")
+    .select("enabled, balance_cents, limit_cents")
+    .eq("business_id", business.id)
+    .eq("customer_id", id)
+    .maybeSingle();
+  const houseAccount = {
+    enabled: haAcct?.enabled === true,
+    balance: haAcct ? (Number(haAcct.balance_cents) || 0) / 100 : 0,
+    limit: haAcct?.limit_cents == null ? null : (Number(haAcct.limit_cents) || 0) / 100,
+  };
 
   // P2-35: POS purchase history + spend (orders-based, for non-transportation
   // businesses). Net of refunds; also surfaces the loyalty balance on the
@@ -260,6 +273,18 @@ export default async function CustomerDetailPage({
           customerId={customer.id}
           initialBalance={storeCreditBalance}
           canIssue={role === "owner" || role === "manager"}
+        />
+      </div>
+
+      {/* House account (accounts receivable) */}
+      <div className="bg-card border border-border rounded-lg p-6 mb-4">
+        <SectionHeader>House account</SectionHeader>
+        <HouseAccountCard
+          customerId={customer.id}
+          initialEnabled={houseAccount.enabled}
+          initialBalance={houseAccount.balance}
+          initialLimit={houseAccount.limit}
+          canManage={role === "owner" || role === "manager"}
         />
       </div>
 

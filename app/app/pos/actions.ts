@@ -27,7 +27,7 @@ const lineSchema = z.object({
 const DINING_OPTIONS = ["dine_in", "takeout", "delivery", "pickup"] as const;
 
 const paymentLineSchema = z.object({
-  method: z.enum(["cash", "card", "other", "gift_card", "store_credit"]),
+  method: z.enum(["cash", "card", "other", "gift_card", "store_credit", "house_account"]),
   amount: z.coerce.number().min(0).max(1000000),
   tendered: z.coerce.number().min(0).max(1000000).optional().nullable(),
   // P2-32b: which gift card backs a "gift_card" tender line.
@@ -46,7 +46,7 @@ const orderSchema = z.object({
   items: z.array(lineSchema).min(1, "Add at least one item."),
   voids: z.array(voidLineSchema).optional(),
   tip: z.coerce.number().min(0).max(1000000).optional(),
-  payment_method: z.enum(["cash", "card", "other", "gift_card", "store_credit"]).optional(),
+  payment_method: z.enum(["cash", "card", "other", "gift_card", "store_credit", "house_account"]).optional(),
   payments: z.array(paymentLineSchema).optional(),
   discount_type: z.enum(["amount", "percent"]).optional(),
   discount_value: z.coerce.number().min(0).max(1000000).optional(),
@@ -76,7 +76,7 @@ const orderSchema = z.object({
 });
 
 type PaymentInput = {
-  method: "cash" | "card" | "other" | "gift_card" | "store_credit";
+  method: "cash" | "card" | "other" | "gift_card" | "store_credit" | "house_account";
   amount: number;
   tendered?: number | null;
   gift_card_code?: string | null;
@@ -91,7 +91,7 @@ type OrderInput = {
   }[];
   voids?: { name: string; unit_price: number; quantity: number; reason_code?: string; reason_note?: string }[];
   tip?: number;
-  payment_method?: "cash" | "card" | "other" | "gift_card" | "store_credit";
+  payment_method?: "cash" | "card" | "other" | "gift_card" | "store_credit" | "house_account";
   payments?: PaymentInput[];
   discount_type?: "amount" | "percent";
   discount_value?: number;
@@ -116,7 +116,7 @@ type OrderInput = {
 };
 
 type Tender = {
-  method: "cash" | "card" | "other" | "gift_card" | "store_credit";
+  method: "cash" | "card" | "other" | "gift_card" | "store_credit" | "house_account";
   amount: number;
   tendered: number | null;
   change: number | null;
@@ -562,6 +562,32 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     }
   }
 
+  // House account (AR): charging to account books the sale as revenue now and adds
+  // to the customer's outstanding balance. Validate enablement + credit limit here;
+  // the atomic charge (with the same limit check) runs post-settle.
+  let houseAccountCents = 0;
+  for (const t of tenders) {
+    if (t.method !== "house_account") continue;
+    houseAccountCents += Math.round(t.amount * 100);
+  }
+  if (houseAccountCents > 0) {
+    if (!customerId) return { error: "Add a customer to charge to a house account." };
+    const { data: ha } = await supabase
+      .from("house_accounts")
+      .select("enabled, limit_cents, balance_cents")
+      .eq("business_id", business.id)
+      .eq("customer_id", customerId)
+      .maybeSingle();
+    if (!ha || ha.enabled !== true) {
+      return { error: "This customer doesn't have an active house account." };
+    }
+    const limit = ha.limit_cents as number | null;
+    const balance = (ha.balance_cents as number) || 0;
+    if (limit != null && balance + houseAccountCents > limit) {
+      return { error: "That charge is over the customer's house-account credit limit." };
+    }
+  }
+
   const distinctMethods = Array.from(new Set(tenders.map((t) => t.method)));
   const orderPaymentMethod =
     distinctMethods.length > 1 ? "split" : distinctMethods[0];
@@ -870,9 +896,28 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       });
       if (scErr) console.error("store credit redeem:", scErr);
     }
+    // House account: add the charge to the customer's balance (atomic, limit-checked,
+    // order-linked). The sale is already recorded, so a failure is logged, not fatal.
+    if (houseAccountCents > 0 && customerId) {
+      const { error: haErr } = await supabase.rpc("apply_house_account_delta", {
+        p_business_id: business.id,
+        p_customer_id: customerId,
+        p_delta_cents: houseAccountCents,
+        p_kind: "charge",
+        p_order_id: result.order_id,
+        p_note: null,
+      });
+      if (haErr) console.error("house account charge:", haErr);
+    }
   }
 
   revalidatePath("/app/pos");
+  // A charge-to-account moves the customer's AR balance — refresh their profile
+  // and the accounting AR total.
+  if (houseAccountCents > 0 && customerId) {
+    revalidatePath("/app/customers/" + customerId);
+    revalidatePath("/app/accounting");
+  }
   return { ok: true, id: result.order_id, sale_number: Number(result.sale_number) };
 }
 

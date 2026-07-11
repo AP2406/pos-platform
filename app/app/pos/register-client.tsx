@@ -53,6 +53,7 @@ import { RegisterRefund } from "./register-refund";
 import { useOnlineStatus } from "./use-online";
 import { getLoyaltyBalance } from "./loyalty-actions";
 import { getStoreCreditBalance } from "./store-credit-actions";
+import { getHouseAccount, type HouseAccount } from "./house-account-actions";
 import Link from "next/link";
 import { tileClassesFor } from "./category-colors";
 import { EmailReceiptButton } from "./sales/email-receipt-button";
@@ -95,7 +96,7 @@ type ServiceChargeCfg = { enabled: boolean; pct: number; autoParty: number; post
 type SplitCfg = { settlementMode: "separate" | "informational"; allowUnits: boolean };
 type StaffMember = { id: string; name: string };
 type Customer = { id: string; name: string; taxExempt?: boolean };
-type Tender = { method: "cash" | "card" | "other" | "gift_card" | "store_credit"; amount: number; tendered: number | null; change: number | null; gift_card_code?: string | null };
+type Tender = { method: "cash" | "card" | "other" | "gift_card" | "store_credit" | "house_account"; amount: number; tendered: number | null; change: number | null; gift_card_code?: string | null };
 type PaymentLine = { method: string; amount: number; tendered: number | null; change: number | null };
 type Receipt = {
   id: string;
@@ -297,6 +298,17 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     getStoreCreditBalance(customer.id).then((b) => { if (!cancelled) setStoreCreditBalance(b); }).catch(() => {});
     return () => { cancelled = true; };
   }, [customer]);
+  // House account (AR) for the attached customer — enables the "charge to account" tender.
+  const [houseAccount, setHouseAccount] = useState<HouseAccount | null>(null);
+  useEffect(() => {
+    if (!customer) { setHouseAccount(null); return; }
+    let cancelled = false;
+    getHouseAccount(customer.id).then((h) => { if (!cancelled) setHouseAccount(h); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [customer]);
+  const houseAccountRemaining = houseAccount && houseAccount.limit != null
+    ? Math.max(0, Math.round((houseAccount.limit - houseAccount.balance) * 100) / 100)
+    : null;
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [pickerItem, setPickerItem] = useState<Item | null>(null);
@@ -2781,6 +2793,8 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         terminalEnabled={terminalEnabled}
         terminalReady={terminalReady}
         storeCreditBalance={storeCreditBalance}
+        houseAccountEnabled={houseAccount?.enabled === true}
+        houseAccountRemaining={houseAccountRemaining}
         onCash={recordCash}
         onSplit={recordSplit}
         onCardManual={recordCardManual}

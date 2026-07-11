@@ -15,7 +15,7 @@ function money(n: number): string {
 }
 const RATE_PCT = (r: number) => (Math.round(r * 10000) / 100).toFixed(2).replace(/\.00$/, "") + "%";
 const TENDER_LABEL: Record<string, string> = {
-  cash: "Cash", card: "Card", gift_card: "Gift card", store_credit: "Store credit", other: "Other",
+  cash: "Cash", card: "Card", gift_card: "Gift card", store_credit: "Store credit", house_account: "House account", other: "Other",
 };
 
 export default async function AccountingPage({
@@ -306,6 +306,7 @@ export default async function AccountingPage({
           <p className="text-xs text-muted-foreground mb-2">Current balances (not for the period).</p>
           <Line label="Gift cards outstanding" value={money(s.giftCardOutstanding)} />
           <Line label="Store credit outstanding" value={money(s.storeCreditOutstanding)} />
+          <Line label="House accounts receivable" value={money(s.houseAccountReceivable)} />
         </div>
       </div>
 
