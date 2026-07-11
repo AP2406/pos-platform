@@ -43,3 +43,4 @@ API-key-for-Auto-capture-leads.txt
    *.key.txt
 # Local Claude Code agent settings
 .claude/
+*.zip
