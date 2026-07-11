@@ -143,7 +143,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
 
   const { data: order } = await supabase
     .from("orders")
-    .select("id, status, subtotal, discount, tax, total, customer_id")
+    .select("id, status, subtotal, discount, tax, total, customer_id, payment_method")
     .eq("id", orderId)
     .eq("business_id", business.id)
     .maybeSingle();
@@ -308,6 +308,36 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     storeCreditedCents = Math.round(amount * 100);
   }
 
+  // House account (AR): refunding an order that was charged to a customer's house
+  // account reduces what they owe (never below zero). Done before the refund row —
+  // same "reverse-before-record" rule as store credit — so a failure changes nothing.
+  let houseAccountReversedCents = 0;
+  if (!toStoreCredit && order.payment_method === "house_account" && orderCustomerId) {
+    const { data: ha } = await supabase
+      .from("house_accounts")
+      .select("balance_cents")
+      .eq("business_id", business.id)
+      .eq("customer_id", orderCustomerId)
+      .maybeSingle();
+    const bal = ha ? (Number(ha.balance_cents) || 0) : 0;
+    const reverseCents = Math.min(Math.round(amount * 100), bal);
+    if (reverseCents > 0) {
+      const { error: haErr } = await supabase.rpc("apply_house_account_delta", {
+        p_business_id: business.id,
+        p_customer_id: orderCustomerId,
+        p_delta_cents: -reverseCents,
+        p_kind: "adjust",
+        p_order_id: orderId,
+        p_note: "refund",
+      });
+      if (haErr) {
+        console.error("refundItems house account reversal:", haErr);
+        return { error: "Could not adjust the house account, so nothing was changed. Please try again." };
+      }
+      houseAccountReversedCents = reverseCents;
+    }
+  }
+
   let restocked = false;
   if (input.restock) {
     const qtyByItem: Record<string, number> = {};
@@ -344,8 +374,9 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     discount_portion: discountPortion,
     tax_portion: taxPortion,
     amount: amount,
-    method: toStoreCredit ? "store_credit" : null,
+    method: toStoreCredit ? "store_credit" : houseAccountReversedCents > 0 ? "house_account" : null,
     store_credit: toStoreCredit ? { cents: storeCreditedCents, customer_id: orderCustomerId } : null,
+    house_account: houseAccountReversedCents > 0 ? { cents: houseAccountReversedCents, customer_id: orderCustomerId } : null,
     finix: finixReversals.length > 0 ? { reversed_cents: finixReversedCents, reversals: finixReversals } : null,
     reason: input.reason,
     staff: active ? { id: active.id, name: active.name, role: active.role } : null,

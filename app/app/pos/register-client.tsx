@@ -53,15 +53,17 @@ import { RegisterRefund } from "./register-refund";
 import { useOnlineStatus } from "./use-online";
 import { getLoyaltyBalance } from "./loyalty-actions";
 import { getStoreCreditBalance } from "./store-credit-actions";
+import { getHouseAccount, type HouseAccount } from "./house-account-actions";
 import Link from "next/link";
 import { tileClassesFor } from "./category-colors";
+import { computeCartTax, type ItemTaxMeta } from "@/lib/services/tax-compute";
 import { EmailReceiptButton } from "./sales/email-receipt-button";
 
 type Variation = { id: string; name: string; price: number };
 type ModOption = { id: string; name: string; price: number; child_group?: ModifierGroup };
 type ModifierGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; allow_split: boolean; options: ModOption[] };
 type ModPosition = "whole" | "left" | "right";
-type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null; track_inventory?: boolean; stock_qty?: number | null; reorder_point?: number | null; open_price?: boolean; requires_manager_approval?: boolean; short_name?: string | null };
+type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null; track_inventory?: boolean; stock_qty?: number | null; reorder_point?: number | null; open_price?: boolean; requires_manager_approval?: boolean; short_name?: string | null; off_hours?: boolean; sales_category?: string | null };
 type Course = { id: string; name: string; sort_order: number };
 type CartLine = {
   catalog_item_id: string | null;
@@ -95,7 +97,7 @@ type ServiceChargeCfg = { enabled: boolean; pct: number; autoParty: number; post
 type SplitCfg = { settlementMode: "separate" | "informational"; allowUnits: boolean };
 type StaffMember = { id: string; name: string };
 type Customer = { id: string; name: string; taxExempt?: boolean };
-type Tender = { method: "cash" | "card" | "other" | "gift_card" | "store_credit"; amount: number; tendered: number | null; change: number | null; gift_card_code?: string | null };
+type Tender = { method: "cash" | "card" | "other" | "gift_card" | "store_credit" | "house_account"; amount: number; tendered: number | null; change: number | null; gift_card_code?: string | null };
 type PaymentLine = { method: string; amount: number; tendered: number | null; change: number | null };
 type Receipt = {
   id: string;
@@ -119,6 +121,7 @@ type Receipt = {
   tableName?: string | null;
   serverName?: string | null;
   orderNote?: string | null;
+  categorySubtotals?: { label: string; amount: number }[];
 };
 type CardCfg =
   | { enabled: true; applicationId: string; environment: string; merchantId: string; terminalEnabled: boolean }
@@ -199,7 +202,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
   });
 }
 
-export function RegisterClient({ items, taxRate, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto", upsellPrompts = [], defaultToSeat = true }: { items: Item[]; taxRate: number; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string; upsellPrompts?: UpsellPrompt[]; defaultToSeat?: boolean }) {
+export function RegisterClient({ items, taxRate, taxMeta, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto", upsellPrompts = [], defaultToSeat = true }: { items: Item[]; taxRate: number; taxMeta?: { itemTaxMeta: Record<string, ItemTaxMeta>; rateFracById: Record<string, number>; rateNameById: Record<string, string> }; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string; upsellPrompts?: UpsellPrompt[]; defaultToSeat?: boolean }) {
   const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
   const online = useOnlineStatus();
   // P1-22: back up the quick-service cart (no table/tab — nothing server-side
@@ -296,6 +299,17 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
     getStoreCreditBalance(customer.id).then((b) => { if (!cancelled) setStoreCreditBalance(b); }).catch(() => {});
     return () => { cancelled = true; };
   }, [customer]);
+  // House account (AR) for the attached customer — enables the "charge to account" tender.
+  const [houseAccount, setHouseAccount] = useState<HouseAccount | null>(null);
+  useEffect(() => {
+    if (!customer) { setHouseAccount(null); return; }
+    let cancelled = false;
+    getHouseAccount(customer.id).then((h) => { if (!cancelled) setHouseAccount(h); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [customer]);
+  const houseAccountRemaining = houseAccount && houseAccount.limit != null
+    ? Math.max(0, Math.round((houseAccount.limit - houseAccount.balance) * 100) / 100)
+    : null;
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [pickerItem, setPickerItem] = useState<Item | null>(null);
@@ -1186,6 +1200,23 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   }
 
   // Print the current unpaid cart as a bill (pre-receipt) — no order created.
+  // Sales-category subtotals for the bill/receipt (TouchBistro "Sales Category
+  // Totals"). Looked up live from the catalog by catalog_item_id; only lines whose
+  // item has a sales_category are grouped. The receipt template renders these only
+  // when the merchant's "Show category totals" toggle is on.
+  function buildCategorySubtotals(lines: CartLine[] = cart): { label: string; amount: number }[] {
+    const byId = new Map<string, Item>();
+    for (const it of items) byId.set(it.id, it);
+    const map = new Map<string, number>();
+    for (const l of lines) {
+      if (l.void) continue;
+      const cat = (l.catalog_item_id && byId.get(l.catalog_item_id)?.sales_category) || null;
+      if (!cat) continue;
+      map.set(cat, (map.get(cat) ?? 0) + l.unit_price * l.quantity);
+    }
+    return Array.from(map.entries()).map(([label, amount]) => ({ label, amount: Math.round(amount * 100) / 100 }));
+  }
+
   function printBill() {
     if (cart.length === 0) return;
     const rec: Receipt = {
@@ -1210,6 +1241,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       tableName: tableBinding ? tableBinding.tableLabel : null,
       serverName: serverName,
       orderNote: checkNote.trim() || null,
+      categorySubtotals: buildCategorySubtotals(),
     };
     doPrint(rec);
   }
@@ -1742,21 +1774,21 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
 
   const taxF = subtotal > 0 ? netSubtotal / subtotal : 0;
 
-  const taxBucketsPreview: Record<string, number> = {};
-  for (const l of cart) {
-    if (l.void) continue;
-    if (!l.taxable) continue;
-    if (l.taxFrac <= 0) continue;
-    const key = l.taxFrac.toFixed(6);
-    taxBucketsPreview[key] = (taxBucketsPreview[key] || 0) + l.unit_price * l.quantity;
-  }
-  let tax = 0;
-  for (const key of Object.keys(taxBucketsPreview)) {
-    const frac = parseFloat(key);
-    const discountedBase = Math.round(taxBucketsPreview[key] * taxF * 100) / 100;
-    tax += Math.round(discountedBase * frac * 100) / 100;
-  }
-  tax = Math.round(tax * 100) / 100;
+  // Preview tax via the SAME shared helper the server charges with, so the on-screen
+  // total matches the charge to the cent — including multi-tax (stacked) items. Lines
+  // key off catalog_item_id → taxMeta; custom lines fall back to the default rate.
+  const _previewTaxCfg = {
+    defaultRateFrac: taxRate,
+    itemTaxMeta: taxMeta?.itemTaxMeta ?? {},
+    rateFracById: taxMeta?.rateFracById ?? {},
+    rateNameById: taxMeta?.rateNameById ?? {},
+  };
+  const _previewTax = computeCartTax(
+    cart.filter((l) => !l.void).map((l) => ({ catalog_item_id: l.catalog_item_id, unit_price: l.unit_price, quantity: l.quantity })),
+    _previewTaxCfg,
+    taxF
+  );
+  let tax = _previewTax.tax;
 
   const customerExempt = customer ? customer.taxExempt === true : false;
   const effectiveExempt = taxExempt || customerExempt;
@@ -2052,6 +2084,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       tableName: tableBinding ? tableBinding.tableLabel : null,
       serverName: serverName,
       orderNote: snap.orderNote ?? null,
+      categorySubtotals: buildCategorySubtotals(snap.items),
     };
     setReceipt(rec);
     setTenderOpen(false);
@@ -2087,6 +2120,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         taxExempt && taxExemptReason === "other" ? taxExemptNote.trim() : undefined,
       customer_id: customer ? customer.id : null,
       dining_option: diningOption,
+      note: checkNote.trim() || undefined,
       approver: approver ?? undefined,
       // Phase A: carry the table ticket so covers / seated-at / section persist on the order.
       open_ticket_id: tableBinding?.ticketId ?? undefined,
@@ -2760,6 +2794,8 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         terminalEnabled={terminalEnabled}
         terminalReady={terminalReady}
         storeCreditBalance={storeCreditBalance}
+        houseAccountEnabled={houseAccount?.enabled === true}
+        houseAccountRemaining={houseAccountRemaining}
         onCash={recordCash}
         onSplit={recordSplit}
         onCardManual={recordCardManual}
@@ -3027,6 +3063,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                                 <img src={item.image_url} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
                                 {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">{lowN} left</span>}
                                 {hhWin && !oos && <span className="absolute top-1 left-1 text-[10px] rounded-full bg-emerald-600 text-white px-1.5 py-0.5 font-medium">HH</span>}
+                                {item.off_hours && !oos && !hhWin && <span className="absolute top-1 left-1 text-[10px] rounded-full bg-zinc-600 text-white px-1.5 py-0.5 font-medium">Off hrs</span>}
                                 <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white text-left px-2 py-1.5">
                                   <div className="font-semibold text-sm leading-snug line-clamp-2">{item.name}</div>
                                   <div className="text-xs text-white/90">{oos ? "86'd" : priceLabel}</div>
@@ -3038,6 +3075,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
                             <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative text-left p-3 min-h-[110px] rounded-xl border shadow-elevation-sm active:scale-[0.97] transition-all flex flex-col justify-between " + tileClassesFor(item.category, categoryColors) + (oos ? " opacity-50" : "")}>
                               {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">{lowN} left</span>}
                               {hhWin && !oos && <span className="absolute top-1 left-1 text-[10px] rounded-full bg-emerald-600 text-white px-1.5 py-0.5 font-medium">HH</span>}
+                              {item.off_hours && !oos && !hhWin && <span className="absolute top-1 left-1 text-[10px] rounded-full bg-zinc-600 text-white px-1.5 py-0.5 font-medium">Off hrs</span>}
                               <div className="font-semibold text-sm leading-snug line-clamp-3">{item.name}</div>
                               <div className="text-sm opacity-80 mt-1 tabular-nums">{oos ? "86'd" : priceLabel}{hhPrice != null && <span className="ml-1 text-xs line-through opacity-50">${item.price.toFixed(2)}</span>}</div>
                             </button>

@@ -27,7 +27,7 @@ export type ModGroup = {
 // P0-2 catalog editor: manage an item's modifier groups (required / min / max)
 // and their options. Existing flat add-ons appear as their backfilled "Add-ons"
 // group; a brand-new item starts empty until a group is added.
-export function ModifierGroupsEditor({ itemId, initial }: { itemId: string; initial: ModGroup[] }) {
+export function ModifierGroupsEditor({ itemId, initial, catalogItems = [] }: { itemId: string; initial: ModGroup[]; catalogItems?: { id: string; name: string; price: number }[] }) {
   const [groups, setGroups] = useState<ModGroup[]>(initial);
   const [newGroup, setNewGroup] = useState("");
   const [optName, setOptName] = useState<Record<string, string>>({});
@@ -84,6 +84,19 @@ export function ModifierGroupsEditor({ itemId, initial }: { itemId: string; init
       setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, options: [...g.options, { id: res.id, name, price, child_group_id: null }] } : g)));
       setOptName((p) => ({ ...p, [groupId]: "" }));
       setOptPrice((p) => ({ ...p, [groupId]: "" }));
+    });
+  }
+
+  // Add another menu item as a modifier option (copies its name + price). Lets you
+  // offer "add a side / add a scoop" from the real menu without retyping.
+  function addFromItem(groupId: string, sourceId: string) {
+    const src = catalogItems.find((i) => i.id === sourceId);
+    if (!src) return;
+    setErr(null);
+    startTransition(async () => {
+      const res = await createModifier(itemId, src.name, src.price, groupId);
+      if ("error" in res) { setErr(res.error); return; }
+      setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, options: [...g.options, { id: res.id, name: src.name, price: src.price, child_group_id: null }] } : g)));
     });
   }
 
@@ -164,6 +177,22 @@ export function ModifierGroupsEditor({ itemId, initial }: { itemId: string; init
                 <Input type="number" min="0" step="0.01" value={optPrice[g.id] ?? ""} onChange={(e) => setOptPrice((p) => ({ ...p, [g.id]: e.target.value }))} placeholder="0.00" className="h-8 w-20 text-right" />
               </div>
               <Button size="sm" onClick={() => addOption(g.id)} disabled={pending || !(optName[g.id] || "").trim()}>Add</Button>
+              {catalogItems.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs">or add a menu item</Label>
+                  <select
+                    value=""
+                    disabled={pending}
+                    onChange={(e) => { if (e.target.value) addFromItem(g.id, e.target.value); e.target.value = ""; }}
+                    className="h-8 rounded-md border border-border bg-transparent px-2 text-sm w-40"
+                  >
+                    <option value="">Pick an item…</option>
+                    {catalogItems.filter((i) => i.id !== itemId).map((i) => (
+                      <option key={i.id} value={i.id}>{i.name} (${i.price.toFixed(2)})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
         ))}

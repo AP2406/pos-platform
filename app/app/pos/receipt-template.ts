@@ -27,6 +27,8 @@ export type ReceiptSettings = {
   // Tip guide: print suggested tip amounts computed from these percentages.
   showTipGuide: boolean;
   tipGuidePcts: string;
+  // Sales-category subtotals (e.g. Food / Alcohol) above the totals.
+  showCategoryTotals: boolean;
   footerMessage: string;
   footerPolicy: string;
   showSocial: boolean;
@@ -55,6 +57,7 @@ export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
   showServerName: true,
   showTipGuide: false,
   tipGuidePcts: "15,18,20",
+  showCategoryTotals: false,
   footerMessage: "Thank you!",
   footerPolicy: "",
   showSocial: false,
@@ -88,6 +91,7 @@ export type ReceiptData = {
   tableName?: string | null;
   serverName?: string | null;
   orderNote?: string | null;
+  categorySubtotals?: { label: string; amount: number }[];
 };
 
 const DINING_LABELS: Record<string, string> = {
@@ -111,6 +115,7 @@ function methodLabel(m: string): string {
   if (m === "split") return "Split";
   if (m === "gift_card") return "Gift card";
   if (m === "store_credit") return "Store credit";
+  if (m === "house_account") return "House account";
   return "Other";
 }
 
@@ -151,6 +156,16 @@ function metaBlock(r: ReceiptData, s: ReceiptSettings): string {
   if (s.showCustomer && r.customerName) html += '<div class="meta">Customer: ' + esc(r.customerName) + "</div>";
   if (r.orderNote && r.orderNote.trim()) html += '<div class="meta">Note: ' + esc(r.orderNote.trim()) + "</div>";
   return html;
+}
+
+// Sales-category subtotals (Food / Alcohol …), shown above the totals when the
+// merchant enables it and the sale actually has categorized items.
+function categoryBlock(r: ReceiptData, s: ReceiptSettings): string {
+  if (!s.showCategoryTotals) return "";
+  const cats = (r.categorySubtotals ?? []).filter((c) => c.label && (Number(c.amount) || 0) !== 0);
+  if (cats.length < 1) return "";
+  const rows = cats.map((c) => row(esc(c.label), money(c.amount), { small: true, muted: true })).join("");
+  return rows + '<div class="rule"></div>';
 }
 
 // Tip guide: suggested tip amounts computed from the printed total. Common on the
@@ -299,6 +314,7 @@ export function buildReceiptHtml(r: ReceiptData, settingsIn: Partial<ReceiptSett
     '<div class="rule"></div>' +
     itemsBlock(r) +
     '<div class="rule"></div>' +
+    categoryBlock(r, s) +
     totals +
     tipGuideBlock(r, s) +
     '<div class="rule"></div>' +

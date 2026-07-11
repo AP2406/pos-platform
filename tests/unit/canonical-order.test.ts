@@ -29,6 +29,7 @@ const FULL: CanonicalOrderInput = {
   dining_option: "dine_in",
   open_ticket_id: "11111111-1111-1111-1111-111111111111",
   signature_data: "data:image/png;base64,AAA",
+  note: "VIP — birthday, no nuts",
   approver: { id: "mgr-1", name: "Sam" },
 };
 

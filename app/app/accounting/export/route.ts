@@ -47,6 +47,7 @@ export async function GET(request: Request) {
   lines.push(row("Void", "Voids (pre-tax)", s.voids.n + " voids", n(s.voids.amount)));
   lines.push(row("Liability", "Gift cards outstanding", "", n(s.giftCardOutstanding)));
   lines.push(row("Liability", "Store credit outstanding", "", n(s.storeCreditOutstanding)));
+  lines.push(row("Asset", "House accounts receivable", "", n(s.houseAccountReceivable)));
 
   const csv = lines.join("\r\n");
   const fname = "accounting-" + period.key + ".csv";

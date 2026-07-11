@@ -24,6 +24,9 @@ export type AccountingSummary = {
   salesByChannel: { channel: string; label: string; count: number; total: number }[];
   giftCardOutstanding: number;
   storeCreditOutstanding: number;
+  houseAccountReceivable: number;
+  houseAccountRefunds: number;
+  houseAccountSettlements: { method: string; amount: number }[];
 };
 
 const CHANNEL_LABELS: Record<string, string> = { instore: "In-store", kiosk: "Kiosk", online: "Online", qr: "QR table", doordash: "DoorDash", ubereats: "Uber Eats", grubhub: "Grubhub" };
@@ -107,17 +110,40 @@ export async function accountingSummary(
     }
   }
 
-  // Refunds in range.
+  // Refunds in range. Track the portion refunded against a house account (AR) so
+  // the journal credits AR 1210 instead of cash for those.
   const { data: refundRows } = await supabase
     .from("refunds")
-    .select("amount, status")
+    .select("amount, status, snapshot")
     .eq("business_id", businessId)
     .gte("created_at", startIso)
     .lt("created_at", endIso);
   let refunds = 0;
+  let houseAccountRefunds = 0;
   for (const r of refundRows ?? []) {
     if ((r.status as string) === "voided") continue;
-    refunds += Number(r.amount) || 0;
+    const amt = Number(r.amount) || 0;
+    refunds += amt;
+    const snap = (r.snapshot as { method?: string; house_account?: { cents?: number } } | null) ?? null;
+    if (snap?.method === "house_account") {
+      houseAccountRefunds += snap.house_account?.cents != null ? (Number(snap.house_account.cents) || 0) / 100 : amt;
+    }
+  }
+
+  // House-account settlements (pay-downs) in range, by how the customer paid. Each
+  // posts as a tender received (debit) against AR (credit) in the journal.
+  const settleMap = new Map<string, number>();
+  const { data: settleRows } = await supabase
+    .from("house_account_ledger")
+    .select("delta_cents, method")
+    .eq("business_id", businessId)
+    .eq("kind", "payment")
+    .gte("created_at", startIso)
+    .lt("created_at", endIso);
+  for (const s of settleRows ?? []) {
+    const m = (s.method as string) || "cash";
+    // payment deltas are negative (they reduce the balance); the cash received = -delta.
+    settleMap.set(m, (settleMap.get(m) ?? 0) + (-(Number(s.delta_cents) || 0)) / 100);
   }
 
   // Map each tax line to its jurisdiction (by the rate's name) for remittance.
@@ -131,15 +157,18 @@ export async function accountingSummary(
     for (const line of taxMap.values()) line.jurisdiction = juris.get(line.label) ?? null;
   }
 
-  // Outstanding liabilities (point-in-time).
-  const [{ data: gc }, { data: sc }] = await Promise.all([
+  // Outstanding liabilities + receivables (point-in-time).
+  const [{ data: gc }, { data: sc }, { data: ha }] = await Promise.all([
     supabase.from("gift_cards").select("balance_cents").eq("business_id", businessId).eq("is_active", true),
     supabase.from("store_credit_accounts").select("balance_cents").eq("business_id", businessId),
+    supabase.from("house_accounts").select("balance_cents").eq("business_id", businessId),
   ]);
   let giftCardOutstanding = 0;
   for (const g of gc ?? []) giftCardOutstanding += (Number(g.balance_cents) || 0) / 100;
   let storeCreditOutstanding = 0;
   for (const s of sc ?? []) storeCreditOutstanding += (Number(s.balance_cents) || 0) / 100;
+  let houseAccountReceivable = 0;
+  for (const h of ha ?? []) houseAccountReceivable += (Number(h.balance_cents) || 0) / 100;
 
   return {
     orderCount: liveIds.length,
@@ -163,6 +192,11 @@ export async function accountingSummary(
       .sort((a, b) => b.total - a.total),
     giftCardOutstanding: r2(giftCardOutstanding),
     storeCreditOutstanding: r2(storeCreditOutstanding),
+    houseAccountReceivable: r2(houseAccountReceivable),
+    houseAccountRefunds: r2(houseAccountRefunds),
+    houseAccountSettlements: Array.from(settleMap.entries())
+      .map(([method, amount]) => ({ method, amount: r2(amount) }))
+      .filter((s) => s.amount !== 0),
   };
 }
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { rowToWindow } from "@/lib/services/price-windows";
+import { loadItemTaxMeta } from "@/lib/services/tax-meta";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { RegisterClient } from "./register-client";
 import { FloorClient } from "./floor-client";
@@ -20,10 +21,45 @@ export default async function PosPage() {
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, taxable, tax_rate_id, image_url, out_of_stock, default_course_id, track_inventory, stock_qty, reorder_point, open_price, requires_manager_approval, short_name")
+    .select("id, name, price, category, sales_category, taxable, tax_rate_id, image_url, out_of_stock, default_course_id, track_inventory, stock_qty, reorder_point, open_price, requires_manager_approval, short_name")
     .eq("business_id", business.id)
     .eq("is_active", true)
     .order("name", { ascending: true });
+
+  // Menu dayparting: flag items outside their availability window right now
+  // (business-local time). Non-blocking — the register shows an "off hours" badge
+  // but still lets staff ring it. No window targeting an item = always available.
+  const dpTz = (business as { timezone?: string }).timezone || "America/Toronto";
+  const { data: winData } = await supabase
+    .from("availability_windows")
+    .select("scope, target_item_id, target_category, days, start_min, end_min")
+    .eq("business_id", business.id)
+    .eq("active", true);
+  const offHoursIds = new Set<string>();
+  if (winData && winData.length > 0) {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: dpTz, weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
+    const dowMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const dow = dowMap[parts.find((p) => p.type === "weekday")?.value ?? "Sun"] ?? 0;
+    const nowMin = (Number(parts.find((p) => p.type === "hour")?.value ?? "0") % 24) * 60 + Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+    const inWindow = (w: { days?: unknown; start_min?: unknown; end_min?: unknown }) => {
+      const days = Array.isArray(w.days) ? (w.days as number[]) : [];
+      if (days.length > 0 && !days.includes(dow)) return false;
+      const s = Number(w.start_min) || 0;
+      const e = w.end_min == null ? 1440 : Number(w.end_min);
+      if (s === e) return true;
+      if (e > s) return nowMin >= s && nowMin < e;
+      return nowMin >= s || nowMin < e; // window wraps past midnight
+    };
+    for (const it of itemsData ?? []) {
+      const id = it.id as string;
+      const cat = (it.category as string | null) || "";
+      const targeting = winData.filter((w) =>
+        (w.scope === "item" && w.target_item_id === id) ||
+        (w.scope === "category" && w.target_category && w.target_category === cat)
+      );
+      if (targeting.length > 0 && !targeting.some(inWindow)) offHoursIds.add(id);
+    }
+  }
 
   const { data: varsData } = await supabase
     .from("catalog_item_variations")
@@ -169,10 +205,18 @@ export default async function PosPage() {
     return out;
   }
 
+  // Multi-tax: per-item tax metadata (a set of rates per item) + rate maps, shared
+  // with the server so the register preview matches the charge exactly.
+  const { itemTaxMeta, rateFracById: taxRateFracById, rateNameById: taxRateNameById } =
+    await loadItemTaxMeta(supabase, business.id, (itemsData ?? []).map((i) => i.id as string));
+
   const items = (itemsData ?? []).map((i) => {
-    const rid = (i.tax_rate_id as string | null) ?? null;
-    const taxFrac =
-      rid && rateFracById[rid] !== undefined ? rateFracById[rid] : defaultFrac;
+    // Summed fraction kept only for legacy single-frac call sites (hydrate/custom
+    // lines); the live preview uses computeCartTax over the full rate set.
+    const rids = itemTaxMeta[i.id as string]?.tax_rate_ids ?? [];
+    const taxFrac = rids.length > 0
+      ? rids.reduce((s, id) => s + (taxRateFracById[id] ?? 0), 0)
+      : defaultFrac;
     return {
       id: i.id as string,
       name: i.name as string,
@@ -189,6 +233,8 @@ export default async function PosPage() {
       open_price: (i.open_price as boolean | null) ?? false,
       requires_manager_approval: (i.requires_manager_approval as boolean | null) ?? false,
       short_name: (i.short_name as string | null) ?? null,
+      off_hours: offHoursIds.has(i.id as string),
+      sales_category: (i.sales_category as string | null) ?? null,
       variations: varsByItem[i.id as string] ?? [],
       modifiers: modsByItem[i.id as string] ?? [],
       modifierGroups: modifierGroupsFor(i.id as string),
@@ -261,6 +307,7 @@ export default async function PosPage() {
   const registerProps = {
     items,
     taxRate,
+    taxMeta: { itemTaxMeta, rateFracById: taxRateFracById, rateNameById: taxRateNameById },
     businessName: business.name,
     businessId: business.id,
     hasStaff,

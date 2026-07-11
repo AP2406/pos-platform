@@ -8,7 +8,7 @@ import type { AccountingSummary } from "./data";
 
 export type CoaKey =
   | "sales" | "service_charge" | "tax_payable" | "tips_payable"
-  | "cash" | "card" | "gift_card" | "store_credit" | "other"
+  | "cash" | "card" | "gift_card" | "store_credit" | "house_account" | "other"
   | "cogs" | "inventory" | "sales_returns" | "clearing"
   // F10: comp/discount/promo contra-revenue accounts, by reason.
   | "comp_manager" | "comp_meal" | "discount_loyalty" | "discount_promo";
@@ -22,6 +22,7 @@ export const COA_DEFAULTS: Record<CoaKey, { name: string; code: string }> = {
   card: { name: "Card clearing", code: "1010" },
   gift_card: { name: "Gift card liability", code: "2400" },
   store_credit: { name: "Store credit liability", code: "2410" },
+  house_account: { name: "House accounts receivable", code: "1210" },
   other: { name: "Other tender clearing", code: "1020" },
   cogs: { name: "Cost of goods sold", code: "5000" },
   inventory: { name: "Inventory", code: "1200" },
@@ -57,7 +58,8 @@ export type JournalLine = { account: string; code: string; debit: number; credit
 
 const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 const TENDER_KEY: Record<string, CoaKey> = {
-  cash: "cash", card: "card", gift_card: "gift_card", store_credit: "store_credit", other: "other",
+  cash: "cash", card: "card", gift_card: "gift_card", store_credit: "store_credit",
+  house_account: "house_account", other: "other",
 };
 
 export function buildJournal(
@@ -101,10 +103,22 @@ export function buildJournal(
     debit("cogs", cogs);
     credit("inventory", cogs);
   }
-  // Refunds: reverse revenue out of cash.
+  // Refunds: reverse revenue. The portion refunded against a house account reduces
+  // AR (no cash left the drawer); the rest comes out of cash.
   if (r2(s.refunds) > 0) {
     debit("sales_returns", s.refunds);
-    credit("cash", s.refunds);
+    const haRefunds = r2(s.houseAccountRefunds ?? 0);
+    if (haRefunds > 0) credit("house_account", haRefunds);
+    const cashRefunds = r2(s.refunds - haRefunds);
+    if (cashRefunds > 0) credit("cash", cashRefunds);
+  }
+  // House-account settlements: the customer paid down their tab. Debit the tender
+  // received, credit AR (balanced pair, doesn't touch revenue).
+  for (const st of s.houseAccountSettlements ?? []) {
+    const amt = r2(st.amount);
+    if (amt <= 0) continue;
+    debit(TENDER_KEY[st.method] ?? "other", amt);
+    credit("house_account", amt);
   }
   return lines;
 }

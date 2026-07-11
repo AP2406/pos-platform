@@ -30,6 +30,7 @@ function payIcon(method: string | null | undefined) {
   if (m === "cash") return <Banknote />;
   if (m === "gift_card") return <Gift />;
   if (m === "store_credit") return <Wallet />;
+  if (m === "house_account") return <Wallet />;
   if (m === "split") return <SplitSquareHorizontal />;
   return <CreditCard />;
 }

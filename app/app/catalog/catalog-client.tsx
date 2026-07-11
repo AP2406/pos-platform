@@ -10,7 +10,7 @@ import {
   createCatalogItem,
   setCatalogItemActive,
   setCatalogItemTaxable,
-  setCatalogItemTaxRate,
+  setCatalogItemTaxes,
   setCatalogItemDefaultCourse,
 } from "./actions";
 import { setCatalogItemStation } from "../kitchen/stations-actions";
@@ -37,6 +37,7 @@ type Item = {
   is_active: boolean;
   taxable: boolean;
   tax_rate_id: string | null;
+  tax_rate_ids: string[];
   barcode: string | null;
   image_url: string | null;
   out_of_stock: boolean;
@@ -170,6 +171,7 @@ export function CatalogClient({
           is_active: true,
           taxable: taxable,
           tax_rate_id: null,
+          tax_rate_ids: [],
           barcode: barcode.trim() || null,
           image_url: imageUrl || null,
           out_of_stock: false,
@@ -331,15 +333,17 @@ export function CatalogClient({
     });
   }
 
-  function handleSetTaxRate(item: Item, taxRateId: string | null) {
+  // Multi-tax: toggle one of an item's taxes and save the whole set.
+  function handleToggleTax(item: Item, rateId: string) {
+    const next = item.tax_rate_ids.includes(rateId)
+      ? item.tax_rate_ids.filter((x) => x !== rateId)
+      : [...item.tax_rate_ids, rateId];
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, tax_rate_ids: next } : i)));
     startTransition(async () => {
-      const res = await setCatalogItemTaxRate(item.id, taxRateId);
-      if (!("error" in res)) {
-        setItems((prev) =>
-          prev.map((i) =>
-            i.id === item.id ? { ...i, tax_rate_id: taxRateId } : i
-          )
-        );
+      const res = await setCatalogItemTaxes(item.id, next);
+      if ("error" in res) {
+        // Revert on failure.
+        setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, tax_rate_ids: item.tax_rate_ids } : i)));
       }
     });
   }
@@ -684,9 +688,9 @@ export function CatalogClient({
                         {!item.taxable && (
                           <span className="ml-2 text-xs text-amber-500">Tax-free</span>
                         )}
-                        {item.taxable && item.tax_rate_id && rateNameById[item.tax_rate_id] && (
+                        {item.taxable && item.tax_rate_ids.length > 0 && (
                           <span className="ml-2 text-xs text-muted-foreground">
-                            {rateNameById[item.tax_rate_id]}
+                            {item.tax_rate_ids.map((id) => rateNameById[id]).filter(Boolean).join(" + ")}
                           </span>
                         )}
                       </div>
@@ -738,19 +742,25 @@ export function CatalogClient({
                         </p>
                         <div className="pl-3">
                           {item.taxable ? (
-                            <select
-                              value={item.tax_rate_id ?? ""}
-                              onChange={(e) => handleSetTaxRate(item, e.target.value || null)}
-                              disabled={pending}
-                              className="h-9 rounded-md border border-border bg-transparent text-foreground px-2 text-sm"
-                            >
-                              <option value="">Default rate</option>
-                              {taxRates.map((r) => (
-                                <option key={r.id} value={r.id}>
-                                  {r.name + " (" + r.rate.toFixed(2) + "%)"}
-                                </option>
-                              ))}
-                            </select>
+                            taxRates.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">Uses the business default rate. Add named tax rates in Settings to stack taxes (e.g. GST + PST).</p>
+                            ) : (
+                              <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground">Pick one or more taxes (they stack). None checked = business default rate.</p>
+                                {taxRates.map((r) => (
+                                  <label key={r.id} className="flex items-center gap-2 text-sm">
+                                    <input
+                                      type="checkbox"
+                                      checked={item.tax_rate_ids.includes(r.id)}
+                                      onChange={() => handleToggleTax(item, r.id)}
+                                      disabled={pending}
+                                      className="h-4 w-4"
+                                    />
+                                    <span>{r.name + " (" + r.rate.toFixed(2) + "%)"}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )
                           ) : (
                             <p className="text-sm text-muted-foreground">
                               This item is Tax-free. Switch it to Taxable to choose a rate.
@@ -1003,7 +1013,7 @@ export function CatalogClient({
                       </div>
 
                       {/* Modifier groups (P0-2) */}
-                      <ModifierGroupsEditor itemId={item.id} initial={item.modifierGroups} />
+                      <ModifierGroupsEditor itemId={item.id} initial={item.modifierGroups} catalogItems={items.map((i) => ({ id: i.id, name: i.name, price: i.price }))} />
                     </div>
                   )}
                 </div>

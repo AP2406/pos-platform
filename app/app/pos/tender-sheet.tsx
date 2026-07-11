@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-type TMethod = "cash" | "card" | "other" | "gift_card" | "store_credit";
+type TMethod = "cash" | "card" | "other" | "gift_card" | "store_credit" | "house_account";
 type Tender = { method: TMethod; amount: number; tendered: number | null; change: number | null; gift_card_code?: string | null };
 type SplitLine = { id: number; method: TMethod; amount: string; cashGiven: string; giftCode: string };
 
@@ -18,6 +18,10 @@ type Props = {
   terminalEnabled?: boolean;
   terminalReady?: boolean | null;
   storeCreditBalance?: number;
+  // House account: whether the attached customer has an active account, and how
+  // much credit remains (null = no limit). Enables the "+ Acct" tender.
+  houseAccountEnabled?: boolean;
+  houseAccountRemaining?: number | null;
   onCash: (tenderedDollars: number) => void;
   onSplit: (tenders: Tender[]) => void;
   onCardManual: () => void;
@@ -31,6 +35,7 @@ function methodLabel(m: string): string {
   if (m === "card") return "Card";
   if (m === "gift_card") return "Gift";
   if (m === "store_credit") return "Credit";
+  if (m === "house_account") return "Acct";
   return "Other";
 }
 
@@ -152,6 +157,17 @@ export function TenderSheet(props: Props) {
     if (scCents > Math.round((props.storeCreditBalance ?? 0) * 100)) {
       setSplitError("Not enough store credit for that amount.");
       return;
+    }
+    const haCents = built
+      .filter(function (p) { return p.method === "house_account"; })
+      .reduce(function (s, p) { return s + Math.round(p.amount * 100); }, 0);
+    if (haCents > 0) {
+      if (!props.houseAccountEnabled) { setSplitError("This customer has no active house account."); return; }
+      const rem = props.houseAccountRemaining;
+      if (rem != null && haCents > Math.round(rem * 100)) {
+        setSplitError("That amount is over the customer's house-account credit limit.");
+        return;
+      }
     }
     const sumCents = built.reduce(function (s, p) { return s + Math.round(p.amount * 100); }, 0);
     if (sumCents !== totalCents) {
@@ -316,7 +332,10 @@ export function TenderSheet(props: Props) {
                     <div key={l.id} className="rounded-lg border border-border p-3 space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex rounded-md border border-border overflow-hidden text-xs">
-                          {(["cash", "card", "other", "gift_card", "store_credit"] as const).map(function (m) {
+                          {(props.houseAccountEnabled
+                            ? (["cash", "card", "other", "gift_card", "store_credit", "house_account"] as const)
+                            : (["cash", "card", "other", "gift_card", "store_credit"] as const)
+                          ).map(function (m) {
                             return (
                               <button
                                 key={m}
@@ -363,6 +382,9 @@ export function TenderSheet(props: Props) {
                 <button type="button" onClick={function () { addLine("gift_card"); }} className="flex-1 px-2 py-1.5 text-xs rounded-md border border-border hover:bg-accent">+ Gift</button>
                 {(props.storeCreditBalance ?? 0) > 0 && (
                   <button type="button" onClick={function () { addLine("store_credit"); }} className="flex-1 px-2 py-1.5 text-xs rounded-md border border-border hover:bg-accent">{"+ Credit ($" + (props.storeCreditBalance ?? 0).toFixed(2) + ")"}</button>
+                )}
+                {props.houseAccountEnabled && (
+                  <button type="button" onClick={function () { addLine("house_account"); }} className="flex-1 px-2 py-1.5 text-xs rounded-md border border-border hover:bg-accent">{props.houseAccountRemaining == null ? "+ Acct" : "+ Acct ($" + (props.houseAccountRemaining ?? 0).toFixed(2) + ")"}</button>
                 )}
                 <button type="button" onClick={function () { addLine("other"); }} className="flex-1 px-2 py-1.5 text-xs rounded-md border border-border hover:bg-accent">+ Other</button>
               </div>
