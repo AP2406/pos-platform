@@ -3,8 +3,12 @@
 -- the legacy single tax_rate_id for items with no junction rows.
 --
 -- MERGE-GATE: apply this before the multi-tax catalog editor (pos-parity-7) reaches
--- production. Without it, a guest paying by QR would be under-charged tax on any item
--- that has 2+ taxes assigned. (Items with a single tax are unaffected.)
+-- production. The new editor (setCatalogItemTaxes) writes taxes to the junction and
+-- NULLs the legacy catalog_items.tax_rate_id. Until this RPC ships, get_guest_check
+-- returns only the (now-null) legacy rate, so QR guest-pay would tax EVERY item edited
+-- through the new UI at the business default rate instead of its real rate(s) — this
+-- affects single-tax items too, not just stacked ones. Register/close/split read the
+-- junction directly (loadItemTaxMeta) and are already correct.
 create or replace function public.get_guest_check(p_business_id uuid, p_element_id uuid)
 returns jsonb
 language plpgsql security definer set search_path to 'public'

@@ -10,7 +10,6 @@ import {
   createCatalogItem,
   setCatalogItemActive,
   setCatalogItemTaxable,
-  setCatalogItemTaxRate,
   setCatalogItemTaxes,
   setCatalogItemDefaultCourse,
 } from "./actions";
@@ -328,19 +327,6 @@ export function CatalogClient({
         setItems((prev) =>
           prev.map((i) =>
             i.id === item.id ? { ...i, taxable: !i.taxable } : i
-          )
-        );
-      }
-    });
-  }
-
-  function handleSetTaxRate(item: Item, taxRateId: string | null) {
-    startTransition(async () => {
-      const res = await setCatalogItemTaxRate(item.id, taxRateId);
-      if (!("error" in res)) {
-        setItems((prev) =>
-          prev.map((i) =>
-            i.id === item.id ? { ...i, tax_rate_id: taxRateId } : i
           )
         );
       }
