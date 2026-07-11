@@ -83,6 +83,17 @@ describe("computeSplitTotals", () => {
     expect(r.perCheckPreTipTotal).toEqual([1000, 1000]);
   });
 
+  it("a 100% comp yields $0 squares (the empty-payments case finalize must allow)", () => {
+    const r = ok(computeSplitTotals({
+      items: [{ name: "A", unit_price: 10, quantity: 1 }, { name: "B", unit_price: 10, quantity: 1 }],
+      checks: [{ lines: [{ name: "A", unit_price: 10, quantity: 1 }] }, { lines: [{ name: "B", unit_price: 10, quantity: 1 }] }],
+      comp_value: 20,
+    }, baseCfg));
+    expect(r.compCents).toBe(2000);
+    expect(r.taxTotalCents).toBe(0); // tax on a fully-comped check is 0
+    expect(r.perCheckPreTipTotal).toEqual([0, 0]);
+  });
+
   it("rejects an allocation that doesn't cover every item", () => {
     const r = computeSplitTotals({
       items: [{ name: "A", unit_price: 10, quantity: 1 }, { name: "B", unit_price: 10, quantity: 1 }],

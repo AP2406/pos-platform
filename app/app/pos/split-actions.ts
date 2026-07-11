@@ -33,7 +33,7 @@ const splitCheckSchema = z.object({
   lines: z.array(splitItemSchema),
   // Per-square multi-tender: one or more payments that must sum to the square's
   // total. A single-element array preserves the old single-method behavior.
-  payments: z.array(splitPaymentSchema).min(1),
+  payments: z.array(splitPaymentSchema),
   tip: z.coerce.number().min(0).max(1000000).optional(),
 });
 
@@ -260,6 +260,7 @@ export async function finalizeSplitCheck(
   // A square/check's tender label = the single method, or "split" for multi-tender.
   const methodOf = (payments: { method: string; amount: number }[]): string => {
     const methods = Array.from(new Set(payments.map((p) => p.method)));
+    if (methods.length === 0) return "other";
     return methods.length === 1 ? methods[0] : "split";
   };
   const toPaymentRows = (payments: { method: string; amount: number }[]) =>
