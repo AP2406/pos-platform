@@ -346,6 +346,9 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
   // P1: kitchen note + allergen flags captured at add-item time (not just line-edit).
   const [pickerNote, setPickerNote] = useState("");
   const [pickerAllergens, setPickerAllergens] = useState<string[]>([]);
+  // When set, the picker is EDITING this cart line (change variation/options) rather
+  // than adding a new one; confirmOptions replaces that line instead of appending.
+  const [pickerEditIndex, setPickerEditIndex] = useState<number | null>(null);
   const [openTickets, setOpenTickets] = useState<OpenTicketSummary[]>([]);
   const [ticketsOpen, setTicketsOpen] = useState(false);
   const [holdOpen, setHoldOpen] = useState(false);
@@ -787,6 +790,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       setPickerPos({});
       setPickerNote("");
       setPickerAllergens([]);
+      setPickerEditIndex(null); // a fresh add, not an edit
       setPickerItem(item);
       return;
     }
@@ -1034,6 +1038,16 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       unit = win.mode === "percent" ? windowPrice(unit, win) : Math.max(0, win.value + modTotal);
     }
     unit = Math.round(unit * 100) / 100;
+    // Editing an existing line: replace its variation/options/price/note in place,
+    // preserving quantity, seat, course, allergy and fired state. (Fired lines can't
+    // be edited — see lineOptionsEditable — so we never rewrite the kitchen's ticket.)
+    if (pickerEditIndex != null) {
+      const idx = pickerEditIndex;
+      const note = pickerNote.trim() ? pickerNote.trim() : null;
+      setCart((prev) => prev.map((l, i) => (i === idx ? { ...l, variation_id: varId, name: label, unit_price: unit, note: note, modifiers: lineMods.length > 0 ? lineMods : undefined } : l)));
+      closePicker();
+      return;
+    }
     // Allergen chips compile into the per-line allergy string (the KDS + chit
     // already render `allergy`); the note rides alongside.
     const allergyStr = pickerAllergens.length > 0 ? allergenLabels(pickerAllergens).join(", ") : "";
@@ -1048,8 +1062,46 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       allergy: allergyStr,
       modifiers: lineMods.length > 0 ? lineMods : undefined,
     });
-    setPickerItem(null);
+    closePicker();
     maybeUpsell(item);
+  }
+
+  function closePicker() {
+    setPickerItem(null);
+    setPickerEditIndex(null);
+  }
+
+  // A line can have its options re-picked only if its catalog item still exists, still
+  // has variations/modifiers, and it hasn't been fired to the kitchen (editing a fired
+  // line would silently change a ticket the kitchen already has — use Void instead).
+  function lineOptionsEditable(index: number): boolean {
+    const l = cart[index];
+    if (!l || !l.catalog_item_id || (l.sent_qty ?? 0) > 0) return false;
+    const it = items.find((x) => x.id === l.catalog_item_id);
+    return !!it && (it.variations.length > 0 || it.modifiers.length > 0);
+  }
+
+  // Re-open the picker on an existing line, prefilled from its structured modifiers,
+  // so a chosen size/temperature/topping can be changed without delete + re-add.
+  function editLineOptions(index: number) {
+    const l = cart[index];
+    if (!l || !l.catalog_item_id) return;
+    const it = items.find((x) => x.id === l.catalog_item_id);
+    if (!it || (it.variations.length === 0 && it.modifiers.length === 0)) return;
+    setReceipt(null);
+    setPickerVariationId(l.variation_id ?? null);
+    const mods = l.modifiers ?? [];
+    setPickerMods(mods.map((m) => m.modifier_id).filter((x): x is string => !!x));
+    const pos: Record<string, ModPosition> = {};
+    for (const m of mods) if (m.modifier_id && m.position && m.position !== "whole") pos[m.modifier_id] = m.position;
+    setPickerPos(pos);
+    setPickerNote(l.note ?? "");
+    // Allergy is preserved as-is on the line (edited via the line editor's Allergy
+    // field), not reconstructed from chips here, so re-picking options never drops it.
+    setPickerAllergens([]);
+    setPickerEditIndex(index);
+    setPickerItem(it);
+    setEditLineIndex(null);
   }
 
   function changeQty(index: number, delta: number) {
@@ -2690,11 +2742,11 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       )}
 
       {pickerItem && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setPickerItem(null)}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={closePicker}>
           <div className="bg-card border border-border rounded-lg p-4 w-full max-w-sm max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-medium">{pickerItem.name}</h3>
-              <button type="button" onClick={() => setPickerItem(null)} className="text-xs text-muted-foreground underline">
+              <button type="button" onClick={closePicker} className="text-xs text-muted-foreground underline">
                 Cancel
               </button>
             </div>
@@ -2752,7 +2804,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
             </div>
 
             <Button className="w-full" onClick={confirmOptions} disabled={(pickerItem.variations.length > 0 && !pickerVariationId) || requiredUnmet(pickerItem).length > 0}>
-              {requiredUnmet(pickerItem).length > 0 ? "Choose " + requiredUnmet(pickerItem)[0].name : "Add to cart - $" + pickerUnitPrice(pickerItem).toFixed(2)}
+              {requiredUnmet(pickerItem).length > 0 ? "Choose " + requiredUnmet(pickerItem)[0].name : (pickerEditIndex != null ? "Save - $" : "Add to cart - $") + pickerUnitPrice(pickerItem).toFixed(2)}
             </Button>
           </div>
         </div>
@@ -3565,6 +3617,11 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                   <p className="text-[11px] text-amber-600 mt-1.5">
                     🔒 Already sent to the kitchen — you can add more or change the note, but not reduce or remove it. To take it off, use Void.
                   </p>
+                )}
+                {lineOptionsEditable(editLineIndex) && (
+                  <button type="button" onClick={() => editLineOptions(editLineIndex!)} className="w-full h-10 mt-3 rounded-md border border-border text-sm hover:bg-accent">
+                    Edit options{cart[editLineIndex].modifiers && cart[editLineIndex].modifiers!.length > 0 ? " (" + cart[editLineIndex].modifiers!.length + ")" : ""}
+                  </button>
                 )}
                 <div className="space-y-1 mt-3">
                   <Label className="text-xs">Kitchen note</Label>
