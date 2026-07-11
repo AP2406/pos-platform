@@ -7,6 +7,8 @@ import { SettingsForm } from "./settings-form";
 import { TaxCurrencyForm } from "./tax-currency-form";
 import { TaxRatesCard } from "./tax-rates-card";
 import { OrderNumberCard } from "./order-number-card";
+import { AvailabilityCard } from "./availability-card";
+import { listAvailabilityWindows } from "./availability-actions";
 import { TrainingModeForm } from "./training-mode-form";
 import { ShowPhotosForm } from "./show-photos-form";
 import { StaffCard } from "./staff-card";
@@ -97,6 +99,19 @@ export default async function SettingsPage() {
     .eq("business_id", business.id)
     .maybeSingle();
   const nextSaleNumber = Number((counterRow as { last_sale_number?: number } | null)?.last_sale_number ?? 0) + 1;
+
+  // Menu-hours (dayparting) editor data: existing windows + the item/category pickers.
+  const availabilityWindows = await listAvailabilityWindows();
+  const { data: availItemsData } = await supabase
+    .from("catalog_items")
+    .select("id, name, category")
+    .eq("business_id", business.id)
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+  const availabilityItems = (availItemsData ?? []).map((i) => ({ id: i.id as string, name: i.name as string }));
+  const availabilityCategories = Array.from(
+    new Set((availItemsData ?? []).map((i) => (i.category as string | null) || "").filter((c) => c))
+  ).sort();
 
   const trainingMode =
     (business as { training_mode?: boolean }).training_mode === true;
@@ -290,6 +305,15 @@ export default async function SettingsPage() {
           <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Order &amp; bill numbers</SectionHeader>
             <OrderNumberCard nextNumber={nextSaleNumber} canManage={role === "owner" || role === "manager"} />
+          </div>
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
+            <SectionHeader>Menu hours (dayparting)</SectionHeader>
+            <AvailabilityCard
+              initialWindows={availabilityWindows}
+              items={availabilityItems}
+              categories={availabilityCategories}
+              canManage={role === "owner" || role === "manager"}
+            />
           </div>
           {showServiceCharge && (
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
