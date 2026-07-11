@@ -107,6 +107,9 @@ export async function authorizeTabCard(input: {
   }
   const auth = authRes.data;
   if ((auth.state || "").toUpperCase() !== "SUCCEEDED") {
+    // Not a clean hold (e.g. PENDING) — release it so a partial hold never dangles on
+    // the card with no record on the tab (review Finding 3). Best-effort.
+    await voidAuthorization(auth.id, "surge-tabvoid-" + input.ticket_id);
     return { declined: true, message: auth.failure_message || "The card was declined. Try another card." };
   }
 
@@ -142,7 +145,7 @@ export async function captureTab(
 
   const { data: ticket } = await supabase
     .from("open_tickets")
-    .select("id, finix_authorization_id, finix_auth_amount_cents, finix_auth_instrument_id, finix_auth_state")
+    .select("id, finix_authorization_id, finix_auth_amount_cents, finix_auth_instrument_id, finix_auth_merchant_id, finix_auth_state")
     .eq("id", input.ticket_id)
     .eq("business_id", business.id)
     .eq("ticket_type", "tab")
@@ -152,6 +155,8 @@ export async function captureTab(
 
   const authId = ticket.finix_authorization_id as string;
   const authCents = Number(ticket.finix_auth_amount_cents) || 0;
+  const instrumentId = (ticket.finix_auth_instrument_id as string | null) ?? null;
+  const authMerchantId = (ticket.finix_auth_merchant_id as string | null) ?? null;
   const finalCents = Math.round((Number(input.expected_total) || 0) * 100);
   if (finalCents < 100) return { error: "The tab total is too small to charge." };
   // Safe v1: the hold must cover the tab. If it doesn't, the cashier takes the
@@ -172,19 +177,42 @@ export async function captureTab(
     return { declined: true, message: captured.failure_message || "The card was declined at capture. Try another payment." };
   }
 
-  // Record the sale. If recording fails, reverse the captured transfer so money is
-  // never kept without a matching sale (mirrors createCardOrder).
+  const admin = createAdminClient();
+
+  // Reverse a captured transfer AND move the hold OFF 'held' to 'reversed' so a retry
+  // can't re-capture the same (now-refunded) transfer — Finix dedupes surge-tabcap-<ticket>
+  // to the same transfer, so without this the refunded money would get re-booked as paid
+  // (review Finding 1). The reversed transfer is also recorded so it's never mistaken for
+  // a collected payment. After a reverse the tab is closed via a normal tender instead.
+  async function reverseCapture(reason: string): Promise<void> {
+    await refundTransfer(transferId as string, { refundAmount: captured.amount, idempotency_id: "surge-tabrev-" + transferId, tags: { reason } });
+    const { data: fp } = await admin.from("finix_payments").select("id").eq("finix_transfer_id", transferId as string).maybeSingle();
+    if (fp) {
+      await admin.from("finix_payments").update({ status: "reversed" }).eq("id", fp.id);
+    } else {
+      await admin.from("finix_payments").insert({
+        business_id: business.id, order_id: null, finix_transfer_id: transferId,
+        finix_payment_instrument_id: instrumentId, finix_merchant_id: authMerchantId,
+        amount_cents: captured.amount, currency: captured.currency, status: "reversed",
+        raw_response: captured as unknown as Record<string, unknown>,
+      });
+    }
+    await supabase.from("open_tickets").update({ finix_auth_state: "reversed" }).eq("id", input.ticket_id).eq("business_id", business.id);
+  }
+  const REVERSED_MSG = "The card was charged but the sale couldn't be saved, so the charge was reversed and the hold released. Close the tab with a normal payment.";
+
+  // Record the sale. If recording fails, reverse (mirrors createCardOrder).
   let rec: Awaited<ReturnType<typeof createOrder>>;
   try {
     rec = await createOrder({ ...forwardOrderFields(input), payment_method: "card", open_ticket_id: input.ticket_id });
   } catch (e) {
     console.error("captureTab: createOrder threw after capture " + transferId, e);
-    await refundTransfer(transferId, { refundAmount: captured.amount, idempotency_id: "surge-tabrev-" + transferId, tags: { reason: "tab_record_exception" } });
-    return { error: "The card was charged but the sale couldn't be saved, so the charge was reversed. Please try again." };
+    await reverseCapture("tab_record_exception");
+    return { error: REVERSED_MSG };
   }
   if ("error" in rec) {
-    await refundTransfer(transferId, { refundAmount: captured.amount, idempotency_id: "surge-tabrev-" + transferId, tags: { reason: "tab_record_failed" } });
-    return { error: "The card was charged but the sale couldn't be saved, so the charge was reversed. Please try again." };
+    await reverseCapture("tab_record_failed");
+    return { error: REVERSED_MSG };
   }
 
   // Amount guard: the recorded sale must equal what we captured.
@@ -192,20 +220,19 @@ export async function captureTab(
   const savedCents = savedOrder ? Math.round((Number(savedOrder.total) || 0) * 100) : finalCents;
   if (savedCents !== finalCents) {
     console.error("captureTab amount mismatch: captured " + finalCents + " vs sale " + savedCents + " (order " + rec.id + ")");
-    await refundTransfer(transferId, { refundAmount: captured.amount, idempotency_id: "surge-tabrev-" + transferId, tags: { reason: "tab_amount_mismatch" } });
-    return { error: "The tab total changed during checkout, so the charge was reversed. Please ring it again." };
+    await reverseCapture("tab_amount_mismatch");
+    return { error: "The tab total changed during checkout, so the charge was reversed and the hold released. Ring it up again." };
   }
 
-  // Link the finix payment (service-role) and mark the hold captured.
-  const admin = createAdminClient();
+  // Success: link the captured transfer and mark the hold captured.
   const { data: existingFp } = await admin.from("finix_payments").select("id").eq("finix_transfer_id", transferId).maybeSingle();
   if (!existingFp) {
     await admin.from("finix_payments").insert({
       business_id: business.id,
       order_id: rec.id,
       finix_transfer_id: transferId,
-      finix_payment_instrument_id: ticket.finix_auth_instrument_id,
-      finix_merchant_id: null,
+      finix_payment_instrument_id: instrumentId,
+      finix_merchant_id: authMerchantId,
       amount_cents: captured.amount,
       currency: captured.currency,
       status: "succeeded",
@@ -214,7 +241,10 @@ export async function captureTab(
   } else {
     await admin.from("finix_payments").update({ order_id: rec.id, status: "succeeded" }).eq("id", existingFp.id);
   }
-  await supabase.from("open_tickets").update({ finix_auth_state: "captured" }).eq("id", input.ticket_id).eq("business_id", business.id);
+  const { error: stErr } = await supabase.from("open_tickets").update({ finix_auth_state: "captured" }).eq("id", input.ticket_id).eq("business_id", business.id);
+  // Finding 4: if this write fails the hold stays 'held', but a retry is backstopped by
+  // createOrder's idempotency (same order) + the finix_payments dedupe above — no double charge.
+  if (stErr) console.error("captureTab: 'captured' state write failed (order " + rec.id + ", transfer " + transferId + ")", stErr);
 
   return { ok: true, id: rec.id, sale_number: rec.sale_number };
 }

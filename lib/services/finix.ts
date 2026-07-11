@@ -324,10 +324,13 @@ export async function refundTransfer(transferId: string, input: CreateRefundInpu
 // tip, up to the auth) at close, or void on a walked tab. Card-PRESENT (PAX) auth
 // is intentionally NOT here — it needs the device operation_key confirmed first.
 //
-// SANDBOX MERGE-GATE: the capture endpoint below follows the spec provided; Finix's
-// live API may instead be `PUT /authorizations/{id}` with capture_amount. Verify the
-// full auth→capture→void round-trip against a Finix SANDBOX before this touches a
-// live card. The endpoint is isolated in captureAuthorization() so it's a one-line change.
+// SANDBOX MERGE-GATE: the capture AND void endpoints below follow the provided spec;
+// Finix's live API may instead be `PUT /authorizations/{id}` (capture_amount / void_me).
+// Verify BOTH against a Finix SANDBOX before a live card:
+//   - wrong CAPTURE endpoint  -> every close errors, tab uncollected (hold expires ~7d).
+//   - wrong VOID endpoint     -> walked-tab release fails AND the dangling-hold cleanup
+//                                in authorizeTabCard fails -> customer money FROZEN till expiry.
+// Both are isolated in one helper each, so each is a one-line change once confirmed.
 
 export type FinixAuthorization = {
   id: string;
