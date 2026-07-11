@@ -45,8 +45,9 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
   invoices: { key: "invoices", href: "/app/invoices", staticLabel: "Invoices", icon: "receipt" },
   proposals: { key: "proposals", href: "/app/proposals", staticLabel: "Proposals", icon: "doc" },
   pos: { key: "pos", href: "/app/pos", staticLabel: "POS", icon: "cash" },
-  // Sales/ticket history lives at /app/pos/sales (there is no /app/orders route).
-  orders: { key: "orders", href: "/app/pos/sales", staticLabel: "Orders", icon: "list" },
+  // Orders = the fulfillment hub (/app/orders, channel-segmented). Settled-payment
+  // history lives at /app/pos/sales, linked from the hub header.
+  orders: { key: "orders", href: "/app/orders", staticLabel: "Orders", icon: "list" },
   kitchen: { key: "kitchen", href: "/app/kitchen", staticLabel: "Kitchen", icon: "list" },
   catalog: { key: "catalog", href: "/app/catalog", staticLabel: "Catalog", icon: "grid" },
   staff: { key: "staff", href: "/app/staff", staticLabel: "Staff", icon: "users" },
