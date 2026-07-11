@@ -25,6 +25,18 @@ export default async function CatalogPage() {
     .eq("business_id", business.id)
     .order("created_at", { ascending: true });
 
+  // Multi-tax: the set of taxes on each item (junction), with a legacy single-rate
+  // fallback so items not yet migrated still show their rate.
+  const { data: itemTaxLinks } = await supabase
+    .from("catalog_item_taxes")
+    .select("catalog_item_id, tax_rate_id")
+    .eq("business_id", business.id);
+  const taxIdsByItem: Record<string, string[]> = {};
+  for (const l of itemTaxLinks ?? []) {
+    const iid = l.catalog_item_id as string;
+    (taxIdsByItem[iid] ||= []).push(l.tax_rate_id as string);
+  }
+
   const { data: bizRow } = await supabase
     .from("businesses")
     .select("category_colors")
@@ -109,6 +121,8 @@ export default async function CatalogPage() {
     is_active: i.is_active as boolean,
     taxable: (i.taxable as boolean | null) ?? true,
     tax_rate_id: (i.tax_rate_id as string | null) ?? null,
+    tax_rate_ids: taxIdsByItem[i.id as string]
+      ?? ((i.tax_rate_id as string | null) ? [i.tax_rate_id as string] : []),
     barcode: (i.barcode as string | null) ?? null,
     image_url: (i.image_url as string | null) ?? null,
     out_of_stock: (i.out_of_stock as boolean | null) ?? false,

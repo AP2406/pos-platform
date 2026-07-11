@@ -5,12 +5,41 @@
 
 export type TaxItem = { catalog_item_id?: string | null; unit_price: number; quantity: number };
 
+// An item can carry several taxes (multi-tax stacking, e.g. GST + PST). Empty
+// tax_rate_ids + taxable = the business default rate.
+export type ItemTaxMeta = { taxable: boolean; tax_rate_ids: string[] };
+
 export type CartTaxConfig = {
   defaultRateFrac: number; // normalized fraction (e.g. 0.13), applied when an item has no specific rate
-  itemTaxMeta: Record<string, { taxable: boolean; tax_rate_id: string | null }>;
+  itemTaxMeta: Record<string, ItemTaxMeta>;
   rateFracById: Record<string, number>; // tax_rate_id -> fraction
   rateNameById: Record<string, string>; // tax_rate_id -> label
 };
+
+// The tax buckets a single item contributes to. One bucket per applicable rate
+// (multi-tax), or one default bucket, or none when non-taxable / no positive rate.
+// Bucket identity is label@frac so identical rates across items accumulate together
+// and per-bucket rounding matches every call site (register, close, split, guest).
+export function itemTaxBuckets(
+  meta: ItemTaxMeta | undefined,
+  cfg: Pick<CartTaxConfig, "defaultRateFrac" | "rateFracById" | "rateNameById">
+): { key: string; label: string; frac: number }[] {
+  const isTaxable = meta ? meta.taxable : true;
+  if (!isTaxable) return [];
+  const ids = meta && meta.tax_rate_ids.length > 0 ? meta.tax_rate_ids : null;
+  if (!ids) {
+    const frac = cfg.defaultRateFrac;
+    return frac > 0 ? [{ key: "Tax@" + frac.toFixed(6), label: "Tax", frac }] : [];
+  }
+  const out: { key: string; label: string; frac: number }[] = [];
+  for (const id of ids) {
+    const frac = cfg.rateFracById[id];
+    if (frac === undefined || frac <= 0) continue;
+    const label = cfg.rateNameById[id] || "Tax";
+    out.push({ key: label + "@" + frac.toFixed(6), label, frac });
+  }
+  return out;
+}
 
 export type CartTaxResult = {
   tax: number;
@@ -24,18 +53,10 @@ export function computeCartTax(items: TaxItem[], cfg: CartTaxConfig, taxF: numbe
   const rateBuckets: Record<string, { label: string; frac: number; base: number }> = {};
   for (const i of items) {
     const meta = i.catalog_item_id ? cfg.itemTaxMeta[i.catalog_item_id] : undefined;
-    const isTaxable = meta ? meta.taxable : true;
-    if (!isTaxable) continue;
-    let frac = cfg.defaultRateFrac;
-    let label = "Tax";
-    if (meta && meta.tax_rate_id && cfg.rateFracById[meta.tax_rate_id] !== undefined) {
-      frac = cfg.rateFracById[meta.tax_rate_id];
-      label = cfg.rateNameById[meta.tax_rate_id] || "Tax";
+    for (const b of itemTaxBuckets(meta, cfg)) {
+      if (!rateBuckets[b.key]) rateBuckets[b.key] = { label: b.label, frac: b.frac, base: 0 };
+      rateBuckets[b.key].base += i.unit_price * i.quantity;
     }
-    if (frac <= 0) continue;
-    const key = label + "@" + frac.toFixed(6);
-    if (!rateBuckets[key]) rateBuckets[key] = { label: label, frac: frac, base: 0 };
-    rateBuckets[key].base += i.unit_price * i.quantity;
   }
 
   let tax = 0;

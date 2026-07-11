@@ -696,6 +696,52 @@ export async function setCatalogItemTaxRate(
   return { ok: true };
 }
 
+// Multi-tax: set the full set of taxes on an item (junction is the source of truth).
+// Also clears the legacy single tax_rate_id so an empty set unambiguously means "use
+// the business default rate" (no stale fallback). Owner/manager only (RLS enforces).
+export async function setCatalogItemTaxes(
+  id: string,
+  rateIds: string[]
+): Promise<{ ok: true } | { error: string }> {
+  if (!id) return { error: "Missing item." };
+  const { business, role } = await requireBusiness();
+  assertConfigEditable(business);
+  if (role !== "owner" && role !== "manager") return { error: "Only an owner or manager can change taxes." };
+  const supabase = await createClient();
+
+  const wanted = Array.from(new Set((rateIds || []).filter((x) => !!x)));
+  if (wanted.length > 0) {
+    const { data: valid } = await supabase
+      .from("tax_rates")
+      .select("id")
+      .eq("business_id", business.id)
+      .in("id", wanted);
+    const validIds = new Set((valid ?? []).map((r) => r.id as string));
+    if (wanted.some((x) => !validIds.has(x))) return { error: "One of those tax rates was not found." };
+  }
+
+  // Replace the junction rows for this item.
+  const { error: delErr } = await supabase
+    .from("catalog_item_taxes")
+    .delete()
+    .eq("business_id", business.id)
+    .eq("catalog_item_id", id);
+  if (delErr) { console.error("setCatalogItemTaxes delete:", delErr); return { error: "Could not update taxes. Please try again." }; }
+
+  if (wanted.length > 0) {
+    const rows = wanted.map((rid) => ({ business_id: business.id, catalog_item_id: id, tax_rate_id: rid }));
+    const { error: insErr } = await supabase.from("catalog_item_taxes").insert(rows);
+    if (insErr) { console.error("setCatalogItemTaxes insert:", insErr); return { error: "Could not update taxes. Please try again." }; }
+  }
+
+  // Clear the legacy single rate so the junction is authoritative (empty = default).
+  await supabase.from("catalog_items").update({ tax_rate_id: null }).eq("id", id).eq("business_id", business.id);
+
+  revalidatePath("/app/catalog");
+  revalidatePath("/app/pos");
+  return { ok: true };
+}
+
 // P0-1: the course a menu item fires with by default on a full-service table.
 export async function setCatalogItemDefaultCourse(
   id: string,

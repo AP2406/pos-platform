@@ -2,6 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { loadItemTaxMeta } from "@/lib/services/tax-meta";
+import { itemTaxBuckets } from "@/lib/services/tax-compute";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { DISCOUNT_REASONS, COMP_REASONS, TAX_EXEMPT_REASONS, isValidReason } from "./reason-codes";
@@ -159,49 +161,16 @@ export async function finalizeSplitCheck(
   const lineIds = Array.from(
     new Set(allItems.map((i) => i.catalog_item_id).filter((id): id is string => !!id))
   );
-  const itemTaxMeta: Record<string, { taxable: boolean; tax_rate_id: string | null }> = {};
-  if (lineIds.length > 0) {
-    const { data: taxRows } = await supabase
-      .from("catalog_items")
-      .select("id, taxable, tax_rate_id")
-      .eq("business_id", business.id)
-      .in("id", lineIds);
-    for (const r of taxRows ?? []) {
-      itemTaxMeta[r.id as string] = {
-        taxable: (r.taxable as boolean | null) ?? true,
-        tax_rate_id: (r.tax_rate_id as string | null) ?? null,
-      };
-    }
-  }
-  const usedRateIds = Array.from(
-    new Set(Object.values(itemTaxMeta).map((m) => m.tax_rate_id).filter((id): id is string => !!id))
-  );
-  const rateFracById: Record<string, number> = {};
-  const rateNameById: Record<string, string> = {};
-  if (usedRateIds.length > 0) {
-    const { data: rateRows } = await supabase
-      .from("tax_rates")
-      .select("id, name, rate")
-      .eq("business_id", business.id)
-      .in("id", usedRateIds);
-    for (const r of rateRows ?? []) {
-      rateFracById[r.id as string] = (Number(r.rate) || 0) / 100;
-      rateNameById[r.id as string] = r.name as string;
-    }
-  }
+  const { itemTaxMeta, rateFracById, rateNameById } = await loadItemTaxMeta(supabase, business.id, lineIds);
+  const taxCfg = { defaultRateFrac: defaultRate, rateFracById, rateNameById };
 
-  // Bucket identity (label@frac) for a line, mirroring createOrder.
-  function bucketOf(it: SplitItem): { taxable: boolean; key: string; label: string; frac: number } {
-    const meta = it.catalog_item_id ? itemTaxMeta[it.catalog_item_id] : undefined;
-    const isTaxable = meta ? meta.taxable : it.taxable !== false;
-    let frac = defaultRate;
-    let label = "Tax";
-    if (meta && meta.tax_rate_id && rateFracById[meta.tax_rate_id] !== undefined) {
-      frac = rateFracById[meta.tax_rate_id];
-      label = rateNameById[meta.tax_rate_id] || "Tax";
-    }
-    if (!isTaxable || frac <= 0) return { taxable: false, key: "", label: "", frac: 0 };
-    return { taxable: true, key: label + "@" + frac.toFixed(6), label, frac };
+  // The tax buckets a split line contributes to (multi-tax: one per applicable rate).
+  // A line with no catalog_item_id falls back to its own taxable flag + the default
+  // rate, matching createOrder's treatment of custom lines.
+  function bucketsOf(it: SplitItem): { key: string; label: string; frac: number }[] {
+    if (it.catalog_item_id) return itemTaxBuckets(itemTaxMeta[it.catalog_item_id], taxCfg);
+    if (it.taxable === false || defaultRate <= 0) return [];
+    return [{ key: "Tax@" + defaultRate.toFixed(6), label: "Tax", frac: defaultRate }];
   }
 
   // --- whole-check authoritative totals (identical math to createOrder) ---
@@ -239,10 +208,10 @@ export async function finalizeSplitCheck(
   // whole-check tax buckets
   const wholeBuckets: Record<string, { label: string; frac: number; base: number }> = {};
   for (const it of data.items) {
-    const b = bucketOf(it);
-    if (!b.taxable) continue;
-    if (!wholeBuckets[b.key]) wholeBuckets[b.key] = { label: b.label, frac: b.frac, base: 0 };
-    wholeBuckets[b.key].base += it.unit_price * it.quantity;
+    for (const b of bucketsOf(it)) {
+      if (!wholeBuckets[b.key]) wholeBuckets[b.key] = { label: b.label, frac: b.frac, base: 0 };
+      wholeBuckets[b.key].base += it.unit_price * it.quantity;
+    }
   }
   const bucketTaxCents: Record<string, number> = {};
   let tax = 0;
@@ -324,9 +293,8 @@ export async function finalizeSplitCheck(
     let s = 0;
     for (const ln of data.checks[ci].lines) {
       s += c(ln.unit_price * ln.quantity);
-      const b = bucketOf(ln);
-      if (b.taxable && checkBucketBaseCents[b.key]) {
-        checkBucketBaseCents[b.key][ci] += c(ln.unit_price * ln.quantity);
+      for (const b of bucketsOf(ln)) {
+        if (checkBucketBaseCents[b.key]) checkBucketBaseCents[b.key][ci] += c(ln.unit_price * ln.quantity);
       }
     }
     checkSubtotalCents.push(s);

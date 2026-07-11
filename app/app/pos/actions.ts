@@ -7,6 +7,7 @@ import { type PermissionKey } from "@/lib/services/permissions";
 import { parseThresholds } from "@/lib/services/exception-thresholds";
 import { isOrderPeriodLocked } from "@/lib/services/period-lock";
 import { computeCartTax } from "@/lib/services/tax-compute";
+import { loadItemTaxMeta } from "@/lib/services/tax-meta";
 import { notifyBusiness } from "@/lib/push";
 import { emailOwnerAlert } from "@/lib/services/owner-alerts";
 import { revalidatePath } from "next/cache";
@@ -359,41 +360,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
         .filter((id): id is string => !!id)
     )
   );
-  const itemTaxMeta: Record<string, { taxable: boolean; tax_rate_id: string | null }> = {};
-  if (taxLineIds.length > 0) {
-    const { data: taxRows } = await supabase
-      .from("catalog_items")
-      .select("id, taxable, tax_rate_id")
-      .eq("business_id", business.id)
-      .in("id", taxLineIds);
-    for (const r of taxRows ?? []) {
-      itemTaxMeta[r.id as string] = {
-        taxable: (r.taxable as boolean | null) ?? true,
-        tax_rate_id: (r.tax_rate_id as string | null) ?? null,
-      };
-    }
-  }
-
-  const usedRateIds = Array.from(
-    new Set(
-      Object.values(itemTaxMeta)
-        .map((m) => m.tax_rate_id)
-        .filter((id): id is string => !!id)
-    )
-  );
-  const rateFracById: Record<string, number> = {};
-  const rateNameById: Record<string, string> = {};
-  if (usedRateIds.length > 0) {
-    const { data: rateRows } = await supabase
-      .from("tax_rates")
-      .select("id, name, rate")
-      .eq("business_id", business.id)
-      .in("id", usedRateIds);
-    for (const r of rateRows ?? []) {
-      rateFracById[r.id as string] = (Number(r.rate) || 0) / 100;
-      rateNameById[r.id as string] = r.name as string;
-    }
-  }
+  const { itemTaxMeta, rateFracById, rateNameById } = await loadItemTaxMeta(supabase, business.id, taxLineIds);
 
   const taxF = subtotal > 0 ? netSubtotal / subtotal : 0;
 
