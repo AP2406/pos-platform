@@ -68,6 +68,22 @@ type ModifierGroup = { id: string; name: string; required: boolean; min_select: 
 type ModPosition = "whole" | "left" | "right";
 type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null; track_inventory?: boolean; stock_qty?: number | null; reorder_point?: number | null; open_price?: boolean; requires_manager_approval?: boolean; short_name?: string | null; off_hours?: boolean; sales_category?: string | null };
 type Course = { id: string; name: string; sort_order: number };
+// A chosen modifier, kept structurally on the line (not just baked into the name).
+// `price` is the option's MENU LIST price at sale time — the same delta already folded
+// into unit_price, NOT a second charge. It is not a discounted-revenue allocation: when
+// a line-level adjustment applies (happy-hour percent, comp, discount, void) the amount
+// actually charged for the option can be less, so a report must count attaches + list
+// price and reconcile line-level adjustments at the line level, never assume
+// sum(modifiers.price) == the line's charged modifier revenue. Enables modifier
+// attach-rate/mix reporting, structured chits, and editing a choice without re-adding.
+type LineModifier = {
+  modifier_id: string | null;
+  group_id: string | null;
+  group_name: string | null;
+  name: string;
+  price: number;
+  position?: "whole" | "left" | "right";
+};
 type CartLine = {
   catalog_item_id: string | null;
   variation_id: string | null;
@@ -76,6 +92,9 @@ type CartLine = {
   quantity: number;
   taxable: boolean;
   taxFrac: number;
+  // Structured record of the modifiers chosen for this line (their prices are already
+  // inside unit_price). Absent/empty for items with no modifiers.
+  modifiers?: LineModifier[];
   // How many of this line have already been fired to the kitchen (table mode).
   sent_qty?: number;
   // Optional kitchen note ("no onions", "well done").
@@ -201,6 +220,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
       fired_at: it.fired_at ?? null,
       void: it.void ?? null,
       guest: (it as { guest?: boolean }).guest === true,
+      modifiers: (it as { modifiers?: LineModifier[] | null }).modifiers ?? undefined,
     };
   });
 }
@@ -326,6 +346,9 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
   // P1: kitchen note + allergen flags captured at add-item time (not just line-edit).
   const [pickerNote, setPickerNote] = useState("");
   const [pickerAllergens, setPickerAllergens] = useState<string[]>([]);
+  // When set, the picker is EDITING this cart line (change variation/options) rather
+  // than adding a new one; confirmOptions replaces that line instead of appending.
+  const [pickerEditIndex, setPickerEditIndex] = useState<number | null>(null);
   const [openTickets, setOpenTickets] = useState<OpenTicketSummary[]>([]);
   const [ticketsOpen, setTicketsOpen] = useState(false);
   const [holdOpen, setHoldOpen] = useState(false);
@@ -689,14 +712,16 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
     setOpenTickets(t);
   }
 
-  function addLine(line: { catalog_item_id: string | null; variation_id: string | null; name: string; unit_price: number; taxable: boolean; taxFrac: number; note?: string | null; allergy?: string | null }) {
+  function addLine(line: { catalog_item_id: string | null; variation_id: string | null; name: string; unit_price: number; taxable: boolean; taxFrac: number; note?: string | null; allergy?: string | null; modifiers?: LineModifier[] }) {
     setReceipt(null);
     const seat = tableMode ? activeSeat : null;
     const note = line.note && line.note.trim() ? line.note.trim() : null;
     const allergy = line.allergy && line.allergy.trim() ? line.allergy.trim() : null;
+    const modifiers = line.modifiers && line.modifiers.length > 0 ? line.modifiers : undefined;
     setCart((prev) => {
       // A line carrying a note/allergy is kept distinct (don't merge it into an
-      // existing plain line — the kitchen instructions differ).
+      // existing plain line — the kitchen instructions differ). Two lines with the
+      // same modifier choices carry the same baked name, so they still stack.
       const match = (l: CartLine) =>
         l.catalog_item_id === line.catalog_item_id &&
         l.variation_id === line.variation_id &&
@@ -720,6 +745,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
           course_id: defaultCourseFor(line.catalog_item_id),
           note: note,
           allergy: allergy,
+          modifiers: modifiers,
         },
       ];
     });
@@ -764,6 +790,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       setPickerPos({});
       setPickerNote("");
       setPickerAllergens([]);
+      setPickerEditIndex(null); // a fresh add, not an edit
       setPickerItem(item);
       return;
     }
@@ -966,9 +993,15 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       const v = item.variations.find((x) => x.id === pickerVariationId);
       if (v) unit = v.price;
     }
+    let modTotal = 0;
     for (const m of item.modifiers) {
-      if (pickerMods.includes(m.id)) unit = unit + m.price;
+      if (pickerMods.includes(m.id)) modTotal += m.price;
     }
+    unit = unit + modTotal;
+    // Apply the active happy-hour window exactly as confirmOptions does, so the
+    // button's price is what actually gets saved (add AND edit) — not a pre-window figure.
+    const win = activeWindow(item);
+    if (win) unit = win.mode === "percent" ? windowPrice(unit, win) : Math.max(0, win.value + modTotal);
     return Math.round(unit * 100) / 100;
   }
 
@@ -987,6 +1020,12 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
     }
     const chosen = item.modifiers.filter((m) => pickerMods.includes(m.id));
     const modTotal = chosen.reduce((s, m) => s + m.price, 0);
+    // Structured record of the chosen options (position included when the group splits).
+    const lineMods: LineModifier[] = chosen.map((m) => {
+      const grp = pickerGroupOf(m.id);
+      const pos = grp?.allow_split ? (pickerPos[m.id] ?? "whole") : "whole";
+      return { modifier_id: m.id, group_id: grp?.id ?? null, group_name: grp?.name ?? null, name: m.name, price: m.price, position: pos };
+    });
     if (chosen.length > 0) {
       unit = unit + modTotal;
       // Half/left-right placement rides in the line name (½L / ½R); price is the
@@ -1005,6 +1044,16 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       unit = win.mode === "percent" ? windowPrice(unit, win) : Math.max(0, win.value + modTotal);
     }
     unit = Math.round(unit * 100) / 100;
+    // Editing an existing line: replace its variation/options/price/note in place,
+    // preserving quantity, seat, course, allergy and fired state. (Fired lines can't
+    // be edited — see lineOptionsEditable — so we never rewrite the kitchen's ticket.)
+    if (pickerEditIndex != null) {
+      const idx = pickerEditIndex;
+      const note = pickerNote.trim() ? pickerNote.trim() : null;
+      setCart((prev) => prev.map((l, i) => (i === idx ? { ...l, variation_id: varId, name: label, unit_price: unit, note: note, modifiers: lineMods.length > 0 ? lineMods : undefined } : l)));
+      closePicker();
+      return;
+    }
     // Allergen chips compile into the per-line allergy string (the KDS + chit
     // already render `allergy`); the note rides alongside.
     const allergyStr = pickerAllergens.length > 0 ? allergenLabels(pickerAllergens).join(", ") : "";
@@ -1017,9 +1066,56 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       taxFrac: item.taxFrac,
       note: pickerNote,
       allergy: allergyStr,
+      modifiers: lineMods.length > 0 ? lineMods : undefined,
     });
-    setPickerItem(null);
+    closePicker();
     maybeUpsell(item);
+  }
+
+  function closePicker() {
+    setPickerItem(null);
+    setPickerEditIndex(null);
+  }
+
+  // A line can have its options re-picked only if its catalog item still exists, still
+  // has variations/modifiers, and it hasn't been fired to the kitchen (editing a fired
+  // line would silently change a ticket the kitchen already has — use Void instead).
+  function lineOptionsEditable(index: number): boolean {
+    const l = cart[index];
+    if (!l || !l.catalog_item_id || (l.sent_qty ?? 0) > 0) return false;
+    const it = items.find((x) => x.id === l.catalog_item_id);
+    if (!it || (it.variations.length === 0 && it.modifiers.length === 0)) return false;
+    // Only editable if every stored modifier maps to a current option id. Otherwise the
+    // picker (which keys on option ids) couldn't preselect it, and Save would silently
+    // drop that paid add-on and lower the price — safer to delete + re-add such a line.
+    const optIds = new Set(it.modifiers.map((m) => m.id));
+    for (const m of l.modifiers ?? []) {
+      if (!m.modifier_id || !optIds.has(m.modifier_id)) return false;
+    }
+    return true;
+  }
+
+  // Re-open the picker on an existing line, prefilled from its structured modifiers,
+  // so a chosen size/temperature/topping can be changed without delete + re-add.
+  function editLineOptions(index: number) {
+    const l = cart[index];
+    if (!l || !l.catalog_item_id) return;
+    const it = items.find((x) => x.id === l.catalog_item_id);
+    if (!it || (it.variations.length === 0 && it.modifiers.length === 0)) return;
+    setReceipt(null);
+    setPickerVariationId(l.variation_id ?? null);
+    const mods = l.modifiers ?? [];
+    setPickerMods(mods.map((m) => m.modifier_id).filter((x): x is string => !!x));
+    const pos: Record<string, ModPosition> = {};
+    for (const m of mods) if (m.modifier_id && m.position && m.position !== "whole") pos[m.modifier_id] = m.position;
+    setPickerPos(pos);
+    setPickerNote(l.note ?? "");
+    // Allergy is preserved as-is on the line (edited via the line editor's Allergy
+    // field), not reconstructed from chips here, so re-picking options never drops it.
+    setPickerAllergens([]);
+    setPickerEditIndex(index);
+    setPickerItem(it);
+    setEditLineIndex(null);
   }
 
   function changeQty(index: number, delta: number) {
@@ -1294,6 +1390,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
         fired_at: l.fired_at ?? null,
         void: l.void ?? null,
         guest: l.guest === true,
+        modifiers: l.modifiers ?? null,
       })),
       tip: tip,
       discount_mode: discountMode,
@@ -2659,11 +2756,11 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       )}
 
       {pickerItem && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setPickerItem(null)}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={closePicker}>
           <div className="bg-card border border-border rounded-lg p-4 w-full max-w-sm max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-medium">{pickerItem.name}</h3>
-              <button type="button" onClick={() => setPickerItem(null)} className="text-xs text-muted-foreground underline">
+              <button type="button" onClick={closePicker} className="text-xs text-muted-foreground underline">
                 Cancel
               </button>
             </div>
@@ -2721,7 +2818,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
             </div>
 
             <Button className="w-full" onClick={confirmOptions} disabled={(pickerItem.variations.length > 0 && !pickerVariationId) || requiredUnmet(pickerItem).length > 0}>
-              {requiredUnmet(pickerItem).length > 0 ? "Choose " + requiredUnmet(pickerItem)[0].name : "Add to cart - $" + pickerUnitPrice(pickerItem).toFixed(2)}
+              {requiredUnmet(pickerItem).length > 0 ? "Choose " + requiredUnmet(pickerItem)[0].name : (pickerEditIndex != null ? "Save - $" : "Add to cart - $") + pickerUnitPrice(pickerItem).toFixed(2)}
             </Button>
           </div>
         </div>
@@ -3534,6 +3631,11 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                   <p className="text-[11px] text-amber-600 mt-1.5">
                     🔒 Already sent to the kitchen — you can add more or change the note, but not reduce or remove it. To take it off, use Void.
                   </p>
+                )}
+                {lineOptionsEditable(editLineIndex) && (
+                  <button type="button" onClick={() => editLineOptions(editLineIndex!)} className="w-full h-10 mt-3 rounded-md border border-border text-sm hover:bg-accent">
+                    Edit options{cart[editLineIndex].modifiers && cart[editLineIndex].modifiers!.length > 0 ? " (" + cart[editLineIndex].modifiers!.length + ")" : ""}
+                  </button>
                 )}
                 <div className="space-y-1 mt-3">
                   <Label className="text-xs">Kitchen note</Label>

@@ -574,6 +574,10 @@ export async function createModifierGroup(
     .maybeSingle();
   const sort = maxRow ? (maxRow.sort_order as number) + 1 : 0;
   const required = parsed.data.required ?? false;
+  let min = parsed.data.min_select ?? (required ? 1 : 0);
+  let max = parsed.data.max_select ?? null;
+  if (required && min < 1) min = 1;
+  if (max !== null && max < min) max = min;
   const { data, error } = await supabase
     .from("catalog_modifier_groups")
     .insert({
@@ -581,8 +585,8 @@ export async function createModifierGroup(
       catalog_item_id: catalogItemId,
       name: parsed.data.name,
       required: required,
-      min_select: parsed.data.min_select ?? (required ? 1 : 0),
-      max_select: parsed.data.max_select ?? null,
+      min_select: min,
+      max_select: max,
       allow_split: parsed.data.allow_split ?? false,
       sort_order: sort,
     })
@@ -599,16 +603,38 @@ export async function createModifierGroup(
 export async function updateModifierGroup(
   id: string,
   input: { name?: string; required?: boolean; min_select?: number; max_select?: number | null; allow_split?: boolean }
-): Promise<{ ok: true } | { error: string }> {
+): Promise<{ ok: true; required: boolean; min_select: number; max_select: number | null } | { error: string }> {
   if (!id) return { error: "Missing group." };
   const { business } = await requireBusiness();
   assertConfigEditable(business);
   const supabase = await createClient();
-  const patch: Record<string, unknown> = {};
+  // Read the current group so min/max/required stay mutually coherent even when only
+  // one field is edited (each field saves on its own blur). An incoherent range the
+  // register can never satisfy — max < min, or required with min 0 — would silently
+  // break enforcement (the whole point of a forced modifier).
+  const { data: cur } = await supabase
+    .from("catalog_modifier_groups")
+    .select("required, min_select, max_select")
+    .eq("id", id)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!cur) return { error: "Group not found." };
+
+  const required = input.required !== undefined ? !!input.required : !!cur.required;
+  let min = input.min_select !== undefined ? Math.max(0, Math.min(50, Math.round(input.min_select))) : Number(cur.min_select) || 0;
+  let max =
+    input.max_select !== undefined
+      ? input.max_select === null
+        ? null
+        : Math.max(1, Math.min(50, Math.round(input.max_select)))
+      : cur.max_select == null
+        ? null
+        : Number(cur.max_select);
+  if (required && min < 1) min = 1; // a required group must let the guest pick at least one
+  if (max !== null && max < min) max = min; // max can never be below min
+
+  const patch: Record<string, unknown> = { required, min_select: min, max_select: max };
   if (input.name !== undefined) patch.name = input.name.trim().slice(0, 60) || "Group";
-  if (input.required !== undefined) patch.required = !!input.required;
-  if (input.min_select !== undefined) patch.min_select = Math.max(0, Math.min(50, Math.round(input.min_select)));
-  if (input.max_select !== undefined) patch.max_select = input.max_select === null ? null : Math.max(1, Math.min(50, Math.round(input.max_select)));
   if (input.allow_split !== undefined) patch.allow_split = !!input.allow_split;
   const { error } = await supabase
     .from("catalog_modifier_groups")
@@ -620,7 +646,7 @@ export async function updateModifierGroup(
     return { error: "Could not update the group." };
   }
   revalidatePath("/app/catalog");
-  return { ok: true };
+  return { ok: true, required, min_select: min, max_select: max };
 }
 
 export async function deleteModifierGroup(

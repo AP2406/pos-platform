@@ -54,13 +54,16 @@ export function ModifierGroupsEditor({ itemId, initial, catalogItems = [] }: { i
   function saveGroup(id: string, fields: Partial<ModGroup>) {
     patch(id, fields);
     startTransition(async () => {
-      await updateModifierGroup(id, {
+      const res = await updateModifierGroup(id, {
         name: fields.name,
         required: fields.required,
         min_select: fields.min_select,
         max_select: fields.max_select,
         allow_split: fields.allow_split,
       });
+      // Reflect the server's reconciled range (required⇒min≥1, max≥min) so the inputs
+      // don't show an incoherent value the register won't honor.
+      if ("ok" in res) patch(id, { required: res.required, min_select: res.min_select, max_select: res.max_select });
     });
   }
 
@@ -145,6 +148,12 @@ export function ModifierGroupsEditor({ itemId, initial, catalogItems = [] }: { i
                 Split ½ L/R
               </label>
             </div>
+
+            {g.required && g.options.length === 0 && (
+              <p className="text-xs text-amber-600">
+                ⚠ This required group has no options yet — the register skips it until you add at least one, so nothing is actually enforced.
+              </p>
+            )}
 
             <div className="space-y-1">
               {g.options.length === 0 ? (
