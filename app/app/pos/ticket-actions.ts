@@ -6,12 +6,24 @@ import { getActiveStaff } from "./staff-session";
 import { verifyManagerPin } from "./approval-actions";
 import { z } from "zod";
 
+// A chosen modifier kept structurally on the line (price already inside unit_price).
+const lineModifierSchema = z.object({
+  modifier_id: z.string().uuid().optional().nullable(),
+  group_id: z.string().uuid().optional().nullable(),
+  group_name: z.string().max(60).optional().nullable(),
+  name: z.string().min(1).max(120),
+  price: z.coerce.number().min(0).max(1000000),
+  position: z.enum(["whole", "left", "right"]).optional(),
+});
+
 const cartLineSchema = z.object({
   catalog_item_id: z.string().uuid().optional().nullable(),
   variation_id: z.string().uuid().optional().nullable(),
   name: z.string().min(1).max(120),
   unit_price: z.coerce.number().min(0).max(1000000),
   quantity: z.coerce.number().int().min(1).max(1000),
+  // Structured modifier breakdown, so a resumed table/tab keeps its choices as data.
+  modifiers: z.array(lineModifierSchema).max(40).optional().nullable(),
 });
 
 const customerSchema = z.object({

@@ -15,6 +15,20 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import { VOID_REASONS, DISCOUNT_REASONS, TAX_EXEMPT_REASONS, COMP_REASONS, SERVICE_CHARGE_WAIVE_REASONS, isValidReason } from "./reason-codes";
 
+// A chosen modifier recorded on a line. `price` is the option's MENU LIST price (already
+// inside unit_price — a breakdown, not a second charge). Like unit_price it is
+// client-reported and bounded but not reconciled here, so reporting must treat it as a
+// list price (attach-rate/mix), not as reconciled revenue — line-level adjustments
+// (happy-hour percent, comp, discount, void) are accounted for at the line/order level.
+const lineModifierSchema = z.object({
+  modifier_id: z.string().uuid().optional().nullable(),
+  group_id: z.string().uuid().optional().nullable(),
+  group_name: z.string().max(60).optional().nullable(),
+  name: z.string().min(1).max(120),
+  price: z.coerce.number().min(0).max(1000000),
+  position: z.enum(["whole", "left", "right"]).optional(),
+});
+
 const lineSchema = z.object({
   catalog_item_id: z.string().uuid().optional().nullable(),
   name: z.string().min(1).max(120),
@@ -23,6 +37,7 @@ const lineSchema = z.object({
   note: z.string().max(280).optional().nullable(),
   allergy: z.string().max(120).optional().nullable(),
   seat: z.coerce.number().int().min(1).max(99).optional().nullable(),
+  modifiers: z.array(lineModifierSchema).max(40).optional().nullable(),
 });
 
 const DINING_OPTIONS = ["dine_in", "takeout", "delivery", "pickup"] as const;
@@ -569,6 +584,10 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       note: i.note ?? null,
       allergy: i.allergy ?? null,
       seat: i.seat ?? null,
+      // Structured modifier breakdown (list prices, already inside unit_price). Persisted
+      // source for modifier attach-rate/mix reporting and structured chit rendering — see
+      // lineModifierSchema on why `price` is a list price, not reconciled revenue.
+      modifiers: i.modifiers && i.modifiers.length > 0 ? i.modifiers : null,
     })),
     subtotal: Math.round(subtotal * 100) / 100,
     discount: {
@@ -699,6 +718,9 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
     name: i.name,
     unit_price: i.unit_price,
     quantity: i.quantity,
+    // Carried for a future relational order_item_modifiers table; the current RPC
+    // ignores unknown line keys, so this is inert until then.
+    modifiers: i.modifiers && i.modifiers.length > 0 ? i.modifiers : undefined,
   }));
 
   const paymentsPayload = tenders.map((t) => ({

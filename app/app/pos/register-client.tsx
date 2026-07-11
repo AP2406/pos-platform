@@ -68,6 +68,22 @@ type ModifierGroup = { id: string; name: string; required: boolean; min_select: 
 type ModPosition = "whole" | "left" | "right";
 type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null; track_inventory?: boolean; stock_qty?: number | null; reorder_point?: number | null; open_price?: boolean; requires_manager_approval?: boolean; short_name?: string | null; off_hours?: boolean; sales_category?: string | null };
 type Course = { id: string; name: string; sort_order: number };
+// A chosen modifier, kept structurally on the line (not just baked into the name).
+// `price` is the option's MENU LIST price at sale time — the same delta already folded
+// into unit_price, NOT a second charge. It is not a discounted-revenue allocation: when
+// a line-level adjustment applies (happy-hour percent, comp, discount, void) the amount
+// actually charged for the option can be less, so a report must count attaches + list
+// price and reconcile line-level adjustments at the line level, never assume
+// sum(modifiers.price) == the line's charged modifier revenue. Enables modifier
+// attach-rate/mix reporting, structured chits, and editing a choice without re-adding.
+type LineModifier = {
+  modifier_id: string | null;
+  group_id: string | null;
+  group_name: string | null;
+  name: string;
+  price: number;
+  position?: "whole" | "left" | "right";
+};
 type CartLine = {
   catalog_item_id: string | null;
   variation_id: string | null;
@@ -76,6 +92,9 @@ type CartLine = {
   quantity: number;
   taxable: boolean;
   taxFrac: number;
+  // Structured record of the modifiers chosen for this line (their prices are already
+  // inside unit_price). Absent/empty for items with no modifiers.
+  modifiers?: LineModifier[];
   // How many of this line have already been fired to the kitchen (table mode).
   sent_qty?: number;
   // Optional kitchen note ("no onions", "well done").
@@ -201,6 +220,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
       fired_at: it.fired_at ?? null,
       void: it.void ?? null,
       guest: (it as { guest?: boolean }).guest === true,
+      modifiers: (it as { modifiers?: LineModifier[] | null }).modifiers ?? undefined,
     };
   });
 }
@@ -689,14 +709,16 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
     setOpenTickets(t);
   }
 
-  function addLine(line: { catalog_item_id: string | null; variation_id: string | null; name: string; unit_price: number; taxable: boolean; taxFrac: number; note?: string | null; allergy?: string | null }) {
+  function addLine(line: { catalog_item_id: string | null; variation_id: string | null; name: string; unit_price: number; taxable: boolean; taxFrac: number; note?: string | null; allergy?: string | null; modifiers?: LineModifier[] }) {
     setReceipt(null);
     const seat = tableMode ? activeSeat : null;
     const note = line.note && line.note.trim() ? line.note.trim() : null;
     const allergy = line.allergy && line.allergy.trim() ? line.allergy.trim() : null;
+    const modifiers = line.modifiers && line.modifiers.length > 0 ? line.modifiers : undefined;
     setCart((prev) => {
       // A line carrying a note/allergy is kept distinct (don't merge it into an
-      // existing plain line — the kitchen instructions differ).
+      // existing plain line — the kitchen instructions differ). Two lines with the
+      // same modifier choices carry the same baked name, so they still stack.
       const match = (l: CartLine) =>
         l.catalog_item_id === line.catalog_item_id &&
         l.variation_id === line.variation_id &&
@@ -720,6 +742,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
           course_id: defaultCourseFor(line.catalog_item_id),
           note: note,
           allergy: allergy,
+          modifiers: modifiers,
         },
       ];
     });
@@ -987,6 +1010,12 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
     }
     const chosen = item.modifiers.filter((m) => pickerMods.includes(m.id));
     const modTotal = chosen.reduce((s, m) => s + m.price, 0);
+    // Structured record of the chosen options (position included when the group splits).
+    const lineMods: LineModifier[] = chosen.map((m) => {
+      const grp = pickerGroupOf(m.id);
+      const pos = grp?.allow_split ? (pickerPos[m.id] ?? "whole") : "whole";
+      return { modifier_id: m.id, group_id: grp?.id ?? null, group_name: grp?.name ?? null, name: m.name, price: m.price, position: pos };
+    });
     if (chosen.length > 0) {
       unit = unit + modTotal;
       // Half/left-right placement rides in the line name (½L / ½R); price is the
@@ -1017,6 +1046,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       taxFrac: item.taxFrac,
       note: pickerNote,
       allergy: allergyStr,
+      modifiers: lineMods.length > 0 ? lineMods : undefined,
     });
     setPickerItem(null);
     maybeUpsell(item);
@@ -1294,6 +1324,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
         fired_at: l.fired_at ?? null,
         void: l.void ?? null,
         guest: l.guest === true,
+        modifiers: l.modifiers ?? null,
       })),
       tip: tip,
       discount_mode: discountMode,
