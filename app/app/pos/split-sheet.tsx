@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { allocateEqual } from "./split-math";
+import { quoteSplitCheck, type SplitQuoteCheck } from "./split-actions";
 
 export type SplitLine = {
   catalog_item_id: string | null;
@@ -16,9 +18,22 @@ export type SplitLine = {
   shared_seats?: number[] | null;
 };
 
+export type SplitPayment = { method: "cash" | "card" | "other"; amount: number };
 export type SplitCheck = {
   lines: SplitLine[];
-  payment_method: "cash" | "card" | "other";
+  // Per-square multi-tender: the payments collected for this square (empty on the
+  // table path, where children are settled later via the normal register tender).
+  payments: SplitPayment[];
+};
+
+// Whole-check adjustments needed to quote authoritative per-square totals.
+export type SplitQuoteContext = {
+  discount_type?: "amount" | "percent";
+  discount_value?: number;
+  comp_value?: number;
+  service_charge?: boolean;
+  tax_exempt?: boolean;
+  customer_id?: string | null;
 };
 
 type Props = {
@@ -28,6 +43,10 @@ type Props = {
   allowUnits: boolean;
   settlementMode: "separate" | "informational";
   pending: boolean;
+  // When true (counter/takeout), collect payment now via the squares UI. When false
+  // (a real table), splitting just creates child checks that pay later — no squares.
+  settleNow: boolean;
+  quoteContext: SplitQuoteContext;
   onConfirm: (checks: SplitCheck[]) => void;
 };
 
@@ -48,9 +67,19 @@ export function SplitSheet(props: Props) {
   const [n, setN] = useState(2);
   // alloc[lineIndex][checkIndex] in cents; rows always sum to lineCents[i].
   const [alloc, setAlloc] = useState<number[][]>([]);
-  const [pays, setPays] = useState<("cash" | "card" | "other")[]>(["cash", "cash"]);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [sharePicker, setSharePicker] = useState<number | null>(null);
+
+  // Settlement phase (settleNow path): quote the authoritative per-square totals,
+  // then collect multi-tender/partial payments against them until each is PAID.
+  const [phase, setPhase] = useState<"allocate" | "settle">("allocate");
+  const [quote, setQuote] = useState<SplitQuoteCheck[] | null>(null);
+  const [quoteErr, setQuoteErr] = useState<string | null>(null);
+  const [quoting, startQuote] = useTransition();
+  const [squarePays, setSquarePays] = useState<SplitPayment[][]>([]);
+  const [activeSquare, setActiveSquare] = useState<number | null>(null);
+  const [payMethod, setPayMethod] = useState<"cash" | "card" | "other">("cash");
+  const [payAmount, setPayAmount] = useState("");
 
   // Seats present on the lines (table checks). Enables the "By seat" shortcut.
   const occupiedSeats = Array.from(
@@ -66,7 +95,11 @@ export function SplitSheet(props: Props) {
       row[0] = lineCents[i];
       return row;
     }));
-    setPays((prev) => Array.from({ length: n }, (_, i) => prev[i] ?? "cash"));
+    setPhase("allocate");
+    setQuote(null);
+    setQuoteErr(null);
+    setSquarePays([]);
+    setActiveSquare(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.open]);
 
@@ -83,7 +116,6 @@ export function SplitSheet(props: Props) {
       if (sum !== lineCents[i]) { row.fill(0); row[0] = lineCents[i]; }
       return row;
     }));
-    setPays((prev) => Array.from({ length: nn }, (_, i) => prev[i] ?? "cash"));
   }
 
   // Auto-group by the seat each line was ordered for. Shared lines (no seat)
@@ -108,7 +140,6 @@ export function SplitSheet(props: Props) {
       }
       return row;
     }));
-    setPays(Array.from({ length: nn }, () => "cash"));
   }
 
   if (!props.open) return null;
@@ -168,7 +199,6 @@ export function SplitSheet(props: Props) {
       row[Math.min(i, nn - 1)] += lineCents[i];
       return row;
     }));
-    setPays(Array.from({ length: nn }, () => "cash"));
   }
   // Even split across all seats. Rotate each line's leftover penny by the line
   // index so the extra cents spread across seats instead of piling on seat 1 —
@@ -216,8 +246,9 @@ export function SplitSheet(props: Props) {
     });
   }
 
-  function buildChecks(): SplitCheck[] {
-    const checks: SplitCheck[] = [];
+  // The per-check line allocation (no payments yet).
+  function buildAllocation(): SplitLine[][] {
+    const out: SplitLine[][] = [];
     for (let ci = 0; ci < n; ci++) {
       const ckLines: SplitLine[] = [];
       for (let i = 0; i < lines.length; i++) {
@@ -231,9 +262,54 @@ export function SplitSheet(props: Props) {
           ckLines.push({ catalog_item_id: lines[i].catalog_item_id, name: lines[i].name + " (shared)", unit_price: Math.round(cents) / 100, quantity: 1, taxable: lines[i].taxable });
         }
       }
-      checks.push({ lines: ckLines, payment_method: pays[ci] ?? "cash" });
+      out.push(ckLines);
     }
-    return checks;
+    return out;
+  }
+
+  // Table path (settleNow=false): children pay later — no squares, no payments.
+  function confirmAllocationOnly() {
+    props.onConfirm(buildAllocation().map((ln) => ({ lines: ln, payments: [] })));
+  }
+
+  // Counter/takeout path: quote server-authoritative per-square totals, then settle.
+  function continueToPayment() {
+    setQuoteErr(null);
+    const allocation = buildAllocation();
+    startQuote(async () => {
+      const res = await quoteSplitCheck({
+        items: lines.map((l) => ({ catalog_item_id: l.catalog_item_id, name: l.name, unit_price: l.unit_price, quantity: l.quantity, taxable: l.taxable })),
+        checks: allocation.map((ln) => ({ lines: ln })),
+        ...props.quoteContext,
+      });
+      if ("error" in res) { setQuoteErr(res.error); return; }
+      setQuote(res.checks);
+      setSquarePays(res.checks.map(() => []));
+      setActiveSquare(null);
+      setPhase("settle");
+    });
+  }
+
+  const squarePaid = (ci: number) => Math.round((squarePays[ci] ?? []).reduce((s, p) => s + p.amount, 0) * 100) / 100;
+  const squareOutstanding = (ci: number) => quote ? Math.round((quote[ci].total - squarePaid(ci)) * 100) / 100 : 0;
+  const allSquaresPaid = !!quote && quote.every((_, ci) => squareOutstanding(ci) <= 0.0001);
+
+  function addPayment(ci: number) {
+    const out = squareOutstanding(ci);
+    if (out <= 0) return;
+    const entered = parseFloat(payAmount);
+    // Default to the outstanding; never overpay a square (keeps sums cent-exact).
+    const amount = Math.min(Number.isFinite(entered) && entered > 0 ? entered : out, out);
+    if (amount <= 0) return;
+    setSquarePays((prev) => prev.map((arr, i) => (i === ci ? [...arr, { method: payMethod, amount: Math.round(amount * 100) / 100 }] : arr)));
+    setPayAmount("");
+  }
+  function removePayment(ci: number, idx: number) {
+    setSquarePays((prev) => prev.map((arr, i) => (i === ci ? arr.filter((_, k) => k !== idx) : arr)));
+  }
+  function completeSplit() {
+    const allocation = buildAllocation();
+    props.onConfirm(allocation.map((ln, ci) => ({ lines: ln, payments: squarePays[ci] ?? [] })));
   }
 
   function rowState(i: number): { whole: number | null; shared: boolean } {
@@ -254,6 +330,7 @@ export function SplitSheet(props: Props) {
           <button type="button" onClick={props.onClose} className="text-xs text-muted-foreground underline">Cancel</button>
         </div>
 
+        {phase === "allocate" && (<>
         <div className="flex items-center justify-between gap-2 p-3 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Seats</span>
@@ -321,30 +398,89 @@ export function SplitSheet(props: Props) {
             );
           })}
         </div>
+        </>)}
+
+        {/* Settle phase (settleNow): squares with Total / Paid / Outstanding. */}
+        {phase === "settle" && quote && (
+          <div className="overflow-y-auto p-3 space-y-2 flex-1">
+            {quote.map((q, ci) => {
+              const out = squareOutstanding(ci);
+              const paid = squarePaid(ci);
+              const done = out <= 0.0001;
+              return (
+                <div key={ci} className={"rounded-md border p-3 " + (done ? "border-emerald-500/60 bg-emerald-500/5" : "border-border")}>
+                  <button type="button" onClick={() => setActiveSquare(activeSquare === ci ? null : ci)} className="w-full flex items-center justify-between text-left">
+                    <div>
+                      <div className="text-sm font-medium">Seat {ci + 1} {done && <span className="ml-1 text-[10px] rounded-full bg-emerald-600 text-white px-1.5 py-0.5 align-middle">PAID</span>}</div>
+                      <div className="text-xs text-muted-foreground tabular-nums">Total ${q.total.toFixed(2)} · Paid ${paid.toFixed(2)}{!done && <span className="text-red-600"> · Outstanding ${out.toFixed(2)}</span>}</div>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{activeSquare === ci ? "Close" : done ? "Edit" : "Pay"}</span>
+                  </button>
+                  {(squarePays[ci] ?? []).length > 0 && (
+                    <div className="mt-2 space-y-0.5">
+                      {(squarePays[ci] ?? []).map((p, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs">
+                          <span className="capitalize text-muted-foreground">{p.method}</span>
+                          <span className="flex items-center gap-2"><span className="tabular-nums">${p.amount.toFixed(2)}</span><button type="button" onClick={() => removePayment(ci, idx)} className="text-red-600 underline">remove</button></span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {activeSquare === ci && !done && (
+                    <div className="mt-2 rounded-md bg-accent/30 p-2 space-y-2">
+                      <div className="flex rounded border border-border overflow-hidden text-xs">
+                        {PAY_METHODS.map((m) => (
+                          <button key={m.key} type="button" onClick={() => setPayMethod(m.key)} className={"flex-1 py-1.5 " + (payMethod === m.key ? "bg-accent font-medium" : "hover:bg-accent/50")}>{m.label}</button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Input type="number" min="0" step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder={out.toFixed(2)} className="h-9 flex-1 text-right" />
+                        <Button className="h-9" onClick={() => addPayment(ci)}>Add</Button>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">Leave blank to pay the full outstanding ${out.toFixed(2)}. Enter less for a partial (split) tender.</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <div className="border-t border-border p-3 space-y-2 shrink-0">
-          <div className="grid grid-cols-2 gap-2">
-            {Array.from({ length: n }, (_, ci) => (
-              <div key={ci} className="rounded-md border border-border p-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Seat {ci + 1}</span>
-                  <span className={"text-sm tabular-nums " + (checkCents[ci] > 0 ? "" : "text-red-600")}>{"$" + (checkCents[ci] / 100).toFixed(2)}</span>
-                </div>
-                {settlementMode === "separate" && (
-                  <div className="mt-1 flex rounded border border-border overflow-hidden text-[11px]">
-                    {PAY_METHODS.map((m) => (
-                      <button key={m.key} type="button" onClick={() => setPays((p) => { const x = p.slice(); x[ci] = m.key; return x; })} className={"flex-1 py-1 " + (pays[ci] === m.key ? "bg-accent font-medium" : "hover:bg-accent/50")}>{m.label}</button>
-                    ))}
+          {phase === "allocate" ? (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                {Array.from({ length: n }, (_, ci) => (
+                  <div key={ci} className="rounded-md border border-border p-2 flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Seat {ci + 1}</span>
+                    <span className={"text-sm tabular-nums " + (checkCents[ci] > 0 ? "" : "text-red-600")}>{"$" + (checkCents[ci] / 100).toFixed(2)}</span>
                   </div>
-                )}
+                ))}
               </div>
-            ))}
-          </div>
-          <p className="text-[11px] text-muted-foreground">Item subtotals shown. Tax{settlementMode === "separate" ? ", service charge and discounts" : " and charges"} are divided proportionally — exact amounts print on each seat, summing to ${(grandCents / 100).toFixed(2)} plus tax.</p>
-          <Button className="w-full h-12" disabled={!canConfirm} onClick={() => props.onConfirm(buildChecks())}>
-            {props.pending ? "Working..." : settlementMode === "separate" ? "Pay " + n + " seats" : "Charge together"}
-          </Button>
-          {!allChecksNonEmpty && <p className="text-xs text-red-600">Every seat needs at least one item.</p>}
+              <p className="text-[11px] text-muted-foreground">Item subtotals shown. Tax, service charge and discounts divide proportionally — exact per-seat amounts are computed when you continue.</p>
+              {quoteErr && <p className="text-xs text-red-600">{quoteErr}</p>}
+              {props.settleNow ? (
+                <Button className="w-full h-12" disabled={!canConfirm || quoting} onClick={continueToPayment}>
+                  {quoting ? "Working..." : "Continue to payment"}
+                </Button>
+              ) : (
+                <Button className="w-full h-12" disabled={!canConfirm} onClick={confirmAllocationOnly}>
+                  {props.pending ? "Working..." : "Split into " + n + " checks"}
+                </Button>
+              )}
+              {!allChecksNonEmpty && <p className="text-xs text-red-600">Every seat needs at least one item.</p>}
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between text-sm">
+                <button type="button" onClick={() => setPhase("allocate")} className="text-xs text-muted-foreground underline">← Back to items</button>
+                <span className="tabular-nums text-muted-foreground">{quote ? "Total $" + quote.reduce((s, q) => s + q.total, 0).toFixed(2) : ""}</span>
+              </div>
+              <Button className="w-full h-12" disabled={!allSquaresPaid || props.pending} onClick={completeSplit}>
+                {props.pending ? "Working..." : allSquaresPaid ? "Complete split — " + n + " seats" : "Collect every seat to finish"}
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>
