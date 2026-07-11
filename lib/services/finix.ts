@@ -369,20 +369,26 @@ export async function createAuthorization(input: {
 }
 
 // Capture a hold (funds move). capture_amount MUST be <= the authorized amount; this
-// is how a tip is added at close. Endpoint per the provided spec — SEE the merge-gate note.
+// is how a tip is added at close. SELF-HEALING ENDPOINT: tries the provided-spec shape
+// (POST /authorizations/{id}/capture); on a wrong-endpoint response (404/405) it falls
+// back to Finix's documented PUT /authorizations/{id}. Same idempotency_id on both, so a
+// capture can never happen twice. (Still worth a one-time sandbox confirmation.)
 export async function captureAuthorization(authorizationId: string, captureAmountCents: number, idempotency_id?: string) {
-  return finix.post<FinixAuthorization>("/authorizations/" + authorizationId + "/capture", {
-    capture_amount: captureAmountCents,
-    idempotency_id,
-  });
+  const body = { capture_amount: captureAmountCents, idempotency_id };
+  const post = await finix.post<FinixAuthorization>("/authorizations/" + authorizationId + "/capture", body);
+  if (!("error" in post)) return post;
+  if (post.status === 404 || post.status === 405) return finix.put<FinixAuthorization>("/authorizations/" + authorizationId, body);
+  return post; // real error/decline — surface it, don't retry as a different shape
 }
 
-// Release a hold (walked tab / cancelled). Once voided it can never be captured.
+// Release a hold (walked tab / cancelled). Once voided it can never be captured. Same
+// self-healing POST-then-PUT(void_me) as capture.
 export async function voidAuthorization(authorizationId: string, idempotency_id?: string) {
-  return finix.post<FinixAuthorization>("/authorizations/" + authorizationId + "/void", {
-    void_me: true,
-    idempotency_id,
-  });
+  const body = { void_me: true, idempotency_id };
+  const post = await finix.post<FinixAuthorization>("/authorizations/" + authorizationId + "/void", body);
+  if (!("error" in post)) return post;
+  if (post.status === 404 || post.status === 405) return finix.put<FinixAuthorization>("/authorizations/" + authorizationId, body);
+  return post;
 }
 
 // ---------- Webhook signature verification ----------
