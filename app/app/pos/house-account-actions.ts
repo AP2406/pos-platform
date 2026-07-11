@@ -90,6 +90,7 @@ export async function setHouseAccount(
 export async function settleHouseAccount(
   customerId: string,
   amountDollars: number,
+  method?: "cash" | "card" | "other",
   note?: string
 ): Promise<{ ok: true; balance: number } | { error: string }> {
   const { business, role } = await requireBusiness();
@@ -100,6 +101,7 @@ export async function settleHouseAccount(
   const cents = Math.round((Number(amountDollars) || 0) * 100);
   if (cents <= 0) return { error: "Enter a payment amount." };
   if (cents > 100_000_000) return { error: "That amount is too large." };
+  const payMethod = method === "cash" || method === "card" || method === "other" ? method : "cash";
 
   const supabase = await createClient();
   const { data: acct } = await supabase
@@ -119,6 +121,7 @@ export async function settleHouseAccount(
     p_kind: "payment",
     p_order_id: null,
     p_note: (note || "").slice(0, 200) || null,
+    p_method: payMethod,
   });
   if (error) { console.error("settleHouseAccount:", error); return { error: "Could not record the payment." }; }
   revalidatePath("/app/customers");

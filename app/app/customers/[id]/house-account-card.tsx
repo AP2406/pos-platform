@@ -24,6 +24,7 @@ export function HouseAccountCard({
   const [limit, setLimit] = useState(initialLimit == null ? "" : String(initialLimit));
   const [balance, setBalance] = useState(initialBalance);
   const [pay, setPay] = useState("");
+  const [payMethod, setPayMethod] = useState<"cash" | "card" | "other">("cash");
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -44,7 +45,7 @@ export function HouseAccountCard({
     const amt = parseFloat(pay);
     if (!Number.isFinite(amt) || amt <= 0) { setErr("Enter a payment amount."); return; }
     start(async () => {
-      const res = await settleHouseAccount(customerId, amt);
+      const res = await settleHouseAccount(customerId, amt, payMethod);
       if ("error" in res) { setErr(res.error); return; }
       setBalance(res.balance);
       setPay("");
@@ -76,9 +77,14 @@ export function HouseAccountCard({
       )}
 
       {canManage && balance > 0 && (
-        <div className="flex items-center gap-2 pt-1 border-t border-border">
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border">
           <label className="text-sm w-28 shrink-0">Record payment</label>
-          <Input type="number" min="0" step="0.01" value={pay} disabled={pending} onChange={(e) => setPay(e.target.value)} placeholder="0.00" className="h-9 w-32 text-right" />
+          <Input type="number" min="0" step="0.01" value={pay} disabled={pending} onChange={(e) => setPay(e.target.value)} placeholder="0.00" className="h-9 w-28 text-right" />
+          <select value={payMethod} disabled={pending} onChange={(e) => setPayMethod(e.target.value as "cash" | "card" | "other")} className="h-9 rounded-md border border-border bg-transparent px-2 text-sm">
+            <option value="cash">Cash</option>
+            <option value="card">Card</option>
+            <option value="other">Other</option>
+          </select>
           <Button className="h-9" disabled={pending} onClick={settle}>Pay down</Button>
         </div>
       )}

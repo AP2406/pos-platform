@@ -103,10 +103,22 @@ export function buildJournal(
     debit("cogs", cogs);
     credit("inventory", cogs);
   }
-  // Refunds: reverse revenue out of cash.
+  // Refunds: reverse revenue. The portion refunded against a house account reduces
+  // AR (no cash left the drawer); the rest comes out of cash.
   if (r2(s.refunds) > 0) {
     debit("sales_returns", s.refunds);
-    credit("cash", s.refunds);
+    const haRefunds = r2(s.houseAccountRefunds ?? 0);
+    if (haRefunds > 0) credit("house_account", haRefunds);
+    const cashRefunds = r2(s.refunds - haRefunds);
+    if (cashRefunds > 0) credit("cash", cashRefunds);
+  }
+  // House-account settlements: the customer paid down their tab. Debit the tender
+  // received, credit AR (balanced pair, doesn't touch revenue).
+  for (const st of s.houseAccountSettlements ?? []) {
+    const amt = r2(st.amount);
+    if (amt <= 0) continue;
+    debit(TENDER_KEY[st.method] ?? "other", amt);
+    credit("house_account", amt);
   }
   return lines;
 }
