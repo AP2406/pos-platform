@@ -57,6 +57,7 @@ import { getHouseAccount, type HouseAccount } from "./house-account-actions";
 import Link from "next/link";
 import { tileClassesFor } from "./category-colors";
 import { computeCartTax, type ItemTaxMeta } from "@/lib/services/tax-compute";
+import type { DeviceProfile } from "@/lib/services/device-profiles";
 import { EmailReceiptButton } from "./sales/email-receipt-button";
 
 type Variation = { id: string; name: string; price: number };
@@ -202,7 +203,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
   });
 }
 
-export function RegisterClient({ items, taxRate, taxMeta, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto", upsellPrompts = [], defaultToSeat = true }: { items: Item[]; taxRate: number; taxMeta?: { itemTaxMeta: Record<string, ItemTaxMeta>; rateFracById: Record<string, number>; rateNameById: Record<string, string> }; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string; upsellPrompts?: UpsellPrompt[]; defaultToSeat?: boolean }) {
+export function RegisterClient({ items, taxRate, taxMeta, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto", upsellPrompts = [], defaultToSeat = true, deviceProfiles = [] }: { items: Item[]; taxRate: number; taxMeta?: { itemTaxMeta: Record<string, ItemTaxMeta>; rateFracById: Record<string, number>; rateNameById: Record<string, string> }; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string; upsellPrompts?: UpsellPrompt[]; defaultToSeat?: boolean; deviceProfiles?: DeviceProfile[] }) {
   const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
   const online = useOnlineStatus();
   // P1-22: back up the quick-service cart (no table/tab — nothing server-side
@@ -426,6 +427,28 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
   // Advanced toggle "Default to Seat 1": on (default) starts on Seat 1 in table
   // mode; off starts on Shared.
   const [activeSeat, setActiveSeat] = useState<number | null>(tableMode && defaultToSeat ? 1 : null);
+  // Device profiles: this device remembers a profile (localStorage) and applies its
+  // wired prefs — default dining option + start-on-seat-1. Applied on mount and when
+  // the operator switches profiles. Empty profile list = feature dormant.
+  const [deviceProfileId, setDeviceProfileId] = useState<string | null>(null);
+  function applyDeviceProfile(id: string | null) {
+    setDeviceProfileId(id);
+    try { if (id) localStorage.setItem("surge_device_profile", id); else localStorage.removeItem("surge_device_profile"); } catch {}
+    const p = deviceProfiles.find((x) => x.id === id);
+    if (!p) return;
+    if (!tableBinding) setDiningOption(p.default_dining_option);
+    if (tableMode) setActiveSeat(p.default_to_seat ? 1 : null);
+  }
+  useEffect(() => {
+    if (deviceProfiles.length === 0) return;
+    let saved: string | null = null;
+    try { saved = localStorage.getItem("surge_device_profile"); } catch {}
+    const p = saved ? deviceProfiles.find((x) => x.id === saved) : undefined;
+    if (!p) return;
+    setDeviceProfileId(p.id);
+    if (!tableBinding) setDiningOption(p.default_dining_option);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // P3: optional guest name per seat (keyed by seat number as a string).
   const [seatNames, setSeatNames] = useState<Record<string, string>>(initialTableCart?.seat_names ?? {});
   const seatName = (s: number | null) => (s != null ? (seatNames[String(s)] || "").trim() : "");
@@ -3208,6 +3231,15 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
               </div>
 
               <div className="shrink-0 border-t border-border">
+                {deviceProfiles.length > 0 && (
+                  <div className="flex items-center gap-2 p-2 border-b border-border text-xs">
+                    <span className="text-muted-foreground">This device</span>
+                    <select value={deviceProfileId ?? ""} onChange={(e) => applyDeviceProfile(e.target.value || null)} className="h-8 rounded-md border border-border bg-transparent px-2 text-xs flex-1">
+                      <option value="">No profile</option>
+                      {deviceProfiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                )}
                 {cart.length > 0 && (
                   <div className="flex items-center gap-1 p-2 border-b border-border">
                     {(["dine_in", "takeout", "delivery", "pickup"] as const).map((d) => (
