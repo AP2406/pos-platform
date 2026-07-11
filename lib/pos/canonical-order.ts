@@ -48,6 +48,9 @@ export type CanonicalOrderInput = {
   dining_option?: "dine_in" | "takeout" | "delivery" | "pickup" | null;
   open_ticket_id?: string | null;
   signature_data?: string | null;
+  // Whole-check note (TouchBistro "Add Note") — stored on the order snapshot and
+  // printed on the bill/receipt.
+  note?: string | null;
   // Client-supplied approver — hardened into a server-verified approval_token in
   // STEP 5; kept here so nothing regresses in the meantime.
   approver?: { id: string; name: string } | null;
@@ -78,6 +81,7 @@ export const CANONICAL_ORDER_KEYS: (keyof CanonicalOrderInput)[] = [
   "dining_option",
   "open_ticket_id",
   "signature_data",
+  "note",
   "approver",
 ];
 
@@ -107,6 +111,7 @@ export function forwardOrderFields(input: CanonicalOrderInput): CanonicalOrderIn
     dining_option: input.dining_option,
     open_ticket_id: input.open_ticket_id,
     signature_data: input.signature_data,
+    note: input.note,
     approver: input.approver,
   };
 }

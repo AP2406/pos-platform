@@ -61,7 +61,7 @@ type Variation = { id: string; name: string; price: number };
 type ModOption = { id: string; name: string; price: number; child_group?: ModifierGroup };
 type ModifierGroup = { id: string; name: string; required: boolean; min_select: number; max_select: number | null; allow_split: boolean; options: ModOption[] };
 type ModPosition = "whole" | "left" | "right";
-type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null; track_inventory?: boolean; stock_qty?: number | null; reorder_point?: number | null; open_price?: boolean; requires_manager_approval?: boolean; short_name?: string | null };
+type Item = { id: string; name: string; price: number; category: string | null; taxable: boolean; taxFrac: number; image_url: string | null; out_of_stock: boolean; variations: Variation[]; modifiers: Variation[]; modifierGroups?: ModifierGroup[]; default_course_id?: string | null; track_inventory?: boolean; stock_qty?: number | null; reorder_point?: number | null; open_price?: boolean; requires_manager_approval?: boolean; short_name?: string | null; sales_category?: string | null };
 type Course = { id: string; name: string; sort_order: number };
 type CartLine = {
   catalog_item_id: string | null;
@@ -119,6 +119,7 @@ type Receipt = {
   tableName?: string | null;
   serverName?: string | null;
   orderNote?: string | null;
+  categorySubtotals?: { label: string; amount: number }[];
 };
 type CardCfg =
   | { enabled: true; applicationId: string; environment: string; merchantId: string; terminalEnabled: boolean }
@@ -1186,6 +1187,23 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
   }
 
   // Print the current unpaid cart as a bill (pre-receipt) — no order created.
+  // Sales-category subtotals for the bill/receipt (TouchBistro "Sales Category
+  // Totals"). Looked up live from the catalog by catalog_item_id; only lines whose
+  // item has a sales_category are grouped. The receipt template renders these only
+  // when the merchant's "Show category totals" toggle is on.
+  function buildCategorySubtotals(lines: CartLine[] = cart): { label: string; amount: number }[] {
+    const byId = new Map<string, Item>();
+    for (const it of items) byId.set(it.id, it);
+    const map = new Map<string, number>();
+    for (const l of lines) {
+      if (l.void) continue;
+      const cat = (l.catalog_item_id && byId.get(l.catalog_item_id)?.sales_category) || null;
+      if (!cat) continue;
+      map.set(cat, (map.get(cat) ?? 0) + l.unit_price * l.quantity);
+    }
+    return Array.from(map.entries()).map(([label, amount]) => ({ label, amount: Math.round(amount * 100) / 100 }));
+  }
+
   function printBill() {
     if (cart.length === 0) return;
     const rec: Receipt = {
@@ -1210,6 +1228,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       tableName: tableBinding ? tableBinding.tableLabel : null,
       serverName: serverName,
       orderNote: checkNote.trim() || null,
+      categorySubtotals: buildCategorySubtotals(),
     };
     doPrint(rec);
   }
@@ -2052,6 +2071,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
       tableName: tableBinding ? tableBinding.tableLabel : null,
       serverName: serverName,
       orderNote: snap.orderNote ?? null,
+      categorySubtotals: buildCategorySubtotals(snap.items),
     };
     setReceipt(rec);
     setTenderOpen(false);
@@ -2087,6 +2107,7 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
         taxExempt && taxExemptReason === "other" ? taxExemptNote.trim() : undefined,
       customer_id: customer ? customer.id : null,
       dining_option: diningOption,
+      note: checkNote.trim() || undefined,
       approver: approver ?? undefined,
       // Phase A: carry the table ticket so covers / seated-at / section persist on the order.
       open_ticket_id: tableBinding?.ticketId ?? undefined,

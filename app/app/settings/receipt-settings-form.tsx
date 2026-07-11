@@ -136,6 +136,7 @@ export function ReceiptSettingsForm({ initial, businessName }: { initial: Partia
             <Toggle checked={s.showCustomer} onChange={(v) => set("showCustomer", v)}>Show customer name (when attached)</Toggle>
             <Toggle checked={s.showTableName} onChange={(v) => set("showTableName", v)}>Show table name (on the bill)</Toggle>
             <Toggle checked={s.showServerName} onChange={(v) => set("showServerName", v)}>Show server name (on the bill)</Toggle>
+            <Toggle checked={s.showCategoryTotals} onChange={(v) => set("showCategoryTotals", v)}>Show sales-category totals (Food / Alcohol…)</Toggle>
           </div>
           <div>
             <Label className="text-xs">Tax line label</Label>

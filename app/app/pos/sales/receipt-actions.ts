@@ -38,9 +38,11 @@ function buildReceiptHtml(businessName: string, order: OrderForEmail): string {
       tax?: { amount?: number };
       tip?: number;
       total?: number;
+      note?: string;
     } | null) || {};
 
   const items = Array.isArray(snap.items) ? snap.items : [];
+  const orderNote = typeof snap.note === "string" ? snap.note.trim() : "";
   const subtotal = typeof snap.subtotal === "number" ? snap.subtotal : 0;
   const discount = snap.discount && typeof snap.discount.amount === "number" ? snap.discount.amount : 0;
   const tax = snap.tax && typeof snap.tax.amount === "number" ? snap.tax.amount : 0;
@@ -77,6 +79,9 @@ function buildReceiptHtml(businessName: string, order: OrderForEmail): string {
     '<div style="text-align:center;color:#666;font-size:12px;margin-bottom:12px">' +
     esc(new Date(order.created_at).toLocaleString()) +
     "</div>" +
+    (orderNote
+      ? '<div style="text-align:center;color:#666;font-size:12px;margin-bottom:12px">Note: ' + esc(orderNote) + "</div>"
+      : "") +
     '<table style="width:100%;border-collapse:collapse;font-size:14px">' +
     rows +
     "</table>" +

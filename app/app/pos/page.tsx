@@ -20,7 +20,7 @@ export default async function PosPage() {
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
-    .select("id, name, price, category, taxable, tax_rate_id, image_url, out_of_stock, default_course_id, track_inventory, stock_qty, reorder_point, open_price, requires_manager_approval, short_name")
+    .select("id, name, price, category, sales_category, taxable, tax_rate_id, image_url, out_of_stock, default_course_id, track_inventory, stock_qty, reorder_point, open_price, requires_manager_approval, short_name")
     .eq("business_id", business.id)
     .eq("is_active", true)
     .order("name", { ascending: true });
@@ -189,6 +189,7 @@ export default async function PosPage() {
       open_price: (i.open_price as boolean | null) ?? false,
       requires_manager_approval: (i.requires_manager_approval as boolean | null) ?? false,
       short_name: (i.short_name as string | null) ?? null,
+      sales_category: (i.sales_category as string | null) ?? null,
       variations: varsByItem[i.id as string] ?? [],
       modifiers: modsByItem[i.id as string] ?? [],
       modifierGroups: modifierGroupsFor(i.id as string),
