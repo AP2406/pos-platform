@@ -6,6 +6,7 @@ import { PageHeader, SectionHeader } from "../_components/ui";
 import { SettingsForm } from "./settings-form";
 import { TaxCurrencyForm } from "./tax-currency-form";
 import { TaxRatesCard } from "./tax-rates-card";
+import { OrderNumberCard } from "./order-number-card";
 import { TrainingModeForm } from "./training-mode-form";
 import { ShowPhotosForm } from "./show-photos-form";
 import { StaffCard } from "./staff-card";
@@ -88,6 +89,14 @@ export default async function SettingsPage() {
     rate: Number(r.rate),
     jurisdiction: (r.jurisdiction as string | null) ?? null,
   }));
+
+  // Current order/bill counter — the next sale is last_sale_number + 1 (1 if unset).
+  const { data: counterRow } = await supabase
+    .from("order_counters")
+    .select("last_sale_number")
+    .eq("business_id", business.id)
+    .maybeSingle();
+  const nextSaleNumber = Number((counterRow as { last_sale_number?: number } | null)?.last_sale_number ?? 0) + 1;
 
   const trainingMode =
     (business as { training_mode?: boolean }).training_mode === true;
@@ -277,6 +286,10 @@ export default async function SettingsPage() {
           <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Additional tax rates</SectionHeader>
             <TaxRatesCard initialRates={taxRates} />
+          </div>
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
+            <SectionHeader>Order &amp; bill numbers</SectionHeader>
+            <OrderNumberCard nextNumber={nextSaleNumber} canManage={role === "owner" || role === "manager"} />
           </div>
           {showServiceCharge && (
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
