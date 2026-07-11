@@ -56,6 +56,7 @@ import { getStoreCreditBalance } from "./store-credit-actions";
 import { getHouseAccount, type HouseAccount } from "./house-account-actions";
 import Link from "next/link";
 import { tileClassesFor } from "./category-colors";
+import { computeCartTax, type ItemTaxMeta } from "@/lib/services/tax-compute";
 import { EmailReceiptButton } from "./sales/email-receipt-button";
 
 type Variation = { id: string; name: string; price: number };
@@ -201,7 +202,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
   });
 }
 
-export function RegisterClient({ items, taxRate, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto", upsellPrompts = [], defaultToSeat = true }: { items: Item[]; taxRate: number; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string; upsellPrompts?: UpsellPrompt[]; defaultToSeat?: boolean }) {
+export function RegisterClient({ items, taxRate, taxMeta, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto", upsellPrompts = [], defaultToSeat = true }: { items: Item[]; taxRate: number; taxMeta?: { itemTaxMeta: Record<string, ItemTaxMeta>; rateFracById: Record<string, number>; rateNameById: Record<string, string> }; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string; upsellPrompts?: UpsellPrompt[]; defaultToSeat?: boolean }) {
   const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
   const online = useOnlineStatus();
   // P1-22: back up the quick-service cart (no table/tab — nothing server-side
@@ -1773,21 +1774,21 @@ export function RegisterClient({ items, taxRate, businessName, businessId, hasSt
 
   const taxF = subtotal > 0 ? netSubtotal / subtotal : 0;
 
-  const taxBucketsPreview: Record<string, number> = {};
-  for (const l of cart) {
-    if (l.void) continue;
-    if (!l.taxable) continue;
-    if (l.taxFrac <= 0) continue;
-    const key = l.taxFrac.toFixed(6);
-    taxBucketsPreview[key] = (taxBucketsPreview[key] || 0) + l.unit_price * l.quantity;
-  }
-  let tax = 0;
-  for (const key of Object.keys(taxBucketsPreview)) {
-    const frac = parseFloat(key);
-    const discountedBase = Math.round(taxBucketsPreview[key] * taxF * 100) / 100;
-    tax += Math.round(discountedBase * frac * 100) / 100;
-  }
-  tax = Math.round(tax * 100) / 100;
+  // Preview tax via the SAME shared helper the server charges with, so the on-screen
+  // total matches the charge to the cent — including multi-tax (stacked) items. Lines
+  // key off catalog_item_id → taxMeta; custom lines fall back to the default rate.
+  const _previewTaxCfg = {
+    defaultRateFrac: taxRate,
+    itemTaxMeta: taxMeta?.itemTaxMeta ?? {},
+    rateFracById: taxMeta?.rateFracById ?? {},
+    rateNameById: taxMeta?.rateNameById ?? {},
+  };
+  const _previewTax = computeCartTax(
+    cart.filter((l) => !l.void).map((l) => ({ catalog_item_id: l.catalog_item_id, unit_price: l.unit_price, quantity: l.quantity })),
+    _previewTaxCfg,
+    taxF
+  );
+  let tax = _previewTax.tax;
 
   const customerExempt = customer ? customer.taxExempt === true : false;
   const effectiveExempt = taxExempt || customerExempt;

@@ -13,7 +13,7 @@ import { computeCartTax, type CartTaxConfig } from "@/lib/services/tax-compute";
 const UUID = /^[0-9a-fA-F-]{36}$/;
 const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
-type CheckItem = { catalog_item_id: string | null; name: string; unit_price: number; quantity: number; taxable: boolean; tax_rate_id: string | null };
+type CheckItem = { catalog_item_id: string | null; name: string; unit_price: number; quantity: number; taxable: boolean; tax_rate_id: string | null; tax_rate_ids?: string[] | null };
 
 export type GuestCheckView =
   | { ok: true; open: true; cardLive: boolean; businessName: string; tableLabel: string | null; lines: { name: string; qty: number; amount: number }[]; subtotal: number; tax: number; total: number }
@@ -25,7 +25,7 @@ async function loadCheck(businessId: string, elementId: string): Promise<
   | { error: string }
   | { found: false }
   | { found: true; open: false; cardLive: boolean; businessName: string | null }
-  | { found: true; open: true; cardLive: boolean; businessName: string; tableLabel: string | null; merchantId: string | null; items: CheckItem[]; subtotal: number; tax: number; taxBreakdown: { label: string; rate: number; base: number; amount: number }[] }
+  | { found: true; open: true; cardLive: boolean; businessName: string; tableLabel: string | null; merchantId: string | null; items: { catalog_item_id: string | null; name: string; unit_price: number; quantity: number; taxable: boolean; tax_rate_ids: string[] }[]; subtotal: number; tax: number; taxBreakdown: { label: string; rate: number; base: number; amount: number }[] }
 > {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("get_guest_check", { p_business_id: businessId, p_element_id: elementId });
@@ -38,20 +38,27 @@ async function loadCheck(businessId: string, elementId: string): Promise<
   if (!d.found || d.enabled === false) return { found: false };
   if (!d.open) return { found: true, open: false, cardLive: d.card_live === true, businessName: d.business_name ?? null };
 
-  const items = (d.items ?? []).map((i) => ({
-    catalog_item_id: i.catalog_item_id ?? null,
-    name: i.name,
-    unit_price: Number(i.unit_price) || 0,
-    quantity: Number(i.quantity) || 0,
-    taxable: i.taxable !== false,
-    tax_rate_id: i.tax_rate_id ?? null,
-  }));
+  const items = (d.items ?? []).map((i) => {
+    // Multi-tax: prefer the junction ids; fall back to the legacy single rate so
+    // this works whether or not the guest-check RPC has been updated (migration 0093).
+    const ids = Array.isArray(i.tax_rate_ids) && i.tax_rate_ids.length > 0
+      ? i.tax_rate_ids.filter((x): x is string => !!x)
+      : (i.tax_rate_id ? [i.tax_rate_id] : []);
+    return {
+      catalog_item_id: i.catalog_item_id ?? null,
+      name: i.name,
+      unit_price: Number(i.unit_price) || 0,
+      quantity: Number(i.quantity) || 0,
+      taxable: i.taxable !== false,
+      tax_rate_ids: ids,
+    };
+  });
   const subtotal = r2(items.reduce((s, i) => s + i.unit_price * i.quantity, 0));
 
   let defaultRate = Number(d.default_tax_rate) || 0;
   if (defaultRate > 1) defaultRate = defaultRate / 100;
   const cfg: CartTaxConfig = { defaultRateFrac: defaultRate, itemTaxMeta: {}, rateFracById: {}, rateNameById: {} };
-  for (const i of items) if (i.catalog_item_id) cfg.itemTaxMeta[i.catalog_item_id] = { taxable: i.taxable, tax_rate_id: i.tax_rate_id };
+  for (const i of items) if (i.catalog_item_id) cfg.itemTaxMeta[i.catalog_item_id] = { taxable: i.taxable, tax_rate_ids: i.tax_rate_ids };
   for (const rr of d.rates ?? []) { cfg.rateFracById[rr.id] = (Number(rr.rate) || 0) / 100; cfg.rateNameById[rr.id] = rr.name; }
   const { tax, taxBreakdown } = computeCartTax(items, cfg, 1);
 

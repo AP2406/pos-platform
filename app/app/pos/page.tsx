@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { rowToWindow } from "@/lib/services/price-windows";
+import { loadItemTaxMeta } from "@/lib/services/tax-meta";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { RegisterClient } from "./register-client";
 import { FloorClient } from "./floor-client";
@@ -204,10 +205,18 @@ export default async function PosPage() {
     return out;
   }
 
+  // Multi-tax: per-item tax metadata (a set of rates per item) + rate maps, shared
+  // with the server so the register preview matches the charge exactly.
+  const { itemTaxMeta, rateFracById: taxRateFracById, rateNameById: taxRateNameById } =
+    await loadItemTaxMeta(supabase, business.id, (itemsData ?? []).map((i) => i.id as string));
+
   const items = (itemsData ?? []).map((i) => {
-    const rid = (i.tax_rate_id as string | null) ?? null;
-    const taxFrac =
-      rid && rateFracById[rid] !== undefined ? rateFracById[rid] : defaultFrac;
+    // Summed fraction kept only for legacy single-frac call sites (hydrate/custom
+    // lines); the live preview uses computeCartTax over the full rate set.
+    const rids = itemTaxMeta[i.id as string]?.tax_rate_ids ?? [];
+    const taxFrac = rids.length > 0
+      ? rids.reduce((s, id) => s + (taxRateFracById[id] ?? 0), 0)
+      : defaultFrac;
     return {
       id: i.id as string,
       name: i.name as string,
@@ -298,6 +307,7 @@ export default async function PosPage() {
   const registerProps = {
     items,
     taxRate,
+    taxMeta: { itemTaxMeta, rateFracById: taxRateFracById, rateNameById: taxRateNameById },
     businessName: business.name,
     businessId: business.id,
     hasStaff,
