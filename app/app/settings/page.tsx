@@ -23,6 +23,8 @@ import { parseOvertime } from "@/lib/services/overtime";
 import { OnlineBookingCard } from "./online-booking-card";
 import { KdsCard } from "./kds-card";
 import { RegisterBehaviorCard } from "./register-behavior-card";
+import { DeviceProfilesCard } from "./device-profiles-card";
+import { parseDeviceProfiles } from "@/lib/services/device-profiles";
 import type { RegisterPrefs } from "./register-prefs-actions";
 import { ScheduledReportCard } from "./scheduled-report-card";
 import { ClockEnforcementCard } from "./clock-enforcement-card";
@@ -167,6 +169,7 @@ export default async function SettingsPage() {
 
   const daySettings = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
   const registerPrefs = (daySettings.register ?? {}) as Partial<RegisterPrefs>;
+  const deviceProfiles = parseDeviceProfiles(daySettings);
   const dayCutoff = typeof daySettings.business_day_cutoff === "string" ? daySettings.business_day_cutoff : "00:00";
   const dayEmails = Array.isArray(daySettings.z_report_emails)
     ? (daySettings.z_report_emails as unknown[]).filter((e): e is string => typeof e === "string")
@@ -520,6 +523,10 @@ export default async function SettingsPage() {
 
           <div className="mb-4">
             <RegisterBehaviorCard initial={registerPrefs} />
+          </div>
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
+            <SectionHeader>Device profiles</SectionHeader>
+            <DeviceProfilesCard initial={deviceProfiles} canManage={role === "owner" || role === "manager"} />
           </div>
           {business.industry === "transportation" && (
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">

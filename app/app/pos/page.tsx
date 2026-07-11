@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { rowToWindow } from "@/lib/services/price-windows";
 import { loadItemTaxMeta } from "@/lib/services/tax-meta";
+import { parseDeviceProfiles } from "@/lib/services/device-profiles";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { RegisterClient } from "./register-client";
 import { FloorClient } from "./floor-client";
@@ -325,6 +326,8 @@ export default async function PosPage() {
     // Advanced register toggle: default new items to Seat 1 (vs Shared) in table
     // mode. Unset = the prior default (Seat 1).
     defaultToSeat: (((business as { settings?: { register?: { default_to_seat?: boolean } } }).settings?.register?.default_to_seat) ?? true),
+    // Device profiles: the register lets this device pick one and applies its prefs.
+    deviceProfiles: parseDeviceProfiles((business as { settings?: unknown }).settings),
   };
 
   // Full-service restaurants get the table floor first; every other mode (and
