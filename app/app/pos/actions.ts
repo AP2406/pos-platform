@@ -66,6 +66,8 @@ const orderSchema = z.object({
   idempotency_key: z.string().uuid().optional(),
   dining_option: z.enum(DINING_OPTIONS).optional().nullable(),
   open_ticket_id: z.string().uuid().optional().nullable(),
+  // Whole-check note (prints on the bill/receipt; stored on the snapshot).
+  note: z.string().max(280).optional().nullable(),
   // E2: guest's on-screen signature (data URL) captured on the CFD.
   signature_data: z.string().max(200000).optional().nullable(),
   // The manager who authorized a sensitive action (comp/discount/void) at the
@@ -108,6 +110,7 @@ type OrderInput = {
   customer_id?: string | null;
   idempotency_key?: string;
   dining_option?: "dine_in" | "takeout" | "delivery" | "pickup" | null;
+  note?: string | null;
   open_ticket_id?: string | null;
   approver?: { id: string; name: string } | null;
 };
@@ -565,6 +568,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
 
   const snapshot = {
     dining_option: parsed.data.dining_option ?? null,
+    note: parsed.data.note ?? null,
     items: parsed.data.items.map((i) => ({
       name: i.name,
       unit_price: i.unit_price,
