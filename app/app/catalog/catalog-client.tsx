@@ -1003,7 +1003,7 @@ export function CatalogClient({
                       </div>
 
                       {/* Modifier groups (P0-2) */}
-                      <ModifierGroupsEditor itemId={item.id} initial={item.modifierGroups} />
+                      <ModifierGroupsEditor itemId={item.id} initial={item.modifierGroups} catalogItems={items.map((i) => ({ id: i.id, name: i.name, price: i.price }))} />
                     </div>
                   )}
                 </div>
