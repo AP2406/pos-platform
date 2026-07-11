@@ -2949,11 +2949,13 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
         </div>
       ) : (
         <div className="h-full flex flex-col">
-          {/* P1-22: offline warning — payment and firing need a connection. */}
+          {/* P1-22: offline warning — firing + payment both need the server (a sale is a
+              server write; card can't be queued at all — processor limitation). Fallback
+              is to restore a connection: phone hotspot or ethernet. */}
           {!online && (
             <div className="shrink-0 flex items-center gap-2 bg-amber-500/15 border-b border-amber-500/40 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-              You&apos;re offline. Keep building the check &mdash; firing and payment will resume when you&apos;re back online.
+              You&apos;re offline. Keep building the check &mdash; firing and payment resume once you reconnect (tip: phone hotspot or ethernet).
             </div>
           )}
           {/* Slim dark top bar */}
