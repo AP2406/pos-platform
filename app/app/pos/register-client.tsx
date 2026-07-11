@@ -2811,6 +2811,15 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
         allowUnits={splitCfg.allowUnits}
         settlementMode={splitCfg.settlementMode}
         pending={pending}
+        settleNow={!(tableBinding && tableBinding.tableId)}
+        quoteContext={{
+          discount_type: discountMode,
+          discount_value: discountInput,
+          comp_value: comp > 0 ? comp : undefined,
+          service_charge: serviceApplied || undefined,
+          tax_exempt: taxExempt || undefined,
+          customer_id: customer ? customer.id : null,
+        }}
         onConfirm={submitSplit}
       />
 
