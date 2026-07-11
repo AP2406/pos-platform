@@ -248,6 +248,7 @@ export type BarTabSummary = {
   subtotal: number;
   staff_id: string | null;
   server_name: string | null;
+  held_auth_cents: number | null; // card hold on file (pre-auth), null if none/settled/released
 };
 
 // Open a table: create its persistent ticket. If the table already has an open
@@ -1405,7 +1406,7 @@ export async function listOpenBarTabs(): Promise<BarTabSummary[]> {
 
   const { data, error } = await supabase
     .from("open_tickets")
-    .select("id, label, opened_at, cart, staff_id")
+    .select("id, label, opened_at, cart, staff_id, finix_auth_state, finix_auth_amount_cents")
     .eq("business_id", business.id)
     .eq("ticket_type", "tab");
   if (error) {
@@ -1417,6 +1418,7 @@ export async function listOpenBarTabs(): Promise<BarTabSummary[]> {
   return (data ?? []).map((t) => {
     const totals = cartTotals(t.cart);
     const staffId = (t.staff_id as string | null) ?? null;
+    const held = (t.finix_auth_state as string | null) === "held" ? Number(t.finix_auth_amount_cents) || null : null;
     return {
       id: t.id as string,
       name: (t.label as string | null) ?? null,
@@ -1425,6 +1427,7 @@ export async function listOpenBarTabs(): Promise<BarTabSummary[]> {
       subtotal: totals.subtotal,
       staff_id: staffId,
       server_name: staffId ? names[staffId] ?? null : null,
+      held_auth_cents: held,
     };
   });
 }
