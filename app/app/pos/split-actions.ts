@@ -3,11 +3,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { loadItemTaxMeta } from "@/lib/services/tax-meta";
-import { itemTaxBuckets } from "@/lib/services/tax-compute";
+import { computeSplitTotals } from "./split-alloc";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { DISCOUNT_REASONS, COMP_REASONS, TAX_EXEMPT_REASONS, isValidReason } from "./reason-codes";
-import { allocateWeighted } from "./split-math";
 
 // Split check by item. The server is the money authority: it recomputes the
 // whole-check totals (identical formulas to createOrder), then allocates every
@@ -25,15 +24,22 @@ const splitItemSchema = z.object({
   taxable: z.coerce.boolean().optional(),
 });
 
+const splitPaymentSchema = z.object({
+  method: z.enum(["cash", "card", "other"]),
+  amount: z.coerce.number().min(0).max(1000000),
+});
+
 const splitCheckSchema = z.object({
   lines: z.array(splitItemSchema),
-  payment_method: z.enum(["cash", "card", "other"]).optional(),
+  // Per-square multi-tender: one or more payments that must sum to the square's
+  // total. A single-element array preserves the old single-method behavior.
+  payments: z.array(splitPaymentSchema).min(1),
   tip: z.coerce.number().min(0).max(1000000).optional(),
 });
 
 const splitSchema = z.object({
   items: z.array(splitItemSchema).min(1),
-  checks: z.array(splitCheckSchema).min(2).max(8),
+  checks: z.array(splitCheckSchema).min(2).max(10),
   settlement: z.enum(["separate", "informational"]),
   discount_type: z.enum(["amount", "percent"]).optional(),
   discount_value: z.coerce.number().min(0).max(1000000).optional(),
@@ -153,77 +159,44 @@ export async function finalizeSplitCheck(
     }
   }
 
-  // --- resolve per-item tax fractions (same as createOrder) ---
+  // --- authoritative per-check totals (SHARED with quoteSplitCheck) ---
   let defaultRate = Number(business.default_tax_rate) || 0;
   if (defaultRate > 1) defaultRate = defaultRate / 100;
-
   const allItems = [...data.items, ...data.checks.flatMap((ck) => ck.lines)];
   const lineIds = Array.from(
     new Set(allItems.map((i) => i.catalog_item_id).filter((id): id is string => !!id))
   );
   const { itemTaxMeta, rateFracById, rateNameById } = await loadItemTaxMeta(supabase, business.id, lineIds);
-  const taxCfg = { defaultRateFrac: defaultRate, rateFracById, rateNameById };
 
-  // The tax buckets a split line contributes to (multi-tax: one per applicable rate).
-  // A line with no catalog_item_id falls back to its own taxable flag + the default
-  // rate, matching createOrder's treatment of custom lines.
-  function bucketsOf(it: SplitItem): { key: string; label: string; frac: number }[] {
-    if (it.catalog_item_id) return itemTaxBuckets(itemTaxMeta[it.catalog_item_id], taxCfg);
-    if (it.taxable === false || defaultRate <= 0) return [];
-    return [{ key: "Tax@" + defaultRate.toFixed(6), label: "Tax", frac: defaultRate }];
-  }
+  const scEnabled = (business as { service_charge_enabled?: boolean }).service_charge_enabled === true;
+  let scPct = Number((business as { service_charge_pct?: number }).service_charge_pct) || 0;
+  if (scPct < 0) scPct = 0;
+  if (scPct > 100) scPct = 100;
+  const scPostTax = (business as { service_charge_post_tax?: boolean }).service_charge_post_tax === true;
+  const scLabel = ((business as { service_charge_label?: string }).service_charge_label || "Service charge").toString();
 
-  // --- whole-check authoritative totals (identical math to createOrder) ---
-  const subtotal = data.items.reduce((s, i) => s + i.unit_price * i.quantity, 0);
-  const subtotalCents = c(subtotal);
-  if (subtotalCents <= 0) return { error: "Nothing to split." };
+  const alloc = computeSplitTotals(data, { defaultRate, itemTaxMeta, rateFracById, rateNameById, customerExempt, scEnabled, scPct, scPostTax });
+  if ("error" in alloc) return { error: alloc.error };
+  const {
+    subtotalCents, discountCents, compCents, taxTotalCents, scCents,
+    checkSubtotalCents, discAlloc, compAlloc, taxAlloc, scAlloc, perCheckPreTipTotal,
+    discount, comp, tax, serviceCharge, netSubtotal, isExempt, scApplied,
+  } = alloc;
+  const N = data.checks.length;
 
-  const discountType = data.discount_type ?? "amount";
-  const discountValue = data.discount_value ?? 0;
-  let discount = discountType === "percent" ? subtotal * (discountValue / 100) : discountValue;
-  if (discount < 0) discount = 0;
-  if (discount > subtotal) discount = subtotal;
-  discount = Math.round(discount * 100) / 100;
+  // Reason gates (block the sale; kept out of the pure math).
   const discountReasonCode = (data.discount_reason_code || "").trim();
   const discountReasonNote = (data.discount_reason_note || "").trim();
   if (discount > 0) {
     if (!isValidReason(DISCOUNT_REASONS, discountReasonCode)) return { error: "Choose a reason for the discount." };
     if (discountReasonCode === "other" && !discountReasonNote) return { error: "Add a note explaining the discount." };
   }
-
-  const discountedSubtotal = Math.round((subtotal - discount) * 100) / 100;
-  let comp = data.comp_value ?? 0;
-  if (comp < 0) comp = 0;
-  if (comp > discountedSubtotal) comp = discountedSubtotal;
-  comp = Math.round(comp * 100) / 100;
   const compReasonCode = (data.comp_reason_code || "").trim();
   const compReasonNote = (data.comp_reason_note || "").trim();
   if (comp > 0) {
     if (!isValidReason(COMP_REASONS, compReasonCode)) return { error: "Choose a reason for the comp." };
     if (compReasonCode === "other" && !compReasonNote) return { error: "Add a note explaining the comp." };
   }
-  const netSubtotal = Math.round((discountedSubtotal - comp) * 100) / 100;
-  const taxF = subtotal > 0 ? netSubtotal / subtotal : 0;
-
-  // whole-check tax buckets
-  const wholeBuckets: Record<string, { label: string; frac: number; base: number }> = {};
-  for (const it of data.items) {
-    for (const b of bucketsOf(it)) {
-      if (!wholeBuckets[b.key]) wholeBuckets[b.key] = { label: b.label, frac: b.frac, base: 0 };
-      wholeBuckets[b.key].base += it.unit_price * it.quantity;
-    }
-  }
-  const bucketTaxCents: Record<string, number> = {};
-  let tax = 0;
-  for (const key of Object.keys(wholeBuckets)) {
-    const b = wholeBuckets[key];
-    const discountedBase = Math.round(b.base * taxF * 100) / 100;
-    const amt = Math.round(discountedBase * b.frac * 100) / 100;
-    bucketTaxCents[key] = c(amt);
-    tax += amt;
-  }
-  tax = Math.round(tax * 100) / 100;
-
   const manualExempt = data.tax_exempt === true;
   const exemptCode = (data.tax_exempt_reason_code || "").trim();
   const exemptNote = (data.tax_exempt_reason_note || "").trim();
@@ -231,29 +204,20 @@ export async function finalizeSplitCheck(
     if (!isValidReason(TAX_EXEMPT_REASONS, exemptCode)) return { error: "Choose a reason for the tax exemption." };
     if (exemptCode === "other" && !exemptNote) return { error: "Add a note explaining the tax exemption." };
   }
-  const isExempt = manualExempt || customerExempt;
-  if (isExempt) {
-    for (const key of Object.keys(bucketTaxCents)) bucketTaxCents[key] = 0;
-    tax = 0;
+
+  // Per-square payment integrity: each check's payments must sum to its total
+  // (its pre-tip allocation + its own tip), to the cent. This is the multi-tender guard.
+  for (let ci = 0; ci < N; ci++) {
+    const tipC = c(data.checks[ci].tip ?? 0);
+    const dueC = perCheckPreTipTotal[ci] + tipC;
+    const paidC = data.checks[ci].payments.reduce((s, p) => s + c(p.amount), 0);
+    if (paidC !== dueC) {
+      return { error: "Seat " + (ci + 1) + "'s payments ($" + (paidC / 100).toFixed(2) + ") must equal its total ($" + (dueC / 100).toFixed(2) + ")." };
+    }
   }
 
-  // service charge (authoritative, same as createOrder)
-  const scEnabled = (business as { service_charge_enabled?: boolean }).service_charge_enabled === true;
-  let scPct = Number((business as { service_charge_pct?: number }).service_charge_pct) || 0;
-  if (scPct < 0) scPct = 0;
-  if (scPct > 100) scPct = 100;
-  const scPostTax = (business as { service_charge_post_tax?: boolean }).service_charge_post_tax === true;
-  const scLabel = ((business as { service_charge_label?: string }).service_charge_label || "Service charge").toString();
-  const scApplied = scEnabled && scPct > 0 && data.service_charge === true;
-  const scBase = scApplied ? (scPostTax ? Math.round((netSubtotal + tax) * 100) / 100 : netSubtotal) : 0;
-  const serviceCharge = scApplied ? Math.round(scBase * (scPct / 100) * 100) / 100 : 0;
-
-  const discountCents = c(discount);
-  const compCents = c(comp);
-
-  // Whole-check sensitive-action audit (P0): the split path previously logged
-  // NONE. Build it once and attach to the single informational order / the first
-  // separate sub-check — with the manager approver when one authorized it.
+  // Whole-check sensitive-action audit (P0): attach to the single informational
+  // order / the first separate sub-check — with the manager approver when one authorized.
   const splitApprover = data.approver ?? null;
   const splitApproverMeta = {
     approved_by: splitApprover ? splitApprover.id : null,
@@ -272,69 +236,9 @@ export async function finalizeSplitCheck(
     metadata: Record<string, unknown>;
   }[] = [];
   if (!isTraining) {
-    if (discount > 0) {
-      splitAudit.push({ actor_id: splitActorId, actor_role: role, action: "discount", reason_code: discountReasonCode || null, reason_note: discountReasonNote || null, metadata: { amount: discount, staff_id: activeStaffId, staff_name: activeStaffName, ...splitApproverMeta } });
-    }
-    if (comp > 0) {
-      splitAudit.push({ actor_id: splitActorId, actor_role: role, action: "comp", reason_code: compReasonCode || null, reason_note: compReasonNote || null, metadata: { amount: comp, staff_id: activeStaffId, staff_name: activeStaffName, ...splitApproverMeta } });
-    }
-    if (manualExempt) {
-      splitAudit.push({ actor_id: splitActorId, actor_role: role, action: "tax_exempt", reason_code: exemptCode || null, reason_note: exemptNote || null, metadata: { staff_id: activeStaffId, staff_name: activeStaffName, ...splitApproverMeta } });
-    }
-  }
-  const scCents = c(serviceCharge);
-
-  // --- partition: per-check item subtotal + per-bucket base ---
-  const N = data.checks.length;
-  const checkSubtotalCents: number[] = [];
-  const checkBucketBaseCents: Record<string, number[]> = {};
-  for (const key of Object.keys(wholeBuckets)) checkBucketBaseCents[key] = new Array(N).fill(0);
-  for (let ci = 0; ci < N; ci++) {
-    let s = 0;
-    for (const ln of data.checks[ci].lines) {
-      s += c(ln.unit_price * ln.quantity);
-      for (const b of bucketsOf(ln)) {
-        if (checkBucketBaseCents[b.key]) checkBucketBaseCents[b.key][ci] += c(ln.unit_price * ln.quantity);
-      }
-    }
-    checkSubtotalCents.push(s);
-  }
-  const partitionSum = checkSubtotalCents.reduce((a, b) => a + b, 0);
-  if (partitionSum !== subtotalCents) {
-    return { error: "Split doesn't add up to the check. Assign every item exactly once." };
-  }
-  for (let ci = 0; ci < N; ci++) {
-    if (checkSubtotalCents[ci] <= 0) return { error: "Every sub-check needs at least one item." };
-  }
-
-  // --- allocate each component across checks (exact, largest-remainder) ---
-  const discAlloc = allocateWeighted(discountCents, checkSubtotalCents);
-  const compAlloc = allocateWeighted(compCents, checkSubtotalCents);
-  const scAlloc = allocateWeighted(scCents, checkSubtotalCents);
-  // tax allocated per rate bucket by each check's taxable base in that bucket
-  const taxAlloc = new Array<number>(N).fill(0);
-  let taxTotalCents = 0;
-  for (const key of Object.keys(bucketTaxCents)) {
-    taxTotalCents += bucketTaxCents[key];
-    const shares = allocateWeighted(bucketTaxCents[key], checkBucketBaseCents[key]);
-    for (let ci = 0; ci < N; ci++) taxAlloc[ci] += shares[ci];
-  }
-
-  // --- conservation invariant: parts must sum to the original, to the cent ---
-  const grandTotalCents = subtotalCents - discountCents - compCents + taxTotalCents + scCents;
-  const sumOf = (a: number[]) => a.reduce((x, y) => x + y, 0);
-  const perCheckPreTipTotal = checkSubtotalCents.map(
-    (s, ci) => s - discAlloc[ci] - compAlloc[ci] + taxAlloc[ci] + scAlloc[ci]
-  );
-  if (
-    sumOf(checkSubtotalCents) !== subtotalCents ||
-    sumOf(discAlloc) !== discountCents ||
-    sumOf(compAlloc) !== compCents ||
-    sumOf(taxAlloc) !== taxTotalCents ||
-    sumOf(scAlloc) !== scCents ||
-    sumOf(perCheckPreTipTotal) !== grandTotalCents
-  ) {
-    return { error: "Split failed to reconcile to the check total. No payment was taken." };
+    if (discount > 0) splitAudit.push({ actor_id: splitActorId, actor_role: role, action: "discount", reason_code: discountReasonCode || null, reason_note: discountReasonNote || null, metadata: { amount: discount, staff_id: activeStaffId, staff_name: activeStaffName, ...splitApproverMeta } });
+    if (comp > 0) splitAudit.push({ actor_id: splitActorId, actor_role: role, action: "comp", reason_code: compReasonCode || null, reason_note: compReasonNote || null, metadata: { amount: comp, staff_id: activeStaffId, staff_name: activeStaffName, ...splitApproverMeta } });
+    if (manualExempt) splitAudit.push({ actor_id: splitActorId, actor_role: role, action: "tax_exempt", reason_code: exemptCode || null, reason_note: exemptNote || null, metadata: { staff_id: activeStaffId, staff_name: activeStaffName, ...splitApproverMeta } });
   }
 
   // --- build per-check payloads ---
@@ -353,6 +257,14 @@ export async function finalizeSplitCheck(
 
   const wholeTip = data.checks.reduce((s, ck) => s + (ck.tip ?? 0), 0);
 
+  // A square/check's tender label = the single method, or "split" for multi-tender.
+  const methodOf = (payments: { method: string; amount: number }[]): string => {
+    const methods = Array.from(new Set(payments.map((p) => p.method)));
+    return methods.length === 1 ? methods[0] : "split";
+  };
+  const toPaymentRows = (payments: { method: string; amount: number }[]) =>
+    payments.map((p) => ({ method: p.method, amount: Math.round(p.amount * 100) / 100, tendered: null, change_given: null, tender_type: p.method, finix_transfer_id: null, finix_state: null }));
+
   if (data.settlement === "informational") {
     // One order for the whole check; breakdown recorded on the snapshot.
     const tip = Math.round(wholeTip * 100) / 100;
@@ -367,6 +279,8 @@ export async function finalizeSplitCheck(
       total: (checkSubtotalCents[ci] - discAlloc[ci] - compAlloc[ci] + taxAlloc[ci] + scAlloc[ci]) / 100,
       items: ck.lines.map((l) => ({ name: l.name, unit_price: l.unit_price, quantity: l.quantity })),
     }));
+    // Whole-check tender = every square's payments flattened (multi-tender aware).
+    const infoPayments = data.checks.flatMap((ck) => ck.payments);
     const payload = {
       business_id: business.id,
       status: "paid",
@@ -377,7 +291,7 @@ export async function finalizeSplitCheck(
       comp: comp,
       service_charge: serviceCharge,
       total: total,
-      payment_method: data.checks[0].payment_method ?? "cash",
+      payment_method: methodOf(infoPayments),
       customer_id: customerId,
       drawer_session_id: drawerSessionId,
       is_training: isTraining,
@@ -401,7 +315,7 @@ export async function finalizeSplitCheck(
         completed_at: new Date().toISOString(),
       },
       items: data.items.map((i) => ({ catalog_item_id: i.catalog_item_id ?? null, name: i.name, unit_price: i.unit_price, quantity: i.quantity })),
-      payments: [{ method: data.checks[0].payment_method ?? "cash", amount: total, tendered: null, change_given: null, tender_type: data.checks[0].payment_method ?? "cash", finix_transfer_id: null, finix_state: null }],
+      payments: toPaymentRows(infoPayments),
       audit_events: splitAudit,
     };
     const { data: rpcData, error: rpcError } = await supabase.rpc("create_pos_order", { payload });
@@ -420,7 +334,7 @@ export async function finalizeSplitCheck(
       service_charge: serviceCharge,
       tip: tip,
       total,
-      payment_method: data.checks[0].payment_method ?? "cash",
+      payment_method: methodOf(infoPayments),
       items: data.items.map((i) => ({ name: i.name, unit_price: i.unit_price, quantity: i.quantity })),
     });
     return { ok: true, mode: "informational", orders };
@@ -438,7 +352,7 @@ export async function finalizeSplitCheck(
     const tipCents = c(tip);
     const totalCents = subCents - dCents - cmpCents + txCents + scc + tipCents;
     const total = totalCents / 100;
-    const pm = ck.payment_method ?? "cash";
+    const pm = methodOf(ck.payments);
     const label = "Seat " + (ci + 1) + " of " + N;
 
     const payload = {
@@ -476,7 +390,7 @@ export async function finalizeSplitCheck(
         completed_at: new Date().toISOString(),
       },
       items: ck.lines.map((l) => ({ catalog_item_id: l.catalog_item_id ?? null, name: l.name, unit_price: l.unit_price, quantity: l.quantity })),
-      payments: [{ method: pm, amount: total, tendered: null, change_given: null, tender_type: pm, finix_transfer_id: null, finix_state: null }],
+      payments: toPaymentRows(ck.payments),
       // Whole-check audit attaches to the first sub-check only (not per child).
       audit_events: ci === 0 ? splitAudit : [],
     };
@@ -513,4 +427,76 @@ function splitRpcMessage(rpcError: { message?: string } | null): string {
   }
   if (msg.indexOf("not_authorized") !== -1) return "You don't have access to record this sale.";
   return "Could not record the split. Please try again.";
+}
+
+// ---- Quote: authoritative per-square totals for the settlement UI --------------
+// Same allocation math as finalizeSplitCheck (via computeSplitTotals), but computes
+// no writes — the client shows Total/Paid/Outstanding squares against these totals,
+// so the on-screen figures ALWAYS match what finalize will validate + record.
+const quoteCheckSchema = z.object({
+  lines: z.array(splitItemSchema),
+  tip: z.coerce.number().min(0).max(1000000).optional(),
+});
+const quoteSchema = z.object({
+  items: z.array(splitItemSchema).min(1),
+  checks: z.array(quoteCheckSchema).min(2).max(10),
+  discount_type: z.enum(["amount", "percent"]).optional(),
+  discount_value: z.coerce.number().min(0).max(1000000).optional(),
+  comp_value: z.coerce.number().min(0).max(1000000).optional(),
+  service_charge: z.coerce.boolean().optional(),
+  tax_exempt: z.coerce.boolean().optional(),
+  customer_id: z.string().uuid().optional().nullable(),
+});
+
+export type SplitQuoteCheck = { subtotal: number; discount: number; comp: number; tax: number; service_charge: number; tip: number; total: number };
+export type SplitQuote = { ok: true; checks: SplitQuoteCheck[]; grandTotal: number };
+
+export async function quoteSplitCheck(input: unknown): Promise<SplitQuote | { error: string }> {
+  const parsed = quoteSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid split." };
+  const data = parsed.data;
+
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  let customerExempt = false;
+  if (data.customer_id) {
+    const { data: cust } = await supabase
+      .from("customers")
+      .select("tax_exempt")
+      .eq("id", data.customer_id)
+      .eq("business_id", business.id)
+      .maybeSingle();
+    customerExempt = (cust?.tax_exempt as boolean | null) === true;
+  }
+
+  let defaultRate = Number(business.default_tax_rate) || 0;
+  if (defaultRate > 1) defaultRate = defaultRate / 100;
+  const lineIds = Array.from(
+    new Set([...data.items, ...data.checks.flatMap((ck) => ck.lines)].map((i) => i.catalog_item_id).filter((id): id is string => !!id))
+  );
+  const { itemTaxMeta, rateFracById, rateNameById } = await loadItemTaxMeta(supabase, business.id, lineIds);
+  const scEnabled = (business as { service_charge_enabled?: boolean }).service_charge_enabled === true;
+  let scPct = Number((business as { service_charge_pct?: number }).service_charge_pct) || 0;
+  if (scPct < 0) scPct = 0;
+  if (scPct > 100) scPct = 100;
+  const scPostTax = (business as { service_charge_post_tax?: boolean }).service_charge_post_tax === true;
+
+  const alloc = computeSplitTotals(data, { defaultRate, itemTaxMeta, rateFracById, rateNameById, customerExempt, scEnabled, scPct, scPostTax });
+  if ("error" in alloc) return { error: alloc.error };
+
+  const checks: SplitQuoteCheck[] = data.checks.map((ck, ci) => {
+    const tip = Math.round((ck.tip ?? 0) * 100) / 100;
+    return {
+      subtotal: alloc.checkSubtotalCents[ci] / 100,
+      discount: alloc.discAlloc[ci] / 100,
+      comp: alloc.compAlloc[ci] / 100,
+      tax: alloc.taxAlloc[ci] / 100,
+      service_charge: alloc.scAlloc[ci] / 100,
+      tip,
+      total: Math.round((alloc.perCheckPreTipTotal[ci] + Math.round(tip * 100))) / 100,
+    };
+  });
+  const grandTotal = Math.round(checks.reduce((s, c) => s + c.total, 0) * 100) / 100;
+  return { ok: true, checks, grandTotal };
 }
