@@ -482,11 +482,13 @@ async function insertFiredByStation(
   const allergensByItem: Record<string, string[]> = {};
   const prepByItem: Record<string, number> = {};
   const nameById: Record<string, string> = {};
+  const shortNameById: Record<string, string> = {};
+  const separateByItem = new Set<string>();
   const eightySixed = new Set<string>();
   if (catIds.length) {
     const { data } = await supabase
       .from("catalog_items")
-      .select("id, name, station_id, out_of_stock, allergens, prep_minutes")
+      .select("id, name, short_name, station_id, out_of_stock, allergens, prep_minutes, print_separate_ticket")
       .eq("business_id", businessId)
       .in("id", catIds);
     for (const r of data ?? []) {
@@ -495,6 +497,8 @@ async function insertFiredByStation(
       if (Array.isArray(r.allergens) && r.allergens.length > 0) allergensByItem[id] = r.allergens as string[];
       if (r.prep_minutes != null) prepByItem[id] = Number(r.prep_minutes);
       if (r.out_of_stock === true) eightySixed.add(id);
+      if (typeof r.short_name === "string" && r.short_name.trim()) shortNameById[id] = (r.short_name as string).trim();
+      if (r.print_separate_ticket === true) separateByItem.add(id);
       nameById[id] = r.name as string;
     }
   }
@@ -509,14 +513,22 @@ async function insertFiredByStation(
   }
 
   // Group fired items by station ("" = no station / default ticket). Item-level
-  // allergens ride along on the fired item so the KDS can flag them.
-  const groups: Record<string, FiredItem[]> = {};
+  // allergens ride along on the fired item so the KDS can flag them. Items flagged
+  // print_separate_ticket break out onto their own chit (unique group key), while
+  // still carrying their real station_id for routing. short_name (if set) replaces
+  // the full name on the kitchen chit.
+  type Grp = { sid: string; items: FiredItem[] };
+  const groups: Record<string, Grp> = {};
+  let sepSeq = 0;
   for (const f of fired) {
     const sid = (f.catalog_item_id && stationByItem[f.catalog_item_id]) || "";
+    const separate = !!(f.catalog_item_id && separateByItem.has(f.catalog_item_id));
+    const key = separate ? sid + "|sep" + sepSeq++ : sid;
     const allergens = f.catalog_item_id ? allergensByItem[f.catalog_item_id] : undefined;
     const prep = f.catalog_item_id ? prepByItem[f.catalog_item_id] : undefined;
-    (groups[sid] ||= []).push({
-      name: f.name,
+    const chitName = (f.catalog_item_id && shortNameById[f.catalog_item_id]) || f.name;
+    (groups[key] ||= { sid, items: [] }).items.push({
+      name: chitName,
       quantity: f.quantity,
       note: f.note ?? null,
       seat: f.seat ?? null,
@@ -527,7 +539,7 @@ async function insertFiredByStation(
   }
 
   // Resolve station names for the ticket label suffix.
-  const sids = Object.keys(groups).filter(Boolean);
+  const sids = Array.from(new Set(Object.values(groups).map((g) => g.sid).filter(Boolean)));
   const stationName: Record<string, string> = {};
   if (sids.length) {
     const { data } = await supabase
@@ -538,12 +550,12 @@ async function insertFiredByStation(
     for (const r of data ?? []) stationName[r.id as string] = r.name as string;
   }
 
-  const rows = Object.keys(groups).map((sid) => ({
+  const rows = Object.values(groups).map((g) => ({
     business_id: businessId,
     element_id: elementId,
-    label: sid ? (baseLabel ? baseLabel + " · " : "") + (stationName[sid] || "Station") : baseLabel,
-    items: groups[sid],
-    station_id: sid || null,
+    label: g.sid ? (baseLabel ? baseLabel + " · " : "") + (stationName[g.sid] || "Station") : baseLabel,
+    items: g.items,
+    station_id: g.sid || null,
     course_id: courseId,
     created_by: createdBy,
   }));

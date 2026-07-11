@@ -134,6 +134,8 @@ export function ReceiptSettingsForm({ initial, businessName }: { initial: Partia
             <Toggle checked={s.showSaleNumber} onChange={(v) => set("showSaleNumber", v)}>Show sale number</Toggle>
             <Toggle checked={s.showDateTime} onChange={(v) => set("showDateTime", v)}>Show date and time</Toggle>
             <Toggle checked={s.showCustomer} onChange={(v) => set("showCustomer", v)}>Show customer name (when attached)</Toggle>
+            <Toggle checked={s.showTableName} onChange={(v) => set("showTableName", v)}>Show table name (on the bill)</Toggle>
+            <Toggle checked={s.showServerName} onChange={(v) => set("showServerName", v)}>Show server name (on the bill)</Toggle>
           </div>
           <div>
             <Label className="text-xs">Tax line label</Label>
@@ -154,6 +156,15 @@ export function ReceiptSettingsForm({ initial, businessName }: { initial: Partia
           <div className="space-y-1">
             <Toggle checked={s.showSocial} onChange={(v) => set("showSocial", v)}>Show social handle</Toggle>
             {s.showSocial && <Input value={s.social} onChange={(e) => set("social", e.target.value)} placeholder="Follow @slaspa" className="h-9" />}
+          </div>
+          <div className="space-y-1">
+            <Toggle checked={s.showTipGuide} onChange={(v) => set("showTipGuide", v)}>Show tip guide (suggested tip amounts)</Toggle>
+            {s.showTipGuide && (
+              <div>
+                <Label className="text-xs">Tip guide percentages (comma-separated)</Label>
+                <Input value={s.tipGuidePcts} onChange={(e) => set("tipGuidePcts", e.target.value)} placeholder="15, 18, 20" className="h-9 mt-1" />
+              </div>
+            )}
           </div>
         </div>
 

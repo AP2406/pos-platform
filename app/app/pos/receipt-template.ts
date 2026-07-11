@@ -21,6 +21,12 @@ export type ReceiptSettings = {
   showSaleNumber: boolean;
   showDateTime: boolean;
   showCustomer: boolean;
+  // Bill-layout fields (mainly meaningful on the pre-payment "BILL" for a table).
+  showTableName: boolean;
+  showServerName: boolean;
+  // Tip guide: print suggested tip amounts computed from these percentages.
+  showTipGuide: boolean;
+  tipGuidePcts: string;
   footerMessage: string;
   footerPolicy: string;
   showSocial: boolean;
@@ -45,6 +51,10 @@ export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
   showSaleNumber: true,
   showDateTime: true,
   showCustomer: true,
+  showTableName: true,
+  showServerName: true,
+  showTipGuide: false,
+  tipGuidePcts: "15,18,20",
   footerMessage: "Thank you!",
   footerPolicy: "",
   showSocial: false,
@@ -74,6 +84,10 @@ export type ReceiptData = {
   // Optional: dining option label and "this is an unpaid bill" pre-receipt flag.
   diningOption?: string | null;
   bill?: boolean;
+  // Bill context (full-service): table label, server, and a whole-check note.
+  tableName?: string | null;
+  serverName?: string | null;
+  orderNote?: string | null;
 };
 
 const DINING_LABELS: Record<string, string> = {
@@ -129,11 +143,30 @@ function metaBlock(r: ReceiptData, s: ReceiptSettings): string {
   let html = "";
   if (r.bill) html += '<div class="meta">\u2014 BILL \u2014 not a receipt</div>';
   if (bits.length) html += '<div class="meta">' + bits.join("  \u00b7  ") + "</div>";
+  if (s.showTableName && r.tableName) html += '<div class="meta">Table: ' + esc(r.tableName) + "</div>";
+  if (s.showServerName && r.serverName) html += '<div class="meta">Server: ' + esc(r.serverName) + "</div>";
   if (r.diningOption && DINING_LABELS[r.diningOption]) {
     html += '<div class="meta">' + DINING_LABELS[r.diningOption] + "</div>";
   }
   if (s.showCustomer && r.customerName) html += '<div class="meta">Customer: ' + esc(r.customerName) + "</div>";
+  if (r.orderNote && r.orderNote.trim()) html += '<div class="meta">Note: ' + esc(r.orderNote.trim()) + "</div>";
   return html;
+}
+
+// Tip guide: suggested tip amounts computed from the printed total. Common on the
+// pre-payment bill so the guest can pick a tip; gated behind showTipGuide.
+function tipGuideBlock(r: ReceiptData, s: ReceiptSettings): string {
+  if (!s.showTipGuide) return "";
+  const pcts = s.tipGuidePcts
+    .split(",")
+    .map((p) => parseFloat(p.trim()))
+    .filter((p) => !isNaN(p) && p > 0)
+    .slice(0, 4);
+  if (!pcts.length) return "";
+  const rows = pcts
+    .map((p) => row(p + "%", money(Math.round(r.total * p) / 100), { small: true, muted: true }))
+    .join("");
+  return '<div class="rule"></div><div class="meta">Tip guide</div>' + rows;
 }
 
 function itemsBlock(r: ReceiptData): string {
@@ -267,6 +300,7 @@ export function buildReceiptHtml(r: ReceiptData, settingsIn: Partial<ReceiptSett
     itemsBlock(r) +
     '<div class="rule"></div>' +
     totals +
+    tipGuideBlock(r, s) +
     '<div class="rule"></div>' +
     (r.bill ? "" : paymentBlock(r)) +
     footerBlock(s);
