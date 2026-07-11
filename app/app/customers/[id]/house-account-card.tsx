@@ -75,7 +75,7 @@ export function HouseAccountCard({
         <p className="text-xs text-muted-foreground">{enabled ? "House account is active." : "No house account."} Only an owner or manager can change it.</p>
       )}
 
-      {balance > 0 && (
+      {canManage && balance > 0 && (
         <div className="flex items-center gap-2 pt-1 border-t border-border">
           <label className="text-sm w-28 shrink-0">Record payment</label>
           <Input type="number" min="0" step="0.01" value={pay} disabled={pending} onChange={(e) => setPay(e.target.value)} placeholder="0.00" className="h-9 w-32 text-right" />

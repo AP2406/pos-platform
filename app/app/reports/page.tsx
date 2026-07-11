@@ -98,7 +98,7 @@ export default async function ReportsPage({
   const tips = round2(orders.reduce((a, o) => a + o.tip, 0));
   const collected = round2(orders.reduce((a, o) => a + o.total, 0));
 
-  const payTotals: Record<string, number> = { cash: 0, card: 0, gift_card: 0, store_credit: 0, other: 0 };
+  const payTotals: Record<string, number> = { cash: 0, card: 0, gift_card: 0, store_credit: 0, house_account: 0, other: 0 };
   let refunds = 0;
   const itemAgg: Record<string, { name: string; qty: number; revenue: number; catId: string | null }> = {};
   const catAgg: Record<string, { qty: number; revenue: number }> = {};
@@ -194,6 +194,7 @@ export default async function ReportsPage({
   const card = round2(payTotals.card);
   const giftCard = round2(payTotals.gift_card);
   const storeCredit = round2(payTotals.store_credit);
+  const houseAccount = round2(payTotals.house_account);
   const other = round2(payTotals.other);
 
   const topItems = Object.keys(itemAgg)
@@ -387,6 +388,12 @@ export default async function ReportsPage({
             <div>
               <div className="text-muted-foreground text-xs">Store credit</div>
               <div className="tabular-nums">{money(storeCredit)}</div>
+            </div>
+          )}
+          {houseAccount > 0 && (
+            <div>
+              <div className="text-muted-foreground text-xs">House account</div>
+              <div className="tabular-nums">{money(houseAccount)}</div>
             </div>
           )}
           <div>

@@ -908,6 +908,12 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   }
 
   revalidatePath("/app/pos");
+  // A charge-to-account moves the customer's AR balance — refresh their profile
+  // and the accounting AR total.
+  if (houseAccountCents > 0 && customerId) {
+    revalidatePath("/app/customers/" + customerId);
+    revalidatePath("/app/accounting");
+  }
   return { ok: true, id: result.order_id, sale_number: Number(result.sale_number) };
 }
 

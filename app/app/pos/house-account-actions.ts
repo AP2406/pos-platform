@@ -72,6 +72,7 @@ export async function setHouseAccount(
       .eq("id", existing.id as string);
     if (error) { console.error("setHouseAccount update:", error); return { error: "Could not save the house account." }; }
     revalidatePath("/app/customers");
+    revalidatePath("/app/customers/" + customerId);
     return { ok: true, balance: (Number(existing.balance_cents) || 0) / 100 };
   }
 
@@ -80,6 +81,7 @@ export async function setHouseAccount(
     .insert({ business_id: business.id, customer_id: customerId, enabled, limit_cents: limitCents, balance_cents: 0 });
   if (error) { console.error("setHouseAccount insert:", error); return { error: "Could not create the house account." }; }
   revalidatePath("/app/customers");
+  revalidatePath("/app/customers/" + customerId);
   return { ok: true, balance: 0 };
 }
 
@@ -90,7 +92,10 @@ export async function settleHouseAccount(
   amountDollars: number,
   note?: string
 ): Promise<{ ok: true; balance: number } | { error: string }> {
-  const { business } = await requireBusiness();
+  const { business, role } = await requireBusiness();
+  if (role !== "owner" && role !== "manager") {
+    return { error: "Only an owner or manager can record a house-account payment." };
+  }
   if (!customerId) return { error: "Choose a customer." };
   const cents = Math.round((Number(amountDollars) || 0) * 100);
   if (cents <= 0) return { error: "Enter a payment amount." };
@@ -117,5 +122,7 @@ export async function settleHouseAccount(
   });
   if (error) { console.error("settleHouseAccount:", error); return { error: "Could not record the payment." }; }
   revalidatePath("/app/customers");
+  revalidatePath("/app/customers/" + customerId);
+  revalidatePath("/app/accounting");
   return { ok: true, balance: (Number(newBal) || 0) / 100 };
 }

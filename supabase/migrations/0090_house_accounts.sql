@@ -36,8 +36,11 @@ create policy house_account_ledger_rw on public.house_account_ledger for all
 create index if not exists house_account_ledger_cust
   on public.house_account_ledger(business_id, customer_id, created_at desc);
 
--- Atomic apply: locks the account row, enforces the credit limit on a 'charge',
--- writes a ledger row, and returns the new balance in cents.
+-- Atomic apply: locks the account row, writes a ledger row, and returns the new
+-- balance in cents. A 'payment' can't overpay the balance (no negative receivable).
+-- A 'charge' always posts: the credit limit is enforced PRE-sale (in createOrder),
+-- so once a sale commits the debt is recorded even if it lands over limit — that
+-- beats leaving a paid, revenue-booked sale unbilled.
 create or replace function public.apply_house_account_delta(
   p_business_id uuid, p_customer_id uuid, p_delta_cents bigint, p_kind text,
   p_order_id uuid, p_note text default null
@@ -45,8 +48,6 @@ create or replace function public.apply_house_account_delta(
 language plpgsql security definer set search_path to 'public','extensions'
 as $$
 declare
-  v_enabled boolean;
-  v_limit bigint;
   v_balance bigint;
 begin
   if not exists (select 1 from business_members where business_id = p_business_id and user_id = auth.uid()) then
@@ -55,21 +56,15 @@ begin
   if p_kind not in ('charge','payment','adjust') then
     raise exception 'Invalid kind';
   end if;
-  select enabled, limit_cents, balance_cents into v_enabled, v_limit, v_balance
+  select balance_cents into v_balance
     from house_accounts where business_id = p_business_id and customer_id = p_customer_id for update;
   if not found then
-    if p_kind = 'charge' then
-      raise exception 'No house account for this customer';
-    end if;
     insert into house_accounts (business_id, customer_id, enabled, balance_cents)
       values (p_business_id, p_customer_id, true, 0)
-      returning enabled, limit_cents, balance_cents into v_enabled, v_limit, v_balance;
+      returning balance_cents into v_balance;
   end if;
-  if p_kind = 'charge' then
-    if not v_enabled then raise exception 'House account is disabled for this customer'; end if;
-    if v_limit is not null and (v_balance + p_delta_cents) > v_limit then
-      raise exception 'Over the house-account credit limit';
-    end if;
+  if p_kind = 'payment' and (v_balance + p_delta_cents) < 0 then
+    raise exception 'Payment exceeds the balance owed';
   end if;
   update house_accounts
     set balance_cents = balance_cents + p_delta_cents, updated_at = now()
