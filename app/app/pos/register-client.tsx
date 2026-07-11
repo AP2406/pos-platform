@@ -993,9 +993,15 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       const v = item.variations.find((x) => x.id === pickerVariationId);
       if (v) unit = v.price;
     }
+    let modTotal = 0;
     for (const m of item.modifiers) {
-      if (pickerMods.includes(m.id)) unit = unit + m.price;
+      if (pickerMods.includes(m.id)) modTotal += m.price;
     }
+    unit = unit + modTotal;
+    // Apply the active happy-hour window exactly as confirmOptions does, so the
+    // button's price is what actually gets saved (add AND edit) — not a pre-window figure.
+    const win = activeWindow(item);
+    if (win) unit = win.mode === "percent" ? windowPrice(unit, win) : Math.max(0, win.value + modTotal);
     return Math.round(unit * 100) / 100;
   }
 
@@ -1078,7 +1084,15 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
     const l = cart[index];
     if (!l || !l.catalog_item_id || (l.sent_qty ?? 0) > 0) return false;
     const it = items.find((x) => x.id === l.catalog_item_id);
-    return !!it && (it.variations.length > 0 || it.modifiers.length > 0);
+    if (!it || (it.variations.length === 0 && it.modifiers.length === 0)) return false;
+    // Only editable if every stored modifier maps to a current option id. Otherwise the
+    // picker (which keys on option ids) couldn't preselect it, and Save would silently
+    // drop that paid add-on and lower the price — safer to delete + re-add such a line.
+    const optIds = new Set(it.modifiers.map((m) => m.id));
+    for (const m of l.modifiers ?? []) {
+      if (!m.modifier_id || !optIds.has(m.modifier_id)) return false;
+    }
+    return true;
   }
 
   // Re-open the picker on an existing line, prefilled from its structured modifiers,
