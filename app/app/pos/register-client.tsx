@@ -43,6 +43,8 @@ import { DISCOUNT_REASONS, COMP_REASONS, SERVICE_CHARGE_WAIVE_REASONS, TAX_EXEMP
 import { setActiveStaff, clearActiveStaff, type ActiveStaff } from "./staff-session";
 import { CardPaymentModal } from "./card-payment-modal";
 import { TerminalPaymentModal } from "./terminal-payment-modal";
+import { TabHoldModal } from "./tab-hold-modal";
+import { captureTab, voidTabAuthorization } from "./finix-preauth-actions";
 import type { CanonicalOrderInput } from "@/lib/pos/canonical-order";
 import { getCardConfig } from "./finix-pos-actions";
 import { tapToPayAvailable } from "@/lib/services/tap-to-pay";
@@ -93,7 +95,7 @@ type CartLine = {
   guest?: boolean;
 };
 // Binding when the register is opened for a specific full-service table or to-go.
-type TableBinding = { tableId: string; ticketId: string; tableLabel: string; serverName?: string | null; seatCount?: number | null; guestCount?: number | null };
+type TableBinding = { tableId: string; ticketId: string; tableLabel: string; serverName?: string | null; seatCount?: number | null; guestCount?: number | null; ticketType?: "tab"; heldAuthCents?: number | null };
 type ServiceChargeCfg = { enabled: boolean; pct: number; autoParty: number; postTax: boolean; label: string };
 type SplitCfg = { settlementMode: "separate" | "informational"; allowUnits: boolean };
 type StaffMember = { id: string; name: string };
@@ -342,6 +344,10 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
   const [staffBusy, setStaffBusy] = useState(false);
   const [cardCfg, setCardCfg] = useState<CardCfg | null>(null);
   const [cardModal, setCardModal] = useState<CardModalState | null>(null);
+  // Bar-tab card hold (pre-auth): cents currently held on this tab's card, or null.
+  const [heldCents, setHeldCents] = useState<number | null>(tableBinding?.ticketType === "tab" ? tableBinding.heldAuthCents ?? null : null);
+  const [tabHoldOpen, setTabHoldOpen] = useState<boolean>(false);
+  const [tabBusy, setTabBusy] = useState<boolean>(false);
   const [terminalModal, setTerminalModal] = useState<CardModalState | null>(null);
   const [terminalReady, setTerminalReady] = useState<boolean | null>(null);
   const [tenderOpen, setTenderOpen] = useState(false);
@@ -1617,6 +1623,10 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
   function openSplit() {
     setError(null);
     if (cart.length === 0) return;
+    if (heldCents != null) {
+      setError("This tab has a card on file. Use “Charge card on file”, or release the hold to split it another way.");
+      return;
+    }
     if (total < 0) {
       setError("Total can't be negative.");
       return;
@@ -2158,6 +2168,13 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       setError("Add at least one item.");
       return;
     }
+    // A tab with a live card hold MUST close through that hold (or release it first).
+    // Otherwise a second tender would double-charge, and closing the ticket would
+    // orphan the Finix authorization with no way to void it (review Findings 1 & 2).
+    if (heldCents != null) {
+      setError("This tab has a card on file. Use “Charge card on file”, or release the hold to take another payment.");
+      return;
+    }
     // P1: a line 86'd by the kitchen can't be sold. Block on the unfired portion
     // (anything already fired was made before the 86 and is fine to charge).
     const blocked86 = cart.find((l) => lineIsOos(l) && l.quantity > (l.sent_qty ?? 0));
@@ -2375,6 +2392,75 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
     closeTableAfterCharge(res.id);
     const cfg = getPrinterConfig();
     if (cfg && cfg.autoPrint) doPrint(rec);
+  }
+
+  // Close a bar tab by capturing its card hold for the final total (tip included).
+  // Same shape as the sale path: captureTab does the charge + records the order (and
+  // reverses itself if recording fails); here we just build the receipt and close out.
+  function captureHeldCard() {
+    if (!tableBinding || heldCents == null || tabBusy) return;
+    if (cart.length === 0) {
+      setError("Add at least one item.");
+      return;
+    }
+    setError(null);
+    setTabBusy(true);
+    captureTab({ ...commonOrderFields(), ticket_id: tableBinding.ticketId, expected_total: total })
+      .then(function (res) {
+        if ("ok" in res) {
+          const rec: Receipt = {
+            id: res.id,
+            saleNumber: res.sale_number,
+            businessName,
+            customerName: customer ? customer.name : null,
+            items: cart,
+            subtotal: subtotal,
+            discount: discount,
+            comp: comp,
+            serviceCharge: serviceChargeAmt,
+            serviceLabel: scCfg.label,
+            tax: tax,
+            tip: tipNum,
+            total: total,
+            paymentMethod: "card",
+            payments: [{ method: "card", amount: total, tendered: null, change: null }],
+            at: new Date().toLocaleString(),
+            diningOption: diningOption,
+          };
+          setHeldCents(null);
+          setReceipt(rec);
+          setTenderOpen(false);
+          clearCart();
+          closeTableAfterCharge(res.id);
+          const cfg = getPrinterConfig();
+          if (cfg && cfg.autoPrint) doPrint(rec);
+          return;
+        }
+        if ("declined" in res) setError(res.message);
+        else setError(res.error);
+        setTabBusy(false);
+      })
+      .catch(function (e) {
+        setError("Something went wrong: " + String(e));
+        setTabBusy(false);
+      });
+  }
+
+  // Release a tab's card hold (the guest walked, or is paying another way).
+  function releaseHeldCard() {
+    if (!tableBinding || heldCents == null || tabBusy) return;
+    setError(null);
+    setTabBusy(true);
+    voidTabAuthorization(tableBinding.ticketId)
+      .then(function (res) {
+        if ("ok" in res) setHeldCents(null);
+        else setError(res.error);
+        setTabBusy(false);
+      })
+      .catch(function (e) {
+        setError("Something went wrong: " + String(e));
+        setTabBusy(false);
+      });
   }
 
   function openHold() {
@@ -2795,6 +2881,20 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
           tapToPay={cardModal.tapToPay}
           onClose={() => setCardModal(null)}
           onSuccess={handleCardSuccess}
+        />
+      )}
+
+      {tabHoldOpen && tableBinding?.ticketType === "tab" && cardCfg && cardCfg.enabled && (
+        <TabHoldModal
+          ticketId={tableBinding.ticketId}
+          tabName={customer ? customer.name : (tableBinding.tableLabel.replace(/^Tab · /, "") || null)}
+          suggestedHold={total > 0 ? total : subtotal}
+          config={{ applicationId: cardCfg.applicationId, environment: cardCfg.environment, merchantId: cardCfg.merchantId }}
+          onClose={() => setTabHoldOpen(false)}
+          onHeld={(cents) => {
+            setHeldCents(cents);
+            setTabHoldOpen(false);
+          }}
         />
       )}
 
@@ -3272,7 +3372,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                     {canRepeatRound && (
                       <Button variant="outline" className="h-11 px-3" onClick={() => { if (tableBinding) startTransition(async () => { await dropCheck(tableBinding.ticketId); }); }} disabled={pending || sending} title="Mark the check as presented to the guest">Drop check</Button>
                     )}
-                    <Button variant="outline" className="flex-1 h-11" onClick={sendAndPay} disabled={pending}>
+                    <Button variant="outline" className="flex-1 h-11" onClick={sendAndPay} disabled={pending || heldCents != null}>
                       Send &amp; Pay
                     </Button>
                   </div>
@@ -3378,11 +3478,34 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
 
                   {error && <p className="text-sm text-red-600 pt-1">{error}</p>}
 
-                  <Button variant="primary" className="w-full h-14 text-base mt-2" onClick={openTender} disabled={pending || cart.length === 0 || (discount > 0 && !discountReasonOk) || (comp > 0 && !compReasonOk) || (scWaived && !serviceWaiveOk) || (taxExempt && !taxExemptOk)}>
+                  <Button variant="primary" className="w-full h-14 text-base mt-2" onClick={openTender} disabled={pending || tabBusy || heldCents != null || cart.length === 0 || (discount > 0 && !discountReasonOk) || (comp > 0 && !compReasonOk) || (scWaived && !serviceWaiveOk) || (taxExempt && !taxExemptOk)}>
                     {"Charge" + (total > 0 ? " $" + total.toFixed(2) : "")}
                   </Button>
+
+                  {/* Bar-tab card hold (pre-auth): hold at open, capture the final total at close. */}
+                  {tableBinding?.ticketType === "tab" && cardEnabled && (
+                    heldCents == null ? (
+                      <button type="button" onClick={() => setTabHoldOpen(true)} disabled={pending || tabBusy} className="w-full h-10 mt-1 rounded-md border border-border text-sm hover:bg-accent disabled:opacity-50">
+                        Hold a card on file
+                      </button>
+                    ) : (
+                      <div className="mt-1 rounded-md border border-border p-2 space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Card on file</span>
+                          <span className="tabular-nums font-medium">{"$" + (heldCents / 100).toFixed(2) + " held"}</span>
+                        </div>
+                        <Button variant="primary" className="w-full h-12" onClick={captureHeldCard} disabled={pending || tabBusy || cart.length === 0}>
+                          {tabBusy ? "Charging…" : "Charge card on file" + (total > 0 ? " · $" + total.toFixed(2) : "")}
+                        </Button>
+                        <button type="button" onClick={releaseHeldCard} disabled={pending || tabBusy} className="w-full h-9 rounded-md border border-border text-sm hover:bg-accent disabled:opacity-50">
+                          Release hold
+                        </button>
+                      </div>
+                    )
+                  )}
+
                   {splitSettings && total > 0 && (
-                    <button type="button" onClick={openSplit} disabled={pending || cart.length === 0} className="w-full h-10 mt-1 rounded-md border border-border text-sm hover:bg-accent disabled:opacity-50">
+                    <button type="button" onClick={openSplit} disabled={pending || tabBusy || heldCents != null || cart.length === 0} className="w-full h-10 mt-1 rounded-md border border-border text-sm hover:bg-accent disabled:opacity-50">
                       Split check
                     </button>
                   )}

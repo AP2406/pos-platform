@@ -319,6 +319,78 @@ export async function refundTransfer(transferId: string, input: CreateRefundInpu
   });
 }
 
+// ---------- Authorization (pre-auth hold) types & helpers ----------
+// Card-not-present pre-auth for bar tabs: place a hold at open, capture (with the
+// tip, up to the auth) at close, or void on a walked tab. Card-PRESENT (PAX) auth
+// is intentionally NOT here — it needs the device operation_key confirmed first.
+//
+// SANDBOX MERGE-GATE: the capture AND void endpoints below follow the provided spec;
+// Finix's live API may instead be `PUT /authorizations/{id}` (capture_amount / void_me).
+// Verify BOTH against a Finix SANDBOX before a live card:
+//   - wrong CAPTURE endpoint  -> every close errors, tab uncollected (hold expires ~7d).
+//   - wrong VOID endpoint     -> walked-tab release fails AND the dangling-hold cleanup
+//                                in authorizeTabCard fails -> customer money FROZEN till expiry.
+// Both are isolated in one helper each, so each is a one-line change once confirmed.
+
+export type FinixAuthorization = {
+  id: string;
+  amount: number;
+  currency: string;
+  state: "PENDING" | "SUCCEEDED" | "FAILED" | "CANCELED";
+  transfer: string | null; // populated once captured
+  is_void?: boolean;
+  void_state?: string | null;
+  expires_at?: string | null;
+  failure_code?: string;
+  failure_message?: string;
+  source: string;
+  created_at: string;
+};
+
+export async function createAuthorization(input: {
+  amount: number; // cents to HOLD
+  currency: string;
+  source: string; // Payment Instrument ID
+  merchant: string; // seller Merchant ID
+  idempotency_id?: string;
+  fraud_session_id?: string;
+  tags?: Record<string, string>;
+}) {
+  const body: Record<string, unknown> = {
+    amount: input.amount,
+    currency: input.currency,
+    source: input.source,
+    merchant: input.merchant,
+    idempotency_id: input.idempotency_id,
+    tags: input.tags,
+  };
+  if (input.fraud_session_id) body.fraud_session_id = input.fraud_session_id;
+  return finix.post<FinixAuthorization>("/authorizations", body);
+}
+
+// Capture a hold (funds move). capture_amount MUST be <= the authorized amount; this
+// is how a tip is added at close. SELF-HEALING ENDPOINT: tries the provided-spec shape
+// (POST /authorizations/{id}/capture); on a wrong-endpoint response (404/405) it falls
+// back to Finix's documented PUT /authorizations/{id}. Same idempotency_id on both, so a
+// capture can never happen twice. (Still worth a one-time sandbox confirmation.)
+export async function captureAuthorization(authorizationId: string, captureAmountCents: number, idempotency_id?: string) {
+  const body = { capture_amount: captureAmountCents, idempotency_id };
+  const post = await finix.post<FinixAuthorization>("/authorizations/" + authorizationId + "/capture", body);
+  if (!("error" in post)) return post;
+  if (post.status === 404 || post.status === 405) return finix.put<FinixAuthorization>("/authorizations/" + authorizationId, body);
+  return post; // real error/decline — surface it, don't retry as a different shape
+}
+
+// Release a hold (walked tab / cancelled). Once voided it can never be captured. Same
+// self-healing POST-then-PUT(void_me) as capture.
+export async function voidAuthorization(authorizationId: string, idempotency_id?: string) {
+  const body = { void_me: true, idempotency_id };
+  const post = await finix.post<FinixAuthorization>("/authorizations/" + authorizationId + "/void", body);
+  if (!("error" in post)) return post;
+  if (post.status === 404 || post.status === 405) return finix.put<FinixAuthorization>("/authorizations/" + authorizationId, body);
+  return post;
+}
+
 // ---------- Webhook signature verification ----------
 // NOTE: This helper assumes a Stripe-style signature and is NOT how Finix signs
 // webhooks. The real verification (the Finix-Signature header) lives in the
