@@ -18,7 +18,7 @@ const REASONS = [
 
 type Line = { order_item_id: string; name: string; unit_price: number; sold: number; returned: number; returnable: number };
 type OrderInfo = { id: string; sale_number: number | null; status: string; subtotal: number; discount: number; tax: number; tip: number; total: number; refunded_amount: number };
-type DoneInfo = { amount: number; fully: boolean; discount_portion: number; tax_portion: number; returned_subtotal: number; items: { name: string; quantity: number; line_subtotal: number }[]; reason: string; at: string };
+type DoneInfo = { amount: number; fully: boolean; discount_portion: number; tax_portion: number; returned_subtotal: number; items: { name: string; quantity: number; line_subtotal: number }[]; reason: string; at: string; byAmount: boolean };
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -35,13 +35,16 @@ function printRefundReceipt(r: { businessName: string; saleNumber: number; info:
   if (!win) return;
   const match = REASONS.find((x) => x.value === r.info.reason);
   const reasonLabel = match ? match.label : r.info.reason;
-  const rows = r.info.items
-    .map(function (l) {
-      return "<tr><td>" + escapeHtml(l.name) + " x" + l.quantity + '</td><td style="text-align:right">$' + l.line_subtotal.toFixed(2) + "</td></tr>";
-    })
-    .join("");
-  const discountRow = r.info.discount_portion > 0 ? '<tr><td>Less discount</td><td style="text-align:right">-$' + r.info.discount_portion.toFixed(2) + "</td></tr>" : "";
-  const taxRow = r.info.tax_portion > 0 ? '<tr><td>Tax</td><td style="text-align:right">+$' + r.info.tax_portion.toFixed(2) + "</td></tr>" : "";
+  const rows = r.info.byAmount
+    ? '<tr><td>Refund amount</td><td style="text-align:right">$' + r.info.amount.toFixed(2) + "</td></tr>"
+    : r.info.items
+        .map(function (l) {
+          return "<tr><td>" + escapeHtml(l.name) + " x" + l.quantity + '</td><td style="text-align:right">$' + l.line_subtotal.toFixed(2) + "</td></tr>";
+        })
+        .join("");
+  const discountRow = !r.info.byAmount && r.info.discount_portion > 0 ? '<tr><td>Less discount</td><td style="text-align:right">-$' + r.info.discount_portion.toFixed(2) + "</td></tr>" : "";
+  const taxRow = !r.info.byAmount && r.info.tax_portion > 0 ? '<tr><td>Tax</td><td style="text-align:right">+$' + r.info.tax_portion.toFixed(2) + "</td></tr>" : "";
+  const subtotalRow = r.info.byAmount ? "" : '<tr><td>Items</td><td style="text-align:right">$' + r.info.returned_subtotal.toFixed(2) + "</td></tr>";
   const html =
     "<html><head><title>Refund</title><style>" +
     "body{font-family:monospace;font-size:12px;width:280px;margin:0 auto;padding:8px;color:#000}" +
@@ -62,7 +65,7 @@ function printRefundReceipt(r: { businessName: string; saleNumber: number; info:
     "<table>" + rows + "</table>" +
     '<div class="line"></div>' +
     "<table>" +
-    '<tr><td>Items</td><td style="text-align:right">$' + r.info.returned_subtotal.toFixed(2) + "</td></tr>" +
+    subtotalRow +
     discountRow +
     taxRow +
     "</table>" +
@@ -86,6 +89,8 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
   const [restock, setRestock] = useState(true);
+  const [mode, setMode] = useState<"items" | "amount">("items");
+  const [amountInput, setAmountInput] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState<DoneInfo | null>(null);
   const [pending, startTransition] = useTransition();
@@ -104,6 +109,8 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
     setReason("");
     setNote("");
     setRestock(true);
+    setMode("items");
+    setAmountInput("");
     setQty({});
     setOrder(null);
     setLines([]);
@@ -160,13 +167,19 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
   const taxPortion = order ? round2(order.tax * f) : 0;
   const previewAmount = round2(returnedSubtotal - discountPortion + taxPortion);
   const anySelected = lines.some((l) => (qty[l.order_item_id] || 0) > 0);
+  // What's left to refund on this sale (total minus everything refunded already).
+  const remaining = order ? round2(order.total - order.refunded_amount) : 0;
+  const amountVal = round2(Number(amountInput) || 0);
+  const effectiveAmount = mode === "amount" ? amountVal : previewAmount;
+  const amountOk = amountVal > 0 && amountVal <= remaining;
 
   function runRefund(approverPin?: string) {
     setErr(null);
-    const selected = lines.filter((l) => (qty[l.order_item_id] || 0) > 0).map((l) => ({ order_item_id: l.order_item_id, quantity: qty[l.order_item_id] || 0 }));
-    const selectedForReceipt = lines.filter((l) => (qty[l.order_item_id] || 0) > 0).map((l) => ({ name: l.name, quantity: qty[l.order_item_id] || 0, line_subtotal: round2((qty[l.order_item_id] || 0) * l.unit_price) }));
+    const byAmount = mode === "amount";
+    const selected = byAmount ? [] : lines.filter((l) => (qty[l.order_item_id] || 0) > 0).map((l) => ({ order_item_id: l.order_item_id, quantity: qty[l.order_item_id] || 0 }));
+    const selectedForReceipt = byAmount ? [] : lines.filter((l) => (qty[l.order_item_id] || 0) > 0).map((l) => ({ name: l.name, quantity: qty[l.order_item_id] || 0, line_subtotal: round2((qty[l.order_item_id] || 0) * l.unit_price) }));
     startTransition(async () => {
-      const res = await refundItems({ order_id: orderId, lines: selected, reason, note, restock, approver_pin: approverPin });
+      const res = await refundItems({ order_id: orderId, lines: selected, reason, note, restock, approver_pin: approverPin, amount: byAmount ? amountVal : undefined });
       if ("needs_approval" in res) {
         setNeedsApproval(true);
         return;
@@ -175,7 +188,7 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
         setErr(res.error);
         return;
       }
-      setDone({ amount: res.amount, fully: res.fully, discount_portion: res.discount_portion, tax_portion: res.tax_portion, returned_subtotal: res.returned_subtotal, items: selectedForReceipt, reason: reason, at: new Date().toLocaleString() });
+      setDone({ amount: res.amount, fully: res.fully, discount_portion: res.discount_portion, tax_portion: res.tax_portion, returned_subtotal: res.returned_subtotal, items: selectedForReceipt, reason: reason, at: new Date().toLocaleString(), byAmount: byAmount });
     });
   }
 
@@ -185,7 +198,10 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
       setErr("Choose a reason.");
       return;
     }
-    if (!anySelected) {
+    if (mode === "amount") {
+      if (amountVal <= 0) { setErr("Enter an amount to refund."); return; }
+      if (amountVal > remaining) { setErr("That's more than the " + cad(remaining) + " left on this sale."); return; }
+    } else if (!anySelected) {
       setErr("Select at least one item to return.");
       return;
     }
@@ -242,7 +258,7 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
               <div className="space-y-3">
                 <h3 className="font-medium">Manager approval</h3>
                 <p className="text-sm text-muted-foreground">
-                  A manager must approve this refund of {cad(previewAmount)}. Ask a manager to enter their PIN.
+                  A manager must approve this refund of {cad(effectiveAmount)}. Ask a manager to enter their PIN.
                 </p>
                 <Input type="password" inputMode="numeric" value={mgrPin} onChange={(e) => setMgrPin(e.target.value)} placeholder="Manager PIN" className="h-9" />
                 {err && <p className="text-sm text-red-600">{err}</p>}
@@ -259,11 +275,29 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-medium">{"Refund sale #" + (order.sale_number ?? saleNumber)}</h3>
-                  <button type="button" onClick={refundAll} className="text-xs text-blue-600 underline">
-                    Refund everything
-                  </button>
+                  {mode === "items" && (
+                    <button type="button" onClick={refundAll} className="text-xs text-blue-600 underline">
+                      Refund everything
+                    </button>
+                  )}
                 </div>
 
+                <div className="flex gap-1 rounded-md border border-border p-0.5 text-sm">
+                  <button type="button" onClick={() => setMode("items")} className={"flex-1 h-8 rounded " + (mode === "items" ? "bg-accent font-medium" : "text-muted-foreground")}>By item</button>
+                  <button type="button" onClick={() => setMode("amount")} className={"flex-1 h-8 rounded " + (mode === "amount" ? "bg-accent font-medium" : "text-muted-foreground")}>By amount</button>
+                </div>
+
+                {mode === "amount" ? (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Refund amount</Label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">$</span>
+                      <Input type="number" inputMode="decimal" min="0" step="0.01" value={amountInput} onChange={(e) => setAmountInput(e.target.value)} placeholder="0.00" className="h-9 flex-1" />
+                    </div>
+                    <p className="text-xs text-muted-foreground">{cad(remaining) + " left on this sale" + (order.refunded_amount > 0 ? " (" + cad(order.refunded_amount) + " already refunded)" : "")}</p>
+                  </div>
+                ) : (
+                <>
                 <div className="space-y-2">
                   {lines.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No items on this sale.</p>
@@ -316,6 +350,8 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
                     <span className="tabular-nums">{cad(previewAmount)}</span>
                   </div>
                 </div>
+                </>
+                )}
 
                 <div className="space-y-1">
                   <Label className="text-xs">Reason (required)</Label>
@@ -330,21 +366,25 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
                   <Label className="text-xs">Note (optional)</Label>
                   <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Details" className="h-9" />
                 </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={restock} onChange={(e) => setRestock(e.target.checked)} />
-                  Return items to inventory
-                </label>
+                {mode === "items" && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={restock} onChange={(e) => setRestock(e.target.checked)} />
+                    Return items to inventory
+                  </label>
+                )}
 
                 {err && <p className="text-sm text-red-600">{err}</p>}
 
                 <div className="flex gap-2 pt-1">
-                  <Button className="flex-1" onClick={submit} disabled={pending || !anySelected || !reason}>
-                    {pending ? "Refunding..." : "Confirm refund " + cad(previewAmount)}
+                  <Button className="flex-1" onClick={submit} disabled={pending || !reason || (mode === "amount" ? !amountOk : !anySelected)}>
+                    {pending ? "Refunding..." : "Confirm refund " + cad(effectiveAmount)}
                   </Button>
                   <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>Cancel</Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Tips aren&apos;t refunded on item returns. Card money-back happens when card payments go live; this records the refund and restocks now.
+                  {mode === "amount"
+                    ? "Refunds the amount to the original card (or records it for cash). Capped at what's left on the sale."
+                    : "Tips aren't refunded on item returns. The card refund is sent to the processor; cash is recorded for the drawer count."}
                 </p>
               </div>
             ) : null}

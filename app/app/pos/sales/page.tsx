@@ -6,6 +6,7 @@ import { VoidButton } from "./void-button";
 import { RefundButton } from "./refund-button";
 import { ReopenButton } from "./reopen-button";
 import { EmailReceiptButton } from "./email-receipt-button";
+import { ReprintButton } from "./reprint-button";
 import { VOID_REASONS, reasonLabel } from "../reason-codes";
 
 type Row = {
@@ -314,6 +315,7 @@ export default async function SalesPage() {
                             businessName={business.name}
                           />
                         )}
+                        <ReprintButton orderId={o.id} />
                         <EmailReceiptButton orderId={o.id} />
                         {o.status === "paid" && <VoidButton orderId={o.id} />}
                         <ReopenButton orderId={o.id} saleNumber={o.sale_number ?? 0} total={o.total} />

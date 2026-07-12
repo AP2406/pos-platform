@@ -182,6 +182,28 @@ function buildRefundReceiptHtml(businessName: string, refund: RefundForEmail): s
   );
 }
 
+// Re-render a past sale's receipt HTML from its stored snapshot, for reprinting from
+// sales history (mirrors what emailReceipt sends). Business-scoped.
+export async function getReceiptHtml(orderId: string): Promise<{ ok: true; html: string; sale_number: number | null } | { error: string }> {
+  if (!orderId) return { error: "Missing sale." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  const { data: order } = await supabase
+    .from("orders")
+    .select("id, sale_number, snapshot, total, created_at")
+    .eq("id", orderId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!order) return { error: "Sale not found." };
+  const html = buildReceiptHtml(business.name, {
+    sale_number: order.sale_number != null ? Number(order.sale_number) : null,
+    snapshot: order.snapshot,
+    total: Number(order.total) || 0,
+    created_at: order.created_at as string,
+  });
+  return { ok: true, html, sale_number: order.sale_number != null ? Number(order.sale_number) : null };
+}
+
 export async function emailReceipt(
   orderId: string,
   email: string

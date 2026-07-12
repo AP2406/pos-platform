@@ -112,7 +112,11 @@ export async function getOrderForRefund(orderId: string): Promise<RefundOrderRes
   };
 }
 
-export async function refundItems(input: { order_id: string; lines: RefundLineInput[]; reason: string; note?: string; restock: boolean; approver_pin?: string; to_store_credit?: boolean }): Promise<RefundItemsResult> {
+// `amount` (dollars) switches to a by-amount refund — an arbitrary figure not tied to
+// line items (goodwill, a disputed charge, a tip). When present, `lines`/`restock` are
+// ignored and the amount is capped at what's left on the sale. Otherwise the refund is
+// by item (the `lines` path).
+export async function refundItems(input: { order_id: string; lines: RefundLineInput[]; reason: string; note?: string; restock: boolean; approver_pin?: string; to_store_credit?: boolean; amount?: number }): Promise<RefundItemsResult> {
  try {
   const orderId = input.order_id;
   if (!orderId) return { error: "Missing sale." };
@@ -186,36 +190,50 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     }
   }
 
-  const refundLines: { order_item_id: string; name: string; quantity: number; line_subtotal: number }[] = [];
-  let returnedSubtotal = 0;
-  for (const reqLine of input.lines ?? []) {
-    const qty = Math.floor(Number(reqLine.quantity) || 0);
-    if (qty <= 0) continue;
-    const it = itemById[reqLine.order_item_id];
-    if (!it) return { error: "An item on this sale could not be found." };
-    const already = returnedByItem[reqLine.order_item_id] || 0;
-    const returnable = it.quantity - already;
-    if (qty > returnable) {
-      return { error: "You cannot return more of " + it.name + " than were sold." };
-    }
-    const lineSub = round2(it.unit_price * qty);
-    returnedSubtotal += lineSub;
-    refundLines.push({ order_item_id: reqLine.order_item_id, name: it.name, quantity: qty, line_subtotal: lineSub });
-  }
-  if (refundLines.length === 0) return { error: "Select at least one item to return." };
-
-  returnedSubtotal = round2(returnedSubtotal);
-
-  const orderSubtotal = Number(order.subtotal) || 0;
-  const f = orderSubtotal > 0 ? returnedSubtotal / orderSubtotal : 0;
-  const discountPortion = round2((Number(order.discount) || 0) * f);
-  const taxPortion = round2((Number(order.tax) || 0) * f);
-  let amount = round2(returnedSubtotal - discountPortion + taxPortion);
-
   const orderTotal = Number(order.total) || 0;
   const remaining = round2(orderTotal - refundedAmount);
-  if (amount > remaining) amount = remaining;
-  if (amount < 0) amount = 0;
+  const isAmountMode = input.amount != null;
+
+  const refundLines: { order_item_id: string; name: string; quantity: number; line_subtotal: number }[] = [];
+  let returnedSubtotal = 0;
+  let discountPortion = 0;
+  let taxPortion = 0;
+  let amount = 0;
+
+  if (isAmountMode) {
+    // By-amount: refund an arbitrary dollar figure, capped at what's left on the sale
+    // so it can never over-refund. No line items are returned (nothing to restock).
+    amount = round2(Number(input.amount) || 0);
+    if (amount <= 0) return { error: "Enter an amount to refund." };
+    if (remaining <= 0) return { error: "This sale is already fully refunded." };
+    if (amount > remaining) return { error: "That's more than the $" + remaining.toFixed(2) + " left on this sale." };
+  } else {
+    for (const reqLine of input.lines ?? []) {
+      const qty = Math.floor(Number(reqLine.quantity) || 0);
+      if (qty <= 0) continue;
+      const it = itemById[reqLine.order_item_id];
+      if (!it) return { error: "An item on this sale could not be found." };
+      const already = returnedByItem[reqLine.order_item_id] || 0;
+      const returnable = it.quantity - already;
+      if (qty > returnable) {
+        return { error: "You cannot return more of " + it.name + " than were sold." };
+      }
+      const lineSub = round2(it.unit_price * qty);
+      returnedSubtotal += lineSub;
+      refundLines.push({ order_item_id: reqLine.order_item_id, name: it.name, quantity: qty, line_subtotal: lineSub });
+    }
+    if (refundLines.length === 0) return { error: "Select at least one item to return." };
+
+    returnedSubtotal = round2(returnedSubtotal);
+
+    const orderSubtotal = Number(order.subtotal) || 0;
+    const f = orderSubtotal > 0 ? returnedSubtotal / orderSubtotal : 0;
+    discountPortion = round2((Number(order.discount) || 0) * f);
+    taxPortion = round2((Number(order.tax) || 0) * f);
+    amount = round2(returnedSubtotal - discountPortion + taxPortion);
+    if (amount > remaining) amount = remaining;
+    if (amount < 0) amount = 0;
+  }
 
   // P2-33b: refund to store credit instead of the original tender. The refund
   // amount becomes spendable store credit for the sale's customer; no money goes
@@ -340,7 +358,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   }
 
   let restocked = false;
-  if (input.restock) {
+  if (input.restock && !isAmountMode) {
     const qtyByItem: Record<string, number> = {};
     for (const rl of refundLines) {
       const cid = itemById[rl.order_item_id].catalog_item_id;
@@ -369,7 +387,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   }
 
   const snapshot = {
-    type: "partial",
+    type: isAmountMode ? "amount" : "partial",
     items: refundLines,
     returned_subtotal: returnedSubtotal,
     discount_portion: discountPortion,
@@ -424,15 +442,22 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     return { error: "Could not record the refund. Please try again." };
   }
 
-  let totalSold = 0;
-  let totalReturned = 0;
-  for (const id of Object.keys(itemById)) {
-    totalSold += itemById[id].quantity;
-    const prev = returnedByItem[id] || 0;
-    const nowThis = refundLines.filter((l) => l.order_item_id === id).reduce((a, l) => a + l.quantity, 0);
-    totalReturned += prev + nowThis;
+  let fully: boolean;
+  if (isAmountMode) {
+    // An amount refund fully refunds the sale once the cumulative refunded amount
+    // reaches the order total (within a cent).
+    fully = round2(refundedAmount + amount) + 0.005 >= orderTotal;
+  } else {
+    let totalSold = 0;
+    let totalReturned = 0;
+    for (const id of Object.keys(itemById)) {
+      totalSold += itemById[id].quantity;
+      const prev = returnedByItem[id] || 0;
+      const nowThis = refundLines.filter((l) => l.order_item_id === id).reduce((a, l) => a + l.quantity, 0);
+      totalReturned += prev + nowThis;
+    }
+    fully = totalSold > 0 && totalReturned >= totalSold;
   }
-  const fully = totalSold > 0 && totalReturned >= totalSold;
 
   const { error: statusError } = await supabase
     .from("orders")
