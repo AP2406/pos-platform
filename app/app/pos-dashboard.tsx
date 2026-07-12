@@ -334,6 +334,11 @@ export async function PosDashboard({ business }: { business: Biz }) {
               </Link>
             ))}
           </div>
+          {lowStock.length > 8 && (
+            <Link href="/app/inventory/low-stock" className="block text-sm text-amber-600 font-medium mt-2 hover:underline">
+              View full low-stock report ({lowStock.length}) →
+            </Link>
+          )}
         </>
       )}
     </div>

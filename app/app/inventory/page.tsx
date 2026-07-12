@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { InventoryClient } from "./inventory-client";
@@ -57,12 +58,20 @@ export default async function InventoryPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Inventory</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Turn on tracking per item, then receive or adjust counts. Items at or
-          below their low-stock level are flagged.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Inventory</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Turn on tracking per item, then receive or adjust counts. Items at or
+            below their low-stock level are flagged.
+          </p>
+        </div>
+        <Link
+          href="/app/inventory/low-stock"
+          className="shrink-0 text-sm rounded-md border border-border px-3 py-2 hover:bg-accent"
+        >
+          Low-stock report
+        </Link>
       </div>
 
       {valuation.length > 0 && (
