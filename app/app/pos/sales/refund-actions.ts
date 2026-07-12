@@ -37,7 +37,7 @@ type RefundLineInput = { order_item_id: string; quantity: number };
 
 type RefundOrderResult = { ok: true; order: { id: string; sale_number: number | null; status: string; subtotal: number; discount: number; tax: number; tip: number; total: number; refunded_amount: number; has_customer: boolean }; lines: { order_item_id: string; name: string; unit_price: number; sold: number; returned: number; returnable: number }[] } | { error: string };
 
-type RefundItemsResult = { ok: true; refund_id: string | null; amount: number; fully: boolean; returned_subtotal: number; discount_portion: number; tax_portion: number; card_refunded: number } | { needs_approval: true } | { error: string };
+type RefundItemsResult = { ok: true; refund_id: string | null; amount: number; fully: boolean; returned_subtotal: number; discount_portion: number; tax_portion: number; card_refunded: number; store_credited: number; house_account_reversed: number; cash_back: number } | { needs_approval: true } | { error: string };
 
 export async function getOrderForRefund(orderId: string): Promise<RefundOrderResult> {
   if (!orderId) return { error: "Missing sale." };
@@ -116,7 +116,7 @@ export async function getOrderForRefund(orderId: string): Promise<RefundOrderRes
 // line items (goodwill, a disputed charge, a tip). When present, `lines`/`restock` are
 // ignored and the amount is capped at what's left on the sale. Otherwise the refund is
 // by item (the `lines` path).
-export async function refundItems(input: { order_id: string; lines: RefundLineInput[]; reason: string; note?: string; restock: boolean; approver_pin?: string; to_store_credit?: boolean; amount?: number }): Promise<RefundItemsResult> {
+export async function refundItems(input: { order_id: string; lines: RefundLineInput[]; reason: string; note?: string; restock: boolean; approver_pin?: string; to_store_credit?: boolean; amount?: number; idempotency_key?: string }): Promise<RefundItemsResult> {
  try {
   const orderId = input.order_id;
   if (!orderId) return { error: "Missing sale." };
@@ -245,6 +245,44 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   }
   let storeCreditedCents = 0;
 
+  // --- Idempotency claim (P2-37 review): claim this refund BEFORE any money moves, so a
+  // double-submit or two operators refunding the same sale can't pay twice (store-credit
+  // has no processor dedup). The unique index on (business_id, idempotency_key) makes the
+  // claim atomic. Fully backward-compatible: with no key, or before migration 0095 is
+  // applied (column missing), we skip the claim and record once at the end as before.
+  const {
+    data: { user: refundUser },
+  } = await supabase.auth.getUser();
+  const idem = input.idempotency_key && /^[0-9a-fA-F-]{10,64}$/.test(input.idempotency_key) ? input.idempotency_key : null;
+  let claimId: string | null = null;
+  if (idem) {
+    const { data: claim, error: claimErr } = await supabase
+      .from("refunds")
+      .insert({ business_id: business.id, order_id: orderId, amount: amount, reason: input.reason, status: "processing", idempotency_key: idem, created_by: refundUser ? refundUser.id : null })
+      .select("id")
+      .single();
+    if (claimErr) {
+      if ((claimErr as { code?: string }).code === "23505") {
+        // Already submitted (duplicate). Return the completed one if it finished; never
+        // process a second time.
+        const { data: existing } = await supabase.from("refunds").select("id, amount, status").eq("business_id", business.id).eq("idempotency_key", idem).maybeSingle();
+        if (existing && existing.status === "recorded") {
+          const amt = Number(existing.amount) || amount;
+          return { ok: true, refund_id: existing.id as string, amount: amt, fully: false, returned_subtotal: 0, discount_portion: 0, tax_portion: 0, card_refunded: 0, store_credited: 0, house_account_reversed: 0, cash_back: 0 };
+        }
+        return { error: "This refund was already submitted." };
+      }
+      // Column missing (pre-migration) or other error: degrade to the no-claim path so
+      // refunds keep working; we just lose idempotency until 0095 is applied.
+      console.warn("refundItems: idempotency claim skipped:", claimErr);
+    } else {
+      claimId = (claim?.id as string | null) ?? null;
+    }
+  }
+  async function abortClaim() {
+    if (claimId) await supabase.from("refunds").delete().eq("id", claimId).eq("business_id", business.id);
+  }
+
   // --- Card refund: reverse the original Finix transfer(s) for this sale. ---
   // This MUST happen before we record anything, so a processor failure leaves
   // the books untouched. Cash/other sales have no Finix transfer and skip this.
@@ -295,12 +333,14 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
         });
         if ("error" in reversalResult) {
           console.error("refundItems Finix reversal failed for transfer " + transferId, reversalResult);
+          await abortClaim();
           return { error: "The card refund could not be sent to the processor, so nothing was changed. Please try again." };
         }
         const rev = reversalResult.data;
         const revState = (rev.state || "").toUpperCase();
         if (revState === "FAILED" || revState === "CANCELED") {
           console.error("refundItems Finix reversal returned " + revState + " for transfer " + transferId);
+          await abortClaim();
           return { error: "The card refund was rejected by the processor, so nothing was changed. Please try again." };
         }
         finixReversals.push({ transfer_id: transferId, reversal_id: rev.id, cents: reverseCents, state: rev.state || "" });
@@ -322,6 +362,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     });
     if (scErr) {
       console.error("refundItems store credit:", scErr);
+      await abortClaim();
       return { error: "Could not issue the store credit, so nothing was changed. Please try again." };
     }
     storeCreditedCents = Math.round(amount * 100);
@@ -351,6 +392,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
       });
       if (haErr) {
         console.error("refundItems house account reversal:", haErr);
+        await abortClaim();
         return { error: "Could not adjust the house account, so nothing was changed. Please try again." };
       }
       houseAccountReversedCents = reverseCents;
@@ -413,22 +455,37 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     .maybeSingle();
   const refundDrawerSessionId = openDrawer ? (openDrawer.id as string) : null;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = refundUser;
+  const noteVal = input.note && input.note.trim() ? input.note.trim().slice(0, 300) : null;
 
-  const { data: refundRow, error: refundError } = await supabase.from("refunds").insert({
-    business_id: business.id,
-    order_id: orderId,
-    amount: amount,
-    reason: input.reason,
-    note: input.note && input.note.trim() ? input.note.trim().slice(0, 300) : null,
-    status: "recorded",
-    restocked: restocked,
-    snapshot: snapshot,
-    drawer_session_id: refundDrawerSessionId,
-    created_by: user ? user.id : null,
-  }).select("id").single();
+  // Finalize: if we claimed a row up front, update it to 'recorded' (money already moved
+  // under that claim); otherwise record a fresh row (no-idempotency path).
+  let refundRow: { id: string } | null = null;
+  let refundError: { message?: string } | null = null;
+  if (claimId) {
+    const { error } = await supabase
+      .from("refunds")
+      .update({ note: noteVal, status: "recorded", restocked: restocked, snapshot: snapshot, drawer_session_id: refundDrawerSessionId })
+      .eq("id", claimId)
+      .eq("business_id", business.id);
+    refundError = error;
+    if (!error) refundRow = { id: claimId };
+  } else {
+    const { data, error } = await supabase.from("refunds").insert({
+      business_id: business.id,
+      order_id: orderId,
+      amount: amount,
+      reason: input.reason,
+      note: noteVal,
+      status: "recorded",
+      restocked: restocked,
+      snapshot: snapshot,
+      drawer_session_id: refundDrawerSessionId,
+      created_by: user ? user.id : null,
+    }).select("id").single();
+    refundRow = data;
+    refundError = error;
+  }
   if (refundError) {
     // If the card was already reversed at Finix but this row failed to write,
     // the money DID go back to the customer; this needs manual reconciliation.
@@ -442,22 +499,13 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     return { error: "Could not record the refund. Please try again." };
   }
 
-  let fully: boolean;
-  if (isAmountMode) {
-    // An amount refund fully refunds the sale once the cumulative refunded amount
-    // reaches the order total (within a cent).
-    fully = round2(refundedAmount + amount) + 0.005 >= orderTotal;
-  } else {
-    let totalSold = 0;
-    let totalReturned = 0;
-    for (const id of Object.keys(itemById)) {
-      totalSold += itemById[id].quantity;
-      const prev = returnedByItem[id] || 0;
-      const nowThis = refundLines.filter((l) => l.order_item_id === id).reduce((a, l) => a + l.quantity, 0);
-      totalReturned += prev + nowThis;
-    }
-    fully = totalSold > 0 && totalReturned >= totalSold;
-  }
+  // "Fully refunded" is amount-based for BOTH modes: the sale is fully refunded once
+  // the cumulative refunded amount reaches the order total (within a cent). Item mode
+  // used to key off item COUNT, which marked an order 'refunded' after all items were
+  // returned even when the tip/service charge remained — permanently locking out a later
+  // by-amount refund of that tip. Amount-based avoids that (an all-items refund of a
+  // tipped sale stays 'partially_refunded' so the tip can still be refunded).
+  const fully = round2(refundedAmount + amount) + 0.005 >= orderTotal;
 
   const { error: statusError } = await supabase
     .from("orders")
@@ -494,7 +542,13 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   if (refundAuditError) console.error("refundItems audit:", refundAuditError);
 
   revalidatePath("/app/pos/sales");
-  return { ok: true, refund_id: (refundRow?.id as string | null) ?? null, amount: amount, fully: fully, returned_subtotal: returnedSubtotal, discount_portion: discountPortion, tax_portion: taxPortion, card_refunded: round2(finixReversedCents / 100) };
+  // What the automatic reversals covered, and the remainder the cashier must return by
+  // hand (cash from the drawer): e.g. a card that only covered part of a split-tender
+  // sale, or a house account whose balance was below the refund. Store-credit refunds
+  // leave no cash back (the money stayed as a credit).
+  const autoReturnedCents = finixReversedCents + storeCreditedCents + houseAccountReversedCents;
+  const cashBack = toStoreCredit ? 0 : Math.max(0, round2(amount - autoReturnedCents / 100));
+  return { ok: true, refund_id: (refundRow?.id as string | null) ?? null, amount: amount, fully: fully, returned_subtotal: returnedSubtotal, discount_portion: discountPortion, tax_portion: taxPortion, card_refunded: round2(finixReversedCents / 100), store_credited: round2(storeCreditedCents / 100), house_account_reversed: round2(houseAccountReversedCents / 100), cash_back: cashBack };
  } catch (e) {
   // Surface unexpected server errors as a returned error (Next masks thrown server
   // action exceptions in prod, which is what made the refund fail silently).

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,7 @@ const REASONS = [
 
 type Line = { order_item_id: string; name: string; unit_price: number; sold: number; returned: number; returnable: number };
 type OrderInfo = { id: string; sale_number: number | null; status: string; subtotal: number; discount: number; tax: number; tip: number; total: number; refunded_amount: number };
-type DoneInfo = { amount: number; fully: boolean; discount_portion: number; tax_portion: number; returned_subtotal: number; items: { name: string; quantity: number; line_subtotal: number }[]; reason: string; at: string; byAmount: boolean };
+type DoneInfo = { amount: number; fully: boolean; discount_portion: number; tax_portion: number; returned_subtotal: number; items: { name: string; quantity: number; line_subtotal: number }[]; reason: string; at: string; byAmount: boolean; card_refunded: number; store_credited: number; cash_back: number };
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -100,6 +100,9 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
   const [emailBusy, setEmailBusy] = useState(false);
   const [needsApproval, setNeedsApproval] = useState(false);
   const [mgrPin, setMgrPin] = useState("");
+  // One idempotency key per refund attempt (this modal session), reused across a
+  // needs-approval retry so the server never processes the same refund twice.
+  const idemRef = useRef<string | null>(null);
 
   async function start() {
     setOpen(true);
@@ -120,6 +123,7 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
     setEmailBusy(false);
     setNeedsApproval(false);
     setMgrPin("");
+    idemRef.current = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + "-" + Math.random().toString(36).slice(2);
     const res = await getOrderForRefund(orderId);
     setLoading(false);
     if ("error" in res) {
@@ -179,7 +183,7 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
     const selected = byAmount ? [] : lines.filter((l) => (qty[l.order_item_id] || 0) > 0).map((l) => ({ order_item_id: l.order_item_id, quantity: qty[l.order_item_id] || 0 }));
     const selectedForReceipt = byAmount ? [] : lines.filter((l) => (qty[l.order_item_id] || 0) > 0).map((l) => ({ name: l.name, quantity: qty[l.order_item_id] || 0, line_subtotal: round2((qty[l.order_item_id] || 0) * l.unit_price) }));
     startTransition(async () => {
-      const res = await refundItems({ order_id: orderId, lines: selected, reason, note, restock, approver_pin: approverPin, amount: byAmount ? amountVal : undefined });
+      const res = await refundItems({ order_id: orderId, lines: selected, reason, note, restock, approver_pin: approverPin, amount: byAmount ? amountVal : undefined, idempotency_key: idemRef.current ?? undefined });
       if ("needs_approval" in res) {
         setNeedsApproval(true);
         return;
@@ -188,7 +192,7 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
         setErr(res.error);
         return;
       }
-      setDone({ amount: res.amount, fully: res.fully, discount_portion: res.discount_portion, tax_portion: res.tax_portion, returned_subtotal: res.returned_subtotal, items: selectedForReceipt, reason: reason, at: new Date().toLocaleString(), byAmount: byAmount });
+      setDone({ amount: res.amount, fully: res.fully, discount_portion: res.discount_portion, tax_portion: res.tax_portion, returned_subtotal: res.returned_subtotal, items: selectedForReceipt, reason: reason, at: new Date().toLocaleString(), byAmount: byAmount, card_refunded: res.card_refunded, store_credited: res.store_credited, cash_back: res.cash_back });
     });
   }
 
@@ -230,6 +234,13 @@ export function RefundButton({ orderId, saleNumber, businessName }: { orderId: s
               <div className="space-y-3">
                 <h3 className="font-medium">{done.fully ? "Full refund recorded" : "Partial refund recorded"}</h3>
                 <div className="text-sm text-muted-foreground">{"Sale #" + saleNumber + " - refunded " + cad(done.amount)}</div>
+                {(done.card_refunded > 0 || done.store_credited > 0 || done.cash_back > 0) && (
+                  <div className="rounded-md border border-border p-2 text-sm space-y-0.5">
+                    {done.card_refunded > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Back to card</span><span className="tabular-nums">{cad(done.card_refunded)}</span></div>}
+                    {done.store_credited > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Store credit</span><span className="tabular-nums">{cad(done.store_credited)}</span></div>}
+                    {done.cash_back > 0 && <div className="flex justify-between font-medium text-amber-600"><span>Give cash to customer</span><span className="tabular-nums">{cad(done.cash_back)}</span></div>}
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <Button className="flex-1" onClick={() => printRefundReceipt({ businessName, saleNumber, info: done })}>Print receipt</Button>
                   <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>Close</Button>
