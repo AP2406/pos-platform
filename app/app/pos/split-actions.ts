@@ -5,6 +5,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { loadItemTaxMeta } from "@/lib/services/tax-meta";
 import { computeSplitTotals } from "./split-alloc";
 import { verifyInSaleApprovals } from "@/lib/services/approval-gate";
+import { readActiveStaffId, ACTIVE_STAFF_COOKIE } from "@/lib/services/active-staff-cookie";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { DISCOUNT_REASONS, COMP_REASONS, TAX_EXEMPT_REASONS, isValidReason } from "./reason-codes";
@@ -135,7 +136,7 @@ export async function finalizeSplitCheck(
   let activeStaffRole: string | null = null;
   {
     const cookieStore = await cookies();
-    const sid = cookieStore.get("surge_active_staff")?.value || null;
+    const sid = readActiveStaffId(cookieStore.get(ACTIVE_STAFF_COOKIE)?.value, business.id);
     if (sid) {
       const { data: st } = await supabase
         .from("staff_members")
@@ -238,6 +239,10 @@ export async function finalizeSplitCheck(
       { present: discount > 0, label: "discount", permKey: "discount", amount: discount },
       { present: comp > 0, label: "comp", permKey: "comp", amount: comp },
       { present: manualExempt, label: "tax exemption", permKey: null, amount: null },
+      // Explicit service-charge waive (mirrors createOrder): SC could apply but was
+      // turned off WITH a waive reason. (A silent SC omission with no reason is a
+      // separate server-authoritative-SC gap, tracked as a follow-up on both paths.)
+      { present: scEnabled && scPct > 0 && data.service_charge !== true && (data.service_charge_waive_reason_code || "").trim() !== "", label: "service-charge waive", permKey: null, amount: null },
     ],
   });
   if ("blocked" in splitGate) {

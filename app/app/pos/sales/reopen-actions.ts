@@ -6,6 +6,7 @@ import { isOrderPeriodLocked } from "@/lib/services/period-lock";
 import { actorCan, approverByPin } from "@/lib/services/permissions-server";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import { readActiveStaffId, ACTIVE_STAFF_COOKIE } from "@/lib/services/active-staff-cookie";
 
 // P0-8: reopen a settled check and apply append-only adjustments. The original
 // orders row + snapshot are never touched (a DB trigger enforces it); every
@@ -17,7 +18,7 @@ const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
 async function getActiveStaffRow(supabase: Awaited<ReturnType<typeof createClient>>, businessId: string) {
   const cookieStore = await cookies();
-  const sid = cookieStore.get("surge_active_staff")?.value || null;
+  const sid = readActiveStaffId(cookieStore.get(ACTIVE_STAFF_COOKIE)?.value, businessId);
   if (!sid) return null;
   const { data } = await supabase
     .from("staff_members").select("id, name, role, is_active")

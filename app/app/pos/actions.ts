@@ -5,6 +5,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { staffPermissionsById } from "@/lib/services/permissions-server";
 import { type PermissionKey } from "@/lib/services/permissions";
 import { verifyInSaleApprovals } from "@/lib/services/approval-gate";
+import { readActiveStaffId, ACTIVE_STAFF_COOKIE } from "@/lib/services/active-staff-cookie";
 import { parseThresholds } from "@/lib/services/exception-thresholds";
 import { isOrderPeriodLocked } from "@/lib/services/period-lock";
 import { computeCartTax } from "@/lib/services/tax-compute";
@@ -154,7 +155,7 @@ async function getActiveStaffRow(
   businessId: string
 ): Promise<{ id: string; name: string; role: string } | null> {
   const cookieStore = await cookies();
-  const sid = cookieStore.get("surge_active_staff")?.value || null;
+  const sid = readActiveStaffId(cookieStore.get(ACTIVE_STAFF_COOKIE)?.value, businessId);
   if (!sid) return null;
   const { data } = await supabase
     .from("staff_members")
@@ -262,7 +263,7 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   let activeStaffRole: string | null = null;
   {
     const cookieStore = await cookies();
-    const sid = cookieStore.get("surge_active_staff")?.value || null;
+    const sid = readActiveStaffId(cookieStore.get(ACTIVE_STAFF_COOKIE)?.value, business.id);
     if (sid) {
       const { data: st } = await supabase
         .from("staff_members")

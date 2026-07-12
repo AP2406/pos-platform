@@ -48,6 +48,11 @@ export async function verifyInSaleApprovals(opts: {
   const capFor = (permKey: PermissionKey | null): number | null =>
     permKey === "discount" ? cashierPerms?.discountCap ?? null : permKey === "comp" ? cashierPerms?.compCap ?? null : null;
 
+  // Owner outranks manager and holds every permission — treat an owner as able to do,
+  // and to approve, any manager-role action (otherwise a solo owner-cashier could never
+  // close a tax-exempt / service-charge-waived sale).
+  const isManagerRole = (r: string | null) => r === "manager" || r === "owner";
+
   let approver: { id: string; name: string } | null = null;
   const blocked: string[] = [];
   for (const a of actions) {
@@ -55,10 +60,10 @@ export async function verifyInSaleApprovals(opts: {
     const cap = capFor(a.permKey);
     const cashierOk =
       a.permKey === null
-        ? cashierRole === "manager"
+        ? isManagerRole(cashierRole)
         : !!cashierPerms && cashierPerms.can(a.permKey) && !(cap != null && a.amount != null && a.amount > cap);
     if (cashierOk) continue;
-    const approverOk = !!approverRow && (a.permKey === null ? approverRow.role === "manager" : approverRow.perms.can(a.permKey));
+    const approverOk = !!approverRow && (a.permKey === null ? isManagerRole(approverRow.role) : approverRow.perms.can(a.permKey));
     if (approverOk && approverRow) {
       approver = { id: approverRow.id, name: approverRow.name };
       continue;

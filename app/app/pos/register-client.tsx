@@ -2032,7 +2032,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
   // sale with no way to supply a PIN. tax-exempt + service-charge waive have no
   // permission key and are manager-gated. FAILS CLOSED: an unknown/null cashier always
   // needs a manager PIN.
-  const managerCashier = !!staff && cashierRole === "manager";
+  const managerCashier = !!staff && (cashierRole === "manager" || cashierRole === "owner");
   const discountUnauth = discount > 0 && !(cashierCan("discount") && !(discountCap != null && discount > discountCap)) && !approver;
   const compUnauth = comp > 0 && !(cashierCan("comp") && !(compCap != null && comp > compCap)) && !approver;
   const voidUnauth = voidLines.length > 0 && !cashierCan("void") && !approver;
