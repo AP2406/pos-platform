@@ -37,7 +37,7 @@ type RefundLineInput = { order_item_id: string; quantity: number };
 
 type RefundOrderResult = { ok: true; order: { id: string; sale_number: number | null; status: string; subtotal: number; discount: number; tax: number; tip: number; total: number; refunded_amount: number; has_customer: boolean }; lines: { order_item_id: string; name: string; unit_price: number; sold: number; returned: number; returnable: number }[] } | { error: string };
 
-type RefundItemsResult = { ok: true; refund_id: string | null; amount: number; fully: boolean; returned_subtotal: number; discount_portion: number; tax_portion: number; card_refunded: number } | { needs_approval: true } | { error: string };
+type RefundItemsResult = { ok: true; refund_id: string | null; amount: number; fully: boolean; returned_subtotal: number; discount_portion: number; tax_portion: number; card_refunded: number; store_credited: number; house_account_reversed: number; cash_back: number } | { needs_approval: true } | { error: string };
 
 export async function getOrderForRefund(orderId: string): Promise<RefundOrderResult> {
   if (!orderId) return { error: "Missing sale." };
@@ -112,7 +112,11 @@ export async function getOrderForRefund(orderId: string): Promise<RefundOrderRes
   };
 }
 
-export async function refundItems(input: { order_id: string; lines: RefundLineInput[]; reason: string; note?: string; restock: boolean; approver_pin?: string; to_store_credit?: boolean }): Promise<RefundItemsResult> {
+// `amount` (dollars) switches to a by-amount refund — an arbitrary figure not tied to
+// line items (goodwill, a disputed charge, a tip). When present, `lines`/`restock` are
+// ignored and the amount is capped at what's left on the sale. Otherwise the refund is
+// by item (the `lines` path).
+export async function refundItems(input: { order_id: string; lines: RefundLineInput[]; reason: string; note?: string; restock: boolean; approver_pin?: string; to_store_credit?: boolean; amount?: number; idempotency_key?: string }): Promise<RefundItemsResult> {
  try {
   const orderId = input.order_id;
   if (!orderId) return { error: "Missing sale." };
@@ -186,36 +190,50 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     }
   }
 
-  const refundLines: { order_item_id: string; name: string; quantity: number; line_subtotal: number }[] = [];
-  let returnedSubtotal = 0;
-  for (const reqLine of input.lines ?? []) {
-    const qty = Math.floor(Number(reqLine.quantity) || 0);
-    if (qty <= 0) continue;
-    const it = itemById[reqLine.order_item_id];
-    if (!it) return { error: "An item on this sale could not be found." };
-    const already = returnedByItem[reqLine.order_item_id] || 0;
-    const returnable = it.quantity - already;
-    if (qty > returnable) {
-      return { error: "You cannot return more of " + it.name + " than were sold." };
-    }
-    const lineSub = round2(it.unit_price * qty);
-    returnedSubtotal += lineSub;
-    refundLines.push({ order_item_id: reqLine.order_item_id, name: it.name, quantity: qty, line_subtotal: lineSub });
-  }
-  if (refundLines.length === 0) return { error: "Select at least one item to return." };
-
-  returnedSubtotal = round2(returnedSubtotal);
-
-  const orderSubtotal = Number(order.subtotal) || 0;
-  const f = orderSubtotal > 0 ? returnedSubtotal / orderSubtotal : 0;
-  const discountPortion = round2((Number(order.discount) || 0) * f);
-  const taxPortion = round2((Number(order.tax) || 0) * f);
-  let amount = round2(returnedSubtotal - discountPortion + taxPortion);
-
   const orderTotal = Number(order.total) || 0;
   const remaining = round2(orderTotal - refundedAmount);
-  if (amount > remaining) amount = remaining;
-  if (amount < 0) amount = 0;
+  const isAmountMode = input.amount != null;
+
+  const refundLines: { order_item_id: string; name: string; quantity: number; line_subtotal: number }[] = [];
+  let returnedSubtotal = 0;
+  let discountPortion = 0;
+  let taxPortion = 0;
+  let amount = 0;
+
+  if (isAmountMode) {
+    // By-amount: refund an arbitrary dollar figure, capped at what's left on the sale
+    // so it can never over-refund. No line items are returned (nothing to restock).
+    amount = round2(Number(input.amount) || 0);
+    if (amount <= 0) return { error: "Enter an amount to refund." };
+    if (remaining <= 0) return { error: "This sale is already fully refunded." };
+    if (amount > remaining) return { error: "That's more than the $" + remaining.toFixed(2) + " left on this sale." };
+  } else {
+    for (const reqLine of input.lines ?? []) {
+      const qty = Math.floor(Number(reqLine.quantity) || 0);
+      if (qty <= 0) continue;
+      const it = itemById[reqLine.order_item_id];
+      if (!it) return { error: "An item on this sale could not be found." };
+      const already = returnedByItem[reqLine.order_item_id] || 0;
+      const returnable = it.quantity - already;
+      if (qty > returnable) {
+        return { error: "You cannot return more of " + it.name + " than were sold." };
+      }
+      const lineSub = round2(it.unit_price * qty);
+      returnedSubtotal += lineSub;
+      refundLines.push({ order_item_id: reqLine.order_item_id, name: it.name, quantity: qty, line_subtotal: lineSub });
+    }
+    if (refundLines.length === 0) return { error: "Select at least one item to return." };
+
+    returnedSubtotal = round2(returnedSubtotal);
+
+    const orderSubtotal = Number(order.subtotal) || 0;
+    const f = orderSubtotal > 0 ? returnedSubtotal / orderSubtotal : 0;
+    discountPortion = round2((Number(order.discount) || 0) * f);
+    taxPortion = round2((Number(order.tax) || 0) * f);
+    amount = round2(returnedSubtotal - discountPortion + taxPortion);
+    if (amount > remaining) amount = remaining;
+    if (amount < 0) amount = 0;
+  }
 
   // P2-33b: refund to store credit instead of the original tender. The refund
   // amount becomes spendable store credit for the sale's customer; no money goes
@@ -226,6 +244,52 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     return { error: "This sale has no customer, so it can't be refunded to store credit." };
   }
   let storeCreditedCents = 0;
+
+  // --- Idempotency claim (P2-37 review): claim this refund BEFORE any money moves, so a
+  // double-submit or two operators refunding the same sale can't pay twice (store-credit
+  // has no processor dedup). The unique index on (business_id, idempotency_key) makes the
+  // claim atomic. Fully backward-compatible: with no key, or before migration 0095 is
+  // applied (column missing), we skip the claim and record once at the end as before.
+  const {
+    data: { user: refundUser },
+  } = await supabase.auth.getUser();
+  const idem = input.idempotency_key && /^[0-9a-fA-F-]{10,64}$/.test(input.idempotency_key) ? input.idempotency_key : null;
+  let claimId: string | null = null;
+  {
+    // Claim finalized=false (status stays a known-good 'recorded' to avoid any CHECK on
+    // status). Two guards catch a double refund: the order-inflight unique index blocks a
+    // CONCURRENT second refund of this sale, and the idempotency-key index blocks a NETWORK
+    // RETRY of this same refund after it completed.
+    const { data: claim, error: claimErr } = await supabase
+      .from("refunds")
+      .insert({ business_id: business.id, order_id: orderId, amount: amount, reason: input.reason, status: "recorded", finalized: false, idempotency_key: idem, created_by: refundUser ? refundUser.id : null })
+      .select("id")
+      .single();
+    if (claimErr) {
+      if ((claimErr as { code?: string }).code === "23505") {
+        // A same-key row ⇒ this exact refund was already submitted (network retry): return
+        // the completed one if it finished, else report it in flight. No same-key row ⇒ the
+        // conflict is the order-inflight index (a DIFFERENT refund of this sale is running).
+        const { data: existing } = idem ? await supabase.from("refunds").select("id, amount, finalized").eq("business_id", business.id).eq("idempotency_key", idem).maybeSingle() : { data: null };
+        if (existing) {
+          if (existing.finalized === true) {
+            const amt = Number(existing.amount) || amount;
+            return { ok: true, refund_id: existing.id as string, amount: amt, fully: false, returned_subtotal: 0, discount_portion: 0, tax_portion: 0, card_refunded: 0, store_credited: 0, house_account_reversed: 0, cash_back: 0 };
+          }
+          return { error: "This refund was already submitted." };
+        }
+        return { error: "Another refund for this sale is being processed. Please wait a moment and try again." };
+      }
+      // Column missing (pre-migration) or other error: degrade to the no-claim path so
+      // refunds keep working; we just lose the concurrency guard until 0095 is applied.
+      console.warn("refundItems: idempotency claim skipped:", claimErr);
+    } else {
+      claimId = (claim?.id as string | null) ?? null;
+    }
+  }
+  async function abortClaim() {
+    if (claimId) await supabase.from("refunds").delete().eq("id", claimId).eq("business_id", business.id);
+  }
 
   // --- Card refund: reverse the original Finix transfer(s) for this sale. ---
   // This MUST happen before we record anything, so a processor failure leaves
@@ -277,12 +341,14 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
         });
         if ("error" in reversalResult) {
           console.error("refundItems Finix reversal failed for transfer " + transferId, reversalResult);
+          await abortClaim();
           return { error: "The card refund could not be sent to the processor, so nothing was changed. Please try again." };
         }
         const rev = reversalResult.data;
         const revState = (rev.state || "").toUpperCase();
         if (revState === "FAILED" || revState === "CANCELED") {
           console.error("refundItems Finix reversal returned " + revState + " for transfer " + transferId);
+          await abortClaim();
           return { error: "The card refund was rejected by the processor, so nothing was changed. Please try again." };
         }
         finixReversals.push({ transfer_id: transferId, reversal_id: rev.id, cents: reverseCents, state: rev.state || "" });
@@ -304,6 +370,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     });
     if (scErr) {
       console.error("refundItems store credit:", scErr);
+      await abortClaim();
       return { error: "Could not issue the store credit, so nothing was changed. Please try again." };
     }
     storeCreditedCents = Math.round(amount * 100);
@@ -333,6 +400,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
       });
       if (haErr) {
         console.error("refundItems house account reversal:", haErr);
+        await abortClaim();
         return { error: "Could not adjust the house account, so nothing was changed. Please try again." };
       }
       houseAccountReversedCents = reverseCents;
@@ -340,7 +408,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   }
 
   let restocked = false;
-  if (input.restock) {
+  if (input.restock && !isAmountMode) {
     const qtyByItem: Record<string, number> = {};
     for (const rl of refundLines) {
       const cid = itemById[rl.order_item_id].catalog_item_id;
@@ -369,7 +437,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   }
 
   const snapshot = {
-    type: "partial",
+    type: isAmountMode ? "amount" : "partial",
     items: refundLines,
     returned_subtotal: returnedSubtotal,
     discount_portion: discountPortion,
@@ -395,22 +463,37 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     .maybeSingle();
   const refundDrawerSessionId = openDrawer ? (openDrawer.id as string) : null;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = refundUser;
+  const noteVal = input.note && input.note.trim() ? input.note.trim().slice(0, 300) : null;
 
-  const { data: refundRow, error: refundError } = await supabase.from("refunds").insert({
-    business_id: business.id,
-    order_id: orderId,
-    amount: amount,
-    reason: input.reason,
-    note: input.note && input.note.trim() ? input.note.trim().slice(0, 300) : null,
-    status: "recorded",
-    restocked: restocked,
-    snapshot: snapshot,
-    drawer_session_id: refundDrawerSessionId,
-    created_by: user ? user.id : null,
-  }).select("id").single();
+  // Finalize: if we claimed a row up front, update it to 'recorded' (money already moved
+  // under that claim); otherwise record a fresh row (no-idempotency path).
+  let refundRow: { id: string } | null = null;
+  let refundError: { message?: string } | null = null;
+  if (claimId) {
+    const { error } = await supabase
+      .from("refunds")
+      .update({ note: noteVal, status: "recorded", finalized: true, restocked: restocked, snapshot: snapshot, drawer_session_id: refundDrawerSessionId })
+      .eq("id", claimId)
+      .eq("business_id", business.id);
+    refundError = error;
+    if (!error) refundRow = { id: claimId };
+  } else {
+    const { data, error } = await supabase.from("refunds").insert({
+      business_id: business.id,
+      order_id: orderId,
+      amount: amount,
+      reason: input.reason,
+      note: noteVal,
+      status: "recorded",
+      restocked: restocked,
+      snapshot: snapshot,
+      drawer_session_id: refundDrawerSessionId,
+      created_by: user ? user.id : null,
+    }).select("id").single();
+    refundRow = data;
+    refundError = error;
+  }
   if (refundError) {
     // If the card was already reversed at Finix but this row failed to write,
     // the money DID go back to the customer; this needs manual reconciliation.
@@ -424,15 +507,27 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     return { error: "Could not record the refund. Please try again." };
   }
 
-  let totalSold = 0;
-  let totalReturned = 0;
-  for (const id of Object.keys(itemById)) {
-    totalSold += itemById[id].quantity;
-    const prev = returnedByItem[id] || 0;
-    const nowThis = refundLines.filter((l) => l.order_item_id === id).reduce((a, l) => a + l.quantity, 0);
-    totalReturned += prev + nowThis;
+  // "Fully refunded" is amount-based: fully once the cumulative refunded amount reaches
+  // the order total (within a cent). This (vs the old item-COUNT rule) keeps a tipped
+  // sale 'partially_refunded' after an all-items refund so the tip can still be refunded
+  // by amount. But a NO-tip sale whose every item is returned can land a cent short of
+  // total from proportional tax/discount rounding — so also treat "all items returned and
+  // nothing but items was owed" as fully, or it would be stuck 'partially_refunded'.
+  let fully = round2(refundedAmount + amount) + 0.005 >= orderTotal;
+  if (!fully && !isAmountMode) {
+    let totalSold = 0;
+    let totalReturned = 0;
+    for (const id of Object.keys(itemById)) {
+      totalSold += itemById[id].quantity;
+      const prev = returnedByItem[id] || 0;
+      const nowThis = refundLines.filter((l) => l.order_item_id === id).reduce((a, l) => a + l.quantity, 0);
+      totalReturned += prev + nowThis;
+    }
+    const allItemsReturned = totalSold > 0 && totalReturned >= totalSold;
+    // Non-item remainder (tip + service charge). ≤ a cent ⇒ only items were owed.
+    const nonItemOwed = round2(orderTotal - ((Number(order.subtotal) || 0) - (Number(order.discount) || 0) + (Number(order.tax) || 0)));
+    if (allItemsReturned && nonItemOwed <= 0.005) fully = true;
   }
-  const fully = totalSold > 0 && totalReturned >= totalSold;
 
   const { error: statusError } = await supabase
     .from("orders")
@@ -469,7 +564,13 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   if (refundAuditError) console.error("refundItems audit:", refundAuditError);
 
   revalidatePath("/app/pos/sales");
-  return { ok: true, refund_id: (refundRow?.id as string | null) ?? null, amount: amount, fully: fully, returned_subtotal: returnedSubtotal, discount_portion: discountPortion, tax_portion: taxPortion, card_refunded: round2(finixReversedCents / 100) };
+  // What the automatic reversals covered, and the remainder the cashier must return by
+  // hand (cash from the drawer): e.g. a card that only covered part of a split-tender
+  // sale, or a house account whose balance was below the refund. Store-credit refunds
+  // leave no cash back (the money stayed as a credit).
+  const autoReturnedCents = finixReversedCents + storeCreditedCents + houseAccountReversedCents;
+  const cashBack = toStoreCredit ? 0 : Math.max(0, round2(amount - autoReturnedCents / 100));
+  return { ok: true, refund_id: (refundRow?.id as string | null) ?? null, amount: amount, fully: fully, returned_subtotal: returnedSubtotal, discount_portion: discountPortion, tax_portion: taxPortion, card_refunded: round2(finixReversedCents / 100), store_credited: round2(storeCreditedCents / 100), house_account_reversed: round2(houseAccountReversedCents / 100), cash_back: cashBack };
  } catch (e) {
   // Surface unexpected server errors as a returned error (Next masks thrown server
   // action exceptions in prod, which is what made the refund fail silently).
