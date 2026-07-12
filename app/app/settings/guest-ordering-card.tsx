@@ -47,10 +47,17 @@ export function GuestOrderingCard({
         Enable guest ordering
       </label>
 
+      <a
+        href="/app/floor/qr-codes"
+        className="inline-flex items-center gap-1.5 text-sm rounded-md border border-border px-3 py-2 hover:bg-accent"
+      >
+        Print table QR codes →
+      </a>
+
       {enabled && (
         <div className="space-y-2 pt-1">
           <div className="text-xs font-semibold text-muted-foreground">Per-table links</div>
-          <p className="text-xs text-muted-foreground">Turn each link into a QR code (any QR tool) and place it on the table. Ordering only works once a server has opened the table.</p>
+          <p className="text-xs text-muted-foreground">Or use the printable QR codes above. Copy a single link to share it directly. Ordering only works once a server has opened the table.</p>
           <div className="space-y-1.5">
             {tables.length === 0 && <p className="text-xs text-muted-foreground">No tables on the floor yet.</p>}
             {tables.map((t) => (
