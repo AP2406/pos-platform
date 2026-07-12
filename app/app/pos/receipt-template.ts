@@ -17,7 +17,12 @@ export type ReceiptSettings = {
   website: string;
   showTaxNumber: boolean;
   taxNumber: string;
+  // Business / registration number (distinct from the tax number).
+  showBusinessNumber: boolean;
+  businessNumber: string;
   taxLabel: string;
+  // Whether to print the dining option (Dine-in / Takeout …). On by default.
+  showDiningOption: boolean;
   showSaleNumber: boolean;
   showDateTime: boolean;
   showCustomer: boolean;
@@ -49,7 +54,10 @@ export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
   website: "",
   showTaxNumber: true,
   taxNumber: "",
+  showBusinessNumber: false,
+  businessNumber: "",
   taxLabel: "",
+  showDiningOption: true,
   showSaleNumber: true,
   showDateTime: true,
   showCustomer: true,
@@ -137,6 +145,7 @@ function contactBlock(s: ReceiptSettings): string {
   if (contact.length) lines.push(contact.join("  \u00b7  "));
   if (s.showWebsite && s.website.trim()) lines.push(esc(s.website.trim()));
   if (s.showTaxNumber && s.taxNumber.trim()) lines.push("Tax# " + esc(s.taxNumber.trim()));
+  if (s.showBusinessNumber && s.businessNumber.trim()) lines.push("Biz# " + esc(s.businessNumber.trim()));
   if (!lines.length) return "";
   return '<div class="ctc">' + lines.join("<br/>") + "</div>";
 }
@@ -150,7 +159,7 @@ function metaBlock(r: ReceiptData, s: ReceiptSettings): string {
   if (bits.length) html += '<div class="meta">' + bits.join("  \u00b7  ") + "</div>";
   if (s.showTableName && r.tableName) html += '<div class="meta">Table: ' + esc(r.tableName) + "</div>";
   if (s.showServerName && r.serverName) html += '<div class="meta">Server: ' + esc(r.serverName) + "</div>";
-  if (r.diningOption && DINING_LABELS[r.diningOption]) {
+  if (s.showDiningOption && r.diningOption && DINING_LABELS[r.diningOption]) {
     html += '<div class="meta">' + DINING_LABELS[r.diningOption] + "</div>";
   }
   if (s.showCustomer && r.customerName) html += '<div class="meta">Customer: ' + esc(r.customerName) + "</div>";

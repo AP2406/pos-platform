@@ -125,6 +125,10 @@ export function ReceiptSettingsForm({ initial, businessName }: { initial: Partia
               <Toggle checked={s.showTaxNumber} onChange={(v) => set("showTaxNumber", v)}>Show tax number</Toggle>
               {s.showTaxNumber && <Input value={s.taxNumber} onChange={(e) => set("taxNumber", e.target.value)} placeholder="80000 1234 RT0001" className="h-9" />}
             </div>
+            <div className="space-y-1">
+              <Toggle checked={s.showBusinessNumber} onChange={(v) => set("showBusinessNumber", v)}>Show business number</Toggle>
+              {s.showBusinessNumber && <Input value={s.businessNumber} onChange={(e) => set("businessNumber", e.target.value)} placeholder="Business / registration no." className="h-9" />}
+            </div>
           </div>
         </div>
 
@@ -136,6 +140,7 @@ export function ReceiptSettingsForm({ initial, businessName }: { initial: Partia
             <Toggle checked={s.showCustomer} onChange={(v) => set("showCustomer", v)}>Show customer name (when attached)</Toggle>
             <Toggle checked={s.showTableName} onChange={(v) => set("showTableName", v)}>Show table name (on the bill)</Toggle>
             <Toggle checked={s.showServerName} onChange={(v) => set("showServerName", v)}>Show server name (on the bill)</Toggle>
+            <Toggle checked={s.showDiningOption} onChange={(v) => set("showDiningOption", v)}>Show dining option (Dine-in / Takeout…)</Toggle>
             <Toggle checked={s.showCategoryTotals} onChange={(v) => set("showCategoryTotals", v)}>Show sales-category totals (Food / Alcohol…)</Toggle>
           </div>
           <div>
