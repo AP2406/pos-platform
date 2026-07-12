@@ -8,19 +8,26 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 // be unforgeable. Only setActiveStaff (after a verified PIN) can mint a valid value.
 export const ACTIVE_STAFF_COOKIE = "surge_active_staff";
 
-// Server-only secret (never shipped to the client). Falls back to empty string, which
-// makes every signature verification fail closed (no active staff) rather than trust.
-function secret(): string {
-  return (process.env.SUPABASE_SERVICE_ROLE_KEY || "") + "|surge-active-staff-v1";
+// Server-only secret (never shipped to the client). Returns null when the service-role
+// key is unset so signing/verification FAIL CLOSED (deny) instead of falling back to a
+// publicly-knowable constant key a client could forge with. Production boot requires the
+// key (lib/env.ts), so this only guards dev/misconfig.
+function secret(): string | null {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return key ? key + "|surge-active-staff-v1" : null;
 }
 
-function sign(businessId: string, staffId: string): string {
-  return createHmac("sha256", secret()).update(businessId + ":" + staffId).digest("base64url");
+function sign(businessId: string, staffId: string): string | null {
+  const key = secret();
+  if (!key) return null;
+  return createHmac("sha256", key).update(businessId + ":" + staffId).digest("base64url");
 }
 
-// Mint the cookie value for a verified cashier: "<staffId>.<sig>".
+// Mint the cookie value for a verified cashier: "<staffId>.<sig>". Empty when no secret
+// (dev/misconfig) — the reader then rejects it, so no unsigned value is ever accepted.
 export function makeActiveStaffCookie(businessId: string, staffId: string): string {
-  return staffId + "." + sign(businessId, staffId);
+  const sig = sign(businessId, staffId);
+  return sig ? staffId + "." + sig : "";
 }
 
 // Verify a cookie value against the business and return the staff id, or null if it's
@@ -33,6 +40,7 @@ export function readActiveStaffId(rawValue: string | null | undefined, businessI
   const staffId = rawValue.slice(0, dot);
   const sig = rawValue.slice(dot + 1);
   const expected = sign(businessId, staffId);
+  if (!expected) return null; // no secret ⇒ deny (never trust an unsigned/forgeable value)
   const sigBuf = Buffer.from(sig);
   const expBuf = Buffer.from(expected);
   if (sigBuf.length !== expBuf.length) return null;
