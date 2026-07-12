@@ -5,9 +5,12 @@ import { listKitchenStations } from "./stations-actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function KitchenPage() {
+export default async function KitchenPage({ searchParams }: { searchParams: Promise<{ station?: string }> }) {
   const { business } = await requireBusiness();
   const supabase = await createClient();
+  // Per-station screen lock: ?station=<id> pins this KDS screen to one station.
+  const sp = await searchParams;
+  const initialStation = typeof sp.station === "string" && sp.station ? sp.station : null;
 
   // B9: operator-configurable KDS aging thresholds (settings.kds), default 10/18.
   const sset = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
@@ -219,7 +222,7 @@ export default async function KitchenPage() {
           New orders appear here automatically. Tap Done when an order is ready.
         </p>
       </div>
-      <KitchenClient businessId={business.id} initialOrders={initialOrders} stations={stations} recent={recent} menu={menu} kdsWarn={kdsWarn} kdsLate={kdsLate} recipes={recipes} lang={kdsLang} printerFallback={printerFallback} />
+      <KitchenClient businessId={business.id} initialOrders={initialOrders} stations={stations} recent={recent} menu={menu} kdsWarn={kdsWarn} kdsLate={kdsLate} recipes={recipes} lang={kdsLang} printerFallback={printerFallback} initialStation={initialStation} />
     </div>
   );
 }
