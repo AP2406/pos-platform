@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { staffPermissionsById } from "@/lib/services/permissions-server";
 import { type PermissionKey } from "@/lib/services/permissions";
+import { verifyInSaleApprovals } from "@/lib/services/approval-gate";
 import { parseThresholds } from "@/lib/services/exception-thresholds";
 import { isOrderPeriodLocked } from "@/lib/services/period-lock";
 import { computeCartTax } from "@/lib/services/tax-compute";
@@ -88,7 +89,12 @@ const orderSchema = z.object({
   signature_data: z.string().max(200000).optional().nullable(),
   // The manager who authorized a sensitive action (comp/discount/void) at the
   // register via PIN, when the cashier's own role lacked the permission/cap.
+  // DISPLAY ONLY — never trusted: the audit approver is the one re-verified from
+  // approver_pin below. Kept so nothing regresses during the client rollout.
   approver: z.object({ id: z.string().max(64), name: z.string().max(120) }).optional().nullable(),
+  // The manager PIN that authorized the sensitive action(s) on this sale. RE-VERIFIED
+  // server-side (a client can't forge an approver by sending a fabricated `approver`).
+  approver_pin: z.string().regex(/^[0-9]{4,6}$/).optional().nullable(),
 });
 
 type PaymentInput = {
@@ -646,11 +652,39 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   } = await supabase.auth.getUser();
   const authUserId = user ? user.id : null;
 
-  // Manager who authorized any sensitive action via PIN at the register (P0).
-  const approver = parsed.data.approver ?? null;
+  // ── Server-side approval gate (P0 security) ───────────────────────────────
+  // In-sale sensitive actions (discount, comp, line voids, tax exemption, service-
+  // charge waive) must be authorized by someone who actually holds the permission.
+  // The cashier's authority is computed server-side from their role/caps; anything
+  // they can't do requires a manager PIN that is RE-VERIFIED here. The client-supplied
+  // `approver` is NEVER trusted (a modified client could forge it) — the recorded
+  // approver is the one resolved from approver_pin. Training sales and unstaffed
+  // tills (no signed-in cashier) are exempt, matching the register's own gate.
+  const gate = await verifyInSaleApprovals({
+    supabase,
+    businessId: business.id,
+    isStaffed: activeStaffId != null,
+    isTraining,
+    cashierId: activeStaffId,
+    cashierRole: activeStaffRole,
+    approverPin: parsed.data.approver_pin ?? undefined,
+    actions: [
+      { present: discount > 0, label: "discount", permKey: "discount", amount: discount },
+      { present: comp > 0, label: "comp", permKey: "comp", amount: comp },
+      { present: voidLines.length > 0, label: "line void", permKey: "void", amount: null },
+      { present: manualExempt, label: "tax exemption", permKey: null, amount: null },
+      { present: scWaived, label: "service-charge waive", permKey: null, amount: null },
+    ],
+  });
+  if ("blocked" in gate) {
+    return { error: "A manager PIN is required to approve: " + gate.blocked.join(", ") + "." };
+  }
+
+  // The approver recorded in the audit trail is the RE-VERIFIED one (never the raw
+  // client-supplied `approver`). Null when no sensitive action needed approval.
   const approverMeta = {
-    approved_by: approver ? approver.id : null,
-    approver_name: approver ? approver.name : null,
+    approved_by: gate.approver ? gate.approver.id : null,
+    approver_name: gate.approver ? gate.approver.name : null,
   };
 
   const auditEvents: {

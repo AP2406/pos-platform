@@ -284,6 +284,10 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
   // discount/void). Such approvals must NOT set the sale-level `approver`, or the
   // manager gets falsely recorded as the approver of unrelated comps/discounts.
   const addApprovalRef = useRef(false);
+  // The manager PIN that authorized a sensitive action on this check, kept so it can
+  // be RE-VERIFIED server-side at close (the server never trusts a bare approver id).
+  // Cleared with the cart. Held in a ref, never rendered or persisted to the ticket.
+  const approverPinRef = useRef<string | null>(null);
   // Service charge / auto-gratuity. Auto-applies for large parties; turning it
   // off (a waiver) is the sensitive, reason-coded action.
   const scCfg: ServiceChargeCfg = serviceCharge ?? { enabled: false, pct: 0, autoParty: 0, postTax: false, label: "Service charge" };
@@ -1587,6 +1591,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
     setCustomerResults([]);
     setApproved(false);
     setApprover(null);
+    approverPinRef.current = null;
     setCompAuthorized(false);
     setDiscountAuthorized(false);
     idemKeyRef.current = null;
@@ -1695,6 +1700,8 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
     // comp/discount/void on this check).
     if (!addApprovalRef.current) {
       setApprover({ id: res.id, name: res.name });
+      // Keep the PIN so createOrder can re-verify this approval server-side.
+      approverPinRef.current = mgrPin;
     }
     setMgrOpen(false);
     setMgrPin("");
@@ -1733,7 +1740,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
     if (scWaived && !serviceWaiveOk) { setError("Choose a reason for waiving the service charge."); return; }
     if (taxExempt && !taxExemptOk) { setError("Choose a reason for the tax exemption."); return; }
     if (needsManagerApproval && !approved) {
-      setMgrAction(taxExempt ? "tax exemption" : "service-charge waive");
+      setMgrAction(approvalLabel);
       setMgrIntent("split");
       setMgrErr(null);
       setMgrPin("");
@@ -1792,6 +1799,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
         dining_option: diningOption,
         idempotency_key: nextIdemKey(),
         approver: approver ?? undefined,
+        approver_pin: approverPinRef.current ?? undefined,
       });
       if ("error" in res) {
         setError(res.error);
@@ -2015,13 +2023,22 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
   const compCap = staff ? (staff as { compCap?: number | null }).compCap ?? null : null;
   const discountCap = staff ? (staff as { discountCap?: number | null }).discountCap ?? null : null;
 
-  // P0: comp / discount / void are authorized AT THE ACTION (authorizeAction),
-  // so by close they're already approved with the approver recorded. The close
-  // gate only covers tax-exempt + service-charge waive (no direct permission
-  // key) — and FAILS CLOSED: an unknown/null cashier always needs a manager PIN,
-  // never default-allow.
+  // P0: comp / discount / void are normally authorized AT THE ACTION
+  // (authorizeAction), so by close `approver` is already set. But a RESUMED table
+  // carries a persisted discount/comp/void with no live approver (the approver isn't
+  // stored on the ticket), so the close gate must re-catch any sensitive action that
+  // the current cashier can't authorize and no live approval covers — otherwise the
+  // server's approval gate (which never trusts a bare approver id) would reject the
+  // sale with no way to supply a PIN. tax-exempt + service-charge waive have no
+  // permission key and are manager-gated. FAILS CLOSED: an unknown/null cashier always
+  // needs a manager PIN.
+  const managerCashier = !!staff && cashierRole === "manager";
+  const discountUnauth = discount > 0 && !(cashierCan("discount") && !(discountCap != null && discount > discountCap)) && !approver;
+  const compUnauth = comp > 0 && !(cashierCan("comp") && !(compCap != null && comp > compCap)) && !approver;
+  const voidUnauth = voidLines.length > 0 && !cashierCan("void") && !approver;
   const needsManagerApproval =
-    (taxExempt || scWaived) && (!staff || cashierRole !== "manager");
+    hasStaff && !approved && (discountUnauth || compUnauth || voidUnauth || ((taxExempt || scWaived) && !managerCashier));
+  const approvalLabel = discountUnauth ? "discount" : compUnauth ? "comp" : voidUnauth ? "void" : taxExempt ? "tax exemption" : "service-charge waive";
 
   // The single authorization chokepoint for a sensitive register action. Fails
   // closed: a null/unknown cashier is never authorized. If the cashier's role
@@ -2252,6 +2269,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       dining_option: diningOption,
       note: checkNote.trim() || undefined,
       approver: approver ?? undefined,
+      approver_pin: approverPinRef.current ?? undefined,
       // Phase A: carry the table ticket so covers / seated-at / section persist on the order.
       open_ticket_id: tableBinding?.ticketId ?? undefined,
       // E2: the guest's on-screen signature (if captured on the CFD).
@@ -2311,7 +2329,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       return;
     }
     if (needsManagerApproval && !approved) {
-      setMgrAction(taxExempt ? "tax exemption" : "service-charge waive");
+      setMgrAction(approvalLabel);
       setMgrIntent("tender");
       setMgrErr(null);
       setMgrPin("");

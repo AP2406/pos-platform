@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { loadItemTaxMeta } from "@/lib/services/tax-meta";
 import { computeSplitTotals } from "./split-alloc";
+import { verifyInSaleApprovals } from "@/lib/services/approval-gate";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { DISCOUNT_REASONS, COMP_REASONS, TAX_EXEMPT_REASONS, isValidReason } from "./reason-codes";
@@ -57,7 +58,11 @@ const splitSchema = z.object({
   customer_id: z.string().uuid().optional().nullable(),
   dining_option: z.enum(["dine_in", "takeout", "delivery", "pickup"]).optional().nullable(),
   idempotency_key: z.string().uuid().optional(),
+  // DISPLAY ONLY — never trusted; the audit approver is re-verified from approver_pin.
   approver: z.object({ id: z.string().max(64), name: z.string().max(120) }).optional().nullable(),
+  // Manager PIN authorizing the whole-check discount/comp/tax-exemption on this split.
+  // RE-VERIFIED server-side, exactly like the non-split close path.
+  approver_pin: z.string().regex(/^[0-9]{4,6}$/).optional().nullable(),
 });
 
 type SplitInput = z.infer<typeof splitSchema>;
@@ -218,10 +223,29 @@ export async function finalizeSplitCheck(
 
   // Whole-check sensitive-action audit (P0): attach to the single informational
   // order / the first separate sub-check — with the manager approver when one authorized.
-  const splitApprover = data.approver ?? null;
+  // Server-side approval gate: same as the non-split close path. A discount/comp/tax
+  // exemption the cashier can't authorize needs a manager PIN that is RE-VERIFIED here
+  // (the client-supplied `approver` is never trusted).
+  const splitGate = await verifyInSaleApprovals({
+    supabase,
+    businessId: business.id,
+    isStaffed: activeStaffId != null,
+    isTraining,
+    cashierId: activeStaffId,
+    cashierRole: activeStaffRole,
+    approverPin: data.approver_pin ?? undefined,
+    actions: [
+      { present: discount > 0, label: "discount", permKey: "discount", amount: discount },
+      { present: comp > 0, label: "comp", permKey: "comp", amount: comp },
+      { present: manualExempt, label: "tax exemption", permKey: null, amount: null },
+    ],
+  });
+  if ("blocked" in splitGate) {
+    return { error: "A manager PIN is required to approve: " + splitGate.blocked.join(", ") + "." };
+  }
   const splitApproverMeta = {
-    approved_by: splitApprover ? splitApprover.id : null,
-    approver_name: splitApprover ? splitApprover.name : null,
+    approved_by: splitGate.approver ? splitGate.approver.id : null,
+    approver_name: splitGate.approver ? splitGate.approver.name : null,
   };
   const {
     data: { user: splitUser },
