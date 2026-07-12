@@ -91,10 +91,12 @@ export function KitchenClient({
   recipes = {},
   lang = "en",
   printerFallback = false,
+  initialStation = null,
 }: {
   businessId: string;
   initialOrders: KitchenOrder[];
   stations: KitchenStation[];
+  initialStation?: string | null;
   recent?: RecentTicket[];
   menu?: MenuItem[];
   kdsWarn?: number;
@@ -126,7 +128,19 @@ export function KitchenClient({
   }
   const MSG_PRESETS = ["Item delayed", "86 mid-course", "Course held", "Re-fire needed", "See the kitchen"];
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders);
-  const [stationFilter, setStationFilter] = useState<string>("all");
+  // Per-station screens: a ?station=<id> URL param locks this screen to one station; a
+  // per-device saved default (restored on mount below) otherwise remembers the last pick,
+  // so a dedicated Grill screen keeps showing Grill across reloads without re-tapping.
+  const [stationFilter, setStationFilter] = useState<string>(() =>
+    initialStation && stations.some((s) => s.id === initialStation) ? initialStation : "all"
+  );
+  function selectStation(id: string) {
+    setStationFilter(id);
+    try {
+      if (id === "all") localStorage.removeItem("kds_station");
+      else localStorage.setItem("kds_station", id);
+    } catch {}
+  }
   const [showAllDay, setShowAllDay] = useState(true);
   const [view, setView] = useState<"stations" | "expo">("stations");
   const [pending, startTransition] = useTransition();
@@ -158,6 +172,15 @@ export function KitchenClient({
   const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     try { setSoundOn(localStorage.getItem("kds_sound") === "1"); } catch {}
+  }, []);
+  // Restore this device's saved station (unless the URL already locked one).
+  useEffect(() => {
+    if (initialStation) return;
+    try {
+      const saved = localStorage.getItem("kds_station");
+      if (saved && stations.some((s) => s.id === saved)) setStationFilter(saved);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const soundOnRef = useRef(soundOn);
   useEffect(() => { soundOnRef.current = soundOn; }, [soundOn]);
@@ -605,7 +628,7 @@ export function KitchenClient({
       <div className="flex flex-wrap gap-2 mb-4">
         <button
           type="button"
-          onClick={() => setStationFilter("all")}
+          onClick={() => selectStation("all")}
           className={
             "text-sm rounded-md px-3 py-1.5 border " +
             (stationFilter === "all" ? "bg-foreground text-background border-foreground" : "border-border hover:bg-accent")
@@ -617,7 +640,7 @@ export function KitchenClient({
           <button
             key={s.id}
             type="button"
-            onClick={() => setStationFilter(s.id)}
+            onClick={() => selectStation(s.id)}
             className={
               "text-sm rounded-md px-3 py-1.5 border " +
               (stationFilter === s.id ? "bg-foreground text-background border-foreground" : "border-border hover:bg-accent")

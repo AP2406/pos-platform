@@ -45,12 +45,13 @@ export function StationsCard({ initial }: { initial: KitchenStation[] }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Prep stations split a fired ticket across kitchen screens — assign menu items to a station in Catalog, and when a table fires, each station sees only its own work. With no stations, the kitchen shows one combined ticket as before.
+        Prep stations split a fired ticket across kitchen screens — assign menu items to a station in Catalog, and when a table fires, each station sees only its own work. With no stations, the kitchen shows one combined ticket as before. Open a station&rsquo;s screen link below on that station&rsquo;s device to lock it to just that station.
       </p>
       <div className="space-y-2">
         {stations.map((s) => (
           <div key={s.id} className="flex items-center gap-2">
             <Input value={s.name} onChange={(e) => rename(s.id, e.target.value)} className="h-9 flex-1" />
+            <a href={"/app/kitchen?station=" + s.id} target="_blank" rel="noopener noreferrer" className="text-xs text-muted-foreground underline hover:text-foreground whitespace-nowrap" title="Open a KDS screen locked to this station">Open screen ↗</a>
             <button type="button" onClick={() => remove(s.id)} disabled={pending} className="text-xs text-red-600 underline">Remove</button>
           </div>
         ))}

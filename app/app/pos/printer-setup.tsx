@@ -59,12 +59,14 @@ const LEVEL_STYLES: Record<StatusLevel, string> = {
   checking: "bg-muted text-muted-foreground border-border",
 };
 
-export function PrinterSettings({ businessName }: { businessName: string }) {
+export function PrinterSettings({ businessName, stations = [] }: { businessName: string; stations?: { id: string; name: string }[] }) {
   const [conn, setConn] = useState<"checking" | "offline" | "online">("checking");
   const [printers, setPrinters] = useState<string[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [widthMm, setWidthMm] = useState<number>(54);
   const [autoPrint, setAutoPrint] = useState<boolean>(true);
+  // Per-station chit printers (opt-in). Empty ⇒ station printing OFF (screen-only).
+  const [stationPrinters, setStationPrinters] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState<boolean>(false);
   const [status, setStatus] = useState<PrinterStatus | null>(null);
   const [testing, setTesting] = useState(false);
@@ -79,6 +81,7 @@ export function PrinterSettings({ businessName }: { businessName: string }) {
       setSelected(cfg.printerName);
       setWidthMm(cfg.widthMm || 54);
       setAutoPrint(cfg.autoPrint);
+      if (cfg.stationPrinters) setStationPrinters(cfg.stationPrinters);
       setSaved(true);
     }
     checkConn(cfg ? cfg.printerName : "");
@@ -128,7 +131,8 @@ export function PrinterSettings({ businessName }: { businessName: string }) {
       setMsg("Choose a printer first.");
       return;
     }
-    savePrinterConfig({ printerName: selected, widthMm: widthMm, autoPrint: autoPrint });
+    const cleanedStations = Object.fromEntries(Object.entries(stationPrinters).filter(([, p]) => p));
+    savePrinterConfig({ printerName: selected, widthMm: widthMm, autoPrint: autoPrint, stationPrinters: Object.keys(cleanedStations).length > 0 ? cleanedStations : undefined });
     setSaved(true);
     setMsg("Saved. This printer stays connected until you disconnect it.");
   }
@@ -224,6 +228,33 @@ export function PrinterSettings({ businessName }: { businessName: string }) {
             <input type="checkbox" checked={autoPrint} onChange={(e) => setAutoPrint(e.target.checked)} className="w-4 h-4" />
             Print receipt automatically after each sale
           </label>
+
+          {stations.length > 0 && (
+            <div className="rounded-md border border-border p-3 space-y-2">
+              <div className="text-sm font-medium">Kitchen station printers <span className="text-xs font-normal text-muted-foreground">(optional)</span></div>
+              <p className="text-xs text-muted-foreground">
+                Route each station&rsquo;s chit to its own printer when a ticket fires. Leave a station on &ldquo;Off&rdquo; to keep it screen-only. This is per-device — set it up on the device wired to the kitchen printers.
+              </p>
+              {stations.map((s) => (
+                <div key={s.id} className="flex items-center gap-2">
+                  <span className="text-sm flex-1 truncate">{s.name}</span>
+                  <select
+                    value={stationPrinters[s.id] ?? ""}
+                    onChange={(e) => setStationPrinters((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                    className="h-9 rounded-md border border-border bg-transparent text-foreground px-2 text-sm max-w-[55%]"
+                  >
+                    <option value="">Off (screen only)</option>
+                    {printers.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+              <p className="text-[11px] text-amber-600">
+                ⚠ Not verified against a physical printer yet — <strong>test-print each station</strong> and run a live fire before a kitchen relies on this. Falls back to the KDS screen if a printer is offline.
+              </p>
+            </div>
+          )}
 
           {saved && status && (
             <div className={"rounded-md border p-3 " + LEVEL_STYLES[status.level]}>

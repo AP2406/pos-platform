@@ -49,7 +49,7 @@ import type { CanonicalOrderInput } from "@/lib/pos/canonical-order";
 import { getCardConfig } from "./finix-pos-actions";
 import { tapToPayAvailable } from "@/lib/services/tap-to-pay";
 import { TenderSheet } from "./tender-sheet";
-import { getPrinterConfig, printReceiptHtml } from "./qz-print";
+import { getPrinterConfig, printReceiptHtml, printStationChits } from "./qz-print";
 import { buildReceiptHtml, type ReceiptSettings } from "./receipt-template";
 import { RegisterRefund } from "./register-refund";
 import { useOnlineStatus } from "./use-online";
@@ -1444,6 +1444,9 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
         return;
       }
       setCart((prev) => prev.map((l) => ({ ...l, sent_qty: l.quantity })));
+      // Opt-in per-station chit printing (no-op unless station printers are configured
+      // on this device). Best-effort — never blocks or fails the fire.
+      if (res.chits && res.chits.length > 0) printStationChits(res.chits).catch(() => {});
     });
   }
 
@@ -1512,6 +1515,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       }
       const nowIso = new Date().toISOString();
       setCart((prev) => prev.map((l) => ((l.course_id ?? null) === course.id ? { ...l, sent_qty: l.quantity, fired_at: nowIso } : l)));
+      if (res.chits && res.chits.length > 0) printStationChits(res.chits).catch(() => {});
     });
   }
 

@@ -360,7 +360,7 @@ export default async function SettingsPage() {
         <p className="text-sm text-muted-foreground mb-4">
           Connect this device to a receipt printer. This setting is saved on this computer and stays connected until you disconnect it.
         </p>
-        <PrinterSettings businessName={business.name} />
+        <PrinterSettings businessName={business.name} stations={stationsList.map((s) => ({ id: s.id, name: s.name }))} />
       </div>
     ),
   });

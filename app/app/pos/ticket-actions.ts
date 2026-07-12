@@ -475,6 +475,14 @@ const DINING_KDS_LABELS: Record<string, string> = {
 
 type FiredItem = { name: string; quantity: number; note?: string | null; seat?: number | null; catalog_item_id?: string | null; allergens?: string[]; allergy?: string | null; prep_minutes?: number | null };
 
+// One printed chit for a station (returned to the client for opt-in per-station printing).
+export type FiredChit = {
+  station_id: string | null;
+  station_name: string | null;
+  label: string | null;
+  items: { name: string; quantity: number; note?: string | null; seat?: number | null; allergens?: string[]; allergy?: string | null; prep_minutes?: number | null }[];
+};
+
 // P1-14: split the just-fired items into one kitchen_tickets row per prep
 // station. Each item's station comes from catalog_items.station_id; items with
 // no mapped station (or businesses with no stations defined) collapse into a
@@ -487,7 +495,7 @@ async function insertFiredByStation(
   fired: FiredItem[],
   createdBy: string | null,
   courseId: string | null = null
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; chits?: FiredChit[] }> {
   const catIds = Array.from(
     new Set(fired.map((f) => f.catalog_item_id).filter((x): x is string => !!x))
   );
@@ -563,24 +571,34 @@ async function insertFiredByStation(
     for (const r of data ?? []) stationName[r.id as string] = r.name as string;
   }
 
-  const rows = Object.values(groups).map((g) => ({
-    business_id: businessId,
-    element_id: elementId,
+  const grouped = Object.values(groups).map((g) => ({
     label: g.sid ? (baseLabel ? baseLabel + " · " : "") + (stationName[g.sid] || "Station") : baseLabel,
     items: g.items,
     station_id: g.sid || null,
+    station_name: g.sid ? stationName[g.sid] || null : null,
+  }));
+  const rows = grouped.map((g) => ({
+    business_id: businessId,
+    element_id: elementId,
+    label: g.label,
+    items: g.items,
+    station_id: g.station_id,
     course_id: courseId,
     created_by: createdBy,
   }));
   const { error } = await supabase.from("kitchen_tickets").insert(rows);
-  return { error: error ? "Could not send to the kitchen. Please try again." : undefined };
+  if (error) return { error: "Could not send to the kitchen. Please try again." };
+  // Return the per-station chits so the register can print each to its station's printer
+  // (opt-in, per-device — see station printer routing). Screen-only kitchens ignore these.
+  const chits: FiredChit[] = grouped.map((g) => ({ station_id: g.station_id, station_name: g.station_name, label: g.label, items: g.items as FiredChit["items"] }));
+  return { chits };
 }
 
 export async function sendTableTicket(
   ticketId: string,
   cart: TableCart,
   diningOption?: string | null
-): Promise<{ ok: true; fired: number } | { error: string }> {
+): Promise<{ ok: true; fired: number; chits?: FiredChit[] } | { error: string }> {
   if (!ticketId) return { error: "Missing ticket." };
   const parsed = tableCartSchema.safeParse(cart);
   if (!parsed.success) return { error: "Could not read the table." };
@@ -651,7 +669,7 @@ export async function sendTableTicket(
     // The fire succeeded; the client will still mark items sent locally.
   }
 
-  return { ok: true, fired: fired.reduce((s, f) => s + f.quantity, 0) };
+  return { ok: true, fired: fired.reduce((s, f) => s + f.quantity, 0), chits: ins.chits };
 }
 
 // Coursing (P0-1): fire only the not-yet-sent items of ONE course to the
@@ -664,7 +682,7 @@ export async function fireCourse(
   courseId: string,
   courseName?: string | null,
   diningOption?: string | null
-): Promise<{ ok: true; fired: number } | { error: string }> {
+): Promise<{ ok: true; fired: number; chits?: FiredChit[] } | { error: string }> {
   if (!ticketId) return { error: "Missing ticket." };
   if (!courseId) return { error: "Missing course." };
   const parsed = tableCartSchema.safeParse(cart);
@@ -733,7 +751,7 @@ export async function fireCourse(
     .eq("business_id", business.id);
   if (updErr) console.error("fireCourse update:", updErr);
 
-  return { ok: true, fired: fired.reduce((s, f) => s + f.quantity, 0) };
+  return { ok: true, fired: fired.reduce((s, f) => s + f.quantity, 0), chits: ins.chits };
 }
 
 // B10 auto-coursing: fire the NEXT unfired course for a table, server-side, from
