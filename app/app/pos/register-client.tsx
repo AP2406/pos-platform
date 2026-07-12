@@ -50,6 +50,7 @@ import { getCardConfig } from "./finix-pos-actions";
 import { tapToPayAvailable } from "@/lib/services/tap-to-pay";
 import { TenderSheet } from "./tender-sheet";
 import { getPrinterConfig, printReceiptHtml, printStationChits } from "./qz-print";
+import { type KitchenTicketConfig, KITCHEN_TICKET_DEFAULTS } from "@/lib/services/kitchen-ticket-config";
 import { buildReceiptHtml, type ReceiptSettings } from "./receipt-template";
 import { RegisterRefund } from "./register-refund";
 import { useOnlineStatus } from "./use-online";
@@ -225,7 +226,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
   });
 }
 
-export function RegisterClient({ items, taxRate, taxMeta, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto", upsellPrompts = [], defaultToSeat = true, deviceProfiles = [] }: { items: Item[]; taxRate: number; taxMeta?: { itemTaxMeta: Record<string, ItemTaxMeta>; rateFracById: Record<string, number>; rateNameById: Record<string, string> }; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string; upsellPrompts?: UpsellPrompt[]; defaultToSeat?: boolean; deviceProfiles?: DeviceProfile[] }) {
+export function RegisterClient({ items, taxRate, taxMeta, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto", upsellPrompts = [], defaultToSeat = true, deviceProfiles = [], kitchenTicketConfig = KITCHEN_TICKET_DEFAULTS }: { items: Item[]; taxRate: number; taxMeta?: { itemTaxMeta: Record<string, ItemTaxMeta>; rateFracById: Record<string, number>; rateNameById: Record<string, string> }; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string; upsellPrompts?: UpsellPrompt[]; defaultToSeat?: boolean; deviceProfiles?: DeviceProfile[]; kitchenTicketConfig?: KitchenTicketConfig }) {
   const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
   const online = useOnlineStatus();
   // P1-22: back up the quick-service cart (no table/tab — nothing server-side
@@ -1446,7 +1447,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       setCart((prev) => prev.map((l) => ({ ...l, sent_qty: l.quantity })));
       // Opt-in per-station chit printing (no-op unless station printers are configured
       // on this device). Best-effort — never blocks or fails the fire.
-      if (res.chits && res.chits.length > 0) printStationChits(res.chits).catch(() => {});
+      if (res.chits && res.chits.length > 0) printStationChits(res.chits, kitchenTicketConfig).catch(() => {});
     });
   }
 
@@ -1515,7 +1516,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       }
       const nowIso = new Date().toISOString();
       setCart((prev) => prev.map((l) => ((l.course_id ?? null) === course.id ? { ...l, sent_qty: l.quantity, fired_at: nowIso } : l)));
-      if (res.chits && res.chits.length > 0) printStationChits(res.chits).catch(() => {});
+      if (res.chits && res.chits.length > 0) printStationChits(res.chits, kitchenTicketConfig).catch(() => {});
     });
   }
 

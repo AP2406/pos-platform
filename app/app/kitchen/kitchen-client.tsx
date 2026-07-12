@@ -9,6 +9,7 @@ import { allergenLabels } from "@/lib/allergens";
 import { setCatalogItemOutOfStock } from "../catalog/actions";
 import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady, setOrderItemPrepared, recallKitchenTicket, recallOrder, setTicketRush, sendKitchenMessage } from "./actions";
 import { printReceiptHtml } from "../pos/qz-print";
+import { type KitchenTicketConfig, KITCHEN_TICKET_DEFAULTS } from "@/lib/services/kitchen-ticket-config";
 
 function allergenText(it: { allergens?: string[] | null; allergy?: string | null }): string {
   return [...allergenLabels(it.allergens), it.allergy ? it.allergy.trim() : ""]
@@ -24,16 +25,18 @@ const TICKET_I18N: Record<string, { allergen: string }> = {
   es: { allergen: "ALÉRGENO" },
 };
 
-function ticketHtml(o: { tableLabel: string | null; id: string; createdAt: string; items: { name: string; quantity: number; note?: string | null; allergens?: string[] | null; allergy?: string | null }[] }, lang = "en"): string {
+function ticketHtml(o: { tableLabel: string | null; id: string; createdAt: string; items: { name: string; quantity: number; note?: string | null; allergens?: string[] | null; allergy?: string | null; seat?: number | null; prep_minutes?: number | null }[] }, lang = "en", config: KitchenTicketConfig = KITCHEN_TICKET_DEFAULTS): string {
   const t = TICKET_I18N[lang] ?? TICKET_I18N.en;
   const title = o.tableLabel ? o.tableLabel : "#" + o.id.slice(0, 8);
   const rows = o.items
     .map((it) => {
-      const allergens = allergenText(it);
+      const allergens = config.show_allergens ? allergenText(it) : "";
+      const seat = config.show_seat && it.seat ? " (S" + it.seat + ")" : "";
+      const prep = config.show_prep_time && it.prep_minutes ? " · " + it.prep_minutes + "m" : "";
       return (
         "<div style='display:flex;justify-content:space-between'><span>" +
-        it.quantity + "x " + esc(displayItemName(it.name)) + "</span></div>" +
-        (it.note ? "<div style='font-size:11px;padding-left:8px'>&rarr; " + esc(it.note) + "</div>" : "") +
+        it.quantity + "x " + esc(displayItemName(it.name)) + esc(seat + prep) + "</span></div>" +
+        (config.show_note && it.note ? "<div style='font-size:11px;padding-left:8px'>&rarr; " + esc(it.note) + "</div>" : "") +
         (allergens ? "<div style='font-size:12px;padding-left:8px;font-weight:bold;color:#c00'>⚠ " + t.allergen + ": " + esc(allergens) + "</div>" : "")
       );
     })
@@ -41,7 +44,9 @@ function ticketHtml(o: { tableLabel: string | null; id: string; createdAt: strin
   return (
     "<html><head><meta name='viewport' content='width=device-width,initial-scale=1'>" +
     "<style>body{font-family:'Courier New',monospace;font-size:14px;width:72mm;margin:0 auto;padding:6px}h1{font-size:16px;margin:0 0 6px}</style></head><body>" +
-    "<h1>" + esc(title) + "</h1>" + rows + "</body></html>"
+    "<h1>" + esc(title) + "</h1>" +
+    (config.show_fire_time ? "<div style='font-size:11px;margin-bottom:4px'>" + esc(new Date(o.createdAt).toLocaleTimeString()) + "</div>" : "") +
+    rows + "</body></html>"
   );
 }
 
@@ -92,6 +97,7 @@ export function KitchenClient({
   lang = "en",
   printerFallback = false,
   initialStation = null,
+  kitchenTicketConfig = KITCHEN_TICKET_DEFAULTS,
 }: {
   businessId: string;
   initialOrders: KitchenOrder[];
@@ -104,6 +110,7 @@ export function KitchenClient({
   recipes?: Record<string, string[]>;
   lang?: string;
   printerFallback?: boolean;
+  kitchenTicketConfig?: KitchenTicketConfig;
 }) {
   // B13: realtime-connection health → printer failover. When the KDS loses its
   // realtime link and the operator enabled fallback, newly-arrived tickets print.
@@ -281,7 +288,7 @@ export function KitchenClient({
     seenIds.current = new Set(orders.map((o) => o.id));
     // B13: printer failover — when the realtime link is down, print incoming tickets.
     if (degradedRef.current && freshTickets.length > 0) {
-      for (const o of freshTickets) { try { printReceiptHtml(ticketHtml(o, lang)); } catch {} }
+      for (const o of freshTickets) { try { printReceiptHtml(ticketHtml(o, lang, kitchenTicketConfig)); } catch {} }
     }
     if (freshVoid) alarm();
     else if (freshNormal) chime();
@@ -455,7 +462,7 @@ export function KitchenClient({
   }, [businessId, refresh, printerFallback]);
 
   function handleReprint(o: KitchenOrder) {
-    printReceiptHtml(ticketHtml(o, lang));
+    printReceiptHtml(ticketHtml(o, lang, kitchenTicketConfig));
   }
 
   function handleRefire(o: KitchenOrder) {

@@ -36,6 +36,8 @@ import { SectionsCard } from "./sections-card";
 import { listSections, listAssignableTables } from "../pos/sections-actions";
 import { TableAgingCard } from "./table-aging-card";
 import { StationsCard } from "./stations-card";
+import { KitchenTicketCard } from "./kitchen-ticket-card";
+import { parseKitchenTicketConfig } from "@/lib/services/kitchen-ticket-config";
 import { listKitchenStations } from "../kitchen/stations-actions";
 import { GuestOrderingCard } from "./guest-ordering-card";
 import { KioskCard } from "./kiosk-card";
@@ -408,6 +410,10 @@ export default async function SettingsPage() {
           <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Kitchen stations</SectionHeader>
             <StationsCard initial={stationsList} />
+          </div>
+          <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
+            <SectionHeader>Kitchen ticket</SectionHeader>
+            <KitchenTicketCard initial={parseKitchenTicketConfig((business as { settings?: unknown }).settings)} />
           </div>
           <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6">
             <SectionHeader>Guest ordering (QR)</SectionHeader>
