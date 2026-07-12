@@ -1,7 +1,10 @@
 // Client-only helper for QZ Tray printing, saved printer config, persistent
 // connection (auto-reconnect), and printer status diagnostics.
 
-export type PrinterConfig = { printerName: string; widthMm: number; autoPrint: boolean };
+// stationPrinters (optional, per-device): map a kitchen station id → the printer its chit
+// should print to when a ticket fires. Absent/empty ⇒ station printing is OFF and the
+// kitchen is screen-only (default). The key "default" routes the no-station chit.
+export type PrinterConfig = { printerName: string; widthMm: number; autoPrint: boolean; stationPrinters?: Record<string, string> };
 export type StatusLevel = "ok" | "warning" | "error" | "offline" | "checking";
 export type PrinterStatus = { level: StatusLevel; code: string; message: string };
 
@@ -266,4 +269,61 @@ export function printReceiptHtml(html: string): void {
     return;
   }
   browserPrint(html);
+}
+
+type StationChit = { station_id: string | null; station_name: string | null; label: string | null; items: { name: string; quantity: number; note?: string | null; seat?: number | null; allergy?: string | null; allergens?: string[] }[] };
+
+// Format a fired station chit for a thermal kitchen printer.
+export function stationChitHtml(chit: StationChit): string {
+  const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const title = chit.station_name || chit.label || "Kitchen";
+  const rows = chit.items
+    .map((it) => {
+      const allergy = it.allergy || (it.allergens && it.allergens.length ? it.allergens.join(", ") : "");
+      const seat = it.seat ? " (S" + it.seat + ")" : "";
+      return (
+        "<div style='display:flex;justify-content:space-between'><span>" + it.quantity + "x " + esc(it.name) + esc(seat) + "</span></div>" +
+        (it.note ? "<div style='font-size:11px;padding-left:8px'>&rarr; " + esc(it.note) + "</div>" : "") +
+        (allergy ? "<div style='font-size:12px;padding-left:8px;font-weight:bold;color:#c00'>&#9888; " + esc(allergy) + "</div>" : "")
+      );
+    })
+    .join("");
+  return (
+    "<html><head><meta name='viewport' content='width=device-width,initial-scale=1'>" +
+    "<style>body{font-family:'Courier New',monospace;font-size:14px;width:72mm;margin:0 auto;padding:6px}h1{font-size:16px;margin:0 0 4px}</style></head><body>" +
+    "<h1>" + esc(title) + "</h1>" +
+    (chit.label && chit.label !== title ? "<div style='font-size:12px;margin-bottom:4px'>" + esc(chit.label) + "</div>" : "") +
+    rows + "</body></html>"
+  );
+}
+
+// Print each fired chit to its station's mapped printer (opt-in, per-device). No-op unless
+// station printers are configured — screen-only kitchens are unaffected. The "default" key
+// routes a no-station chit. Best-effort per chit; never throws to the caller.
+export async function printStationChits(chits: StationChit[]): Promise<{ printed: number; skipped: number }> {
+  const cfg = getPrinterConfig();
+  const map = cfg?.stationPrinters;
+  if (!cfg || !map || Object.keys(map).length === 0) return { printed: 0, skipped: chits.length };
+  try {
+    await qzConnect();
+  } catch {
+    return { printed: 0, skipped: chits.length };
+  }
+  let printed = 0;
+  let skipped = 0;
+  for (const chit of chits) {
+    const printer = map[chit.station_id || "default"];
+    if (!printer) {
+      skipped++;
+      continue;
+    }
+    try {
+      await qzPrintHtml(printer, stationChitHtml(chit), cfg.widthMm || 72);
+      printed++;
+    } catch (e) {
+      console.error("printStationChits: print failed for station " + (chit.station_id || "default"), e);
+      skipped++;
+    }
+  }
+  return { printed, skipped };
 }
