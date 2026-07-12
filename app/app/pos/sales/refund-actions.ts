@@ -255,25 +255,33 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   } = await supabase.auth.getUser();
   const idem = input.idempotency_key && /^[0-9a-fA-F-]{10,64}$/.test(input.idempotency_key) ? input.idempotency_key : null;
   let claimId: string | null = null;
-  if (idem) {
+  {
+    // Claim finalized=false (status stays a known-good 'recorded' to avoid any CHECK on
+    // status). Two guards catch a double refund: the order-inflight unique index blocks a
+    // CONCURRENT second refund of this sale, and the idempotency-key index blocks a NETWORK
+    // RETRY of this same refund after it completed.
     const { data: claim, error: claimErr } = await supabase
       .from("refunds")
-      .insert({ business_id: business.id, order_id: orderId, amount: amount, reason: input.reason, status: "processing", idempotency_key: idem, created_by: refundUser ? refundUser.id : null })
+      .insert({ business_id: business.id, order_id: orderId, amount: amount, reason: input.reason, status: "recorded", finalized: false, idempotency_key: idem, created_by: refundUser ? refundUser.id : null })
       .select("id")
       .single();
     if (claimErr) {
       if ((claimErr as { code?: string }).code === "23505") {
-        // Already submitted (duplicate). Return the completed one if it finished; never
-        // process a second time.
-        const { data: existing } = await supabase.from("refunds").select("id, amount, status").eq("business_id", business.id).eq("idempotency_key", idem).maybeSingle();
-        if (existing && existing.status === "recorded") {
-          const amt = Number(existing.amount) || amount;
-          return { ok: true, refund_id: existing.id as string, amount: amt, fully: false, returned_subtotal: 0, discount_portion: 0, tax_portion: 0, card_refunded: 0, store_credited: 0, house_account_reversed: 0, cash_back: 0 };
+        // A same-key row ⇒ this exact refund was already submitted (network retry): return
+        // the completed one if it finished, else report it in flight. No same-key row ⇒ the
+        // conflict is the order-inflight index (a DIFFERENT refund of this sale is running).
+        const { data: existing } = idem ? await supabase.from("refunds").select("id, amount, finalized").eq("business_id", business.id).eq("idempotency_key", idem).maybeSingle() : { data: null };
+        if (existing) {
+          if (existing.finalized === true) {
+            const amt = Number(existing.amount) || amount;
+            return { ok: true, refund_id: existing.id as string, amount: amt, fully: false, returned_subtotal: 0, discount_portion: 0, tax_portion: 0, card_refunded: 0, store_credited: 0, house_account_reversed: 0, cash_back: 0 };
+          }
+          return { error: "This refund was already submitted." };
         }
-        return { error: "This refund was already submitted." };
+        return { error: "Another refund for this sale is being processed. Please wait a moment and try again." };
       }
       // Column missing (pre-migration) or other error: degrade to the no-claim path so
-      // refunds keep working; we just lose idempotency until 0095 is applied.
+      // refunds keep working; we just lose the concurrency guard until 0095 is applied.
       console.warn("refundItems: idempotency claim skipped:", claimErr);
     } else {
       claimId = (claim?.id as string | null) ?? null;
@@ -465,7 +473,7 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   if (claimId) {
     const { error } = await supabase
       .from("refunds")
-      .update({ note: noteVal, status: "recorded", restocked: restocked, snapshot: snapshot, drawer_session_id: refundDrawerSessionId })
+      .update({ note: noteVal, status: "recorded", finalized: true, restocked: restocked, snapshot: snapshot, drawer_session_id: refundDrawerSessionId })
       .eq("id", claimId)
       .eq("business_id", business.id);
     refundError = error;
@@ -499,13 +507,27 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
     return { error: "Could not record the refund. Please try again." };
   }
 
-  // "Fully refunded" is amount-based for BOTH modes: the sale is fully refunded once
-  // the cumulative refunded amount reaches the order total (within a cent). Item mode
-  // used to key off item COUNT, which marked an order 'refunded' after all items were
-  // returned even when the tip/service charge remained — permanently locking out a later
-  // by-amount refund of that tip. Amount-based avoids that (an all-items refund of a
-  // tipped sale stays 'partially_refunded' so the tip can still be refunded).
-  const fully = round2(refundedAmount + amount) + 0.005 >= orderTotal;
+  // "Fully refunded" is amount-based: fully once the cumulative refunded amount reaches
+  // the order total (within a cent). This (vs the old item-COUNT rule) keeps a tipped
+  // sale 'partially_refunded' after an all-items refund so the tip can still be refunded
+  // by amount. But a NO-tip sale whose every item is returned can land a cent short of
+  // total from proportional tax/discount rounding — so also treat "all items returned and
+  // nothing but items was owed" as fully, or it would be stuck 'partially_refunded'.
+  let fully = round2(refundedAmount + amount) + 0.005 >= orderTotal;
+  if (!fully && !isAmountMode) {
+    let totalSold = 0;
+    let totalReturned = 0;
+    for (const id of Object.keys(itemById)) {
+      totalSold += itemById[id].quantity;
+      const prev = returnedByItem[id] || 0;
+      const nowThis = refundLines.filter((l) => l.order_item_id === id).reduce((a, l) => a + l.quantity, 0);
+      totalReturned += prev + nowThis;
+    }
+    const allItemsReturned = totalSold > 0 && totalReturned >= totalSold;
+    // Non-item remainder (tip + service charge). ≤ a cent ⇒ only items were owed.
+    const nonItemOwed = round2(orderTotal - ((Number(order.subtotal) || 0) - (Number(order.discount) || 0) + (Number(order.tax) || 0)));
+    if (allItemsReturned && nonItemOwed <= 0.005) fully = true;
+  }
 
   const { error: statusError } = await supabase
     .from("orders")
