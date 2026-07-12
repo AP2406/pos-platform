@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { readActiveStaffId, ACTIVE_STAFF_COOKIE } from "@/lib/services/active-staff-cookie";
 import {
   resolvePermissions,
   PERMISSION_KEYS,
@@ -113,9 +114,9 @@ export async function approverByPin(
 // cookie), or null if no one is signed in.
 export async function getActiveStaffPermissions(): Promise<StaffPermissions | null> {
   const cookieStore = await cookies();
-  const sid = cookieStore.get("surge_active_staff")?.value || null;
-  if (!sid) return null;
   const { business } = await requireBusiness();
+  const sid = readActiveStaffId(cookieStore.get(ACTIVE_STAFF_COOKIE)?.value, business.id);
+  if (!sid) return null;
   const supabase = await createClient();
   return staffPermissionsById(supabase, business.id, sid);
 }

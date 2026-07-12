@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { staffPermissionsById } from "@/lib/services/permissions-server";
+import { makeActiveStaffCookie } from "@/lib/services/active-staff-cookie";
 import { cookies } from "next/headers";
 
 const ACTIVE_STAFF_COOKIE = "surge_active_staff";
@@ -79,7 +80,7 @@ export async function setActiveStaff(
     compCap: perms?.compCap ?? null,
     discountCap: perms?.discountCap ?? null,
   };
-  cookieStore.set(ACTIVE_STAFF_COOKIE, staff.id, {
+  cookieStore.set(ACTIVE_STAFF_COOKIE, makeActiveStaffCookie(business.id, staff.id), {
     httpOnly: true,
     sameSite: "lax",
     path: "/",

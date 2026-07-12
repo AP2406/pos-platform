@@ -7,6 +7,7 @@ import { requiresApproval } from "@/lib/services/config/approval";
 import { refundTransfer } from "@/lib/services/finix";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import { readActiveStaffId, ACTIVE_STAFF_COOKIE } from "@/lib/services/active-staff-cookie";
 
 const REASONS = ["customer_request", "defective", "wrong_item", "overcharge", "duplicate", "other"];
 
@@ -20,7 +21,7 @@ async function getActiveStaffRow(
   businessId: string
 ): Promise<{ id: string; name: string; role: string } | null> {
   const cookieStore = await cookies();
-  const sid = cookieStore.get("surge_active_staff")?.value || null;
+  const sid = readActiveStaffId(cookieStore.get(ACTIVE_STAFF_COOKIE)?.value, businessId);
   if (!sid) return null;
   const { data } = await supabase
     .from("staff_members")

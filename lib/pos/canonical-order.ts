@@ -51,9 +51,14 @@ export type CanonicalOrderInput = {
   // Whole-check note (TouchBistro "Add Note") — stored on the order snapshot and
   // printed on the bill/receipt.
   note?: string | null;
-  // Client-supplied approver — hardened into a server-verified approval_token in
-  // STEP 5; kept here so nothing regresses in the meantime.
+  // Client-supplied approver — DISPLAY ONLY. createOrder re-verifies the approving
+  // manager from `approver_pin` server-side (never trusts this bare id/name).
   approver?: { id: string; name: string } | null;
+  // Manager PIN authorizing a sensitive action (discount/comp/void/tax-exempt/SC waive)
+  // when the cashier lacks the permission/cap. Re-verified server-side in createOrder;
+  // must ride through EVERY tender path (cash/card/terminal/split) or an approved sale
+  // would be rejected at close.
+  approver_pin?: string | null;
 };
 
 // Every canonical key, in one place. The test asserts the picker preserves all
@@ -83,6 +88,7 @@ export const CANONICAL_ORDER_KEYS: (keyof CanonicalOrderInput)[] = [
   "signature_data",
   "note",
   "approver",
+  "approver_pin",
 ];
 
 // Select exactly the canonical fields to forward into createOrder. Explicit (not
@@ -113,5 +119,6 @@ export function forwardOrderFields(input: CanonicalOrderInput): CanonicalOrderIn
     signature_data: input.signature_data,
     note: input.note,
     approver: input.approver,
+    approver_pin: input.approver_pin,
   };
 }
