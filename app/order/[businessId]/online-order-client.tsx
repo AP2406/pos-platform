@@ -39,7 +39,7 @@ export function OnlineOrderClient({
   const [phone, setPhone] = useState("");
   const [note, setNote] = useState("");
   const [placing, setPlacing] = useState(false);
-  const [confirmation, setConfirmation] = useState<{ label: string; count: number } | null>(null);
+  const [confirmation, setConfirmation] = useState<{ label: string; count: number; token: string | null } | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const shown = items.filter((i) => (i.category || "Other") === activeCat);
@@ -84,12 +84,12 @@ export function OnlineOrderClient({
       p_note: note.trim() || null,
     });
     setPlacing(false);
-    const res = (data ?? null) as { ok?: boolean; label?: string; count?: number } | null;
+    const res = (data ?? null) as { ok?: boolean; label?: string; count?: number; token?: string } | null;
     if (error || !res?.ok) {
       setErr("Sorry — we couldn't place that order. Please call the restaurant.");
       return;
     }
-    setConfirmation({ label: res.label ?? "Online", count: res.count ?? cartCount });
+    setConfirmation({ label: res.label ?? "Online", count: res.count ?? cartCount, token: res.token ?? null });
     setCart(new Map());
     setName("");
     setPhone("");
@@ -110,9 +110,20 @@ export function OnlineOrderClient({
           <span className="font-semibold">{businessName}</span>. We&apos;ll have it ready for pickup —{" "}
           <span className="font-semibold">pay when you collect your order</span>.
         </p>
+        {confirmation.token && (
+          <a
+            href={`/order/${businessId}/status/${confirmation.token}`}
+            className="mt-10 px-8 py-4 rounded-xl bg-zinc-900 text-white text-lg font-semibold"
+          >
+            Track your order
+          </a>
+        )}
         <button
           onClick={() => setConfirmation(null)}
-          className="mt-10 px-8 py-4 rounded-xl bg-zinc-900 text-white text-lg font-semibold"
+          className={
+            (confirmation.token ? "mt-4" : "mt-10") +
+            " px-8 py-4 rounded-xl border border-zinc-300 text-zinc-700 text-lg font-semibold"
+          }
         >
           Start a new order
         </button>
