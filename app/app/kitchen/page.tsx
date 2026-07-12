@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { KitchenClient } from "./kitchen-client";
 import { listKitchenStations } from "./stations-actions";
+import { parseKitchenTicketConfig } from "@/lib/services/kitchen-ticket-config";
 
 export const dynamic = "force-dynamic";
 
@@ -222,7 +223,7 @@ export default async function KitchenPage({ searchParams }: { searchParams: Prom
           New orders appear here automatically. Tap Done when an order is ready.
         </p>
       </div>
-      <KitchenClient businessId={business.id} initialOrders={initialOrders} stations={stations} recent={recent} menu={menu} kdsWarn={kdsWarn} kdsLate={kdsLate} recipes={recipes} lang={kdsLang} printerFallback={printerFallback} initialStation={initialStation} />
+      <KitchenClient businessId={business.id} initialOrders={initialOrders} stations={stations} recent={recent} menu={menu} kdsWarn={kdsWarn} kdsLate={kdsLate} recipes={recipes} lang={kdsLang} printerFallback={printerFallback} initialStation={initialStation} kitchenTicketConfig={parseKitchenTicketConfig(sset)} />
     </div>
   );
 }
