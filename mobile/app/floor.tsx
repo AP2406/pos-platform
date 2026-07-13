@@ -25,6 +25,7 @@ import {
   fetchOpenChecks,
   type FloorPlan,
   type FloorElement,
+  type FloorSection,
   type TableSummary,
   type OpenCheck,
   type Aging,
@@ -32,12 +33,18 @@ import {
 import { formatElapsed, minutesSince, money } from "@/lib/format";
 
 const RINGABLE = new Set(["table", "booth"]);
+const LEGEND: { status: TableStatus; label: string }[] = [
+  { status: "available", label: "Available" },
+  { status: "occupied", label: "Occupied" },
+  { status: "warning", label: "Warning" },
+  { status: "late", label: "Late" },
+];
 
 function tableStatus(summary: TableSummary | undefined, aging: Aging, now: number): TableStatus {
   if (!summary) return "available";
   if (summary.checkDropped) return "paid";
   const m = minutesSince(summary.openedAt, now) ?? 0;
-  if (summary.itemCount <= 0 || summary.subtotal <= 0) return "occupied"; // seated, no order yet
+  if (summary.itemCount <= 0 || summary.subtotal <= 0) return "occupied";
   if (m >= aging.redMin) return "late";
   if (m >= aging.yellowMin) return "warning";
   return "occupied";
@@ -52,7 +59,7 @@ export default function Floor() {
   const [plans, setPlans] = useState<FloorPlan[]>([]);
   const [activePlan, setActivePlan] = useState<string | null>(null);
   const [elements, setElements] = useState<FloorElement[]>([]);
-  const [sectionColor, setSectionColor] = useState<Record<string, string>>({});
+  const [sections, setSections] = useState<FloorSection[]>([]);
   const [summaries, setSummaries] = useState<Record<string, TableSummary>>({});
   const [aging, setAging] = useState<Aging>({ yellowMin: 60, redMin: 90 });
   const [openChecks, setOpenChecks] = useState<OpenCheck[]>([]);
@@ -60,16 +67,13 @@ export default function Floor() {
   const [now, setNow] = useState(0);
   const [size, setSize] = useState({ w: 0, h: 0 });
 
-  // Static-ish layout (plans, sections, aging) once.
   useEffect(() => {
     (async () => {
       try {
         const [pl, secs, ag] = await Promise.all([fetchFloorPlans(bizId), fetchSections(bizId), fetchTableAging(bizId)]);
         setPlans(pl);
         setActivePlan((cur) => cur ?? pl[0]?.id ?? null);
-        const cmap: Record<string, string> = {};
-        for (const sec of secs) if (sec.color) cmap[sec.id] = sec.color;
-        setSectionColor(cmap);
+        setSections(secs);
         setAging(ag);
       } catch {
         /* ignore */
@@ -77,7 +81,6 @@ export default function Floor() {
     })();
   }, [bizId]);
 
-  // Elements for the active plan.
   useEffect(() => {
     if (!activePlan) return;
     (async () => {
@@ -89,7 +92,6 @@ export default function Floor() {
     })();
   }, [bizId, activePlan]);
 
-  // Live check state (summaries + list), realtime + 30s tick.
   const loadLive = useCallback(async () => {
     try {
       const [sum, checks] = await Promise.all([fetchTableSummaries(bizId), fetchOpenChecks(bizId)]);
@@ -117,17 +119,56 @@ export default function Floor() {
     };
   }, [bizId, loadLive]);
 
-  // Canvas bounds + fit-to-container scale (mirrors the web floor).
-  const { canvasW, canvasH } = useMemo(() => {
-    let w = 200;
-    let h = 200;
+  const sectionColor = useMemo(() => Object.fromEntries(sections.filter((x) => x.color).map((x) => [x.id, x.color as string])), [sections]);
+  const sectionName = useMemo(() => Object.fromEntries(sections.map((x) => [x.id, x.name])), [sections]);
+
+  // Centre on the CONTENT bounding box (not the 0,0 canvas) so tables sit
+  // centred with even padding instead of clustered top-left.
+  const bbox = useMemo(() => {
+    if (elements.length === 0) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const e of elements) {
-      w = Math.max(w, e.x + e.w + 40);
-      h = Math.max(h, e.y + e.h + 40);
+      minX = Math.min(minX, e.x);
+      minY = Math.min(minY, e.y);
+      maxX = Math.max(maxX, e.x + e.w);
+      maxY = Math.max(maxY, e.y + e.h);
     }
-    return { canvasW: w, canvasH: h };
+    return { minX, minY, maxX, maxY };
   }, [elements]);
+
+  const P = 28;
+  const canvasW = bbox ? bbox.maxX - bbox.minX + 2 * P : 200;
+  const canvasH = bbox ? bbox.maxY - bbox.minY + 2 * P : 200;
+  const ox = bbox ? P - bbox.minX : P;
+  const oy = bbox ? P - bbox.minY : P;
   const scale = size.w > 0 && size.h > 0 ? Math.min(size.w / canvasW, size.h / canvasH) : 1;
+
+  const statusById = useMemo(() => {
+    const m: Record<string, TableStatus> = {};
+    for (const e of elements) if (RINGABLE.has(e.kind)) m[e.id] = tableStatus(summaries[e.id], aging, now);
+    return m;
+  }, [elements, summaries, aging, now]);
+
+  const zones = useMemo(() => {
+    const byId: Record<string, { minX: number; minY: number; maxX: number; maxY: number }> = {};
+    for (const e of elements) {
+      if (!e.sectionId) continue;
+      const z = (byId[e.sectionId] ||= { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+      z.minX = Math.min(z.minX, e.x);
+      z.minY = Math.min(z.minY, e.y);
+      z.maxX = Math.max(z.maxX, e.x + e.w);
+      z.maxY = Math.max(z.maxY, e.y + e.h);
+    }
+    return Object.entries(byId).map(([sid, z]) => ({
+      id: sid,
+      name: sectionName[sid] ?? "",
+      color: sectionColor[sid] ?? color.textFaint,
+      x: z.minX + ox - 14,
+      y: z.minY + oy - 14,
+      w: z.maxX - z.minX + 28,
+      h: z.maxY - z.minY + 28,
+    }));
+  }, [elements, ox, oy, sectionColor, sectionName]);
 
   function onCanvasLayout(e: LayoutChangeEvent) {
     const { width, height } = e.nativeEvent.layout;
@@ -139,12 +180,19 @@ export default function Floor() {
     else router.push({ pathname: "/register", params: { table: el.label ?? "" } });
   }
 
+  function seatTint(parentId: string | null): string {
+    const st = parentId ? statusById[parentId] : undefined;
+    return st && st !== "available" ? tableStatusColor(st) + "26" : color.card2;
+  }
+
   const listVisible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return openChecks.filter((c) => !q || c.label.toLowerCase().includes(q) || (c.customerPhone ?? "").toLowerCase().includes(q));
   }, [openChecks, query]);
 
   const planTabs = plans.map((p) => ({ key: p.id, label: p.name }));
+  const nonTable = elements.filter((e) => !RINGABLE.has(e.kind));
+  const tables = elements.filter((e) => RINGABLE.has(e.kind));
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -180,35 +228,54 @@ export default function Floor() {
             {elements.length === 0 ? (
               <Text style={[text.bodyDim, { textAlign: "center" }]}>No floor plan for this room. Design it in the web app.</Text>
             ) : (
-              <View style={{ width: canvasW, height: canvasH, transform: [{ scale }] }}>
-                {elements.map((el) => {
-                  const isTable = RINGABLE.has(el.kind);
-                  const summary = isTable ? summaries[el.id] : undefined;
-                  const status = tableStatus(summary, aging, now);
-                  const meta = summary
-                    ? (summary.guests > 0 ? summary.guests + "p · " : "") + (summary.checkDropped ? "dropped" : formatElapsed(summary.openedAt, now))
-                    : null;
+              <View style={[styles.floor, { width: canvasW, height: canvasH, transform: [{ scale }] }]}>
+                {/* Section zones (behind everything) */}
+                {zones.map((z) => (
+                  <View key={z.id} style={{ position: "absolute", left: z.x, top: z.y, width: z.w, height: z.h, borderRadius: 18, backgroundColor: z.color + "14", borderWidth: 1, borderColor: z.color + "33" }}>
+                    {z.name ? <Text style={[styles.zoneLabel, { color: z.color }]}>{z.name}</Text> : null}
+                  </View>
+                ))}
+                {/* Décor, fixtures, chairs (behind tables) */}
+                {nonTable.map((el) => (
+                  <TableShape key={el.id} x={el.x + ox} y={el.y + oy} w={el.w} h={el.h} rotation={el.rotation} shape={el.shape} kind={el.kind} label={el.label} seatTint={seatTint(el.parentId)} />
+                ))}
+                {/* Tables on top */}
+                {tables.map((el) => {
+                  const summary = summaries[el.id];
+                  const st = statusById[el.id] ?? "available";
+                  const c = tableStatusColor(st);
+                  const fill = st === "available" ? color.card : c + "1F";
                   return (
                     <TableShape
                       key={el.id}
-                      x={el.x}
-                      y={el.y}
+                      x={el.x + ox}
+                      y={el.y + oy}
                       w={el.w}
                       h={el.h}
                       rotation={el.rotation}
                       shape={el.shape}
                       kind={el.kind}
-                      statusColor={isTable ? tableStatusColor(status) : undefined}
+                      statusColor={c}
+                      fillColor={fill}
                       sectionColor={el.sectionId ? sectionColor[el.sectionId] : null}
                       label={el.label}
                       total={summary && summary.subtotal > 0 ? money(summary.subtotal, "CAD") : null}
-                      meta={meta}
-                      onPress={isTable ? () => openTable(el, summary) : undefined}
+                      guests={summary?.guests ?? null}
+                      timeLabel={summary ? (summary.checkDropped ? "dropped" : formatElapsed(summary.openedAt, now)) : null}
+                      onPress={() => openTable(el, summary)}
                     />
                   );
                 })}
               </View>
             )}
+          </View>
+          <View style={styles.legend}>
+            {LEGEND.map((l) => (
+              <View key={l.status} style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: tableStatusColor(l.status) }]} />
+                <Text style={text.caption}>{l.label}</Text>
+              </View>
+            ))}
           </View>
         </>
       ) : (
@@ -218,20 +285,17 @@ export default function Floor() {
           </View>
           <ScrollView contentContainerStyle={styles.grid}>
             {listVisible.length === 0 && <Text style={[text.bodyDim, { padding: space.lg }]}>No open checks.</Text>}
-            {listVisible.map((c) => {
-              const mins = minutesSince(c.openedAt, now);
-              return (
-                <TableCard
-                  key={c.id}
-                  label={c.label}
-                  sub={c.guests > 0 ? c.guests + " guests" : c.channel ?? c.ticketType ?? undefined}
-                  minutes={mins}
-                  elapsedLabel={c.checkDropped ? "check dropped" : formatElapsed(c.openedAt, now)}
-                  checkDropped={c.checkDropped}
-                  onPress={() => router.push({ pathname: "/register", params: { ticket: c.id } })}
-                />
-              );
-            })}
+            {listVisible.map((c) => (
+              <TableCard
+                key={c.id}
+                label={c.label}
+                sub={c.guests > 0 ? c.guests + " guests" : c.channel ?? c.ticketType ?? undefined}
+                minutes={minutesSince(c.openedAt, now)}
+                elapsedLabel={c.checkDropped ? "check dropped" : formatElapsed(c.openedAt, now)}
+                checkDropped={c.checkDropped}
+                onPress={() => router.push({ pathname: "/register", params: { ticket: c.id } })}
+              />
+            ))}
           </ScrollView>
         </>
       )}
@@ -252,6 +316,11 @@ const styles = StyleSheet.create({
   toggleOn: { backgroundColor: color.card2 },
   controls: { paddingHorizontal: space.xl, gap: space.sm },
   canvasWrap: { flex: 1, margin: space.lg, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  floor: { backgroundColor: color.card, borderRadius: 20, borderWidth: 1, borderColor: color.border },
+  zoneLabel: { position: "absolute", left: 10, bottom: 6, fontFamily: "Poppins_500Medium", fontSize: 11 },
+  legend: { flexDirection: "row", justifyContent: "center", gap: space.lg, paddingBottom: space.sm },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  legendDot: { width: 10, height: 10, borderRadius: 999 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: space.md, padding: space.xl },
-  signout: { alignItems: "center", padding: space.md },
+  signout: { alignItems: "center", padding: space.sm },
 });
