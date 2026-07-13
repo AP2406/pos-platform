@@ -5,6 +5,8 @@ import {
   type SessionResponse,
   type ApprovalsVerifyRequest,
   type ApprovalsVerifyResponse,
+  type QuoteRequest,
+  type QuoteResponse,
 } from "@surge/api-contracts";
 
 // Typed client for the shared v1 HTTP API. Every call carries the Supabase access
@@ -51,6 +53,20 @@ export async function verifyApprovals(
     body: JSON.stringify(body),
   });
   return parse<ApprovalsVerifyResponse>(res);
+}
+
+// POST /api/v1/quote — Subtotal / Tax / Total for a cart. Compute-only (no write).
+export async function quote(
+  businessId: string,
+  staffId: string | null,
+  body: QuoteRequest
+): Promise<QuoteResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/quote`, {
+    method: "POST",
+    headers: await authHeaders(businessId, staffId),
+    body: JSON.stringify(body),
+  });
+  return parse<QuoteResponse>(res);
 }
 
 // NOTE: order / tender / refund / tab money-write calls are intentionally absent —

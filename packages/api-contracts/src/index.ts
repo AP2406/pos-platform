@@ -63,3 +63,23 @@ export type ApprovalsVerifyRequest = {
 export type ApprovalsVerifyResponse =
   | { approver: { id: string; name: string } | null }
   | { blocked: string[] };
+
+// ---- Quote (compute-only; no writes, no charge) -----------------------------
+// Returns Subtotal / Tax / Total for a cart using the canonical shared tax math
+// (computeCartTax) so the native register shows totals that match the eventual
+// charge exactly. Pure computation — nothing is persisted.
+
+export type QuoteItemInput = {
+  catalog_item_id?: string | null;
+  unit_price: number;
+  quantity: number;
+};
+
+export type QuoteRequest = { items: QuoteItemInput[] };
+
+export type QuoteResponse = {
+  subtotal: number;
+  tax: number;
+  total: number;
+  taxBreakdown: { label: string; rate: number; base: number; amount: number }[];
+};
