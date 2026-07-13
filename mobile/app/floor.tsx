@@ -197,16 +197,10 @@ export default function Floor() {
   const canvasH = bbox ? bbox.maxY - bbox.minY + 2 * PAD : 200;
   const ox = bbox ? PAD - bbox.minX : PAD;
   const oy = bbox ? PAD - bbox.minY : PAD;
-  // Scale-to-FILL (cover): the room fills the full width AND height of the floor;
-  // any overflow bleeds into the PAD margin (and clips at the edge, TB-style),
-  // rather than leaving dead space. Clamped so a very mismatched room aspect
-  // can't over-zoom absurdly.
-  const scale = useMemo(() => {
-    if (!(size.w > 0 && size.h > 0)) return 1;
-    const contain = Math.min(size.w / canvasW, size.h / canvasH);
-    const cover = Math.max(size.w / canvasW, size.h / canvasH);
-    return Math.min(cover, contain * 1.9);
-  }, [size, canvasW, canvasH]);
+  // Fit-to-CONTAIN: the ENTIRE room is visible at the largest size that fits — no
+  // cropping, no scrolling. The floor data ~matches the landscape aspect, so this
+  // fills with minimal margin.
+  const scale = size.w > 0 && size.h > 0 ? Math.min(size.w / canvasW, size.h / canvasH) : 1;
 
   const statusById = useMemo(() => {
     const m: Record<string, TableStatus> = {};
