@@ -35,10 +35,10 @@ import { formatElapsed, minutesSince, money } from "@/lib/format";
 
 const RINGABLE = new Set(["table", "booth"]);
 const DECOR = new Set(["wall", "room", "label", "counter", "station"]);
-const TABLE_SCALE = 1.2; // bigger, tap-friendly tables
-const CHAIR = 16;
-const CHAIR_GAP = 7;
-const PAD = 10;
+const TABLE_SCALE = 1.2;
+const CHAIR = 13;
+const CHAIR_GAP = 6;
+const PAD = 8;
 
 const LEGEND: { status: TableStatus; label: string }[] = [
   { status: "available", label: "Available" },
@@ -57,14 +57,29 @@ function tableStatus(summary: TableSummary | undefined, aging: Aging, now: numbe
   return "occupied";
 }
 
-// Chairs evenly around the (enlarged) table perimeter, so a 2-top vs 6-top is obvious.
-function chairPositions(cx: number, cy: number, tw: number, th: number, n: number) {
-  const rx = tw / 2 + CHAIR_GAP + CHAIR / 2;
-  const ry = th / 2 + CHAIR_GAP + CHAIR / 2;
+// Chairs hugging a table's edges. Round tables → evenly on the ellipse; rectangles
+// → walked along the perimeter (offset half a slot so none land on a corner), each
+// nudged outward from its edge. Small rounded seats, not loose blocks.
+function chairLayout(x0: number, y0: number, w: number, h: number, round: boolean, n: number) {
   const out: { x: number; y: number }[] = [];
+  const off = CHAIR_GAP + CHAIR / 2;
+  if (round) {
+    const cx = x0 + w / 2, cy = y0 + h / 2, rx = w / 2 + off, ry = h / 2 + off;
+    for (let i = 0; i < n; i++) {
+      const a = (2 * Math.PI * i) / n - Math.PI / 2;
+      out.push({ x: cx + rx * Math.cos(a) - CHAIR / 2, y: cy + ry * Math.sin(a) - CHAIR / 2 });
+    }
+    return out;
+  }
+  const perim = 2 * (w + h);
   for (let i = 0; i < n; i++) {
-    const a = (2 * Math.PI * i) / n - Math.PI / 2;
-    out.push({ x: cx + rx * Math.cos(a) - CHAIR / 2, y: cy + ry * Math.sin(a) - CHAIR / 2 });
+    let d = ((i + 0.5) / n) * perim;
+    let px: number, py: number, nx: number, ny: number;
+    if (d < w) { px = x0 + d; py = y0; nx = 0; ny = -1; }
+    else if ((d -= w) < h) { px = x0 + w; py = y0 + d; nx = 1; ny = 0; }
+    else if ((d -= h) < w) { px = x0 + w - d; py = y0 + h; nx = 0; ny = 1; }
+    else { d -= w; px = x0; py = y0 + h - d; nx = -1; ny = 0; }
+    out.push({ x: px + nx * off - CHAIR / 2, y: py + ny * off - CHAIR / 2 });
   }
   return out;
 }
@@ -94,12 +109,41 @@ export default function Floor() {
         setActivePlan((cur) => cur ?? pl[0]?.id ?? null);
         setSections(secs);
         setAging(ag);
+
+        // Diagnostic: which plan hosts which sections/tables. If "Patio" tables show
+        // on the Main tab, their plan_id IS Main's (or Patio is only a section, not a
+        // plan) — surfaced here so it can be fixed in the web floor editor.
+        const planName: Record<string, string> = Object.fromEntries(pl.map((p) => [p.id, p.name]));
+        const secName: Record<string, string> = Object.fromEntries(secs.map((x) => [x.id, x.name]));
+        const { data: allEls } = await supabase
+          .from("floor_elements")
+          .select("plan_id, section_id")
+          .eq("business_id", bizId)
+          .eq("is_active", true)
+          .in("kind", ["table", "booth"]);
+        const byPlan: Record<string, { count: number; sections: Set<string> }> = {};
+        for (const e of allEls ?? []) {
+          const p = (e.plan_id as string) ?? "none";
+          const b = (byPlan[p] ||= { count: 0, sections: new Set() });
+          b.count++;
+          if (e.section_id) b.sections.add(secName[e.section_id as string] ?? (e.section_id as string));
+        }
+        for (const [pid, info] of Object.entries(byPlan)) {
+          const secList = [...info.sections];
+          console.log(`[floor] plan "${planName[pid] ?? pid}" — ${info.count} tables; sections: ${secList.join(", ") || "none"}`);
+          if (secList.length > 1) {
+            console.warn(
+              `[floor] plan "${planName[pid] ?? pid}" hosts multiple sections (${secList.join(", ")}). Sections do NOT create separate Map tabs — if Patio/Bar should be its own tab, split it into its own FLOOR PLAN in the web editor.`
+            );
+          }
+        }
       } catch {
         /* ignore */
       }
     })();
   }, [bizId]);
 
+  // Strictly the selected plan's elements (fetchFloorElements filters .eq plan_id).
   useEffect(() => {
     if (!activePlan) return;
     (async () => {
@@ -144,20 +188,14 @@ export default function Floor() {
   const tables = useMemo(() => elements.filter((e) => RINGABLE.has(e.kind)), [elements]);
   const decor = useMemo(() => elements.filter((e) => DECOR.has(e.kind)), [elements]);
 
-  // Seat count per table (child seats → guest_count → 4), for the chair ring.
   const seatCountByTable = useMemo(() => {
     const childCount: Record<string, number> = {};
     for (const e of elements) if (e.kind === "seat" && e.parentId) childCount[e.parentId] = (childCount[e.parentId] ?? 0) + 1;
     const m: Record<string, number> = {};
-    for (const t of tables) {
-      const n = childCount[t.id] || summaries[t.id]?.guests || 4;
-      m[t.id] = Math.max(1, Math.min(12, n));
-    }
+    for (const t of tables) m[t.id] = Math.max(1, Math.min(12, childCount[t.id] || summaries[t.id]?.guests || 4));
     return m;
   }, [elements, tables, summaries]);
 
-  // Bounds include enlarged tables + their chair rings + décor, so nothing clips
-  // and the content is centred (no top-left cluster / dead space).
   const bbox = useMemo(() => {
     if (elements.length === 0) return null;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -258,31 +296,29 @@ export default function Floor() {
               <SegmentedTabs tabs={planTabs} value={activePlan ?? ""} onChange={(k) => setActivePlan(k)} />
             </View>
           )}
-          <View style={styles.canvasWrap} onLayout={onCanvasLayout}>
+          {/* The lit floor fills the whole area (large, tap-friendly); the room is
+              scaled to fit and centred on it — not a small panel with big margins. */}
+          <View style={styles.floor} onLayout={onCanvasLayout}>
             {elements.length === 0 ? (
               <Text style={[text.bodyDim, { textAlign: "center" }]}>No floor plan for this room. Design it in the web app.</Text>
             ) : (
-              <View style={[styles.floor, { width: canvasW, height: canvasH, transform: [{ scale }] }]}>
-                {/* Section zones */}
+              <View style={{ width: canvasW, height: canvasH, transform: [{ scale }] }}>
                 {zones.map((z) => (
                   <View key={z.id} style={{ position: "absolute", left: z.x, top: z.y, width: z.w, height: z.h, borderRadius: 20, backgroundColor: z.color + "22", borderWidth: 1, borderColor: z.color + "55" }}>
                     {z.name ? <Text style={[styles.zoneLabel, { color: z.color }]}>{z.name}</Text> : null}
                   </View>
                 ))}
-                {/* Décor / fixtures */}
                 {decor.map((el) => (
                   <TableShape key={el.id} x={el.x + ox} y={el.y + oy} w={el.w} h={el.h} rotation={el.rotation} shape={el.shape} kind={el.kind} label={el.label} />
                 ))}
-                {/* Chairs (synthesized around each table by seat count) */}
                 {tables.map((t) => {
                   const tw = t.w * TABLE_SCALE, th = t.h * TABLE_SCALE;
-                  const cx = t.x + t.w / 2 + ox, cy = t.y + t.h / 2 + oy;
-                  const chairRadius = t.shape === "round" ? 9999 : 5;
-                  return chairPositions(cx, cy, tw, th, seatCountByTable[t.id] ?? 4).map((p, i) => (
-                    <View key={t.id + "-c" + i} style={{ position: "absolute", left: p.x, top: p.y, width: CHAIR, height: CHAIR, borderRadius: chairRadius, backgroundColor: F.chair }} />
+                  const tx = t.x + t.w / 2 - tw / 2 + ox;
+                  const ty = t.y + t.h / 2 - th / 2 + oy;
+                  return chairLayout(tx, ty, tw, th, t.shape === "round", seatCountByTable[t.id] ?? 4).map((p, i) => (
+                    <View key={t.id + "-c" + i} style={[styles.chair, { left: p.x, top: p.y }]} />
                   ));
                 })}
-                {/* Tables on top */}
                 {tables.map((t) => {
                   const summary = summaries[t.id];
                   const st = statusById[t.id] ?? "available";
@@ -359,8 +395,18 @@ const styles = StyleSheet.create({
   toggleBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: 999 },
   toggleOn: { backgroundColor: color.card2 },
   controls: { paddingHorizontal: space.xl, gap: space.sm },
-  canvasWrap: { flex: 1, margin: space.lg, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  floor: { backgroundColor: F.surface, borderRadius: 22, borderWidth: 1, borderColor: F.surfaceBorder },
+  floor: {
+    flex: 1,
+    margin: space.md,
+    backgroundColor: F.surface,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: F.surfaceBorder,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  chair: { position: "absolute", width: CHAIR, height: CHAIR, borderRadius: 9999, backgroundColor: F.chair, borderWidth: 1, borderColor: "#4A4F59" },
   zoneLabel: { position: "absolute", left: 12, bottom: 8, fontFamily: "Poppins_600SemiBold", fontSize: 12 },
   legend: { flexDirection: "row", justifyContent: "center", gap: space.lg, paddingBottom: space.sm },
   legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
