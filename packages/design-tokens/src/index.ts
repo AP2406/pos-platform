@@ -41,14 +41,14 @@ export const floor = {
   // Fixtures / walls.
   fixture: "#3A3A3A", // cash register / host stand
   wall: "#C9BBA2",
-  // Default table fill when a table has no section.
-  tableDefault: "#3E4657",
-  // Status ring (thin, over the section-colored fill).
-  ringVacant: "rgba(0,0,0,0.20)",
-  ringOccupied: "#FFFFFF",
-  ringWarning: "#F2B01E",
-  ringLate: "#E5484D",
-  ringPaid: "#2FA36B",
+  // Bold, saturated table fills by status (default when no explicit section color).
+  statusAvailable: "#6C3FA6", // purple
+  statusOccupied: "#BE3A4B", // warm red
+  statusWarning: "#E08A2B", // amber
+  statusLate: "#9E1C31", // deep warm red
+  statusPaid: "#2FA36B", // green
+  // Subtle edge ring for object definition.
+  ring: "rgba(0,0,0,0.22)",
   // Bar stools.
   stoolOpen: "#2FA36B",
   stoolBusy: "#8E2C5B",

@@ -66,7 +66,7 @@ export function TableShape(props: {
   return (
     <Pressable
       onPress={props.onPress}
-      style={[base, styles.table, { borderRadius: round ? 9999 : 16, backgroundColor: props.fill ?? floor.tableDefault, borderColor: props.ring ?? floor.ringVacant }]}
+      style={[base, styles.table, { borderRadius: round ? 9999 : 16, backgroundColor: props.fill ?? floor.statusAvailable, borderColor: props.ring ?? floor.ring }]}
       accessibilityRole="button"
     >
       <Text style={[styles.name, { fontSize: big ? 17 : 12 }]} numberOfLines={2}>

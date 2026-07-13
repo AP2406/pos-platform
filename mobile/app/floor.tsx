@@ -11,7 +11,6 @@ import {
   Button,
   color,
   floor as F,
-  sectionPalette,
   space,
   text,
   type TableStatus,
@@ -56,18 +55,15 @@ function tableStatus(summary: TableSummary | undefined, aging: Aging, now: numbe
   return "occupied";
 }
 
-// Status shown as a thin RING over the section-colored fill (not the whole fill).
-function statusRing(status: TableStatus): string {
+// Bold, saturated table fill by status (purple available, warm-red occupied/late).
+function statusFill(status: TableStatus): string {
   switch (status) {
-    case "occupied": return F.ringOccupied;
-    case "warning": return F.ringWarning;
-    case "late": return F.ringLate;
-    case "paid": return F.ringPaid;
-    default: return F.ringVacant;
+    case "occupied": return F.statusOccupied;
+    case "warning": return F.statusWarning;
+    case "late": return F.statusLate;
+    case "paid": return F.statusPaid;
+    default: return F.statusAvailable;
   }
-}
-function legendColor(status: TableStatus): string {
-  return status === "available" ? "#8A93A6" : status === "occupied" ? "#FFFFFF" : statusRing(status);
 }
 
 export default function Floor() {
@@ -177,9 +173,9 @@ export default function Floor() {
     () => elements.filter((e) => e.kind === "seat" && e.parentId && (kindById[e.parentId] === "counter" || kindById[e.parentId] === "station")),
     [elements, kindById]
   );
-  const sectionIndex = useMemo(() => Object.fromEntries(sections.map((s, i) => [s.id, i] as const)), [sections]);
-  const fillForTable = (t: FloorElement) =>
-    t.sectionId ? sectionColor[t.sectionId] ?? sectionPalette[(sectionIndex[t.sectionId] ?? 0) % sectionPalette.length] : F.tableDefault;
+  // Fill: explicit section color from the data when set, else the bold status color.
+  const fillForTable = (t: FloorElement, status: TableStatus) =>
+    t.sectionId && sectionColor[t.sectionId] ? sectionColor[t.sectionId] : statusFill(status);
 
   const seatCountByTable = useMemo(() => {
     const childCount: Record<string, number> = {};
@@ -334,8 +330,7 @@ export default function Floor() {
                       rotation={t.rotation}
                       shape={t.shape}
                       kind={t.kind}
-                      fill={fillForTable(t)}
-                      ring={statusRing(st)}
+                      fill={fillForTable(t, st)}
                       label={t.label}
                       occupied={occupied}
                       seats={seatCountByTable[t.id]}
@@ -353,7 +348,7 @@ export default function Floor() {
           <View style={styles.legend}>
             {LEGEND.map((l) => (
               <View key={l.status} style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: legendColor(l.status) }]} />
+                <View style={[styles.legendDot, { backgroundColor: statusFill(l.status) }]} />
                 <Text style={text.caption}>{l.label}</Text>
               </View>
             ))}
