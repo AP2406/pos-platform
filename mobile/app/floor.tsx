@@ -47,6 +47,11 @@ const LEGEND: { status: TableStatus; label: string }[] = [
   { status: "late", label: "Late" },
 ];
 
+// Subtle status tint for chairs (neutral when the table's empty).
+function chairColor(status: TableStatus): string {
+  return status === "available" ? "#8A93A6" : tableStatusColor(status) + "CC";
+}
+
 function tableStatus(summary: TableSummary | undefined, aging: Aging, now: number): TableStatus {
   if (!summary) return "available";
   if (summary.checkDropped) return "paid";
@@ -143,12 +148,16 @@ export default function Floor() {
     })();
   }, [bizId]);
 
-  // Strictly the selected plan's elements (fetchFloorElements filters .eq plan_id).
+  // Strictly the selected plan's elements: the query filters .eq plan_id AND we
+  // hard-filter again client-side so nothing from another plan can render.
   useEffect(() => {
     if (!activePlan) return;
     (async () => {
       try {
-        setElements(await fetchFloorElements(bizId, activePlan));
+        const els = await fetchFloorElements(bizId, activePlan);
+        const strict = els.filter((e) => e.planId === activePlan);
+        if (strict.length !== els.length) console.warn(`[floor] dropped ${els.length - strict.length} element(s) not on the selected plan.`);
+        setElements(strict);
       } catch {
         /* ignore */
       }
@@ -315,8 +324,9 @@ export default function Floor() {
                   const tw = t.w * TABLE_SCALE, th = t.h * TABLE_SCALE;
                   const tx = t.x + t.w / 2 - tw / 2 + ox;
                   const ty = t.y + t.h / 2 - th / 2 + oy;
+                  const cc = chairColor(statusById[t.id] ?? "available");
                   return chairLayout(tx, ty, tw, th, t.shape === "round", seatCountByTable[t.id] ?? 4).map((p, i) => (
-                    <View key={t.id + "-c" + i} style={[styles.chair, { left: p.x, top: p.y }]} />
+                    <View key={t.id + "-c" + i} style={[styles.chair, { left: p.x, top: p.y, backgroundColor: cc }]} />
                   ));
                 })}
                 {tables.map((t) => {
@@ -406,7 +416,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  chair: { position: "absolute", width: CHAIR, height: CHAIR, borderRadius: 9999, backgroundColor: F.chair, borderWidth: 1, borderColor: "#4A4F59" },
+  chair: { position: "absolute", width: CHAIR, height: CHAIR, borderRadius: 9999, borderWidth: 1, borderColor: "#4A4F59" },
   zoneLabel: { position: "absolute", left: 12, bottom: 8, fontFamily: "Poppins_600SemiBold", fontSize: 12 },
   legend: { flexDirection: "row", justifyContent: "center", gap: space.lg, paddingBottom: space.sm },
   legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },

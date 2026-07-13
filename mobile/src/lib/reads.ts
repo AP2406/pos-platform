@@ -94,6 +94,7 @@ export type FloorElement = {
   h: number;
   rotation: number;
   shape: string;
+  planId: string | null;
   sectionId: string | null;
   parentId: string | null;
   seatNo: number | null;
@@ -102,7 +103,7 @@ export type FloorElement = {
 export async function fetchFloorElements(businessId: string, planId: string): Promise<FloorElement[]> {
   const { data, error } = await supabase
     .from("floor_elements")
-    .select("id, kind, label, x, y, w, h, rotation, shape, section_id, parent_id, seat_no, is_active")
+    .select("id, kind, label, x, y, w, h, rotation, shape, plan_id, section_id, parent_id, seat_no, is_active")
     .eq("business_id", businessId)
     .eq("plan_id", planId)
     .eq("is_active", true)
@@ -118,6 +119,7 @@ export async function fetchFloorElements(businessId: string, planId: string): Pr
     h: Number(e.h) || 80,
     rotation: Number(e.rotation) || 0,
     shape: (e.shape as string) || "rect",
+    planId: (e.plan_id as string | null) ?? null,
     sectionId: (e.section_id as string | null) ?? null,
     parentId: (e.parent_id as string | null) ?? null,
     seatNo: e.seat_no == null ? null : Number(e.seat_no),
