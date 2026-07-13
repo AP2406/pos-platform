@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@surge/design-tokens": ["./packages/design-tokens/src"],
+      "@surge/api-contracts": ["./packages/api-contracts/src"]
     }
   },
   "include": [
@@ -30,5 +32,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "**/*.test.ts"]
+  "exclude": ["node_modules", "**/*.test.ts", "mobile"]
 }

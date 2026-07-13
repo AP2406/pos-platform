@@ -1,0 +1,9 @@
+{
+  "name": "@surge/design-tokens",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Surge design tokens (§4 of the Native iOS POS blueprint) — shared by the RN app and, optionally, the web app. Pure TS, no dependencies.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "sideEffects": false
+}

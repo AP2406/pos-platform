@@ -179,6 +179,12 @@ export async function PosDashboard({ business }: { business: Biz }) {
         </div>
         <div className="shrink-0 flex items-center gap-2">
           <Link
+            href="/app/live-ops"
+            className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-accent"
+          >
+            Live ops
+          </Link>
+          <Link
             href="/app/m"
             className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-accent"
           >
