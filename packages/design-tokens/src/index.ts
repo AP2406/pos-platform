@@ -30,19 +30,33 @@ export const color = {
 // saturated objects on top (TouchBistro-style). Status colors above stay
 // saturated; vacant tables use a neutral slate so the white number/seat text reads.
 export const floor = {
-  surface: "#E6E2DC", // light warm-wood floor
-  surfaceBorder: "#D2CCC2",
-  plank: "rgba(0,0,0,0.04)", // faint plank seams
-  vacant: "#2E2A5E", // navy — empty table
-  occupied: "#8E2C5B", // magenta — occupied table
-  warning: "#D98324", // saturated amber (aging)
-  late: "#C0392B", // saturated red (over time)
-  paid: "#2FA36B", // green — paid / bar seat
-  onTable: "#FFFFFF", // table number/name (bold white)
-  onTableDim: "rgba(255,255,255,0.85)", // covers / timer / seat text
-  fixture: "#3A3A3A", // cash register / bar / host fixture
-  wall: "#C9C3B8", // walls on the light floor
+  // Warm light wood-plank floor.
+  wood: "#E7DBC6",
+  woodAlt: "#E1D4BC",
+  seam: "rgba(90,60,25,0.13)",
+  highlight: "rgba(255,255,255,0.30)",
+  // Table text.
+  onTable: "#FFFFFF",
+  onTableDim: "rgba(255,255,255,0.85)",
+  // Fixtures / walls.
+  fixture: "#3A3A3A", // cash register / host stand
+  wall: "#C9BBA2",
+  // Default table fill when a table has no section.
+  tableDefault: "#3E4657",
+  // Status ring (thin, over the section-colored fill).
+  ringVacant: "rgba(0,0,0,0.20)",
+  ringOccupied: "#FFFFFF",
+  ringWarning: "#F2B01E",
+  ringLate: "#E5484D",
+  ringPaid: "#2FA36B",
+  // Bar stools.
+  stoolOpen: "#2FA36B",
+  stoolBusy: "#8E2C5B",
 } as const;
+
+// Bold, saturated fills assigned per SECTION (used when a section has no explicit
+// color in the data). Distinct from the status ring colors.
+export const sectionPalette = ["#2E2A5E", "#8E2C5B", "#2563EB", "#0E7C86", "#6D3A73", "#9A5A2B"] as const;
 
 // Primary gradient (blue → cyan) — the "Charge" button, extended to all primary CTAs.
 export const gradient = {

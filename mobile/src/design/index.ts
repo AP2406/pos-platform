@@ -9,6 +9,7 @@ export * from "./SegmentedTabs";
 export * from "./SearchField";
 export * from "./TableCard";
 export * from "./TableShape";
+export * from "./WoodFloor";
 export * from "./SeatTab";
 export * from "./NumPad";
 export * from "./BottomSheet";

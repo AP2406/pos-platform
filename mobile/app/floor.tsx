@@ -7,9 +7,11 @@ import {
   SearchField,
   TableCard,
   TableShape,
+  WoodFloor,
   Button,
   color,
   floor as F,
+  sectionPalette,
   space,
   text,
   type TableStatus,
@@ -36,7 +38,6 @@ const RINGABLE = new Set(["table", "booth"]);
 const DECOR = new Set(["wall", "room", "label", "counter", "station"]);
 const TABLE_SCALE = 1.35; // large, tap-friendly tables
 const PAD = 8; // minimal inset so the room fills the floor
-const PLANK = 46; // wood plank spacing (screen px)
 
 const LEGEND: { status: TableStatus; label: string }[] = [
   { status: "available", label: "Available" },
@@ -55,15 +56,18 @@ function tableStatus(summary: TableSummary | undefined, aging: Aging, now: numbe
   return "occupied";
 }
 
-// Saturated fill per status (TB palette: navy vacant, magenta occupied).
-function fillFor(status: TableStatus): string {
+// Status shown as a thin RING over the section-colored fill (not the whole fill).
+function statusRing(status: TableStatus): string {
   switch (status) {
-    case "occupied": return F.occupied;
-    case "warning": return F.warning;
-    case "late": return F.late;
-    case "paid": return F.paid;
-    default: return F.vacant;
+    case "occupied": return F.ringOccupied;
+    case "warning": return F.ringWarning;
+    case "late": return F.ringLate;
+    case "paid": return F.ringPaid;
+    default: return F.ringVacant;
   }
+}
+function legendColor(status: TableStatus): string {
+  return status === "available" ? "#8A93A6" : status === "occupied" ? "#FFFFFF" : statusRing(status);
 }
 
 export default function Floor() {
@@ -166,6 +170,16 @@ export default function Floor() {
 
   const tables = useMemo(() => elements.filter((e) => RINGABLE.has(e.kind)), [elements]);
   const decor = useMemo(() => elements.filter((e) => DECOR.has(e.kind)), [elements]);
+  const kindById = useMemo(() => Object.fromEntries(elements.map((e) => [e.id, e.kind] as const)), [elements]);
+  // Bar stools = seat elements parented to a counter/station (drawn at their real
+  // positions along the bar). Table chairs stay hidden (tables show "N Seats").
+  const stools = useMemo(
+    () => elements.filter((e) => e.kind === "seat" && e.parentId && (kindById[e.parentId] === "counter" || kindById[e.parentId] === "station")),
+    [elements, kindById]
+  );
+  const sectionIndex = useMemo(() => Object.fromEntries(sections.map((s, i) => [s.id, i] as const)), [sections]);
+  const fillForTable = (t: FloorElement) =>
+    t.sectionId ? sectionColor[t.sectionId] ?? sectionPalette[(sectionIndex[t.sectionId] ?? 0) % sectionPalette.length] : F.tableDefault;
 
   const seatCountByTable = useMemo(() => {
     const childCount: Record<string, number> = {};
@@ -189,9 +203,10 @@ export default function Floor() {
       grow(cx - (t.w * TABLE_SCALE) / 2, cy - (t.h * TABLE_SCALE) / 2, cx + (t.w * TABLE_SCALE) / 2, cy + (t.h * TABLE_SCALE) / 2);
     }
     for (const d of decor) grow(d.x, d.y, d.x + d.w, d.y + d.h);
+    for (const st of stools) grow(st.x, st.y, st.x + st.w, st.y + st.h);
     if (minX === Infinity) return null;
     return { minX, minY, maxX, maxY };
-  }, [elements, tables, decor]);
+  }, [elements, tables, decor, stools]);
 
   const canvasW = bbox ? bbox.maxX - bbox.minX + 2 * PAD : 200;
   const canvasH = bbox ? bbox.maxY - bbox.minY + 2 * PAD : 200;
@@ -228,11 +243,6 @@ export default function Floor() {
       h: z.maxY - z.minY + 36,
     }));
   }, [elements, ox, oy, sectionColor, sectionName]);
-
-  const planks = useMemo(() => {
-    const n = size.h > 0 ? Math.ceil(size.h / PLANK) : 0;
-    return Array.from({ length: n }, (_, i) => i * PLANK);
-  }, [size.h]);
 
   function onCanvasLayout(e: LayoutChangeEvent) {
     const { width, height } = e.nativeEvent.layout;
@@ -280,9 +290,7 @@ export default function Floor() {
           )}
           {/* Full-bleed warm-wood floor */}
           <View style={styles.floor} onLayout={onCanvasLayout}>
-            {planks.map((top) => (
-              <View key={top} style={[styles.plank, { top }]} pointerEvents="none" />
-            ))}
+            <WoodFloor width={size.w} height={size.h} />
             {elements.length === 0 ? (
               <Text style={styles.emptyTxt}>No floor plan for this room. Design it in the web app.</Text>
             ) : (
@@ -295,6 +303,20 @@ export default function Floor() {
                 {decor.map((el) => (
                   <TableShape key={el.id} x={el.x + ox} y={el.y + oy} w={el.w} h={el.h} rotation={el.rotation} shape={el.shape} kind={el.kind} label={el.label} />
                 ))}
+                {/* Bar stools — round, at their real positions along the counter */}
+                {stools.map((el) => {
+                  const busy = !!summaries[el.id];
+                  const numTxt = el.label ?? (el.seatNo != null ? String(el.seatNo) : "");
+                  const fs = Math.max(8, Math.min(12, el.w * 0.4));
+                  return (
+                    <View
+                      key={el.id}
+                      style={{ position: "absolute", left: el.x + ox, top: el.y + oy, width: el.w, height: el.h, borderRadius: 9999, backgroundColor: busy ? F.stoolBusy : F.stoolOpen, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(0,0,0,0.15)" }}
+                    >
+                      {numTxt ? <Text style={{ color: "#fff", fontSize: fs, fontFamily: "Poppins_600SemiBold" }}>{numTxt}</Text> : null}
+                    </View>
+                  );
+                })}
                 {tables.map((t) => {
                   const summary = summaries[t.id];
                   const st = statusById[t.id] ?? "available";
@@ -312,10 +334,12 @@ export default function Floor() {
                       rotation={t.rotation}
                       shape={t.shape}
                       kind={t.kind}
-                      fill={fillFor(st)}
+                      fill={fillForTable(t)}
+                      ring={statusRing(st)}
                       label={t.label}
                       occupied={occupied}
                       seats={seatCountByTable[t.id]}
+                      sectionName={t.sectionId ? sectionName[t.sectionId] ?? null : null}
                       covers={summary?.guests ?? null}
                       timer={summary ? (summary.checkDropped ? "dropped" : formatElapsed(summary.openedAt, now)) : null}
                       total={summary && summary.subtotal > 0 ? money(summary.subtotal, "CAD") : null}
@@ -329,7 +353,7 @@ export default function Floor() {
           <View style={styles.legend}>
             {LEGEND.map((l) => (
               <View key={l.status} style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: fillFor(l.status) }]} />
+                <View style={[styles.legendDot, { backgroundColor: legendColor(l.status) }]} />
                 <Text style={text.caption}>{l.label}</Text>
               </View>
             ))}
@@ -376,8 +400,7 @@ const styles = StyleSheet.create({
   toggleOn: { backgroundColor: color.card2 },
   controls: { paddingHorizontal: space.lg, gap: space.sm, paddingBottom: space.xs },
   // Full-bleed floor: fills the whole area edge-to-edge, no inset/rounding.
-  floor: { flex: 1, backgroundColor: F.surface, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  plank: { position: "absolute", left: 0, right: 0, height: 1, backgroundColor: F.plank },
+  floor: { flex: 1, backgroundColor: F.wood, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   emptyTxt: { color: "#6E665A", fontSize: 15, textAlign: "center" },
   zoneLabel: { position: "absolute", left: 12, bottom: 8, fontFamily: "Poppins_600SemiBold", fontSize: 12 },
   legend: { flexDirection: "row", justifyContent: "center", gap: space.lg, paddingVertical: space.xs },
