@@ -197,7 +197,16 @@ export default function Floor() {
   const canvasH = bbox ? bbox.maxY - bbox.minY + 2 * PAD : 200;
   const ox = bbox ? PAD - bbox.minX : PAD;
   const oy = bbox ? PAD - bbox.minY : PAD;
-  const scale = size.w > 0 && size.h > 0 ? Math.min(size.w / canvasW, size.h / canvasH) : 1;
+  // Scale-to-FILL (cover): the room fills the full width AND height of the floor;
+  // any overflow bleeds into the PAD margin (and clips at the edge, TB-style),
+  // rather than leaving dead space. Clamped so a very mismatched room aspect
+  // can't over-zoom absurdly.
+  const scale = useMemo(() => {
+    if (!(size.w > 0 && size.h > 0)) return 1;
+    const contain = Math.min(size.w / canvasW, size.h / canvasH);
+    const cover = Math.max(size.w / canvasW, size.h / canvasH);
+    return Math.min(cover, contain * 1.9);
+  }, [size, canvasW, canvasH]);
 
   const statusById = useMemo(() => {
     const m: Record<string, TableStatus> = {};
@@ -249,7 +258,7 @@ export default function Floor() {
   const planTabs = plans.map((p) => ({ key: p.id, label: p.name }));
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle} numberOfLines={1}>
           Floor <Text style={styles.headerSub}>· {s.businessName} · {s.staff?.name}</Text>
