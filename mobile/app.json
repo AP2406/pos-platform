@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Surge POS",
+    "slug": "surge-pos",
+    "scheme": "surgepos",
+    "version": "0.1.0",
+    "orientation": "landscape",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.surgetechpos.pos"
+    },
+    "plugins": ["expo-router", "expo-font"],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "supabaseUrl": "",
+      "supabaseAnonKey": "",
+      "apiBaseUrl": "https://app.surgetechpos.com"
+    }
+  }
+}

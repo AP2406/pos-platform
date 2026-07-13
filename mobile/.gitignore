@@ -1,0 +1,17 @@
+# Expo / RN
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+
+# Native
+ios/
+android/
+
+# Env / secrets
+.env
+.env.local
+
+# macOS
+.DS_Store
