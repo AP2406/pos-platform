@@ -26,17 +26,22 @@ export const color = {
   success: "#2FBF71", // paid / confirmed
 } as const;
 
-// Floor map: a lit, lighter surface so tables/chairs read as physical objects
-// (TouchBistro-style), even though the rest of the app stays dark.
+// Floor map: a warm wood floor that fills the screen; tables are large, solid,
+// saturated objects on top (TouchBistro-style). Status colors above stay
+// saturated; vacant tables use a neutral slate so the white number/seat text reads.
 export const floor = {
-  surface: "#D9DDE4", // light neutral room panel
-  surfaceBorder: "#C2C7D1",
-  table: "#242B39", // solid slate table object
-  chair: "#6B7280", // mid-tone chair, visible on the light floor
-  onTable: "#FFFFFF", // table number/name
-  onTableDim: "#C7CCD6", // muted $ / time chips
-  fixture: "#3A4152", // bar / host stand
-  wall: "#9AA1AE",
+  surface: "#E6E2DC", // light warm-wood floor
+  surfaceBorder: "#D2CCC2",
+  plank: "rgba(0,0,0,0.04)", // faint plank seams
+  vacant: "#2E2A5E", // navy — empty table
+  occupied: "#8E2C5B", // magenta — occupied table
+  warning: "#D98324", // saturated amber (aging)
+  late: "#C0392B", // saturated red (over time)
+  paid: "#2FA36B", // green — paid / bar seat
+  onTable: "#FFFFFF", // table number/name (bold white)
+  onTableDim: "rgba(255,255,255,0.85)", // covers / timer / seat text
+  fixture: "#3A3A3A", // cash register / bar / host fixture
+  wall: "#C9C3B8", // walls on the light floor
 } as const;
 
 // Primary gradient (blue → cyan) — the "Charge" button, extended to all primary CTAs.

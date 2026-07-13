@@ -12,7 +12,6 @@ import {
   floor as F,
   space,
   text,
-  tableStatusColor,
   type TableStatus,
 } from "@/design";
 import { useSession } from "@/state/session";
@@ -35,10 +34,9 @@ import { formatElapsed, minutesSince, money } from "@/lib/format";
 
 const RINGABLE = new Set(["table", "booth"]);
 const DECOR = new Set(["wall", "room", "label", "counter", "station"]);
-const TABLE_SCALE = 1.2;
-const CHAIR = 13;
-const CHAIR_GAP = 6;
-const PAD = 8;
+const TABLE_SCALE = 1.35; // large, tap-friendly tables
+const PAD = 24;
+const PLANK = 46; // wood plank spacing (screen px)
 
 const LEGEND: { status: TableStatus; label: string }[] = [
   { status: "available", label: "Available" },
@@ -46,11 +44,6 @@ const LEGEND: { status: TableStatus; label: string }[] = [
   { status: "warning", label: "Warning" },
   { status: "late", label: "Late" },
 ];
-
-// Subtle status tint for chairs (neutral when the table's empty).
-function chairColor(status: TableStatus): string {
-  return status === "available" ? "#8A93A6" : tableStatusColor(status) + "CC";
-}
 
 function tableStatus(summary: TableSummary | undefined, aging: Aging, now: number): TableStatus {
   if (!summary) return "available";
@@ -62,31 +55,15 @@ function tableStatus(summary: TableSummary | undefined, aging: Aging, now: numbe
   return "occupied";
 }
 
-// Chairs hugging a table's edges. Round tables → evenly on the ellipse; rectangles
-// → walked along the perimeter (offset half a slot so none land on a corner), each
-// nudged outward from its edge. Small rounded seats, not loose blocks.
-function chairLayout(x0: number, y0: number, w: number, h: number, round: boolean, n: number) {
-  const out: { x: number; y: number }[] = [];
-  const off = CHAIR_GAP + CHAIR / 2;
-  if (round) {
-    const cx = x0 + w / 2, cy = y0 + h / 2, rx = w / 2 + off, ry = h / 2 + off;
-    for (let i = 0; i < n; i++) {
-      const a = (2 * Math.PI * i) / n - Math.PI / 2;
-      out.push({ x: cx + rx * Math.cos(a) - CHAIR / 2, y: cy + ry * Math.sin(a) - CHAIR / 2 });
-    }
-    return out;
+// Saturated fill per status (TB palette: navy vacant, magenta occupied).
+function fillFor(status: TableStatus): string {
+  switch (status) {
+    case "occupied": return F.occupied;
+    case "warning": return F.warning;
+    case "late": return F.late;
+    case "paid": return F.paid;
+    default: return F.vacant;
   }
-  const perim = 2 * (w + h);
-  for (let i = 0; i < n; i++) {
-    let d = ((i + 0.5) / n) * perim;
-    let px: number, py: number, nx: number, ny: number;
-    if (d < w) { px = x0 + d; py = y0; nx = 0; ny = -1; }
-    else if ((d -= w) < h) { px = x0 + w; py = y0 + d; nx = 1; ny = 0; }
-    else if ((d -= h) < w) { px = x0 + w - d; py = y0 + h; nx = 0; ny = 1; }
-    else { d -= w; px = x0; py = y0 + h - d; nx = -1; ny = 0; }
-    out.push({ x: px + nx * off - CHAIR / 2, y: py + ny * off - CHAIR / 2 });
-  }
-  return out;
 }
 
 export default function Floor() {
@@ -115,9 +92,6 @@ export default function Floor() {
         setSections(secs);
         setAging(ag);
 
-        // Diagnostic: which plan hosts which sections/tables. If "Patio" tables show
-        // on the Main tab, their plan_id IS Main's (or Patio is only a section, not a
-        // plan) — surfaced here so it can be fixed in the web floor editor.
         const planName: Record<string, string> = Object.fromEntries(pl.map((p) => [p.id, p.name]));
         const secName: Record<string, string> = Object.fromEntries(secs.map((x) => [x.id, x.name]));
         const { data: allEls } = await supabase
@@ -137,9 +111,7 @@ export default function Floor() {
           const secList = [...info.sections];
           console.log(`[floor] plan "${planName[pid] ?? pid}" — ${info.count} tables; sections: ${secList.join(", ") || "none"}`);
           if (secList.length > 1) {
-            console.warn(
-              `[floor] plan "${planName[pid] ?? pid}" hosts multiple sections (${secList.join(", ")}). Sections do NOT create separate Map tabs — if Patio/Bar should be its own tab, split it into its own FLOOR PLAN in the web editor.`
-            );
+            console.warn(`[floor] plan "${planName[pid] ?? pid}" hosts multiple sections (${secList.join(", ")}). Sections don't create Map tabs — split Patio/Bar into its own FLOOR PLAN in the web editor.`);
           }
         }
       } catch {
@@ -148,8 +120,6 @@ export default function Floor() {
     })();
   }, [bizId]);
 
-  // Strictly the selected plan's elements: the query filters .eq plan_id AND we
-  // hard-filter again client-side so nothing from another plan can render.
   useEffect(() => {
     if (!activePlan) return;
     (async () => {
@@ -201,7 +171,7 @@ export default function Floor() {
     const childCount: Record<string, number> = {};
     for (const e of elements) if (e.kind === "seat" && e.parentId) childCount[e.parentId] = (childCount[e.parentId] ?? 0) + 1;
     const m: Record<string, number> = {};
-    for (const t of tables) m[t.id] = Math.max(1, Math.min(12, childCount[t.id] || summaries[t.id]?.guests || 4));
+    for (const t of tables) m[t.id] = Math.max(1, Math.min(20, childCount[t.id] || summaries[t.id]?.guests || 4));
     return m;
   }, [elements, tables, summaries]);
 
@@ -216,9 +186,7 @@ export default function Floor() {
     };
     for (const t of tables) {
       const cx = t.x + t.w / 2, cy = t.y + t.h / 2;
-      const hx = (t.w * TABLE_SCALE) / 2 + CHAIR_GAP + CHAIR;
-      const hy = (t.h * TABLE_SCALE) / 2 + CHAIR_GAP + CHAIR;
-      grow(cx - hx, cy - hy, cx + hx, cy + hy);
+      grow(cx - (t.w * TABLE_SCALE) / 2, cy - (t.h * TABLE_SCALE) / 2, cx + (t.w * TABLE_SCALE) / 2, cy + (t.h * TABLE_SCALE) / 2);
     }
     for (const d of decor) grow(d.x, d.y, d.x + d.w, d.y + d.h);
     if (minX === Infinity) return null;
@@ -250,13 +218,18 @@ export default function Floor() {
     return Object.entries(byId).map(([sid, z]) => ({
       id: sid,
       name: sectionName[sid] ?? "",
-      color: sectionColor[sid] ?? color.textFaint,
-      x: z.minX + ox - 16,
-      y: z.minY + oy - 16,
-      w: z.maxX - z.minX + 32,
-      h: z.maxY - z.minY + 32,
+      color: sectionColor[sid] ?? "#00000018",
+      x: z.minX + ox - 18,
+      y: z.minY + oy - 18,
+      w: z.maxX - z.minX + 36,
+      h: z.maxY - z.minY + 36,
     }));
   }, [elements, ox, oy, sectionColor, sectionName]);
+
+  const planks = useMemo(() => {
+    const n = size.h > 0 ? Math.ceil(size.h / PLANK) : 0;
+    return Array.from({ length: n }, (_, i) => i * PLANK);
+  }, [size.h]);
 
   function onCanvasLayout(e: LayoutChangeEvent) {
     const { width, height } = e.nativeEvent.layout;
@@ -305,15 +278,17 @@ export default function Floor() {
               <SegmentedTabs tabs={planTabs} value={activePlan ?? ""} onChange={(k) => setActivePlan(k)} />
             </View>
           )}
-          {/* The lit floor fills the whole area (large, tap-friendly); the room is
-              scaled to fit and centred on it — not a small panel with big margins. */}
+          {/* Full-bleed warm-wood floor */}
           <View style={styles.floor} onLayout={onCanvasLayout}>
+            {planks.map((top) => (
+              <View key={top} style={[styles.plank, { top }]} pointerEvents="none" />
+            ))}
             {elements.length === 0 ? (
-              <Text style={[text.bodyDim, { textAlign: "center" }]}>No floor plan for this room. Design it in the web app.</Text>
+              <Text style={styles.emptyTxt}>No floor plan for this room. Design it in the web app.</Text>
             ) : (
               <View style={{ width: canvasW, height: canvasH, transform: [{ scale }] }}>
                 {zones.map((z) => (
-                  <View key={z.id} style={{ position: "absolute", left: z.x, top: z.y, width: z.w, height: z.h, borderRadius: 20, backgroundColor: z.color + "22", borderWidth: 1, borderColor: z.color + "55" }}>
+                  <View key={z.id} style={{ position: "absolute", left: z.x, top: z.y, width: z.w, height: z.h, borderRadius: 22, backgroundColor: z.color + "22", borderWidth: 1, borderColor: z.color + "44" }}>
                     {z.name ? <Text style={[styles.zoneLabel, { color: z.color }]}>{z.name}</Text> : null}
                   </View>
                 ))}
@@ -321,18 +296,9 @@ export default function Floor() {
                   <TableShape key={el.id} x={el.x + ox} y={el.y + oy} w={el.w} h={el.h} rotation={el.rotation} shape={el.shape} kind={el.kind} label={el.label} />
                 ))}
                 {tables.map((t) => {
-                  const tw = t.w * TABLE_SCALE, th = t.h * TABLE_SCALE;
-                  const tx = t.x + t.w / 2 - tw / 2 + ox;
-                  const ty = t.y + t.h / 2 - th / 2 + oy;
-                  const cc = chairColor(statusById[t.id] ?? "available");
-                  return chairLayout(tx, ty, tw, th, t.shape === "round", seatCountByTable[t.id] ?? 4).map((p, i) => (
-                    <View key={t.id + "-c" + i} style={[styles.chair, { left: p.x, top: p.y, backgroundColor: cc }]} />
-                  ));
-                })}
-                {tables.map((t) => {
                   const summary = summaries[t.id];
                   const st = statusById[t.id] ?? "available";
-                  const c = tableStatusColor(st);
+                  const occupied = st !== "available";
                   const tw = t.w * TABLE_SCALE, th = t.h * TABLE_SCALE;
                   const tx = t.x + t.w / 2 - tw / 2 + ox;
                   const ty = t.y + t.h / 2 - th / 2 + oy;
@@ -346,12 +312,13 @@ export default function Floor() {
                       rotation={t.rotation}
                       shape={t.shape}
                       kind={t.kind}
-                      statusColor={st === "available" ? F.wall : c}
-                      tint={st === "available" ? null : c + "2E"}
-                      sectionColor={t.sectionId ? sectionColor[t.sectionId] : null}
+                      fill={fillFor(st)}
                       label={t.label}
+                      occupied={occupied}
+                      seats={seatCountByTable[t.id]}
+                      covers={summary?.guests ?? null}
+                      timer={summary ? (summary.checkDropped ? "dropped" : formatElapsed(summary.openedAt, now)) : null}
                       total={summary && summary.subtotal > 0 ? money(summary.subtotal, "CAD") : null}
-                      timeLabel={summary ? (summary.checkDropped ? "dropped" : formatElapsed(summary.openedAt, now)) : null}
                       onPress={() => openTable(t, summary)}
                     />
                   );
@@ -362,7 +329,7 @@ export default function Floor() {
           <View style={styles.legend}>
             {LEGEND.map((l) => (
               <View key={l.status} style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: tableStatusColor(l.status) }]} />
+                <View style={[styles.legendDot, { backgroundColor: fillFor(l.status) }]} />
                 <Text style={text.caption}>{l.label}</Text>
               </View>
             ))}
@@ -404,21 +371,12 @@ const styles = StyleSheet.create({
   toggle: { flexDirection: "row", backgroundColor: color.card, borderRadius: 999, padding: 2, borderWidth: 1, borderColor: color.border },
   toggleBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: 999 },
   toggleOn: { backgroundColor: color.card2 },
-  controls: { paddingHorizontal: space.xl, gap: space.sm },
-  floor: {
-    flex: 1,
-    margin: space.md,
-    backgroundColor: F.surface,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: F.surfaceBorder,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  chair: { position: "absolute", width: CHAIR, height: CHAIR, borderRadius: 9999, borderWidth: 1, borderColor: "#4A4F59" },
+  controls: { paddingHorizontal: space.xl, gap: space.sm, paddingBottom: space.sm },
+  floor: { flex: 1, backgroundColor: F.surface, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  plank: { position: "absolute", left: 0, right: 0, height: 1, backgroundColor: F.plank },
+  emptyTxt: { color: "#6E665A", fontSize: 15, textAlign: "center" },
   zoneLabel: { position: "absolute", left: 12, bottom: 8, fontFamily: "Poppins_600SemiBold", fontSize: 12 },
-  legend: { flexDirection: "row", justifyContent: "center", gap: space.lg, paddingBottom: space.sm },
+  legend: { flexDirection: "row", justifyContent: "center", gap: space.lg, paddingVertical: space.sm },
   legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
   legendDot: { width: 10, height: 10, borderRadius: 999 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: space.md, padding: space.xl },
