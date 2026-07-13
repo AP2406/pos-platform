@@ -35,7 +35,7 @@ import { formatElapsed, minutesSince, money } from "@/lib/format";
 const RINGABLE = new Set(["table", "booth"]);
 const DECOR = new Set(["wall", "room", "label", "counter", "station"]);
 const TABLE_SCALE = 1.35; // large, tap-friendly tables
-const PAD = 24;
+const PAD = 8; // minimal inset so the room fills the floor
 const PLANK = 46; // wood plank spacing (screen px)
 
 const LEGEND: { status: TableStatus; label: string }[] = [
@@ -251,12 +251,9 @@ export default function Floor() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <View>
-          <Text style={text.title}>Floor</Text>
-          <Text style={text.caption}>
-            {s.businessName} · {s.staff?.name}
-          </Text>
-        </View>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          Floor <Text style={styles.headerSub}>· {s.businessName} · {s.staff?.name}</Text>
+        </Text>
         <View style={styles.actions}>
           <View style={styles.toggle}>
             <Pressable onPress={() => setView("map")} style={[styles.toggleBtn, view === "map" && styles.toggleOn]}>
@@ -366,19 +363,23 @@ export default function Floor() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: space.xl, paddingBottom: space.md },
+  // Slim top bar (TB-style thin header).
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs, gap: space.md },
+  headerTitle: { flex: 1, fontFamily: "Poppins_600SemiBold", fontSize: 17, color: color.text },
+  headerSub: { fontFamily: "Poppins_400Regular", fontSize: 13, color: color.textDim },
   actions: { flexDirection: "row", alignItems: "center", gap: space.sm },
   toggle: { flexDirection: "row", backgroundColor: color.card, borderRadius: 999, padding: 2, borderWidth: 1, borderColor: color.border },
   toggleBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: 999 },
   toggleOn: { backgroundColor: color.card2 },
-  controls: { paddingHorizontal: space.xl, gap: space.sm, paddingBottom: space.sm },
+  controls: { paddingHorizontal: space.lg, gap: space.sm, paddingBottom: space.xs },
+  // Full-bleed floor: fills the whole area edge-to-edge, no inset/rounding.
   floor: { flex: 1, backgroundColor: F.surface, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   plank: { position: "absolute", left: 0, right: 0, height: 1, backgroundColor: F.plank },
   emptyTxt: { color: "#6E665A", fontSize: 15, textAlign: "center" },
   zoneLabel: { position: "absolute", left: 12, bottom: 8, fontFamily: "Poppins_600SemiBold", fontSize: 12 },
-  legend: { flexDirection: "row", justifyContent: "center", gap: space.lg, paddingVertical: space.sm },
+  legend: { flexDirection: "row", justifyContent: "center", gap: space.lg, paddingVertical: space.xs },
   legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
   legendDot: { width: 10, height: 10, borderRadius: 999 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: space.md, padding: space.xl },
-  signout: { alignItems: "center", padding: space.sm },
+  signout: { alignItems: "center", paddingVertical: space.xs },
 });
