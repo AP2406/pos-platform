@@ -26,6 +26,19 @@ export const color = {
   success: "#2FBF71", // paid / confirmed
 } as const;
 
+// Floor map: a lit, lighter surface so tables/chairs read as physical objects
+// (TouchBistro-style), even though the rest of the app stays dark.
+export const floor = {
+  surface: "#D9DDE4", // light neutral room panel
+  surfaceBorder: "#C2C7D1",
+  table: "#242B39", // solid slate table object
+  chair: "#6B7280", // mid-tone chair, visible on the light floor
+  onTable: "#FFFFFF", // table number/name
+  onTableDim: "#C7CCD6", // muted $ / time chips
+  fixture: "#3A4152", // bar / host stand
+  wall: "#9AA1AE",
+} as const;
+
 // Primary gradient (blue → cyan) — the "Charge" button, extended to all primary CTAs.
 export const gradient = {
   primary: [color.blue, color.cyan] as [string, string],

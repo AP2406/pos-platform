@@ -9,6 +9,7 @@ import {
   TableShape,
   Button,
   color,
+  floor as F,
   space,
   text,
   tableStatusColor,
@@ -33,6 +34,12 @@ import {
 import { formatElapsed, minutesSince, money } from "@/lib/format";
 
 const RINGABLE = new Set(["table", "booth"]);
+const DECOR = new Set(["wall", "room", "label", "counter", "station"]);
+const TABLE_SCALE = 1.2; // bigger, tap-friendly tables
+const CHAIR = 16;
+const CHAIR_GAP = 7;
+const PAD = 10;
+
 const LEGEND: { status: TableStatus; label: string }[] = [
   { status: "available", label: "Available" },
   { status: "occupied", label: "Occupied" },
@@ -48,6 +55,18 @@ function tableStatus(summary: TableSummary | undefined, aging: Aging, now: numbe
   if (m >= aging.redMin) return "late";
   if (m >= aging.yellowMin) return "warning";
   return "occupied";
+}
+
+// Chairs evenly around the (enlarged) table perimeter, so a 2-top vs 6-top is obvious.
+function chairPositions(cx: number, cy: number, tw: number, th: number, n: number) {
+  const rx = tw / 2 + CHAIR_GAP + CHAIR / 2;
+  const ry = th / 2 + CHAIR_GAP + CHAIR / 2;
+  const out: { x: number; y: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = (2 * Math.PI * i) / n - Math.PI / 2;
+    out.push({ x: cx + rx * Math.cos(a) - CHAIR / 2, y: cy + ry * Math.sin(a) - CHAIR / 2 });
+  }
+  return out;
 }
 
 export default function Floor() {
@@ -122,32 +141,54 @@ export default function Floor() {
   const sectionColor = useMemo(() => Object.fromEntries(sections.filter((x) => x.color).map((x) => [x.id, x.color as string])), [sections]);
   const sectionName = useMemo(() => Object.fromEntries(sections.map((x) => [x.id, x.name])), [sections]);
 
-  // Centre on the CONTENT bounding box (not the 0,0 canvas) so tables sit
-  // centred with even padding instead of clustered top-left.
+  const tables = useMemo(() => elements.filter((e) => RINGABLE.has(e.kind)), [elements]);
+  const decor = useMemo(() => elements.filter((e) => DECOR.has(e.kind)), [elements]);
+
+  // Seat count per table (child seats → guest_count → 4), for the chair ring.
+  const seatCountByTable = useMemo(() => {
+    const childCount: Record<string, number> = {};
+    for (const e of elements) if (e.kind === "seat" && e.parentId) childCount[e.parentId] = (childCount[e.parentId] ?? 0) + 1;
+    const m: Record<string, number> = {};
+    for (const t of tables) {
+      const n = childCount[t.id] || summaries[t.id]?.guests || 4;
+      m[t.id] = Math.max(1, Math.min(12, n));
+    }
+    return m;
+  }, [elements, tables, summaries]);
+
+  // Bounds include enlarged tables + their chair rings + décor, so nothing clips
+  // and the content is centred (no top-left cluster / dead space).
   const bbox = useMemo(() => {
     if (elements.length === 0) return null;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const e of elements) {
-      minX = Math.min(minX, e.x);
-      minY = Math.min(minY, e.y);
-      maxX = Math.max(maxX, e.x + e.w);
-      maxY = Math.max(maxY, e.y + e.h);
+    const grow = (x0: number, y0: number, x1: number, y1: number) => {
+      minX = Math.min(minX, x0);
+      minY = Math.min(minY, y0);
+      maxX = Math.max(maxX, x1);
+      maxY = Math.max(maxY, y1);
+    };
+    for (const t of tables) {
+      const cx = t.x + t.w / 2, cy = t.y + t.h / 2;
+      const hx = (t.w * TABLE_SCALE) / 2 + CHAIR_GAP + CHAIR;
+      const hy = (t.h * TABLE_SCALE) / 2 + CHAIR_GAP + CHAIR;
+      grow(cx - hx, cy - hy, cx + hx, cy + hy);
     }
+    for (const d of decor) grow(d.x, d.y, d.x + d.w, d.y + d.h);
+    if (minX === Infinity) return null;
     return { minX, minY, maxX, maxY };
-  }, [elements]);
+  }, [elements, tables, decor]);
 
-  const P = 28;
-  const canvasW = bbox ? bbox.maxX - bbox.minX + 2 * P : 200;
-  const canvasH = bbox ? bbox.maxY - bbox.minY + 2 * P : 200;
-  const ox = bbox ? P - bbox.minX : P;
-  const oy = bbox ? P - bbox.minY : P;
+  const canvasW = bbox ? bbox.maxX - bbox.minX + 2 * PAD : 200;
+  const canvasH = bbox ? bbox.maxY - bbox.minY + 2 * PAD : 200;
+  const ox = bbox ? PAD - bbox.minX : PAD;
+  const oy = bbox ? PAD - bbox.minY : PAD;
   const scale = size.w > 0 && size.h > 0 ? Math.min(size.w / canvasW, size.h / canvasH) : 1;
 
   const statusById = useMemo(() => {
     const m: Record<string, TableStatus> = {};
-    for (const e of elements) if (RINGABLE.has(e.kind)) m[e.id] = tableStatus(summaries[e.id], aging, now);
+    for (const t of tables) m[t.id] = tableStatus(summaries[t.id], aging, now);
     return m;
-  }, [elements, summaries, aging, now]);
+  }, [tables, summaries, aging, now]);
 
   const zones = useMemo(() => {
     const byId: Record<string, { minX: number; minY: number; maxX: number; maxY: number }> = {};
@@ -163,10 +204,10 @@ export default function Floor() {
       id: sid,
       name: sectionName[sid] ?? "",
       color: sectionColor[sid] ?? color.textFaint,
-      x: z.minX + ox - 14,
-      y: z.minY + oy - 14,
-      w: z.maxX - z.minX + 28,
-      h: z.maxY - z.minY + 28,
+      x: z.minX + ox - 16,
+      y: z.minY + oy - 16,
+      w: z.maxX - z.minX + 32,
+      h: z.maxY - z.minY + 32,
     }));
   }, [elements, ox, oy, sectionColor, sectionName]);
 
@@ -180,19 +221,12 @@ export default function Floor() {
     else router.push({ pathname: "/register", params: { table: el.label ?? "" } });
   }
 
-  function seatTint(parentId: string | null): string {
-    const st = parentId ? statusById[parentId] : undefined;
-    return st && st !== "available" ? tableStatusColor(st) + "26" : color.card2;
-  }
-
   const listVisible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return openChecks.filter((c) => !q || c.label.toLowerCase().includes(q) || (c.customerPhone ?? "").toLowerCase().includes(q));
   }, [openChecks, query]);
 
   const planTabs = plans.map((p) => ({ key: p.id, label: p.name }));
-  const nonTable = elements.filter((e) => !RINGABLE.has(e.kind));
-  const tables = elements.filter((e) => RINGABLE.has(e.kind));
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -229,40 +263,50 @@ export default function Floor() {
               <Text style={[text.bodyDim, { textAlign: "center" }]}>No floor plan for this room. Design it in the web app.</Text>
             ) : (
               <View style={[styles.floor, { width: canvasW, height: canvasH, transform: [{ scale }] }]}>
-                {/* Section zones (behind everything) */}
+                {/* Section zones */}
                 {zones.map((z) => (
-                  <View key={z.id} style={{ position: "absolute", left: z.x, top: z.y, width: z.w, height: z.h, borderRadius: 18, backgroundColor: z.color + "14", borderWidth: 1, borderColor: z.color + "33" }}>
+                  <View key={z.id} style={{ position: "absolute", left: z.x, top: z.y, width: z.w, height: z.h, borderRadius: 20, backgroundColor: z.color + "22", borderWidth: 1, borderColor: z.color + "55" }}>
                     {z.name ? <Text style={[styles.zoneLabel, { color: z.color }]}>{z.name}</Text> : null}
                   </View>
                 ))}
-                {/* Décor, fixtures, chairs (behind tables) */}
-                {nonTable.map((el) => (
-                  <TableShape key={el.id} x={el.x + ox} y={el.y + oy} w={el.w} h={el.h} rotation={el.rotation} shape={el.shape} kind={el.kind} label={el.label} seatTint={seatTint(el.parentId)} />
+                {/* Décor / fixtures */}
+                {decor.map((el) => (
+                  <TableShape key={el.id} x={el.x + ox} y={el.y + oy} w={el.w} h={el.h} rotation={el.rotation} shape={el.shape} kind={el.kind} label={el.label} />
                 ))}
+                {/* Chairs (synthesized around each table by seat count) */}
+                {tables.map((t) => {
+                  const tw = t.w * TABLE_SCALE, th = t.h * TABLE_SCALE;
+                  const cx = t.x + t.w / 2 + ox, cy = t.y + t.h / 2 + oy;
+                  const chairRadius = t.shape === "round" ? 9999 : 5;
+                  return chairPositions(cx, cy, tw, th, seatCountByTable[t.id] ?? 4).map((p, i) => (
+                    <View key={t.id + "-c" + i} style={{ position: "absolute", left: p.x, top: p.y, width: CHAIR, height: CHAIR, borderRadius: chairRadius, backgroundColor: F.chair }} />
+                  ));
+                })}
                 {/* Tables on top */}
-                {tables.map((el) => {
-                  const summary = summaries[el.id];
-                  const st = statusById[el.id] ?? "available";
+                {tables.map((t) => {
+                  const summary = summaries[t.id];
+                  const st = statusById[t.id] ?? "available";
                   const c = tableStatusColor(st);
-                  const fill = st === "available" ? color.card : c + "1F";
+                  const tw = t.w * TABLE_SCALE, th = t.h * TABLE_SCALE;
+                  const tx = t.x + t.w / 2 - tw / 2 + ox;
+                  const ty = t.y + t.h / 2 - th / 2 + oy;
                   return (
                     <TableShape
-                      key={el.id}
-                      x={el.x + ox}
-                      y={el.y + oy}
-                      w={el.w}
-                      h={el.h}
-                      rotation={el.rotation}
-                      shape={el.shape}
-                      kind={el.kind}
-                      statusColor={c}
-                      fillColor={fill}
-                      sectionColor={el.sectionId ? sectionColor[el.sectionId] : null}
-                      label={el.label}
+                      key={t.id}
+                      x={tx}
+                      y={ty}
+                      w={tw}
+                      h={th}
+                      rotation={t.rotation}
+                      shape={t.shape}
+                      kind={t.kind}
+                      statusColor={st === "available" ? F.wall : c}
+                      tint={st === "available" ? null : c + "2E"}
+                      sectionColor={t.sectionId ? sectionColor[t.sectionId] : null}
+                      label={t.label}
                       total={summary && summary.subtotal > 0 ? money(summary.subtotal, "CAD") : null}
-                      guests={summary?.guests ?? null}
                       timeLabel={summary ? (summary.checkDropped ? "dropped" : formatElapsed(summary.openedAt, now)) : null}
-                      onPress={() => openTable(el, summary)}
+                      onPress={() => openTable(t, summary)}
                     />
                   );
                 })}
@@ -316,8 +360,8 @@ const styles = StyleSheet.create({
   toggleOn: { backgroundColor: color.card2 },
   controls: { paddingHorizontal: space.xl, gap: space.sm },
   canvasWrap: { flex: 1, margin: space.lg, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  floor: { backgroundColor: color.card, borderRadius: 20, borderWidth: 1, borderColor: color.border },
-  zoneLabel: { position: "absolute", left: 10, bottom: 6, fontFamily: "Poppins_500Medium", fontSize: 11 },
+  floor: { backgroundColor: F.surface, borderRadius: 22, borderWidth: 1, borderColor: F.surfaceBorder },
+  zoneLabel: { position: "absolute", left: 12, bottom: 8, fontFamily: "Poppins_600SemiBold", fontSize: 12 },
   legend: { flexDirection: "row", justifyContent: "center", gap: space.lg, paddingBottom: space.sm },
   legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
   legendDot: { width: 10, height: 10, borderRadius: 999 },

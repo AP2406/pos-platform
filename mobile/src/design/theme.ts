@@ -3,7 +3,7 @@ import { color, fontSize, fontFamily } from "@surge/design-tokens";
 
 // Shared text styles built from the design tokens. Re-export tokens so screens
 // import everything design-related from one place (`@/design`).
-export { color, gradient, fontSize, fontFamily, space, radius, touch, tableStatusColor, statusFromSeatedMinutes } from "@surge/design-tokens";
+export { color, floor, gradient, fontSize, fontFamily, space, radius, touch, tableStatusColor, statusFromSeatedMinutes } from "@surge/design-tokens";
 export type { TableStatus } from "@surge/design-tokens";
 
 export const text = StyleSheet.create({

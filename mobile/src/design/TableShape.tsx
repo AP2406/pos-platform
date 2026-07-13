@@ -1,10 +1,11 @@
 import { Pressable, View, Text, StyleSheet, type ViewStyle } from "react-native";
-import { color, fontFamily, fontSize } from "@surge/design-tokens";
+import { color, floor, fontFamily } from "@surge/design-tokens";
 
-// A single positioned floor element. Tables/booths are elevated, status-tinted
-// objects with a status ring and a name/$/chips hierarchy. Seats render as
-// intentional chair pills hugging their table (Square/TB style). Walls/rooms/
-// labels/counters are quiet fixtures — never floating dark dots.
+// A positioned floor element for the lit, lighter floor. Tables are SOLID slate
+// objects that pop: big white number, a bold status ring + subtle status tint,
+// and muted $ / time chips at the bottom. Chairs are drawn separately (see
+// floor.tsx, synthesized by seat count). Walls/rooms/labels/counters are quiet
+// fixtures toned for the light floor.
 export function TableShape(props: {
   x: number;
   y: number;
@@ -13,16 +14,12 @@ export function TableShape(props: {
   rotation: number;
   shape: string;
   kind: string;
-  // table:
   statusColor?: string;
-  fillColor?: string;
+  tint?: string | null;
   sectionColor?: string | null;
   label?: string | null;
   total?: string | null;
-  guests?: number | null;
   timeLabel?: string | null;
-  // seat:
-  seatTint?: string;
   onPress?: () => void;
 }) {
   const { x, y, w, h, rotation, shape, kind } = props;
@@ -36,17 +33,12 @@ export function TableShape(props: {
     transform: rotation ? [{ rotate: rotation + "deg" }] : undefined,
   };
 
-  // Chair pill hugging a table.
-  if (kind === "seat") {
-    return <View style={[base, { borderRadius: round ? 9999 : 6, backgroundColor: props.seatTint ?? color.card2, borderWidth: 1, borderColor: color.border }]} />;
-  }
-  // Structural / décor fixtures.
-  if (kind === "wall") return <View style={[base, styles.wall, { borderRadius: 2 }]} />;
+  if (kind === "wall") return <View style={[base, { backgroundColor: floor.wall, borderRadius: 2 }]} />;
   if (kind === "room" || kind === "label") {
     return (
       <View style={[base, styles.room]}>
         {props.label ? (
-          <Text style={styles.decorTxt} numberOfLines={1}>
+          <Text style={styles.roomTxt} numberOfLines={1}>
             {props.label}
           </Text>
         ) : null}
@@ -54,10 +46,8 @@ export function TableShape(props: {
     );
   }
   if (kind === "counter" || kind === "station") {
-    // A designed fixture (bar / host stand), not a placeholder box.
     return (
       <View style={[base, styles.fixture, { borderRadius: round ? 9999 : 10 }]}>
-        <View style={styles.fixtureAccent} />
         {props.label ? (
           <Text style={styles.fixtureTxt} numberOfLines={1}>
             {props.label}
@@ -67,30 +57,22 @@ export function TableShape(props: {
     );
   }
 
-  // Interactive table / booth — an elevated object.
-  const c = props.statusColor ?? color.available;
-  const fill = props.fillColor ?? color.card;
-  const compact = h < 58 || w < 74;
+  // Interactive table / booth.
+  const ring = props.statusColor ?? floor.wall;
+  const radius = round ? 9999 : 14;
+  const big = Math.min(w, h) >= 62;
   return (
-    <Pressable
-      onPress={props.onPress}
-      style={[base, styles.table, { borderRadius: round ? 9999 : 14, borderColor: c, backgroundColor: fill }]}
-      accessibilityRole="button"
-    >
+    <Pressable onPress={props.onPress} style={[base, styles.table, { borderRadius: radius, borderColor: ring }]} accessibilityRole="button">
+      {props.tint ? <View style={[StyleSheet.absoluteFill, { backgroundColor: props.tint, borderRadius: radius }]} /> : null}
       {props.sectionColor ? <View style={[styles.dot, { backgroundColor: props.sectionColor }]} /> : null}
-      <Text style={[styles.name, compact && styles.nameCompact]} numberOfLines={1}>
+      <Text style={[styles.name, { fontSize: big ? 18 : 14 }]} numberOfLines={1}>
         {props.label ?? ""}
       </Text>
-      {props.total ? (
-        <Text style={[styles.total, { color: c }]} numberOfLines={1}>
-          {props.total}
-        </Text>
-      ) : null}
-      {!compact && (props.guests || props.timeLabel) ? (
+      {props.total || props.timeLabel ? (
         <View style={styles.chips}>
-          {props.guests && props.guests > 0 ? (
+          {props.total ? (
             <View style={styles.chip}>
-              <Text style={styles.chipTxt}>{props.guests}p</Text>
+              <Text style={styles.chipTxt}>{props.total}</Text>
             </View>
           ) : null}
           {props.timeLabel ? (
@@ -106,37 +88,25 @@ export function TableShape(props: {
 
 const styles = StyleSheet.create({
   table: {
-    borderWidth: 2,
+    backgroundColor: floor.table,
+    borderWidth: 2.5,
     alignItems: "center",
     justifyContent: "center",
-    padding: 4,
-    gap: 2,
     overflow: "hidden",
-    // soft elevation so tables read as objects on the floor
+    // strong-ish elevation so the object lifts off the light floor
     shadowColor: "#000000",
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
   },
-  dot: { position: "absolute", top: 5, left: 5, width: 8, height: 8, borderRadius: 999 },
-  name: { fontFamily: fontFamily.semibold, fontSize: fontSize.body, color: color.text },
-  nameCompact: { fontSize: fontSize.caption },
-  total: { fontFamily: fontFamily.semibold, fontSize: fontSize.caption },
-  chips: { flexDirection: "row", gap: 4, marginTop: 2 },
-  chip: { backgroundColor: "rgba(11,14,20,0.55)", borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
-  chipTxt: { fontFamily: fontFamily.medium, fontSize: 10, color: color.textDim },
-  wall: { backgroundColor: color.border },
-  room: { borderWidth: 1, borderColor: color.border, borderStyle: "dashed", borderRadius: 10, alignItems: "flex-start", justifyContent: "flex-start", padding: 4 },
-  decorTxt: { fontFamily: fontFamily.medium, fontSize: 11, color: color.textFaint },
-  fixture: {
-    backgroundColor: color.card2,
-    borderWidth: 1,
-    borderColor: color.border,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  fixtureAccent: { position: "absolute", top: 0, left: 0, right: 0, height: 3, backgroundColor: color.textFaint },
-  fixtureTxt: { fontFamily: fontFamily.medium, fontSize: 11, color: color.textDim },
+  dot: { position: "absolute", top: 6, left: 6, width: 9, height: 9, borderRadius: 999 },
+  name: { fontFamily: fontFamily.semibold, color: floor.onTable, textAlign: "center", paddingHorizontal: 4 },
+  chips: { position: "absolute", bottom: 5, flexDirection: "row", gap: 4, alignItems: "center" },
+  chip: { backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
+  chipTxt: { fontFamily: fontFamily.medium, fontSize: 10, color: floor.onTableDim },
+  room: { borderWidth: 1, borderColor: floor.wall, borderStyle: "dashed", borderRadius: 10, alignItems: "flex-start", justifyContent: "flex-start", padding: 4 },
+  roomTxt: { fontFamily: fontFamily.medium, fontSize: 11, color: floor.fixture },
+  fixture: { backgroundColor: floor.fixture, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  fixtureTxt: { fontFamily: fontFamily.medium, fontSize: 11, color: floor.onTable },
 });
