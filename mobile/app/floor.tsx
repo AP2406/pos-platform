@@ -35,8 +35,9 @@ import { formatElapsed, minutesSince, money } from "@/lib/format";
 
 const RINGABLE = new Set(["table", "booth"]);
 const DECOR = new Set(["wall", "room", "label", "counter", "station"]);
-const TABLE_SCALE = 1.35; // large, tap-friendly tables
-const PAD = 8; // minimal inset so the room fills the floor
+const TSIZE = 82; // fixed on-screen table size (longest side, px)
+const STOOL = 22; // fixed on-screen stool size (px)
+const MARGIN = 56; // floor margin around the room, screen px
 
 const LEGEND: { status: TableStatus; label: string }[] = [
   { status: "available", label: "Available" },
@@ -194,9 +195,11 @@ export default function Floor() {
       maxX = Math.max(maxX, x1);
       maxY = Math.max(maxY, y1);
     };
+    // Fit is driven by table CENTERS (+ décor / stools), since tables render at a
+    // fixed size decoupled from the fit.
     for (const t of tables) {
       const cx = t.x + t.w / 2, cy = t.y + t.h / 2;
-      grow(cx - (t.w * TABLE_SCALE) / 2, cy - (t.h * TABLE_SCALE) / 2, cx + (t.w * TABLE_SCALE) / 2, cy + (t.h * TABLE_SCALE) / 2);
+      grow(cx, cy, cx, cy);
     }
     for (const d of decor) grow(d.x, d.y, d.x + d.w, d.y + d.h);
     for (const st of stools) grow(st.x, st.y, st.x + st.w, st.y + st.h);
@@ -204,14 +207,16 @@ export default function Floor() {
     return { minX, minY, maxX, maxY };
   }, [elements, tables, decor, stools]);
 
-  const canvasW = bbox ? bbox.maxX - bbox.minX + 2 * PAD : 200;
-  const canvasH = bbox ? bbox.maxY - bbox.minY + 2 * PAD : 200;
-  const ox = bbox ? PAD - bbox.minX : PAD;
-  const oy = bbox ? PAD - bbox.minY : PAD;
-  // Fit-to-CONTAIN: the ENTIRE room is visible at the largest size that fits — no
-  // cropping, no scrolling. The floor data ~matches the landscape aspect, so this
-  // fills with minimal margin.
-  const scale = size.w > 0 && size.h > 0 ? Math.min(size.w / canvasW, size.h / canvasH) : 1;
+  // Position the room to fill the floor (fit-to-contain on positions), but render
+  // tables at a FIXED on-screen size (TSIZE) so they're small objects with
+  // generous floor around them — the floor surface is decoupled from table size.
+  const roomW = bbox ? Math.max(1, bbox.maxX - bbox.minX) : 1;
+  const roomH = bbox ? Math.max(1, bbox.maxY - bbox.minY) : 1;
+  const S = size.w > 0 && size.h > 0 && bbox ? Math.min((size.w - 2 * MARGIN) / roomW, (size.h - 2 * MARGIN) / roomH) : 1;
+  const offX = bbox ? (size.w - roomW * S) / 2 - bbox.minX * S : 0;
+  const offY = bbox ? (size.h - roomH * S) / 2 - bbox.minY * S : 0;
+  const sx = (x: number) => x * S + offX;
+  const sy = (y: number) => y * S + offY;
 
   const statusById = useMemo(() => {
     const m: Record<string, TableStatus> = {};
@@ -233,12 +238,12 @@ export default function Floor() {
       id: sid,
       name: sectionName[sid] ?? "",
       color: sectionColor[sid] ?? "#00000018",
-      x: z.minX + ox - 18,
-      y: z.minY + oy - 18,
-      w: z.maxX - z.minX + 36,
-      h: z.maxY - z.minY + 36,
+      minX: z.minX,
+      minY: z.minY,
+      maxX: z.maxX,
+      maxY: z.maxY,
     }));
-  }, [elements, ox, oy, sectionColor, sectionName]);
+  }, [elements, sectionColor, sectionName]);
 
   function onCanvasLayout(e: LayoutChangeEvent) {
     const { width, height } = e.nativeEvent.layout;
@@ -290,36 +295,39 @@ export default function Floor() {
             {elements.length === 0 ? (
               <Text style={styles.emptyTxt}>No floor plan for this room. Design it in the web app.</Text>
             ) : (
-              <View style={{ width: canvasW, height: canvasH, transform: [{ scale }] }}>
+              <>
+                {/* Section zones (positions + sizes scale with the room) */}
                 {zones.map((z) => (
-                  <View key={z.id} style={{ position: "absolute", left: z.x, top: z.y, width: z.w, height: z.h, borderRadius: 22, backgroundColor: z.color + "22", borderWidth: 1, borderColor: z.color + "44" }}>
+                  <View key={z.id} style={{ position: "absolute", left: sx(z.minX) - 14, top: sy(z.minY) - 14, width: (z.maxX - z.minX) * S + 28, height: (z.maxY - z.minY) * S + 28, borderRadius: 22, backgroundColor: z.color + "22", borderWidth: 1, borderColor: z.color + "44" }}>
                     {z.name ? <Text style={[styles.zoneLabel, { color: z.color }]}>{z.name}</Text> : null}
                   </View>
                 ))}
+                {/* Structural décor scales with the room */}
                 {decor.map((el) => (
-                  <TableShape key={el.id} x={el.x + ox} y={el.y + oy} w={el.w} h={el.h} rotation={el.rotation} shape={el.shape} kind={el.kind} label={el.label} />
+                  <TableShape key={el.id} x={sx(el.x)} y={sy(el.y)} w={el.w * S} h={el.h * S} rotation={el.rotation} shape={el.shape} kind={el.kind} label={el.label} />
                 ))}
-                {/* Bar stools — round, at their real positions along the counter */}
+                {/* Bar stools — fixed-size round seats at their scaled positions */}
                 {stools.map((el) => {
                   const busy = !!summaries[el.id];
                   const numTxt = el.label ?? (el.seatNo != null ? String(el.seatNo) : "");
-                  const fs = Math.max(8, Math.min(12, el.w * 0.4));
                   return (
                     <View
                       key={el.id}
-                      style={{ position: "absolute", left: el.x + ox, top: el.y + oy, width: el.w, height: el.h, borderRadius: 9999, backgroundColor: busy ? F.stoolBusy : F.stoolOpen, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(0,0,0,0.15)" }}
+                      style={{ position: "absolute", left: sx(el.x + el.w / 2) - STOOL / 2, top: sy(el.y + el.h / 2) - STOOL / 2, width: STOOL, height: STOOL, borderRadius: 9999, backgroundColor: busy ? F.stoolBusy : F.stoolOpen, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(0,0,0,0.15)" }}
                     >
-                      {numTxt ? <Text style={{ color: "#fff", fontSize: fs, fontFamily: "Poppins_600SemiBold" }}>{numTxt}</Text> : null}
+                      {numTxt ? <Text style={{ color: "#fff", fontSize: 9, fontFamily: "Poppins_600SemiBold" }}>{numTxt}</Text> : null}
                     </View>
                   );
                 })}
+                {/* Tables — FIXED on-screen size, positioned by the fit */}
                 {tables.map((t) => {
                   const summary = summaries[t.id];
                   const st = statusById[t.id] ?? "available";
                   const occupied = st !== "available";
-                  const tw = t.w * TABLE_SCALE, th = t.h * TABLE_SCALE;
-                  const tx = t.x + t.w / 2 - tw / 2 + ox;
-                  const ty = t.y + t.h / 2 - th / 2 + oy;
+                  const k = TSIZE / (Math.max(t.w, t.h) || 1);
+                  const tw = t.w * k, th = t.h * k;
+                  const tx = sx(t.x + t.w / 2) - tw / 2;
+                  const ty = sy(t.y + t.h / 2) - th / 2;
                   return (
                     <TableShape
                       key={t.id}
@@ -342,7 +350,7 @@ export default function Floor() {
                     />
                   );
                 })}
-              </View>
+              </>
             )}
           </View>
           <View style={styles.legend}>
