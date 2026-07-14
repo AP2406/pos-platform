@@ -206,6 +206,118 @@ export async function fetchTableAging(businessId: string): Promise<Aging> {
   return { yellowMin: Number(ta.yellow_min) || 60, redMin: Number(ta.red_min) || 90 };
 }
 
+// ---- Order history (read-only) ----------------------------------------------
+
+export type SaleStatus = "paid" | "voided" | "refunded";
+export type SaleRow = {
+  id: string;
+  saleNumber: number | null;
+  createdAt: string;
+  total: number;
+  method: string;
+  status: SaleStatus;
+  customerName: string | null;
+  serverName: string | null;
+};
+
+export async function fetchSalesHistory(businessId: string, sinceIso: string): Promise<SaleRow[]> {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("id, sale_number, created_at, total, payment_method, status, customer:customers(name), server:staff_members(name)")
+    .eq("business_id", businessId)
+    .neq("is_training", true)
+    .gte("created_at", sinceIso)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  const rows = data ?? [];
+  const ids = rows.map((o) => o.id as string);
+  const refunded = new Set<string>();
+  if (ids.length > 0) {
+    const { data: rf } = await supabase.from("refunds").select("order_id").eq("business_id", businessId).in("order_id", ids);
+    for (const r of rf ?? []) refunded.add(r.order_id as string);
+  }
+  return rows.map((o) => {
+    const cust = o.customer as { name?: string } | { name?: string }[] | null;
+    const srv = o.server as { name?: string } | { name?: string }[] | null;
+    const oneName = (v: typeof cust) => (Array.isArray(v) ? v[0]?.name : v?.name) ?? null;
+    const status: SaleStatus = o.status === "voided" ? "voided" : refunded.has(o.id as string) ? "refunded" : "paid";
+    return {
+      id: o.id as string,
+      saleNumber: o.sale_number != null ? Number(o.sale_number) : null,
+      createdAt: o.created_at as string,
+      total: Number(o.total) || 0,
+      method: (o.payment_method as string | null) ?? "cash",
+      status,
+      customerName: oneName(cust),
+      serverName: oneName(srv),
+    };
+  });
+}
+
+export type SaleDetailLine = { name: string; quantity: number; unitPrice: number; note: string | null };
+export type SaleDetail = {
+  id: string;
+  saleNumber: number | null;
+  createdAt: string;
+  status: SaleStatus;
+  diningOption: string | null;
+  customerName: string | null;
+  serverName: string | null;
+  subtotal: number;
+  discount: number;
+  comp: number;
+  tax: number;
+  tip: number;
+  total: number;
+  items: SaleDetailLine[];
+  payments: { method: string; amount: number }[];
+  refunds: { amount: number; reasonCode: string | null }[];
+};
+
+export async function fetchOrderDetail(businessId: string, orderId: string): Promise<SaleDetail | null> {
+  const { data: o } = await supabase
+    .from("orders")
+    .select("id, sale_number, created_at, status, dining_option, subtotal, discount, comp, tax, tip, total, snapshot, customer:customers(name), server:staff_members(name)")
+    .eq("id", orderId)
+    .eq("business_id", businessId)
+    .maybeSingle();
+  if (!o) return null;
+  const [{ data: pays }, { data: refs }] = await Promise.all([
+    supabase.from("payments").select("method, amount").eq("business_id", businessId).eq("order_id", orderId),
+    supabase.from("refunds").select("amount, reason_code").eq("business_id", businessId).eq("order_id", orderId),
+  ]);
+  const snap = (o.snapshot ?? null) as { items?: Array<Record<string, unknown>> } | null;
+  const items = Array.isArray(snap?.items) ? snap!.items : [];
+  const cust = o.customer as { name?: string } | { name?: string }[] | null;
+  const srv = o.server as { name?: string } | { name?: string }[] | null;
+  const oneName = (v: typeof cust) => (Array.isArray(v) ? v[0]?.name : v?.name) ?? null;
+  const refundTotal = (refs ?? []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  return {
+    id: o.id as string,
+    saleNumber: o.sale_number != null ? Number(o.sale_number) : null,
+    createdAt: o.created_at as string,
+    status: o.status === "voided" ? "voided" : refundTotal > 0 ? "refunded" : "paid",
+    diningOption: (o.dining_option as string | null) ?? null,
+    customerName: oneName(cust),
+    serverName: oneName(srv),
+    subtotal: Number(o.subtotal) || 0,
+    discount: Number(o.discount) || 0,
+    comp: Number(o.comp) || 0,
+    tax: Number(o.tax) || 0,
+    tip: Number(o.tip) || 0,
+    total: Number(o.total) || 0,
+    items: items.map((it) => ({
+      name: String(it.name ?? "Item"),
+      quantity: Number(it.quantity) || 1,
+      unitPrice: Number(it.unit_price) || 0,
+      note: (it.note as string | null) ?? null,
+    })),
+    payments: (pays ?? []).map((p) => ({ method: (p.method as string) || "other", amount: Number(p.amount) || 0 })),
+    refunds: (refs ?? []).map((r) => ({ amount: Number(r.amount) || 0, reasonCode: (r.reason_code as string | null) ?? null })),
+  };
+}
+
 // ---- KDS (kitchen display) --------------------------------------------------
 
 export type KdsItem = { name: string; quantity: number; note: string | null; allergens: string[] };

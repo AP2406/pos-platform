@@ -4,12 +4,12 @@ export type { Surface, DeviceHome, NativeRoleAccess, NativeAccessConfig };
 
 export const ALL_SURFACES: Surface[] = ["floor", "register", "kds", "sales"];
 
-// Route per surface. `sales` maps to /floor until the history screen ships.
-export const SURFACE_ROUTE: Record<Surface, "/floor" | "/register" | "/kds"> = {
+// Route per surface.
+export const SURFACE_ROUTE: Record<Surface, "/floor" | "/register" | "/kds" | "/history"> = {
   floor: "/floor",
   register: "/register",
   kds: "/kds",
-  sales: "/floor",
+  sales: "/history",
 };
 
 // Sensible defaults per role (works before an owner configures anything). Handles
