@@ -5,7 +5,7 @@ import { useRouter } from "expo-router";
 import { SegmentedTabs, KdsTicket, color, space, text } from "@/design";
 import { useSession } from "@/state/session";
 import { supabase, realtimeChannel } from "@/lib/supabase";
-import { fetchKitchenTickets, fetchKitchenStations, fetchKdsAging, type KitchenTicket, type KitchenStation, type Aging } from "@/lib/reads";
+import { fetchKitchenTickets, fetchKitchenStations, fetchKdsAging, type KitchenTicket, type KitchenStation, type KdsItem, type Aging } from "@/lib/reads";
 import { kdsMutate } from "@/lib/api";
 import { canBumpKds } from "@/lib/access";
 import { formatElapsed, minutesSince } from "@/lib/format";
@@ -67,13 +67,14 @@ export default function Kds() {
     };
   }, [bizId, load]);
 
-  async function mutate(id: string, op: "bump" | "recall") {
-    if (!canBump) return; // read-only glance
-    setBusyId(id);
-    // Optimistic: bump removes from the open board; recall returns it.
-    setTickets((ts) => ts.map((t) => (t.id === id ? { ...t, fulfilledAt: op === "bump" ? new Date(now || Date.now()).toISOString() : null } : t)));
+  // Bump/recall a whole table's group of (station-split) tickets at once.
+  async function mutate(ids: string[], op: "bump" | "recall") {
+    if (!canBump || ids.length === 0) return; // read-only glance
+    setBusyId(ids[0]);
+    const set = new Set(ids);
+    setTickets((ts) => ts.map((t) => (set.has(t.id) ? { ...t, fulfilledAt: op === "bump" ? new Date(now || Date.now()).toISOString() : null } : t)));
     try {
-      await kdsMutate(bizId, staffId, id, op);
+      await Promise.all(ids.map((id) => kdsMutate(bizId, staffId, id, op)));
     } catch {
       /* realtime/interval will re-sync on failure */
     } finally {
@@ -86,18 +87,35 @@ export default function Kds() {
 
   const inStation = (t: KitchenTicket) => station === "all" || t.stationId === station;
 
-  const open = useMemo(
-    () =>
-      tickets
-        .filter((t) => !t.fulfilledAt && inStation(t))
-        .sort((a, b) => (a.rush === b.rush ? new Date(a.firedAt).getTime() - new Date(b.firedAt).getTime() : a.rush ? -1 : 1)),
-    [tickets, station, now]
-  );
+  // ONE card per table: the kitchen splits a fired order into a ticket per station,
+  // so merge a table's tickets back into a single card (all items). Grouped by the
+  // table (element_id) or, for non-table tickets, the base label; void notices stay
+  // separate.
+  type KdsCard = { key: string; label: string; items: KdsItem[]; firedAt: string; rush: boolean; ids: string[] };
+  const cards = useMemo<KdsCard[]>(() => {
+    const groups = new Map<string, KdsCard>();
+    for (const t of tickets) {
+      if (t.fulfilledAt || !inStation(t)) continue;
+      const base = (t.label ?? "Ticket").split(" · ")[0].trim() || "Ticket";
+      const isVoid = (t.label ?? "").toUpperCase().startsWith("VOID");
+      const key = isVoid ? t.id : t.elementId ?? "lbl:" + base;
+      const g = groups.get(key);
+      if (!g) groups.set(key, { key, label: isVoid ? t.label ?? base : base, items: [...t.items], firedAt: t.firedAt, rush: t.rush, ids: [t.id] });
+      else {
+        g.items.push(...t.items);
+        g.rush = g.rush || t.rush;
+        if (new Date(t.firedAt).getTime() < new Date(g.firedAt).getTime()) g.firedAt = t.firedAt;
+        g.ids.push(t.id);
+      }
+    }
+    return [...groups.values()].sort((a, b) => (a.rush === b.rush ? new Date(a.firedAt).getTime() - new Date(b.firedAt).getTime() : a.rush ? -1 : 1));
+  }, [tickets, station, now]);
+
   const recent = useMemo(
     () => tickets.filter((t) => t.fulfilledAt && inStation(t)).sort((a, b) => new Date(b.fulfilledAt!).getTime() - new Date(a.fulfilledAt!).getTime()),
     [tickets, station]
   );
-  const rushCount = open.filter((t) => t.rush).length;
+  const rushCount = cards.filter((c) => c.rush).length;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -114,25 +132,25 @@ export default function Kds() {
           )}
           <Text style={styles.title}>Kitchen</Text>
           <Text style={text.caption}>
-            {open.length} firing{rushCount > 0 ? " · " + rushCount + " rush" : ""}
+            {cards.length} firing{rushCount > 0 ? " · " + rushCount + " rush" : ""}
           </Text>
         </View>
         {stationTabs.length > 1 && <SegmentedTabs tabs={stationTabs} value={station} onChange={setStation} />}
       </View>
 
       <ScrollView contentContainerStyle={styles.grid}>
-        {open.length === 0 && <Text style={[text.bodyDim, { padding: space.lg }]}>Nothing firing.</Text>}
-        {open.map((t) => (
+        {cards.length === 0 && <Text style={[text.bodyDim, { padding: space.lg }]}>Nothing firing.</Text>}
+        {cards.map((c) => (
           <KdsTicket
-            key={t.id}
-            label={t.label || "Ticket"}
-            elapsedLabel={formatElapsed(t.firedAt, now)}
-            agingColor={agingColor(t.firedAt, aging, now)}
-            rush={t.rush}
-            items={t.items}
-            busy={busyId === t.id}
+            key={c.key}
+            label={c.label}
+            elapsedLabel={formatElapsed(c.firedAt, now)}
+            agingColor={agingColor(c.firedAt, aging, now)}
+            rush={c.rush}
+            items={c.items}
+            busy={busyId === c.ids[0]}
             readOnly={!canBump}
-            onBump={() => mutate(t.id, "bump")}
+            onBump={() => mutate(c.ids, "bump")}
           />
         ))}
       </ScrollView>
@@ -142,7 +160,7 @@ export default function Kds() {
           <Text style={styles.recallLabel}>Recently ready — tap to recall</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recallRow}>
             {recent.slice(0, 12).map((t) => (
-              <Pressable key={t.id} onPress={() => mutate(t.id, "recall")} style={styles.recallChip}>
+              <Pressable key={t.id} onPress={() => mutate([t.id], "recall")} style={styles.recallChip}>
                 <Text style={styles.recallChipTxt} numberOfLines={1}>
                   {t.label || "Ticket"}
                 </Text>

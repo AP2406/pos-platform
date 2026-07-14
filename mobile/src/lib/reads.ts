@@ -334,6 +334,7 @@ export type KitchenTicket = {
   stationId: string | null;
   courseId: string | null;
   rush: boolean;
+  elementId: string | null;
 };
 
 export type KitchenStation = { id: string; name: string };
@@ -357,7 +358,7 @@ export async function fetchKitchenTickets(businessId: string): Promise<KitchenTi
   const sinceIso = new Date(Date.now() - 30 * 60000).toISOString();
   const { data, error } = await supabase
     .from("kitchen_tickets")
-    .select("id, label, items, fired_at, fulfilled_at, station_id, course_id, rush")
+    .select("id, label, items, fired_at, fulfilled_at, station_id, course_id, rush, element_id")
     .eq("business_id", businessId)
     .or(`fulfilled_at.is.null,fulfilled_at.gt.${sinceIso}`)
     .order("fired_at", { ascending: true });
@@ -371,6 +372,7 @@ export async function fetchKitchenTickets(businessId: string): Promise<KitchenTi
     stationId: (t.station_id as string | null) ?? null,
     courseId: (t.course_id as string | null) ?? null,
     rush: (t.rush as boolean | null) === true,
+    elementId: (t.element_id as string | null) ?? null,
   }));
 }
 
