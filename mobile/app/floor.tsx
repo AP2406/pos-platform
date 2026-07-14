@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, type LayoutChangeEvent } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, type LayoutChangeEvent } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import {
@@ -261,6 +261,9 @@ export default function Floor() {
   }, [openChecks, query]);
 
   const planTabs = plans.map((p) => ({ key: p.id, label: p.name }));
+  const activeBg = plans.find((p) => p.id === activePlan)?.background ?? null;
+  const colorBg = activeBg?.type === "color" ? activeBg.value : null;
+  const imageBg = activeBg?.type === "image" ? activeBg.value : null;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -289,8 +292,9 @@ export default function Floor() {
               <SegmentedTabs tabs={planTabs} value={activePlan ?? ""} onChange={(k) => setActivePlan(k)} />
             </View>
           )}
-          {/* Full-screen floor — one background, shared with the rest of the screen */}
-          <View style={styles.floor} onLayout={onCanvasLayout}>
+          {/* Full-screen floor — per-plan background (color / image), else the shared dark */}
+          <View style={[styles.floor, colorBg ? { backgroundColor: colorBg } : null]} onLayout={onCanvasLayout}>
+            {imageBg ? <Image source={{ uri: imageBg }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
             {elements.length === 0 ? (
               <Text style={styles.emptyTxt}>No floor plan for this room. Design it in the web app.</Text>
             ) : (

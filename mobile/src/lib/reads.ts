@@ -72,16 +72,29 @@ export type CheckLine = {
 
 // ---- Floor map (same layout data the web floor renders) ---------------------
 
-export type FloorPlan = { id: string; name: string; sortOrder: number };
+export type FloorBackground = { type: "color" | "image"; value: string } | null;
+export type FloorPlan = { id: string; name: string; sortOrder: number; background: FloorBackground };
+
+function parseBackground(raw: unknown): FloorBackground {
+  if (!raw || typeof raw !== "object") return null;
+  const b = raw as { type?: unknown; value?: unknown };
+  if ((b.type === "color" || b.type === "image") && typeof b.value === "string") return { type: b.type, value: b.value };
+  return null;
+}
 
 export async function fetchFloorPlans(businessId: string): Promise<FloorPlan[]> {
   const { data, error } = await supabase
     .from("floor_plans")
-    .select("id, name, sort_order")
+    .select("id, name, sort_order, background")
     .eq("business_id", businessId)
     .order("sort_order", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((p) => ({ id: p.id as string, name: (p.name as string) || "Floor", sortOrder: Number(p.sort_order) || 0 }));
+  return (data ?? []).map((p) => ({
+    id: p.id as string,
+    name: (p.name as string) || "Floor",
+    sortOrder: Number(p.sort_order) || 0,
+    background: parseBackground((p as { background?: unknown }).background),
+  }));
 }
 
 export type FloorElement = {

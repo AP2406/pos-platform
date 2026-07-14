@@ -397,7 +397,7 @@ export default async function SettingsPage() {
         <>
           <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Floor plan</SectionHeader>
-            <FloorCard initialPlans={floorPlans} initialElements={floorElements} initialChairMode={chairMode} />
+            <FloorCard initialPlans={floorPlans} initialElements={floorElements} initialChairMode={chairMode} businessId={business.id} />
           </div>
           <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
             <SectionHeader>Server sections</SectionHeader>
