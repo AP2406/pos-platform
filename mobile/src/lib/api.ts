@@ -9,6 +9,8 @@ import {
   type QuoteResponse,
   type KdsOp,
   type KdsMutateResponse,
+  type OrdersFulfillOp,
+  type OrdersFulfillResponse,
 } from "@surge/api-contracts";
 
 // Typed client for the shared v1 HTTP API. Every call carries the Supabase access
@@ -80,6 +82,17 @@ export async function kdsMutate(businessId: string, staffId: string | null, tick
     body: JSON.stringify({ op }),
   });
   return parse<KdsMutateResponse>(res);
+}
+
+// POST /api/v1/orders/:id/fulfill — Orders-hub Mark-ready / Reopen. Fulfillment
+// state (+ order-ready email on "ready"), not money.
+export async function ordersFulfill(businessId: string, staffId: string | null, orderId: string, op: OrdersFulfillOp): Promise<OrdersFulfillResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/orders/${orderId}/fulfill`, {
+    method: "POST",
+    headers: await authHeaders(businessId, staffId),
+    body: JSON.stringify({ op }),
+  });
+  return parse<OrdersFulfillResponse>(res);
 }
 
 // NOTE: order / tender / refund / tab money-write calls are intentionally absent —

@@ -2,14 +2,15 @@ import type { Surface, DeviceHome, NativeRoleAccess, NativeAccessConfig } from "
 
 export type { Surface, DeviceHome, NativeRoleAccess, NativeAccessConfig };
 
-export const ALL_SURFACES: Surface[] = ["floor", "register", "kds", "sales"];
+export const ALL_SURFACES: Surface[] = ["floor", "register", "kds", "sales", "orders"];
 
 // Route per surface.
-export const SURFACE_ROUTE: Record<Surface, "/floor" | "/register" | "/kds" | "/history"> = {
+export const SURFACE_ROUTE: Record<Surface, "/floor" | "/register" | "/kds" | "/history" | "/orders"> = {
   floor: "/floor",
   register: "/register",
   kds: "/kds",
   sales: "/history",
+  orders: "/orders",
 };
 
 // Sensible defaults per role (works before an owner configures anything). Handles
@@ -20,12 +21,12 @@ export function defaultRoleAccess(roleKey: string): NativeRoleAccess {
     case "manager":
     case "shift_lead":
     case "shiftlead":
-      return { surfaces: ["floor", "register", "kds", "sales"], home: "floor" };
+      return { surfaces: ["floor", "register", "kds", "sales", "orders"], home: "floor" };
     case "server":
     case "staff":
     case "waiter":
-      // Servers can glance at the kitchen (read-only — see canBumpKds).
-      return { surfaces: ["floor", "register", "kds"], home: "floor" };
+      // Servers can glance at the kitchen (read-only — see canBumpKds) + orders.
+      return { surfaces: ["floor", "register", "kds", "orders"], home: "floor" };
     case "host":
     case "trainee":
       return { surfaces: ["floor"], home: "floor" };

@@ -87,7 +87,7 @@ export type QuoteResponse = {
 // ---- Role-based native access (navigation gating; NOT security) -------------
 // RLS remains the real data boundary; this only decides which native surfaces a
 // role/device sees + where they land. Config lives in businesses.settings.native_access.
-export type Surface = "floor" | "register" | "kds" | "sales";
+export type Surface = "floor" | "register" | "kds" | "sales" | "orders";
 export type DeviceHome = "pos" | "kds";
 export type NativeRoleAccess = { surfaces: Surface[]; home: Surface };
 export type NativeAccessConfig = Record<string, NativeRoleAccess>; // keyed by role key
@@ -97,3 +97,9 @@ export type NativeAccessConfig = Record<string, NativeRoleAccess>; // keyed by r
 export type KdsOp = "bump" | "recall";
 export type KdsMutateRequest = { op: KdsOp };
 export type KdsMutateResponse = { ok: true };
+
+// ---- Order fulfillment (Orders hub; kitchen state, NOT money) ----------------
+// ready = mark fulfilled (+ order-ready email/SMS); reopen = clear fulfilled_at.
+export type OrdersFulfillOp = "ready" | "reopen";
+export type OrdersFulfillRequest = { op: OrdersFulfillOp };
+export type OrdersFulfillResponse = { ok: true };

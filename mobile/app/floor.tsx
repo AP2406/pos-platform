@@ -285,6 +285,9 @@ export default function Floor() {
               <Text style={[text.caption, view === "list" && { color: color.text }]}>List</Text>
             </Pressable>
           </View>
+          {(s.access?.surfaces ?? []).includes("orders") && (
+            <Button title="Orders" variant="ghost" onPress={() => router.push("/orders")} />
+          )}
           {(s.access?.surfaces ?? []).includes("sales") && (
             <Button title="Sales" variant="ghost" onPress={() => router.push("/history")} />
           )}

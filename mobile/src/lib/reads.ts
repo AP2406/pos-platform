@@ -210,6 +210,48 @@ export async function fetchTableAging(businessId: string): Promise<Aging> {
   return { yellowMin: Number(ta.yellow_min) || 60, redMin: Number(ta.red_min) || 90 };
 }
 
+// ---- Orders hub (fulfillment) -----------------------------------------------
+
+export type OrderHubRow = {
+  id: string;
+  saleNumber: number | null;
+  channel: string | null;
+  diningOption: string | null;
+  createdAt: string;
+  fulfilledAt: string | null;
+  total: number;
+  customerName: string | null;
+};
+
+// Today's non-voided orders for the fulfillment hub (channel-segmented).
+export async function fetchOrdersHub(businessId: string): Promise<OrderHubRow[]> {
+  const sinceIso = new Date(new Date().toDateString()).toISOString();
+  const { data, error } = await supabase
+    .from("orders")
+    .select("id, sale_number, channel, dining_option, created_at, fulfilled_at, total, customer:customers(name)")
+    .eq("business_id", businessId)
+    .neq("is_training", true)
+    .neq("status", "voided")
+    .gte("created_at", sinceIso)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  return (data ?? []).map((o) => {
+    const cust = o.customer as { name?: string } | { name?: string }[] | null;
+    const name = (Array.isArray(cust) ? cust[0]?.name : cust?.name) ?? null;
+    return {
+      id: o.id as string,
+      saleNumber: o.sale_number != null ? Number(o.sale_number) : null,
+      channel: (o.channel as string | null) ?? null,
+      diningOption: (o.dining_option as string | null) ?? null,
+      createdAt: o.created_at as string,
+      fulfilledAt: (o.fulfilled_at as string | null) ?? null,
+      total: Number(o.total) || 0,
+      customerName: name,
+    };
+  });
+}
+
 // ---- Order history (read-only) ----------------------------------------------
 
 export type SaleStatus = "paid" | "voided" | "refunded";
