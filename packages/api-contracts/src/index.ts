@@ -83,3 +83,9 @@ export type QuoteResponse = {
   total: number;
   taxBreakdown: { label: string; rate: number; base: number; amount: number }[];
 };
+
+// ---- KDS (kitchen state; NOT money) -----------------------------------------
+// Bump = fired -> ready (set fulfilled_at); recall = ready -> fired (clear it).
+export type KdsOp = "bump" | "recall";
+export type KdsMutateRequest = { op: KdsOp };
+export type KdsMutateResponse = { ok: true };

@@ -280,6 +280,7 @@ export default function Floor() {
               <Text style={[text.caption, view === "list" && { color: color.text }]}>List</Text>
             </Pressable>
           </View>
+          <Button title="Kitchen" variant="ghost" onPress={() => router.push("/kds")} />
           <Button title="New tab" variant="secondary" onPress={() => router.push("/register?mode=tab")} />
           <Button title="New to-go" onPress={() => router.push("/register?mode=togo")} />
         </View>

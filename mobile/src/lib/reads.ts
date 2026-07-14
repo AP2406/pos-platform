@@ -206,6 +206,75 @@ export async function fetchTableAging(businessId: string): Promise<Aging> {
   return { yellowMin: Number(ta.yellow_min) || 60, redMin: Number(ta.red_min) || 90 };
 }
 
+// ---- KDS (kitchen display) --------------------------------------------------
+
+export type KdsItem = { name: string; quantity: number; note: string | null; allergens: string[] };
+export type KitchenTicket = {
+  id: string;
+  label: string | null;
+  items: KdsItem[];
+  firedAt: string;
+  fulfilledAt: string | null;
+  stationId: string | null;
+  courseId: string | null;
+  rush: boolean;
+};
+
+export type KitchenStation = { id: string; name: string };
+
+function parseKdsItems(raw: unknown): KdsItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((it) => {
+    const o = (it ?? {}) as Record<string, unknown>;
+    const al = o.allergens;
+    return {
+      name: String(o.name ?? "Item"),
+      quantity: Number(o.quantity) || 1,
+      note: (o.note as string | null) ?? null,
+      allergens: Array.isArray(al) ? al.map((a) => String(a)) : [],
+    };
+  });
+}
+
+// Open (unbumped) tickets + those bumped in the last ~30 min (for the recall strip).
+export async function fetchKitchenTickets(businessId: string): Promise<KitchenTicket[]> {
+  const sinceIso = new Date(Date.now() - 30 * 60000).toISOString();
+  const { data, error } = await supabase
+    .from("kitchen_tickets")
+    .select("id, label, items, fired_at, fulfilled_at, station_id, course_id, rush")
+    .eq("business_id", businessId)
+    .or(`fulfilled_at.is.null,fulfilled_at.gt.${sinceIso}`)
+    .order("fired_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((t) => ({
+    id: t.id as string,
+    label: (t.label as string | null) ?? null,
+    items: parseKdsItems(t.items),
+    firedAt: t.fired_at as string,
+    fulfilledAt: (t.fulfilled_at as string | null) ?? null,
+    stationId: (t.station_id as string | null) ?? null,
+    courseId: (t.course_id as string | null) ?? null,
+    rush: (t.rush as boolean | null) === true,
+  }));
+}
+
+export async function fetchKitchenStations(businessId: string): Promise<KitchenStation[]> {
+  const { data, error } = await supabase
+    .from("kitchen_stations")
+    .select("id, name")
+    .eq("business_id", businessId)
+    .order("name", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((s) => ({ id: s.id as string, name: (s.name as string) || "Station" }));
+}
+
+// Kitchen aging thresholds from businesses.settings.kds (fallback 10 / 18 min).
+export async function fetchKdsAging(businessId: string): Promise<Aging> {
+  const { data } = await supabase.from("businesses").select("settings").eq("id", businessId).maybeSingle();
+  const kds = ((data?.settings ?? {}) as { kds?: { warnMin?: number; lateMin?: number } }).kds ?? {};
+  return { yellowMin: Number(kds.warnMin) || 10, redMin: Number(kds.lateMin) || 18 };
+}
+
 // Read an existing open check's cart lines (jsonb) so the register can resume it.
 export async function fetchCheckCart(ticketId: string): Promise<CheckLine[]> {
   const { data, error } = await supabase.from("open_tickets").select("cart").eq("id", ticketId).maybeSingle();

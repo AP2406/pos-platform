@@ -7,6 +7,8 @@ import {
   type ApprovalsVerifyResponse,
   type QuoteRequest,
   type QuoteResponse,
+  type KdsOp,
+  type KdsMutateResponse,
 } from "@surge/api-contracts";
 
 // Typed client for the shared v1 HTTP API. Every call carries the Supabase access
@@ -67,6 +69,17 @@ export async function quote(
     body: JSON.stringify(body),
   });
   return parse<QuoteResponse>(res);
+}
+
+// POST /api/v1/kds/:id — bump (fired->ready) / recall (ready->fired). Kitchen
+// state, not money.
+export async function kdsMutate(businessId: string, staffId: string | null, ticketId: string, op: KdsOp): Promise<KdsMutateResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/kds/${ticketId}`, {
+    method: "POST",
+    headers: await authHeaders(businessId, staffId),
+    body: JSON.stringify({ op }),
+  });
+  return parse<KdsMutateResponse>(res);
 }
 
 // NOTE: order / tender / refund / tab money-write calls are intentionally absent —
