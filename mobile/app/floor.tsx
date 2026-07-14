@@ -15,7 +15,7 @@ import {
   type TableStatus,
 } from "@/design";
 import { useSession } from "@/state/session";
-import { supabase } from "@/lib/supabase";
+import { supabase, realtimeChannel } from "@/lib/supabase";
 import {
   fetchFloorPlans,
   fetchFloorElements,
@@ -147,8 +147,7 @@ export default function Floor() {
   useEffect(() => {
     setNow(Date.now());
     loadLive();
-    const channel = supabase
-      .channel("floor-" + bizId)
+    const channel = realtimeChannel("floor-" + bizId)
       .on("postgres_changes", { event: "*", schema: "public", table: "open_tickets", filter: "business_id=eq." + bizId }, () => loadLive())
       .subscribe();
     const iv = setInterval(() => {

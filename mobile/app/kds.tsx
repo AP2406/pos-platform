@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { SegmentedTabs, KdsTicket, color, space, text } from "@/design";
 import { useSession } from "@/state/session";
-import { supabase } from "@/lib/supabase";
+import { supabase, realtimeChannel } from "@/lib/supabase";
 import { fetchKitchenTickets, fetchKitchenStations, fetchKdsAging, type KitchenTicket, type KitchenStation, type Aging } from "@/lib/reads";
 import { kdsMutate } from "@/lib/api";
 import { formatElapsed, minutesSince } from "@/lib/format";
@@ -52,8 +52,7 @@ export default function Kds() {
   useEffect(() => {
     setNow(Date.now());
     load();
-    const channel = supabase
-      .channel("kds-" + bizId)
+    const channel = realtimeChannel("kds-" + bizId)
       .on("postgres_changes", { event: "*", schema: "public", table: "kitchen_tickets", filter: "business_id=eq." + bizId }, () => load())
       .subscribe();
     const iv = setInterval(() => {
