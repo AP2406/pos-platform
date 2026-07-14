@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { SegmentedTabs, KdsTicket, color, space, text } from "@/design";
+import { SegmentedTabs, KdsTicket, ScreenHeader, EmptyState, color, space, text } from "@/design";
 import { useSession } from "@/state/session";
 import { supabase, realtimeChannel } from "@/lib/supabase";
 import { fetchKitchenTickets, fetchKitchenStations, fetchKdsAging, type KitchenTicket, type KitchenStation, type KdsItem, type Aging } from "@/lib/reads";
@@ -22,6 +22,7 @@ export default function Kds() {
   const router = useRouter();
   const bizId = s.businessId!;
   const staffId = s.staff?.id ?? null;
+  const hasFloor = (s.access?.surfaces ?? []).includes("floor");
   const canBump = canBumpKds(s.staff?.role ?? "", s.deviceHome); // servers get a read-only glance
 
   const [tickets, setTickets] = useState<KitchenTicket[]>([]);
@@ -119,27 +120,17 @@ export default function Kds() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <View style={styles.hl}>
-          {(s.access?.surfaces ?? []).includes("floor") ? (
-            <Pressable onPress={() => router.replace("/floor")} hitSlop={12}>
-              <Text style={text.bodyDim}>‹ Floor</Text>
-            </Pressable>
-          ) : (
-            <Pressable onPress={s.signOut} hitSlop={12}>
-              <Text style={text.bodyDim}>Sign out</Text>
-            </Pressable>
-          )}
-          <Text style={styles.title}>Kitchen</Text>
-          <Text style={text.caption}>
-            {cards.length} firing{rushCount > 0 ? " · " + rushCount + " rush" : ""}
-          </Text>
-        </View>
+      <ScreenHeader
+        title="Kitchen"
+        subtitle={cards.length + " firing" + (rushCount > 0 ? " · " + rushCount + " rush" : "")}
+        onBack={hasFloor ? () => router.replace("/floor") : undefined}
+        onSignOut={hasFloor ? undefined : s.signOut}
+      >
         {stationTabs.length > 1 && <SegmentedTabs tabs={stationTabs} value={station} onChange={setStation} />}
-      </View>
+      </ScreenHeader>
 
       <ScrollView contentContainerStyle={styles.grid}>
-        {cards.length === 0 && <Text style={[text.bodyDim, { padding: space.lg }]}>Nothing firing.</Text>}
+        {cards.length === 0 && <EmptyState>Nothing firing.</EmptyState>}
         {cards.map((c) => (
           <KdsTicket
             key={c.key}
@@ -175,9 +166,6 @@ export default function Kds() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
-  header: { paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs, gap: space.sm },
-  hl: { flexDirection: "row", alignItems: "baseline", gap: space.md },
-  title: { fontFamily: "Poppins_600SemiBold", fontSize: 20, color: color.text },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: space.md, padding: space.lg },
   recallStrip: { borderTopWidth: 1, borderTopColor: color.border, paddingVertical: space.sm, paddingHorizontal: space.lg, gap: space.xs },
   recallLabel: { fontFamily: "Poppins_500Medium", fontSize: 11, color: color.textDim },

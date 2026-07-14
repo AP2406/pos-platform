@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { SearchField, BottomSheet, color, space, text } from "@/design";
+import { SearchField, BottomSheet, ScreenHeader, EmptyState, color, space, text } from "@/design";
 import { useSession } from "@/state/session";
 import { fetchCustomers, fetchCustomerDetail, type CustomerRow, type CustomerDetail } from "@/lib/reads";
 import { money } from "@/lib/format";
@@ -48,19 +48,14 @@ export default function Customers() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.replace("/floor")} hitSlop={12}>
-          <Text style={text.bodyDim}>‹ Floor</Text>
-        </Pressable>
-        <Text style={styles.title}>Customers</Text>
-      </View>
+      <ScreenHeader title="Customers" onBack={() => router.replace("/floor")} />
 
       <View style={styles.searchWrap}>
         <SearchField value={term} onChangeText={setTerm} placeholder="Search name, phone, or email" />
       </View>
 
       <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
-        {rows.length === 0 && <Text style={[text.bodyDim, { padding: space.lg }]}>{term ? "No matches." : "No customers yet."}</Text>}
+        {rows.length === 0 && <EmptyState>{term ? "No matches." : "No customers yet."}</EmptyState>}
         {rows.map((c) => (
           <Pressable key={c.id} style={styles.row} onPress={() => open(c.id)}>
             <View style={styles.main}>
@@ -103,8 +98,6 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
-  header: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs },
-  title: { fontFamily: "Poppins_600SemiBold", fontSize: 20, color: color.text },
   searchWrap: { paddingHorizontal: space.lg, paddingVertical: space.xs },
   list: { padding: space.lg, gap: space.xs },
   row: { flexDirection: "row", alignItems: "center", gap: space.md, backgroundColor: color.card, borderRadius: 12, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.sm },

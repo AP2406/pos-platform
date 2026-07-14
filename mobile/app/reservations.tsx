@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Button, color, space, text } from "@/design";
+import { Button, ScreenHeader, EmptyState, color, space, text } from "@/design";
 import { useSession } from "@/state/session";
 import { supabase, realtimeChannel } from "@/lib/supabase";
 import { fetchReservations, type ReservationRow } from "@/lib/reads";
@@ -59,17 +59,10 @@ export default function Reservations() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.replace("/floor")} hitSlop={12}>
-          <Text style={text.bodyDim}>‹ Floor</Text>
-        </Pressable>
-        <Text style={styles.title}>Reservations</Text>
-        <View style={{ flex: 1 }} />
-        <Button title="Waitlist" variant="ghost" onPress={() => router.replace("/waitlist")} />
-      </View>
+      <ScreenHeader title="Reservations" onBack={() => router.replace("/floor")} right={<Button title="Waitlist" variant="ghost" onPress={() => router.replace("/waitlist")} />} />
 
       <ScrollView contentContainerStyle={styles.list}>
-        {bookings.length === 0 && <Text style={[text.bodyDim, { padding: space.lg }]}>No upcoming reservations.</Text>}
+        {bookings.length === 0 && <EmptyState>No upcoming reservations.</EmptyState>}
         {bookings.map((r) => (
           <View key={r.id} style={styles.row}>
             <View style={styles.main}>
@@ -102,8 +95,6 @@ export default function Reservations() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
-  header: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs },
-  title: { fontFamily: "Poppins_600SemiBold", fontSize: 20, color: color.text },
   list: { padding: space.lg, gap: space.xs },
   row: { flexDirection: "row", alignItems: "center", gap: space.md, backgroundColor: color.card, borderRadius: 12, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.sm },
   main: { flex: 1 },

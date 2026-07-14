@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Button, BottomSheet, color, radius, space, text } from "@/design";
+import { Button, BottomSheet, ScreenHeader, EmptyState, color, radius, space, text } from "@/design";
 import { useSession } from "@/state/session";
 import { supabase, realtimeChannel } from "@/lib/supabase";
 import { fetchReservations, type ReservationRow } from "@/lib/reads";
@@ -114,18 +114,19 @@ export default function Waitlist() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.replace("/floor")} hitSlop={12}>
-          <Text style={text.bodyDim}>‹ Floor</Text>
-        </Pressable>
-        <Text style={styles.title}>Waitlist</Text>
-        <View style={{ flex: 1 }} />
-        <Button title="Reservations" variant="ghost" onPress={() => router.replace("/reservations")} />
-        <Button title="Add" onPress={() => setAdding(true)} />
-      </View>
+      <ScreenHeader
+        title="Waitlist"
+        onBack={() => router.replace("/floor")}
+        right={
+          <>
+            <Button title="Reservations" variant="ghost" onPress={() => router.replace("/reservations")} />
+            <Button title="Add" onPress={() => setAdding(true)} />
+          </>
+        }
+      />
 
       <ScrollView contentContainerStyle={styles.list}>
-        {waiting.length === 0 && <Text style={[text.bodyDim, { padding: space.lg }]}>Nobody waiting.</Text>}
+        {waiting.length === 0 && <EmptyState>Nobody waiting.</EmptyState>}
         {waiting.map((r, i) => (
           <View key={r.id} style={styles.row}>
             <Text style={styles.pos}>{i + 1}</Text>
@@ -164,8 +165,6 @@ export default function Waitlist() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
-  header: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs },
-  title: { fontFamily: "Poppins_600SemiBold", fontSize: 20, color: color.text },
   list: { padding: space.lg, gap: space.xs },
   row: { flexDirection: "row", alignItems: "center", gap: space.md, backgroundColor: color.card, borderRadius: 12, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.sm },
   pos: { fontFamily: "Poppins_600SemiBold", fontSize: 16, color: color.textDim, minWidth: 20, textAlign: "center" },

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { SegmentedTabs, SearchField, color, space, text } from "@/design";
+import { SegmentedTabs, SearchField, ScreenHeader, EmptyState, color, space, text } from "@/design";
 import { useSession } from "@/state/session";
 import { fetchSalesHistory, type SaleRow, type SaleStatus } from "@/lib/reads";
 import { money } from "@/lib/format";
@@ -29,6 +29,7 @@ export default function History() {
   const s = useSession();
   const router = useRouter();
   const bizId = s.businessId!;
+  const hasFloor = (s.access?.surfaces ?? []).includes("floor");
   const [range, setRange] = useState<Range>("today");
   const [rows, setRows] = useState<SaleRow[]>([]);
   const [query, setQuery] = useState("");
@@ -56,21 +57,13 @@ export default function History() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <View style={styles.hl}>
-          {(s.access?.surfaces ?? []).includes("floor") && (
-            <Pressable onPress={() => router.replace("/floor")} hitSlop={12}>
-              <Text style={text.bodyDim}>‹ Floor</Text>
-            </Pressable>
-          )}
-          <Text style={styles.title}>Sales</Text>
-        </View>
+      <ScreenHeader title="Sales" onBack={hasFloor ? () => router.replace("/floor") : undefined} onSignOut={hasFloor ? undefined : s.signOut}>
         <SegmentedTabs tabs={RANGES} value={range} onChange={setRange} />
         <SearchField value={query} onChangeText={setQuery} placeholder="Search — sale # or customer" />
-      </View>
+      </ScreenHeader>
 
       <ScrollView contentContainerStyle={styles.list}>
-        {visible.length === 0 && <Text style={[text.bodyDim, { padding: space.lg }]}>No sales in this range.</Text>}
+        {visible.length === 0 && <EmptyState>No sales in this range.</EmptyState>}
         {visible.map((r) => {
           const st = STATUS[r.status];
           return (
@@ -93,19 +86,12 @@ export default function History() {
           );
         })}
       </ScrollView>
-
-      <Pressable onPress={s.signOut} style={styles.signout}>
-        <Text style={text.caption}>Sign out</Text>
-      </Pressable>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
-  header: { paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.sm },
-  hl: { flexDirection: "row", alignItems: "baseline", gap: space.md },
-  title: { fontFamily: "Poppins_600SemiBold", fontSize: 20, color: color.text },
   list: { padding: space.lg, gap: space.xs },
   row: { flexDirection: "row", alignItems: "center", gap: space.md, backgroundColor: color.card, borderRadius: 12, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.sm },
   rowMain: { flex: 1 },
@@ -114,5 +100,4 @@ const styles = StyleSheet.create({
   badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1 },
   badgeTxt: { fontFamily: "Poppins_500Medium", fontSize: 11 },
   total: { fontFamily: "Poppins_600SemiBold", fontSize: 15, color: color.text, minWidth: 80, textAlign: "right" },
-  signout: { alignItems: "center", paddingVertical: space.xs },
 });

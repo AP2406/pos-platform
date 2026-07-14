@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Button, color, space, text } from "@/design";
+import { Button, ScreenHeader, EmptyState, color, space, text } from "@/design";
 import { useSession } from "@/state/session";
 import { supabase, realtimeChannel } from "@/lib/supabase";
 import { fetchMyShift, fetchOnShift, type MyShift, type OnShiftRow } from "@/lib/reads";
@@ -73,12 +73,7 @@ export default function Clock() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.replace("/floor")} hitSlop={12}>
-          <Text style={text.bodyDim}>‹ Floor</Text>
-        </Pressable>
-        <Text style={styles.title}>Time clock</Text>
-      </View>
+      <ScreenHeader title="Time clock" onBack={() => router.replace("/floor")} />
 
       <ScrollView contentContainerStyle={styles.body}>
         {staffId ? (
@@ -104,11 +99,11 @@ export default function Clock() {
             )}
           </View>
         ) : (
-          <Text style={[text.bodyDim, { padding: space.lg }]}>No acting staff on this device.</Text>
+          <EmptyState>No acting staff on this device.</EmptyState>
         )}
 
         <Text style={styles.section}>On the clock ({roster.length})</Text>
-        {roster.length === 0 && <Text style={[text.bodyDim, { paddingHorizontal: space.lg }]}>Nobody is clocked in.</Text>}
+        {roster.length === 0 && <EmptyState>Nobody is clocked in.</EmptyState>}
         {roster.map((r) => (
           <View key={r.staffId} style={styles.row}>
             <Text style={styles.rowName}>{r.name}</Text>
@@ -125,8 +120,6 @@ export default function Clock() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
-  header: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs },
-  title: { fontFamily: "Poppins_600SemiBold", fontSize: 20, color: color.text },
   body: { padding: space.lg, gap: space.sm },
   card: { backgroundColor: color.card, borderRadius: 16, borderWidth: 1, borderColor: color.border, padding: space.lg, marginBottom: space.md },
   name: { fontFamily: "Poppins_600SemiBold", fontSize: 18, color: color.text, marginBottom: space.xs },

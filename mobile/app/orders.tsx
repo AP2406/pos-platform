@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { SegmentedTabs, Button, color, space, text } from "@/design";
+import { SegmentedTabs, Button, ScreenHeader, EmptyState, color, space, text } from "@/design";
 import { useSession } from "@/state/session";
 import { supabase, realtimeChannel } from "@/lib/supabase";
 import { fetchOrdersHub, type OrderHubRow } from "@/lib/reads";
@@ -39,6 +39,7 @@ export default function Orders() {
   const router = useRouter();
   const bizId = s.businessId!;
   const staffId = s.staff?.id ?? null;
+  const hasFloor = (s.access?.surfaces ?? []).includes("floor");
 
   const [rows, setRows] = useState<OrderHubRow[]>([]);
   const [chan, setChan] = useState<Channel | "all">("all");
@@ -104,20 +105,12 @@ export default function Orders() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <View style={styles.hl}>
-          {(s.access?.surfaces ?? []).includes("floor") ? (
-            <Pressable onPress={() => router.replace("/floor")} hitSlop={12}>
-              <Text style={text.bodyDim}>‹ Floor</Text>
-            </Pressable>
-          ) : (
-            <Pressable onPress={s.signOut} hitSlop={12}>
-              <Text style={text.bodyDim}>Sign out</Text>
-            </Pressable>
-          )}
-          <Text style={styles.title}>Orders</Text>
-          <Text style={text.caption}>{activeCount} active</Text>
-          <View style={styles.spacer} />
+      <ScreenHeader
+        title="Orders"
+        subtitle={activeCount + " active"}
+        onBack={hasFloor ? () => router.replace("/floor") : undefined}
+        onSignOut={hasFloor ? undefined : s.signOut}
+        right={
           <View style={styles.toggle}>
             <Pressable onPress={() => setView("active")} style={[styles.toggleBtn, view === "active" && styles.toggleOn]}>
               <Text style={[text.caption, view === "active" && { color: color.text }]}>Active</Text>
@@ -126,12 +119,13 @@ export default function Orders() {
               <Text style={[text.caption, view === "completed" && { color: color.text }]}>Completed</Text>
             </Pressable>
           </View>
-        </View>
+        }
+      >
         <SegmentedTabs tabs={chanTabs} value={chan} onChange={setChan} />
-      </View>
+      </ScreenHeader>
 
       <ScrollView contentContainerStyle={styles.list}>
-        {visible.length === 0 && <Text style={[text.bodyDim, { padding: space.lg }]}>No {view} orders.</Text>}
+        {visible.length === 0 && <EmptyState>{"No " + view + " orders."}</EmptyState>}
         {visible.map((r) => (
           <View key={r.id} style={styles.row}>
             <View style={styles.rowMain}>
@@ -158,10 +152,6 @@ export default function Orders() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
-  header: { paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.sm },
-  hl: { flexDirection: "row", alignItems: "center", gap: space.md },
-  title: { fontFamily: "Poppins_600SemiBold", fontSize: 20, color: color.text },
-  spacer: { flex: 1 },
   toggle: { flexDirection: "row", backgroundColor: color.card, borderRadius: 999, padding: 2, borderWidth: 1, borderColor: color.border },
   toggleBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: 999 },
   toggleOn: { backgroundColor: color.card2 },
