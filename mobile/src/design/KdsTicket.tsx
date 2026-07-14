@@ -16,6 +16,7 @@ export function KdsTicket({
   onBump,
   onRecall,
   busy,
+  readOnly,
 }: {
   label: string;
   elapsedLabel: string;
@@ -26,6 +27,7 @@ export function KdsTicket({
   onBump?: () => void;
   onRecall?: () => void;
   busy?: boolean;
+  readOnly?: boolean; // glance mode (server) — hide the Ready/Recall action
 }) {
   return (
     <View style={[styles.card, { borderLeftColor: agingColor }, rush ? styles.rush : null]}>
@@ -53,7 +55,9 @@ export function KdsTicket({
         {items.length === 0 ? <Text style={styles.note}>—</Text> : null}
       </View>
 
-      {fulfilled ? (
+      {readOnly ? (
+        <Text style={styles.glance}>{fulfilled ? "Ready" : "In kitchen"}</Text>
+      ) : fulfilled ? (
         <Button title="Recall" variant="secondary" onPress={onRecall} loading={busy} />
       ) : (
         <Button title="Ready" onPress={onBump} loading={busy} />
@@ -84,4 +88,5 @@ const styles = StyleSheet.create({
   name: { fontFamily: fontFamily.medium, fontSize: fontSize.body, color: color.text },
   note: { fontFamily: fontFamily.regular, fontSize: fontSize.caption, color: color.textDim },
   allergen: { fontFamily: fontFamily.semibold, fontSize: fontSize.caption, color: "#E5484D", marginTop: 1 },
+  glance: { fontFamily: fontFamily.medium, fontSize: fontSize.caption, color: color.textDim, textAlign: "center", paddingVertical: space.xs },
 });

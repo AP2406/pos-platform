@@ -24,7 +24,8 @@ export function defaultRoleAccess(roleKey: string): NativeRoleAccess {
     case "server":
     case "staff":
     case "waiter":
-      return { surfaces: ["floor", "register"], home: "floor" };
+      // Servers can glance at the kitchen (read-only — see canBumpKds).
+      return { surfaces: ["floor", "register", "kds"], home: "floor" };
     case "host":
     case "trainee":
       return { surfaces: ["floor"], home: "floor" };
@@ -37,6 +38,25 @@ export function defaultRoleAccess(roleKey: string): NativeRoleAccess {
       return { surfaces: ["kds"], home: "kds" };
     default:
       return { surfaces: ["floor", "register"], home: "floor" };
+  }
+}
+
+// Who can BUMP on the KDS (fired -> ready). A Kitchen-Display device lets anyone
+// bump; otherwise kitchen/manager/owner only. Servers/hosts get a READ-ONLY glance.
+export function canBumpKds(roleKey: string, deviceHome: DeviceHome | null): boolean {
+  if (deviceHome === "kds") return true;
+  switch ((roleKey || "").toLowerCase().replace(/[\s-]/g, "_")) {
+    case "owner":
+    case "manager":
+    case "shift_lead":
+    case "shiftlead":
+    case "kitchen":
+    case "cook":
+    case "line_cook":
+    case "kds":
+      return true;
+    default:
+      return false;
   }
 }
 

@@ -7,6 +7,7 @@ import { useSession } from "@/state/session";
 import { supabase, realtimeChannel } from "@/lib/supabase";
 import { fetchKitchenTickets, fetchKitchenStations, fetchKdsAging, type KitchenTicket, type KitchenStation, type Aging } from "@/lib/reads";
 import { kdsMutate } from "@/lib/api";
+import { canBumpKds } from "@/lib/access";
 import { formatElapsed, minutesSince } from "@/lib/format";
 
 function agingColor(firedAt: string, aging: Aging, now: number): string {
@@ -21,6 +22,7 @@ export default function Kds() {
   const router = useRouter();
   const bizId = s.businessId!;
   const staffId = s.staff?.id ?? null;
+  const canBump = canBumpKds(s.staff?.role ?? "", s.deviceHome); // servers get a read-only glance
 
   const [tickets, setTickets] = useState<KitchenTicket[]>([]);
   const [stations, setStations] = useState<KitchenStation[]>([]);
@@ -66,6 +68,7 @@ export default function Kds() {
   }, [bizId, load]);
 
   async function mutate(id: string, op: "bump" | "recall") {
+    if (!canBump) return; // read-only glance
     setBusyId(id);
     // Optimistic: bump removes from the open board; recall returns it.
     setTickets((ts) => ts.map((t) => (t.id === id ? { ...t, fulfilledAt: op === "bump" ? new Date(now || Date.now()).toISOString() : null } : t)));
@@ -128,12 +131,13 @@ export default function Kds() {
             rush={t.rush}
             items={t.items}
             busy={busyId === t.id}
+            readOnly={!canBump}
             onBump={() => mutate(t.id, "bump")}
           />
         ))}
       </ScrollView>
 
-      {recent.length > 0 && (
+      {canBump && recent.length > 0 && (
         <View style={styles.recallStrip}>
           <Text style={styles.recallLabel}>Recently ready — tap to recall</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recallRow}>
