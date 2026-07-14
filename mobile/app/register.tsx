@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useReducer, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -23,11 +23,14 @@ import {
 } from "@/design";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSession } from "@/state/session";
-import { fetchMenu, fetchCheckCart, fetchCourses, type MenuItem, type Course } from "@/lib/reads";
+import { fetchMenu, fetchCheckCart, fetchCourses, fetchUpsells, type MenuItem, type Course, type UpsellPrompt } from "@/lib/reads";
 import { itemNeedsSheet, type ModPosition } from "@/lib/modifiers";
+import { ALLERGENS, allergyString } from "@/lib/allergens";
 import { quote, verifyApprovals, fire } from "@/lib/api";
 import { cartReducer, initialCart, cartSubtotal, cartSeats, type DiningOption, type CartLine as Line } from "@/state/cart";
 import { money } from "@/lib/format";
+
+type Suggestion = { item: MenuItem; label: string; discount: number };
 
 const DINING: { key: DiningOption; label: string }[] = [
   { key: "dine_in", label: "Dine-in" },
@@ -53,6 +56,8 @@ export default function Register() {
   const [cart, dispatch] = useReducer(cartReducer, initialCart);
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [upsells, setUpsells] = useState<UpsellPrompt[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [cat, setCat] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [totals, setTotals] = useState({ subtotal: 0, tax: 0, total: 0 });
@@ -73,6 +78,7 @@ export default function Register() {
   const [fireOpen, setFireOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [lineEditId, setLineEditId] = useState<string | null>(null);
+  const [editAllergens, setEditAllergens] = useState<string[]>([]);
 
   const bizId = s.businessId!;
   const staffId = s.staff?.id ?? null;
@@ -83,9 +89,10 @@ export default function Register() {
   useEffect(() => {
     (async () => {
       try {
-        const [m, c] = await Promise.all([fetchMenu(bizId), fetchCourses(bizId)]);
+        const [m, c, u] = await Promise.all([fetchMenu(bizId), fetchCourses(bizId), fetchUpsells(bizId)]);
         setMenu(m);
         setCourses(c);
+        setUpsells(u);
       } catch {
         /* ignore */
       }
@@ -100,7 +107,7 @@ export default function Register() {
           const lines = await fetchCheckCart(params.ticket!);
           dispatch({
             type: "LOAD",
-            lines: lines.map((l) => ({ catalogItemId: l.catalogItemId, variationId: null, name: l.name, unitPrice: l.unitPrice, quantity: l.quantity, seat: l.seat, course: 1, note: l.note, modifiers: null, customized: false, firedQty: l.quantity })),
+            lines: lines.map((l) => ({ catalogItemId: l.catalogItemId, variationId: null, name: l.name, unitPrice: l.unitPrice, quantity: l.quantity, seat: l.seat, course: 1, note: l.note, modifiers: null, allergy: null, customized: false, firedQty: l.quantity })),
           });
         } catch {
           /* ignore */
@@ -151,6 +158,24 @@ export default function Register() {
 
   const seats = cartSeats(cart);
   const courseName = (n: number) => courses[n - 1]?.name ?? "Course " + n;
+  const seatLabel = (n: number) => {
+    const nm = (cart.seatNames[String(n)] || "").trim();
+    return nm ? "S" + n + " · " + nm : "Seat " + n;
+  };
+  const LABEL_TO_KEY: Record<string, string> = Object.fromEntries(ALLERGENS.map((a) => [a.label, a.key]));
+
+  // Open the line editor, seeding the allergen chips from the line's allergy string.
+  function openLineEditor(l: Line) {
+    setEditAllergens((l.allergy ?? "").split(",").map((s) => LABEL_TO_KEY[s.trim()]).filter(Boolean));
+    setLineEditId(l.id);
+  }
+  function toggleLineAllergen(lineId: string, key: string) {
+    setEditAllergens((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      dispatch({ type: "SET_LINE_ALLERGY", id: lineId, allergy: next.length ? allergyString(next) : null });
+      return next;
+    });
+  }
 
   // The course a new line of this item lands on (its default course, else active).
   function courseForItem(m: MenuItem): number {
@@ -160,6 +185,19 @@ export default function Register() {
       if (idx >= 0) return idx + 1;
     }
     return activeCourse;
+  }
+
+  // E6 suggestive-selling: when a trigger item/category is rung, surface its add-ons.
+  function maybeUpsell(m: MenuItem) {
+    if (upsells.length === 0) return;
+    const matches = upsells.filter((p) => (p.triggerScope === "item" && p.triggerItemId === m.id) || (p.triggerScope === "category" && !!p.triggerCategory && (m.category || "") === p.triggerCategory));
+    const out: Suggestion[] = [];
+    for (const p of matches) {
+      const si = menu.find((x) => x.id === p.suggestItemId);
+      if (!si || si.outOfStock || out.some((s) => s.item.id === si.id)) continue;
+      out.push({ item: si, label: p.label || "Add " + si.name + "?", discount: p.comboDiscount });
+    }
+    if (out.length > 0) setSuggestions(out);
   }
 
   // Tap a menu tile: force the picker for items with sizes/forced modifiers so a
@@ -176,6 +214,7 @@ export default function Register() {
       return;
     }
     dispatch({ type: "ADD", item: { catalogItemId: m.id, name: m.name, unitPrice: m.price }, course: courseForItem(m) });
+    maybeUpsell(m);
   }
 
   function onSheetConfirm(spec: ConfirmSpec) {
@@ -183,10 +222,23 @@ export default function Register() {
       dispatch({ type: "REPLACE_LINE", id: editLineId, spec: { catalogItemId: spec.catalogItemId, variationId: spec.variationId, name: spec.name, unitPrice: spec.unitPrice, note: spec.note, modifiers: spec.modifiers } });
     } else {
       const m = menu.find((x) => x.id === spec.catalogItemId);
-      dispatch({ type: "ADD_LINE", spec: { catalogItemId: spec.catalogItemId, variationId: spec.variationId, name: spec.name, unitPrice: spec.unitPrice, note: spec.note, modifiers: spec.modifiers, course: m ? courseForItem(m) : activeCourse } });
+      dispatch({ type: "ADD_LINE", spec: { catalogItemId: spec.catalogItemId, variationId: spec.variationId, name: spec.name, unitPrice: spec.unitPrice, note: spec.note, modifiers: spec.modifiers, allergy: spec.allergy, course: m ? courseForItem(m) : activeCourse } });
+      if (m) maybeUpsell(m);
     }
     setSheetItem(null);
     setEditLineId(null);
+  }
+
+  // Add a suggested upsell: items needing choices open the picker (combo discount
+  // skipped there); simple items drop straight in at the discounted combo price.
+  function addSuggested(sug: Suggestion) {
+    setSuggestions(null);
+    if (itemNeedsSheet(sug.item)) {
+      tapItem(sug.item);
+      return;
+    }
+    const price = Math.max(0, Math.round((sug.item.price - sug.discount) * 100) / 100);
+    dispatch({ type: "ADD", item: { catalogItemId: sug.item.id, name: sug.item.name, unitPrice: price }, course: courseForItem(sug.item) });
   }
 
   // Re-open the picker on an existing customized line, prefilled from its modifiers.
@@ -249,7 +301,7 @@ export default function Register() {
     if (unfired.length === 0 || sending) return;
     setSending(true);
     try {
-      const items = unfired.map((l) => ({ catalog_item_id: l.catalogItemId, name: l.name, unit_price: l.unitPrice, quantity: l.quantity - l.firedQty, note: l.note, seat: l.seat }));
+      const items = unfired.map((l) => ({ catalog_item_id: l.catalogItemId, name: l.name, unit_price: l.unitPrice, quantity: l.quantity - l.firedQty, note: l.note, seat: l.seat, allergy: l.allergy }));
       const res = await fire(bizId, staffId, {
         ticketId,
         elementId: params.element ?? null,
@@ -322,19 +374,29 @@ export default function Register() {
           <View style={styles.seatRow}>
             <SeatTab label="Check" active={cart.activeSeat == null} onPress={() => dispatch({ type: "SET_ACTIVE_SEAT", seat: null })} />
             {seats.map((n) => (
-              <SeatTab key={n} label={"Seat " + n} active={cart.activeSeat === n} onPress={() => dispatch({ type: "SET_ACTIVE_SEAT", seat: n })} />
+              <SeatTab key={n} label={seatLabel(n)} active={cart.activeSeat === n} onPress={() => dispatch({ type: "SET_ACTIVE_SEAT", seat: n })} />
             ))}
             <SeatTab label="+ Seat" onPress={() => dispatch({ type: "SET_ACTIVE_SEAT", seat: (seats[seats.length - 1] ?? 0) + 1 })} />
           </View>
+
+          {cart.activeSeat != null && (
+            <TextInput
+              value={cart.seatNames[String(cart.activeSeat)] ?? ""}
+              onChangeText={(t) => dispatch({ type: "SET_SEAT_NAME", seat: cart.activeSeat as number, name: t })}
+              placeholder={"Name Seat " + cart.activeSeat + " (optional)"}
+              placeholderTextColor={color.textFaint}
+              style={styles.seatName}
+            />
+          )}
 
           <ScrollView style={styles.lines}>
             {cart.lines.length === 0 && <Text style={[text.bodyDim, { paddingVertical: space.md }]}>Tap the menu to add items.</Text>}
             {cart.lines.map((l) => {
               const fired = l.firedQty >= l.quantity && l.quantity > 0;
-              const tag = [l.seat != null ? "S" + l.seat : null, coursingOn ? courseName(l.course) : null, fired ? "✓ fired" : l.firedQty > 0 ? l.firedQty + " fired" : null].filter(Boolean).join(" · ");
+              const tag = [l.seat != null ? seatLabel(l.seat) : null, coursingOn ? courseName(l.course) : null, fired ? "✓ fired" : l.firedQty > 0 ? l.firedQty + " fired" : null].filter(Boolean).join(" · ");
               return (
-                <Pressable key={l.id} onPress={() => setLineEditId(l.id)}>
-                  <CartLine name={l.name + (tag ? "  · " + tag : "")} qty={l.quantity} price={money(l.unitPrice * l.quantity, "CAD")} note={l.note ?? undefined} />
+                <Pressable key={l.id} onPress={() => openLineEditor(l)}>
+                  <CartLine name={l.name + (tag ? "  · " + tag : "")} qty={l.quantity} price={money(l.unitPrice * l.quantity, "CAD")} note={l.note ?? undefined} allergy={l.allergy ?? undefined} />
                 </Pressable>
               );
             })}
@@ -384,6 +446,20 @@ export default function Register() {
         <Button title={"Fire everything (" + unfiredCount + ")"} onPress={fireAll} disabled={unfiredCount === 0 || sending} loading={sending} />
       </BottomSheet>
 
+      {/* Suggestive-selling prompt */}
+      <BottomSheet visible={!!suggestions} onClose={() => setSuggestions(null)} title="Add to the order?">
+        {(suggestions ?? []).map((sug) => (
+          <Pressable key={sug.item.id} onPress={() => addSuggested(sug)} style={styles.suggest}>
+            <Text style={styles.suggestName}>{sug.label}</Text>
+            <Text style={text.bodyDim}>
+              {money(Math.max(0, sug.item.price - sug.discount), "CAD")}
+              {sug.discount > 0 ? "  (save " + money(sug.discount, "CAD") + ")" : ""}
+            </Text>
+          </Pressable>
+        ))}
+        <Button title="No thanks" variant="ghost" onPress={() => setSuggestions(null)} />
+      </BottomSheet>
+
       {/* Line editor — seat / course / options / remove */}
       <BottomSheet visible={!!editLine} onClose={() => setLineEditId(null)} title={editLine?.name}>
         {editLine ? (
@@ -392,7 +468,7 @@ export default function Register() {
             <View style={styles.seatRow}>
               <SeatTab label="Check" active={editLine.seat == null} onPress={() => dispatch({ type: "SET_LINE_SEAT", id: editLine.id, seat: null })} />
               {seats.map((n) => (
-                <SeatTab key={n} label={"Seat " + n} active={editLine.seat === n} onPress={() => dispatch({ type: "SET_LINE_SEAT", id: editLine.id, seat: n })} />
+                <SeatTab key={n} label={seatLabel(n)} active={editLine.seat === n} onPress={() => dispatch({ type: "SET_LINE_SEAT", id: editLine.id, seat: n })} />
               ))}
               <SeatTab label="+ Seat" onPress={() => dispatch({ type: "SET_LINE_SEAT", id: editLine.id, seat: (seats[seats.length - 1] ?? 0) + 1 })} />
             </View>
@@ -406,6 +482,17 @@ export default function Register() {
                 </View>
               </>
             )}
+            <Text style={text.caption}>Allergy alert</Text>
+            <View style={styles.chipRow}>
+              {ALLERGENS.map((a) => {
+                const on = editAllergens.includes(a.key);
+                return (
+                  <Pressable key={a.key} onPress={() => toggleLineAllergen(editLine.id, a.key)} style={[styles.chip, on && styles.chipOn]}>
+                    <Text style={[styles.chipTxt, on && styles.chipTxtOn]}>{a.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             <View style={styles.editActions}>
               <Button title="−" variant="secondary" onPress={() => dispatch({ type: "DEC", id: editLine.id })} style={{ flex: 1 }} />
               <Text style={styles.qtyVal}>{editLine.quantity}</Text>
@@ -477,4 +564,12 @@ const styles = StyleSheet.create({
   customAmt: { color: color.text, fontSize: 32, textAlign: "center", paddingVertical: space.sm },
   editActions: { flexDirection: "row", alignItems: "center", gap: space.md, marginVertical: space.xs },
   qtyVal: { fontFamily: "Poppins_600SemiBold", fontSize: 18, color: color.text, minWidth: 32, textAlign: "center" },
+  seatName: { backgroundColor: color.card2, borderRadius: radius.card, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.xs, color: color.text, fontFamily: "Poppins_400Regular", fontSize: 14 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  chip: { paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.pill, borderWidth: 1, borderColor: color.border },
+  chipOn: { backgroundColor: color.late, borderColor: color.late },
+  chipTxt: { fontFamily: "Poppins_500Medium", fontSize: 12, color: color.textDim },
+  chipTxtOn: { color: "#fff" },
+  suggest: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: space.md, borderRadius: radius.card, borderWidth: 1, borderColor: color.border, backgroundColor: color.card2 },
+  suggestName: { fontFamily: "Poppins_500Medium", fontSize: 15, color: color.text, flexShrink: 1 },
 });

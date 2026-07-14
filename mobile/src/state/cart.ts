@@ -17,6 +17,8 @@ export type CartLine = {
   note: string | null;
   // Structured modifiers chosen for this line (prices already inside unitPrice).
   modifiers: LineModifier[] | null;
+  // Per-line guest allergy alert (e.g. "Peanuts, Shellfish") — red on the KDS.
+  allergy: string | null;
   // Customized lines (variation/modifiers/note) never merge with a plain tap-add.
   customized: boolean;
   // How many of this line have already been fired to the kitchen (coursing).
@@ -31,6 +33,7 @@ export type LineSpec = {
   unitPrice: number;
   note?: string | null;
   modifiers?: LineModifier[] | null;
+  allergy?: string | null;
   course?: number;
 };
 
@@ -38,6 +41,8 @@ export type CartState = {
   lines: CartLine[];
   activeSeat: number | null;
   diningOption: DiningOption;
+  // Optional guest name per seat (keyed by seat number as a string).
+  seatNames: Record<string, string>;
   seq: number; // monotonic id source (deterministic — no Date.now/random)
 };
 
@@ -45,6 +50,7 @@ export const initialCart: CartState = {
   lines: [],
   activeSeat: null,
   diningOption: "dine_in",
+  seatNames: {},
   seq: 1,
 };
 
@@ -59,14 +65,16 @@ export type CartAction =
   | { type: "SET_LINE_SEAT"; id: string; seat: number | null }
   | { type: "SET_LINE_COURSE"; id: string; course: number }
   | { type: "SET_NOTE"; id: string; note: string | null }
+  | { type: "SET_LINE_ALLERGY"; id: string; allergy: string | null }
+  | { type: "SET_SEAT_NAME"; seat: number; name: string }
   | { type: "SET_DINING"; option: DiningOption }
   | { type: "MARK_FIRED"; ids: string[] }
   | { type: "LOAD"; lines: Omit<CartLine, "id">[] }
   | { type: "CLEAR" };
 
 // Defaults for the fields a plain tap-add doesn't set.
-function baseLine(): Pick<CartLine, "variationId" | "modifiers" | "customized" | "firedQty" | "note"> {
-  return { variationId: null, modifiers: null, customized: false, firedQty: 0, note: null };
+function baseLine(): Pick<CartLine, "variationId" | "modifiers" | "allergy" | "customized" | "firedQty" | "note"> {
+  return { variationId: null, modifiers: null, allergy: null, customized: false, firedQty: 0, note: null };
 }
 
 export function cartReducer(state: CartState, action: CartAction): CartState {
@@ -103,7 +111,7 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
         seq: state.seq + 1,
         lines: [
           ...state.lines,
-          { ...baseLine(), id, catalogItemId: sp.catalogItemId, variationId: sp.variationId ?? null, name: sp.name, unitPrice: sp.unitPrice, quantity: 1, seat: state.activeSeat, course: sp.course ?? 1, note: sp.note ?? null, modifiers: sp.modifiers ?? null, customized: true },
+          { ...baseLine(), id, catalogItemId: sp.catalogItemId, variationId: sp.variationId ?? null, name: sp.name, unitPrice: sp.unitPrice, quantity: 1, seat: state.activeSeat, course: sp.course ?? 1, note: sp.note ?? null, modifiers: sp.modifiers ?? null, allergy: sp.allergy ?? null, customized: true },
         ],
       };
     }
@@ -142,6 +150,15 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
       return { ...state, lines: state.lines.map((l) => (l.id === action.id ? { ...l, course: action.course } : l)) };
     case "SET_NOTE":
       return { ...state, lines: state.lines.map((l) => (l.id === action.id ? { ...l, note: action.note } : l)) };
+    case "SET_LINE_ALLERGY":
+      return { ...state, lines: state.lines.map((l) => (l.id === action.id ? { ...l, allergy: action.allergy } : l)) };
+    case "SET_SEAT_NAME": {
+      const name = action.name.trim().slice(0, 40);
+      const seatNames = { ...state.seatNames };
+      if (name) seatNames[String(action.seat)] = name;
+      else delete seatNames[String(action.seat)];
+      return { ...state, seatNames };
+    }
     case "SET_DINING":
       return { ...state, diningOption: action.option };
     case "LOAD": {

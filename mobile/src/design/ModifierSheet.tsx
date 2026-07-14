@@ -16,13 +16,14 @@ import {
   type Variation,
   type LineModifier,
 } from "../lib/modifiers";
+import { ALLERGENS, allergyString } from "../lib/allergens";
 
 // The item shape the sheet needs (a subset of MenuItem).
 export type SheetItem = { id: string; name: string; price: number; variations: Variation[]; modifierGroups: ModifierGroup[] };
 
 export type SheetInitial = { variationId: string | null; selected: string[]; positions: Record<string, ModPosition>; note: string };
 
-export type ConfirmSpec = { catalogItemId: string; variationId: string | null; name: string; unitPrice: number; note: string | null; modifiers: LineModifier[] };
+export type ConfirmSpec = { catalogItemId: string; variationId: string | null; name: string; unitPrice: number; note: string | null; modifiers: LineModifier[]; allergy: string | null };
 
 const money = (n: number) => "$" + (n || 0).toFixed(2);
 
@@ -46,6 +47,7 @@ export function ModifierSheet({
   const [selected, setSelected] = useState<string[]>([]);
   const [positions, setPositions] = useState<Record<string, ModPosition>>({});
   const [note, setNote] = useState("");
+  const [allergens, setAllergens] = useState<string[]>([]);
   // Re-seed state when the sheet opens for a (different) item.
   const [seededFor, setSeededFor] = useState<string | null>(null);
   const key = item ? item.id + (isEdit ? ":edit" : "") : null;
@@ -54,6 +56,7 @@ export function ModifierSheet({
     setSelected(initial?.selected ?? []);
     setPositions(initial?.positions ?? {});
     setNote(initial?.note ?? "");
+    setAllergens([]);
     setSeededFor(key);
   }
 
@@ -119,7 +122,7 @@ export function ModifierSheet({
 
   function confirm() {
     if (!item || !built || blocked) return;
-    onConfirm({ catalogItemId: item.id, variationId: built.variationId, name: built.name, unitPrice: built.unitPrice, note: note.trim() || null, modifiers: built.modifiers });
+    onConfirm({ catalogItemId: item.id, variationId: built.variationId, name: built.name, unitPrice: built.unitPrice, note: note.trim() || null, modifiers: built.modifiers, allergy: allergens.length ? allergyString(allergens) : null });
   }
 
   const cta = blocked
@@ -154,6 +157,19 @@ export function ModifierSheet({
               </View>
             )}
             {groups.map((g) => renderGroup(g, 0))}
+            <View style={styles.group}>
+              <Text style={[styles.groupName, { marginBottom: space.xs }]}>Allergy alert</Text>
+              <View style={styles.chips}>
+                {ALLERGENS.map((a) => {
+                  const on = allergens.includes(a.key);
+                  return (
+                    <Pressable key={a.key} onPress={() => setAllergens((prev) => (on ? prev.filter((k) => k !== a.key) : [...prev, a.key]))} style={[styles.chip, on && styles.chipOn]}>
+                      <Text style={[styles.chipTxt, on && styles.chipTxtOn]}>{a.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
             <TextInput value={note} onChangeText={setNote} placeholder="Note for the kitchen (optional)" placeholderTextColor={color.textFaint} style={styles.note} />
           </ScrollView>
           <Button title={cta} onPress={confirm} disabled={blocked} />
@@ -190,4 +206,9 @@ const styles = StyleSheet.create({
   splitTxt: { fontFamily: fontFamily.medium, fontSize: fontSize.caption, color: color.textDim },
   splitTxtOn: { color: color.text },
   note: { backgroundColor: color.card2, borderRadius: radius.card, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.sm, color: color.text, fontFamily: fontFamily.regular, fontSize: fontSize.body, marginTop: space.xs },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  chip: { paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.pill, borderWidth: 1, borderColor: color.border },
+  chipOn: { backgroundColor: color.late, borderColor: color.late },
+  chipTxt: { fontFamily: fontFamily.medium, fontSize: fontSize.caption, color: color.textDim },
+  chipTxtOn: { color: "#fff" },
 });

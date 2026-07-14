@@ -115,6 +115,7 @@ export type FireItemInput = {
   quantity: number;
   note?: string | null;
   seat?: number | null;
+  allergy?: string | null; // per-line guest allergy alert (red on the KDS)
 };
 export type FireRequest = {
   ticketId?: string | null; // existing open check to resume, else a new one is created

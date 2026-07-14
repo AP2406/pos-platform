@@ -121,6 +121,34 @@ export async function fetchCourses(businessId: string): Promise<Course[]> {
   return (data ?? []).map((c) => ({ id: c.id as string, name: (c.name as string) || "Course", sortOrder: Number(c.sort_order) || 0 }));
 }
 
+// E6 suggestive-selling: when a trigger item/category is rung, prompt an add-on.
+export type UpsellPrompt = {
+  triggerScope: "item" | "category";
+  triggerItemId: string | null;
+  triggerCategory: string | null;
+  suggestItemId: string;
+  label: string | null;
+  comboDiscount: number; // $ off the suggested item when added from the prompt
+};
+
+export async function fetchUpsells(businessId: string): Promise<UpsellPrompt[]> {
+  const { data, error } = await supabase
+    .from("upsell_prompts")
+    .select("trigger_scope, trigger_item_id, trigger_category, suggest_item_id, label, combo_discount")
+    .eq("business_id", businessId)
+    .eq("active", true)
+    .order("sort", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    triggerScope: (r.trigger_scope as string) === "category" ? "category" : "item",
+    triggerItemId: (r.trigger_item_id as string | null) ?? null,
+    triggerCategory: (r.trigger_category as string | null) ?? null,
+    suggestItemId: r.suggest_item_id as string,
+    label: (r.label as string | null) ?? null,
+    comboDiscount: Math.max(0, Number(r.combo_discount) || 0),
+  }));
+}
+
 export type OpenCheck = {
   id: string;
   label: string;

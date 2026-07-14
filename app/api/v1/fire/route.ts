@@ -41,6 +41,7 @@ export async function POST(req: Request) {
       quantity: Number(i.quantity) || 0,
       note: i.note ?? null,
       seat: i.seat ?? null,
+      allergy: i.allergy ?? null,
     })),
   });
   if ("error" in res) {

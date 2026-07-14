@@ -8,7 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Sb = SupabaseClient<any, "public", any>;
 
-export type FireItem = { catalog_item_id: string | null; name: string; unit_price: number; quantity: number; note?: string | null; seat?: number | null };
+export type FireItem = { catalog_item_id: string | null; name: string; unit_price: number; quantity: number; note?: string | null; seat?: number | null; allergy?: string | null };
 export type FireArgs = {
   businessId: string;
   staffId: string | null;
@@ -100,7 +100,12 @@ export async function fireToKitchen(supabase: Sb, args: FireArgs): Promise<{ tic
   for (const i of fireable) {
     const st = i.catalog_item_id ? stationByItem[i.catalog_item_id] ?? null : null;
     const arr = groups.get(st) ?? [];
-    arr.push({ name: i.name, quantity: Number(i.quantity) || 1, note: i.note ?? null, allergens: i.catalog_item_id ? allergensByItem[i.catalog_item_id] ?? [] : [] });
+    // The item's inherent allergens, plus any per-line guest allergy alert so the
+    // KDS flags it red alongside the dish.
+    const inherent = i.catalog_item_id ? allergensByItem[i.catalog_item_id] ?? [] : [];
+    const guest = (i.allergy ?? "").trim();
+    const allergens = guest ? [...inherent, ...guest.split(",").map((a) => a.trim()).filter(Boolean)] : inherent;
+    arr.push({ name: i.name, quantity: Number(i.quantity) || 1, note: i.note ?? null, allergens });
     groups.set(st, arr);
   }
   const rows = [...groups.entries()].map(([stationId, its]) => ({
