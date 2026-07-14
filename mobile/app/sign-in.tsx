@@ -78,6 +78,18 @@ export default function SignIn() {
             <Button title="Switch location" variant="ghost" onPress={() => s.pickBusiness("")} />
           </View>
         )}
+
+        {s.signedIn && (
+          <View style={styles.deviceRow}>
+            <Text style={text.caption}>This device:</Text>
+            <Pressable onPress={() => s.setDeviceHome(null)} style={[styles.deviceBtn, s.deviceHome !== "kds" && styles.deviceOn]}>
+              <Text style={[text.caption, s.deviceHome !== "kds" && { color: color.text }]}>POS</Text>
+            </Pressable>
+            <Pressable onPress={() => s.setDeviceHome("kds")} style={[styles.deviceBtn, s.deviceHome === "kds" && styles.deviceOn]}>
+              <Text style={[text.caption, s.deviceHome === "kds" && { color: color.text }]}>Kitchen Display</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -91,4 +103,7 @@ const styles = StyleSheet.create({
   bizRow: { minHeight: touch.min, borderRadius: radius.card, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   err: { color: color.late, fontSize: 13 },
   pinDots: { color: color.text, fontSize: 28, letterSpacing: 8, textAlign: "center", paddingVertical: space.sm },
+  deviceRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.lg },
+  deviceBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: 999, borderWidth: 1, borderColor: color.border, backgroundColor: color.card },
+  deviceOn: { borderColor: color.blue, backgroundColor: color.card2 },
 });

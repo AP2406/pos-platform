@@ -7,11 +7,13 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { color } from "@surge/design-tokens";
 import { SessionProvider, useSession } from "@/state/session";
+import { SURFACE_ROUTE, type Surface } from "@/lib/access";
 
 const queryClient = new QueryClient();
 
-// Redirect to sign-in until there's a Supabase session + an active business + a
-// staff PIN. Everything past the gate can assume a full session.
+// Route by session + ROLE ACCESS: sign-in until there's a full session, then land
+// on the role/device home and keep the signed-in user out of disallowed surfaces.
+// Navigation gating only — RLS remains the real data boundary.
 function Gate() {
   const s = useSession();
   const router = useRouter();
@@ -21,9 +23,14 @@ function Gate() {
     if (!s.ready) return;
     const onSignIn = segments[0] === "sign-in";
     const authed = s.signedIn && !!s.businessId && !!s.staff;
+    const home = SURFACE_ROUTE[s.access?.home ?? "floor"];
+    const allowed = new Set<string>((s.access?.surfaces ?? ["floor", "register"]).map((x: Surface) => SURFACE_ROUTE[x]));
+    const current = "/" + (segments[0] ?? "");
+
     if (!authed && !onSignIn) router.replace("/sign-in");
-    else if (authed && onSignIn) router.replace("/floor");
-  }, [s.ready, s.signedIn, s.businessId, s.staff, segments, router]);
+    else if (authed && onSignIn) router.replace(home);
+    else if (authed && segments[0] && current !== "/" && !allowed.has(current)) router.replace(home);
+  }, [s.ready, s.signedIn, s.businessId, s.staff, s.access, segments, router]);
 
   if (!s.ready) return <View style={{ flex: 1, backgroundColor: color.bg }} />;
   return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg } }} />;

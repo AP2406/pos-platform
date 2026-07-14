@@ -101,9 +101,15 @@ export default function Kds() {
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <View style={styles.hl}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Text style={text.bodyDim}>‹ Floor</Text>
-          </Pressable>
+          {(s.access?.surfaces ?? []).includes("floor") ? (
+            <Pressable onPress={() => router.replace("/floor")} hitSlop={12}>
+              <Text style={text.bodyDim}>‹ Floor</Text>
+            </Pressable>
+          ) : (
+            <Pressable onPress={s.signOut} hitSlop={12}>
+              <Text style={text.bodyDim}>Sign out</Text>
+            </Pressable>
+          )}
           <Text style={styles.title}>Kitchen</Text>
           <Text style={text.caption}>
             {open.length} firing{rushCount > 0 ? " · " + rushCount + " rush" : ""}

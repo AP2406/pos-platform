@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
+import { resolveNativeAccess, type NativeRoleAccess, type NativeAccessConfig, type DeviceHome } from "@/lib/access";
 
 export type Staff = { id: string; name: string; role: string };
 export type Biz = { id: string; name: string; role: string };
@@ -13,6 +14,9 @@ type SessionValue = {
   businessId: string | null;
   businessName: string | null;
   staff: Staff | null;
+  access: NativeRoleAccess | null; // allowed surfaces + home for the signed-in staff/device
+  deviceHome: DeviceHome | null; // this device's mode (null = POS default)
+  setDeviceHome: (mode: DeviceHome | null) => void;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   pickBusiness: (id: string) => Promise<void>;
@@ -29,6 +33,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [businesses, setBusinesses] = useState<Biz[]>([]);
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [staff, setStaff] = useState<Staff | null>(null);
+  const [nativeConfig, setNativeConfig] = useState<NativeAccessConfig | null>(null);
+  const [deviceHome, setDeviceHomeState] = useState<DeviceHome | null>(null);
 
   const loadBusinesses = useCallback(async (userId: string) => {
     const { data: members } = await supabase.from("business_members").select("business_id, role").eq("user_id", userId);
@@ -72,6 +78,35 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, [loadBusinesses]);
 
+  // This device's mode (persisted). A "kds" device always lands on KDS.
+  useEffect(() => {
+    AsyncStorage.getItem("surge_device_home").then((v) => setDeviceHomeState(v === "kds" ? "kds" : v === "pos" ? "pos" : null));
+  }, []);
+
+  const setDeviceHome = useCallback((mode: DeviceHome | null) => {
+    setDeviceHomeState(mode);
+    if (mode) AsyncStorage.setItem("surge_device_home", mode);
+    else AsyncStorage.removeItem("surge_device_home");
+  }, []);
+
+  // Owner's role->surface overrides (settings.native_access) for the active business.
+  useEffect(() => {
+    if (!businessId) {
+      setNativeConfig(null);
+      return;
+    }
+    (async () => {
+      const { data } = await supabase.from("businesses").select("settings").eq("id", businessId).maybeSingle();
+      const na = ((data?.settings ?? {}) as { native_access?: NativeAccessConfig }).native_access ?? null;
+      setNativeConfig(na);
+    })();
+  }, [businessId]);
+
+  const access = useMemo<NativeRoleAccess | null>(
+    () => (staff ? resolveNativeAccess(staff.role, nativeConfig, deviceHome) : deviceHome === "kds" ? resolveNativeAccess("", nativeConfig, deviceHome) : null),
+    [staff, nativeConfig, deviceHome]
+  );
+
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error) return { error: error.message };
@@ -113,13 +148,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       businessId,
       businessName: businesses.find((b) => b.id === businessId)?.name ?? null,
       staff,
+      access,
+      deviceHome,
+      setDeviceHome,
       signIn,
       signOut,
       pickBusiness,
       setStaffByPin,
       clearStaff,
     }),
-    [ready, userEmail, businesses, businessId, staff, signIn, signOut, pickBusiness, setStaffByPin, clearStaff]
+    [ready, userEmail, businesses, businessId, staff, access, deviceHome, setDeviceHome, signIn, signOut, pickBusiness, setStaffByPin, clearStaff]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

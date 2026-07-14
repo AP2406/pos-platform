@@ -84,6 +84,14 @@ export type QuoteResponse = {
   taxBreakdown: { label: string; rate: number; base: number; amount: number }[];
 };
 
+// ---- Role-based native access (navigation gating; NOT security) -------------
+// RLS remains the real data boundary; this only decides which native surfaces a
+// role/device sees + where they land. Config lives in businesses.settings.native_access.
+export type Surface = "floor" | "register" | "kds" | "sales";
+export type DeviceHome = "pos" | "kds";
+export type NativeRoleAccess = { surfaces: Surface[]; home: Surface };
+export type NativeAccessConfig = Record<string, NativeRoleAccess>; // keyed by role key
+
 // ---- KDS (kitchen state; NOT money) -----------------------------------------
 // Bump = fired -> ready (set fulfilled_at); recall = ready -> fired (clear it).
 export type KdsOp = "bump" | "recall";
