@@ -435,6 +435,148 @@ export async function fetchKdsAging(businessId: string): Promise<Aging> {
   return { yellowMin: Number(kds.warnMin) || 10, redMin: Number(kds.lateMin) || 18 };
 }
 
+// ---- Time clock (staff state) -----------------------------------------------
+
+export type MyShift = { onShift: boolean; onBreak: boolean; since: string | null; onBreakSince: string | null };
+
+// The acting staff member's own open shift (if any).
+export async function fetchMyShift(businessId: string, staffId: string): Promise<MyShift> {
+  const { data } = await supabase
+    .from("time_clock_entries")
+    .select("clock_in, on_break_since")
+    .eq("business_id", businessId)
+    .eq("staff_id", staffId)
+    .is("clock_out", null)
+    .maybeSingle();
+  if (!data) return { onShift: false, onBreak: false, since: null, onBreakSince: null };
+  return {
+    onShift: true,
+    onBreak: data.on_break_since != null,
+    since: (data.clock_in as string | null) ?? null,
+    onBreakSince: (data.on_break_since as string | null) ?? null,
+  };
+}
+
+export type OnShiftRow = { staffId: string; name: string; since: string; onBreakSince: string | null };
+
+// Everyone currently on the clock (glance for the whole floor).
+export async function fetchOnShift(businessId: string): Promise<OnShiftRow[]> {
+  const { data, error } = await supabase
+    .from("time_clock_entries")
+    .select("staff_id, clock_in, on_break_since, staff:staff_members(name)")
+    .eq("business_id", businessId)
+    .is("clock_out", null)
+    .order("clock_in", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((r) => {
+    const staff = Array.isArray(r.staff) ? r.staff[0] : r.staff;
+    return {
+      staffId: r.staff_id as string,
+      name: (staff?.name as string | undefined) ?? "Staff",
+      since: r.clock_in as string,
+      onBreakSince: (r.on_break_since as string | null) ?? null,
+    };
+  });
+}
+
+// ---- Reservations + waitlist (front-of-house state) -------------------------
+
+export type ReservationRow = {
+  id: string;
+  guestName: string;
+  partySize: number;
+  phone: string | null;
+  email: string | null;
+  scheduledAt: string | null; // null = walk-in waitlist entry
+  quotedWaitMin: number | null;
+  elementId: string | null;
+  status: string;
+  notes: string | null;
+  pagedAt: string | null;
+  createdAt: string;
+};
+
+// Active bookings + waitlist (excludes closed-out rows), soonest first.
+export async function fetchReservations(businessId: string): Promise<ReservationRow[]> {
+  const { data, error } = await supabase
+    .from("reservations")
+    .select("id, guest_name, party_size, phone, email, scheduled_at, quoted_wait_min, element_id, status, notes, paged_at, created_at")
+    .eq("business_id", businessId)
+    .in("status", ["booked", "waitlisted", "seated"])
+    .order("scheduled_at", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    guestName: (r.guest_name as string | null) ?? "",
+    partySize: Number(r.party_size) || 1,
+    phone: (r.phone as string | null) ?? null,
+    email: (r.email as string | null) ?? null,
+    scheduledAt: (r.scheduled_at as string | null) ?? null,
+    quotedWaitMin: r.quoted_wait_min == null ? null : Number(r.quoted_wait_min),
+    elementId: (r.element_id as string | null) ?? null,
+    status: (r.status as string | null) ?? "booked",
+    notes: (r.notes as string | null) ?? null,
+    pagedAt: (r.paged_at as string | null) ?? null,
+    createdAt: r.created_at as string,
+  }));
+}
+
+// ---- Customers (lookup; read-only) ------------------------------------------
+
+export type CustomerRow = { id: string; name: string; phone: string | null; email: string | null };
+
+// Search customers by name / phone / email (blank term = most recent).
+export async function fetchCustomers(businessId: string, term: string): Promise<CustomerRow[]> {
+  let q = supabase.from("customers").select("id, name, phone, email").eq("business_id", businessId);
+  const t = term.trim();
+  if (t) q = q.or(`name.ilike.%${t}%,phone.ilike.%${t}%,email.ilike.%${t}%`);
+  const { data, error } = await q.order("name", { ascending: true }).limit(50);
+  if (error) throw error;
+  return (data ?? []).map((c) => ({
+    id: c.id as string,
+    name: (c.name as string | null) || "Guest",
+    phone: (c.phone as string | null) ?? null,
+    email: (c.email as string | null) ?? null,
+  }));
+}
+
+export type CustomerDetail = CustomerRow & {
+  notes: string | null;
+  loyaltyPoints: number | null;
+  storeCredit: number; // dollars
+  visits: number;
+  lastVisit: string | null;
+};
+
+// Lookup extras: loyalty balance, store credit, visit count + last visit.
+export async function fetchCustomerDetail(businessId: string, customerId: string): Promise<CustomerDetail | null> {
+  const { data: c } = await supabase
+    .from("customers")
+    .select("id, name, phone, email, notes")
+    .eq("id", customerId)
+    .eq("business_id", businessId)
+    .maybeSingle();
+  if (!c) return null;
+  const [{ data: loy }, { data: sc }, { data: orders }] = await Promise.all([
+    supabase.from("loyalty_accounts").select("points").eq("business_id", businessId).eq("customer_id", customerId).maybeSingle(),
+    supabase.from("store_credit_accounts").select("balance_cents").eq("business_id", businessId).eq("customer_id", customerId).maybeSingle(),
+    supabase.from("orders").select("created_at").eq("business_id", businessId).eq("customer_id", customerId).neq("status", "voided").order("created_at", { ascending: false }).limit(500),
+  ]);
+  const rows = orders ?? [];
+  return {
+    id: c.id as string,
+    name: (c.name as string | null) || "Guest",
+    phone: (c.phone as string | null) ?? null,
+    email: (c.email as string | null) ?? null,
+    notes: (c.notes as string | null) ?? null,
+    loyaltyPoints: loy ? Number(loy.points) || 0 : null,
+    storeCredit: sc ? (Number(sc.balance_cents) || 0) / 100 : 0,
+    visits: rows.length,
+    lastVisit: rows.length ? (rows[0].created_at as string) : null,
+  };
+}
+
 // Read an existing open check's cart lines (jsonb) so the register can resume it.
 export async function fetchCheckCart(ticketId: string): Promise<CheckLine[]> {
   const { data, error } = await supabase.from("open_tickets").select("cart").eq("id", ticketId).maybeSingle();

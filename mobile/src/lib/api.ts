@@ -13,6 +13,12 @@ import {
   type OrdersFulfillResponse,
   type FireRequest,
   type FireResponse,
+  type ClockOp,
+  type ClockResponse,
+  type ReservationInput,
+  type ReservationCreateResponse,
+  type ReservationMutateRequest,
+  type ReservationMutateResponse,
 } from "@surge/api-contracts";
 
 // Typed client for the shared v1 HTTP API. Every call carries the Supabase access
@@ -106,6 +112,38 @@ export async function fire(businessId: string, staffId: string | null, body: Fir
     body: JSON.stringify(body),
   });
   return parse<FireResponse>(res);
+}
+
+// POST /api/v1/clock — the acting staff clocks in/out (op "toggle") or toggles a
+// break (op "break"). Staff state, not money.
+export async function clockToggle(businessId: string, staffId: string | null, op: ClockOp): Promise<ClockResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/clock`, {
+    method: "POST",
+    headers: await authHeaders(businessId, staffId),
+    body: JSON.stringify({ op }),
+  });
+  return parse<ClockResponse>(res);
+}
+
+// POST /api/v1/reservations — create a booking or walk-in waitlist entry. FOH state.
+export async function createReservation(businessId: string, staffId: string | null, body: ReservationInput): Promise<ReservationCreateResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/reservations`, {
+    method: "POST",
+    headers: await authHeaders(businessId, staffId),
+    body: JSON.stringify(body),
+  });
+  return parse<ReservationCreateResponse>(res);
+}
+
+// POST /api/v1/reservations/:id — advance status (seat/cancel/no-show/done) or
+// page a waitlisted guest. FOH state, not money.
+export async function reservationMutate(businessId: string, staffId: string | null, id: string, body: ReservationMutateRequest): Promise<ReservationMutateResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/reservations/${id}`, {
+    method: "POST",
+    headers: await authHeaders(businessId, staffId),
+    body: JSON.stringify(body),
+  });
+  return parse<ReservationMutateResponse>(res);
 }
 
 // NOTE: order / tender / refund / tab money-write calls are intentionally absent —

@@ -126,3 +126,45 @@ export type FireRequest = {
   items: FireItemInput[];
 };
 export type FireResponse = { ticketId: string; fired: number };
+
+// ---- Time clock (staff state; NOT money) ------------------------------------
+// The acting staff (X-Surge-Staff) clocks themselves in/out or toggles a break.
+// No PIN re-entry (context already verified the staff) and no schedule
+// enforcement — self-service on the staff member's own device.
+export type ClockOp = "toggle" | "break";
+export type ClockRequest = { op: ClockOp };
+export type ClockShift = { onShift: boolean; onBreak: boolean; since: string | null; onBreakSince: string | null };
+export type ClockResponse = ClockShift & { action: "in" | "out" | "break_start" | "break_end"; name: string };
+
+// ---- Reservations + waitlist (front-of-house state; NOT money) ---------------
+// One table holds future bookings (scheduledAt set) and walk-in waitlist entries
+// (scheduledAt null). Create preserves the confirmation email; "page" preserves
+// the table-ready SMS/email. No money anywhere.
+export type ReservationInput = {
+  guestName: string;
+  partySize: number;
+  phone?: string | null;
+  email?: string | null;
+  scheduledAt?: string | null; // ISO, or null/empty = walk-in waitlist
+  quotedWaitMin?: number | null;
+  notes?: string | null;
+};
+export type ReservationRow = {
+  id: string;
+  guestName: string;
+  partySize: number;
+  phone: string | null;
+  email: string | null;
+  scheduledAt: string | null;
+  quotedWaitMin: number | null;
+  elementId: string | null;
+  status: string; // booked | waitlisted | seated | cancelled | no_show | done
+  notes: string | null;
+  pagedAt: string | null;
+};
+export type ReservationCreateResponse = { reservation: ReservationRow; warning: string | null };
+export type ReservationStatus = "booked" | "waitlisted" | "seated" | "cancelled" | "no_show" | "done";
+export type ReservationMutateRequest =
+  | { op: "status"; status: ReservationStatus; elementId?: string | null }
+  | { op: "page" };
+export type ReservationMutateResponse = { ok: true; channel?: "sms" | "email" };

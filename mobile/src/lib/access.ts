@@ -13,6 +13,12 @@ export const SURFACE_ROUTE: Record<Surface, "/floor" | "/register" | "/kds" | "/
   orders: "/orders",
 };
 
+// Staff-tool routes reachable from the Floor (time clock, reservations, waitlist,
+// customers) — auxiliary utilities, not primary surfaces, so they carry no
+// device-home semantics. Any authed staff who can reach the Floor may open them;
+// RLS remains the real data boundary.
+export const AUX_ROUTES = ["/clock", "/reservations", "/waitlist", "/customers"] as const;
+
 // Sensible defaults per role (works before an owner configures anything). Handles
 // both the seeded role keys and the legacy enum values returned by the PIN gate.
 export function defaultRoleAccess(roleKey: string): NativeRoleAccess {

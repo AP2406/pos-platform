@@ -7,7 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { color } from "@surge/design-tokens";
 import { SessionProvider, useSession } from "@/state/session";
-import { SURFACE_ROUTE, type Surface } from "@/lib/access";
+import { SURFACE_ROUTE, AUX_ROUTES, type Surface } from "@/lib/access";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +25,8 @@ function Gate() {
     const authed = s.signedIn && !!s.businessId && !!s.staff;
     const home = SURFACE_ROUTE[s.access?.home ?? "floor"];
     const allowed = new Set<string>((s.access?.surfaces ?? ["floor", "register"]).map((x: Surface) => SURFACE_ROUTE[x]));
+    // Staff tools ride alongside the Floor — allow them whenever the Floor is.
+    if (allowed.has("/floor")) for (const r of AUX_ROUTES) allowed.add(r);
     const current = "/" + (segments[0] ?? "");
 
     if (!authed && !onSignIn) router.replace("/sign-in");

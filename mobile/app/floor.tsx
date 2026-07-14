@@ -8,6 +8,7 @@ import {
   TableCard,
   TableShape,
   Button,
+  BottomSheet,
   color,
   floor as F,
   space,
@@ -76,6 +77,7 @@ export default function Floor() {
   const scoped = !seesAllTables(s.staff?.role ?? "");
 
   const [view, setView] = useState<"map" | "list">("map");
+  const [moreOpen, setMoreOpen] = useState(false);
   const [plans, setPlans] = useState<FloorPlan[]>([]);
   const [activePlan, setActivePlan] = useState<string | null>(null);
   const [elements, setElements] = useState<FloorElement[]>([]);
@@ -294,6 +296,7 @@ export default function Floor() {
           {(s.access?.surfaces ?? []).includes("kds") && (
             <Button title="Kitchen" variant="ghost" onPress={() => router.push("/kds")} />
           )}
+          <Button title="More" variant="ghost" onPress={() => setMoreOpen(true)} />
           {(s.access?.surfaces ?? []).includes("register") && (
             <>
               <Button title="New tab" variant="secondary" onPress={() => router.push("/register?mode=tab")} />
@@ -411,6 +414,13 @@ export default function Floor() {
       <Pressable onPress={s.signOut} style={styles.signout}>
         <Text style={text.caption}>Sign out</Text>
       </Pressable>
+
+      <BottomSheet visible={moreOpen} onClose={() => setMoreOpen(false)} title="Staff tools">
+        <Button title="Time clock" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/clock"); }} />
+        <Button title="Reservations" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/reservations"); }} />
+        <Button title="Waitlist" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/waitlist"); }} />
+        <Button title="Customers" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/customers"); }} />
+      </BottomSheet>
     </SafeAreaView>
   );
 }
