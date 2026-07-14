@@ -11,13 +11,17 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.surgetechpos.pos"
     },
-    "plugins": ["expo-router", "expo-font"],
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-asset"
+    ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "supabaseUrl": "",
-      "supabaseAnonKey": "",
+      "supabaseUrl": "https://zbymwnfhbpdgfrykwrpd.supabase.co",
+      "supabaseAnonKey": "sb_publishable_Jx1T5pGsCBdruNYDTy-Ybg_-uyzPV0c",
       "apiBaseUrl": "https://app.surgetechpos.com"
     }
   }

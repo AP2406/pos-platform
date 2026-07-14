@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import type { ModOption, ModifierGroup, Variation } from "./modifiers";
 
 // Direct Supabase reads (RLS enforces tenancy). All money WRITES go through the
 // v1 HTTP API; these are pure reads for the floor + register.
@@ -10,17 +11,90 @@ export type MenuItem = {
   category: string | null;
   imageUrl: string | null;
   outOfStock: boolean;
+  defaultCourseId: string | null;
+  variations: Variation[];
+  // Nested modifier group tree (forced/required, min/max, half-split, follow-ups).
+  modifierGroups: ModifierGroup[];
 };
 
+// Build each item's modifier group tree exactly like the web POS (page.tsx):
+// flat catalog_item_modifiers point at catalog_modifier_groups; an option's
+// child_group_id nests a follow-up group (depth-capped); items with only loose
+// modifiers get one non-required "Add-ons" group.
+function buildModifierMaps(
+  mods: { id: string; catalog_item_id: string; name: string; price: number; group_id: string | null; child_group_id: string | null }[],
+  groups: { id: string; catalog_item_id: string; name: string; required: boolean; min_select: number; max_select: number | null; allow_split: boolean }[]
+): Record<string, ModifierGroup[]> {
+  type RawOpt = { id: string; name: string; price: number; child_group_id: string | null };
+  const optsByGroup: Record<string, RawOpt[]> = {};
+  const looseByItem: Record<string, RawOpt[]> = {};
+  for (const m of mods) {
+    const ro: RawOpt = { id: m.id, name: m.name, price: Number(m.price) || 0, child_group_id: m.child_group_id ?? null };
+    if (m.group_id) (optsByGroup[m.group_id] ??= []).push(ro);
+    else (looseByItem[m.catalog_item_id] ??= []).push(ro);
+  }
+  const rawGroupById = new Map<string, (typeof groups)[number]>();
+  const groupIdsByItem: Record<string, string[]> = {};
+  for (const g of groups) {
+    rawGroupById.set(g.id, g);
+    (groupIdsByItem[g.catalog_item_id] ??= []).push(g.id);
+  }
+  const childGroupIds = new Set<string>();
+  for (const arr of Object.values(optsByGroup)) for (const o of arr) if (o.child_group_id) childGroupIds.add(o.child_group_id);
+
+  function build(groupId: string, depth: number, seen: Set<string>): ModifierGroup | null {
+    const rg = rawGroupById.get(groupId);
+    if (!rg) return null;
+    const options: ModOption[] = (optsByGroup[groupId] ?? []).map((o) => {
+      let child: ModifierGroup | undefined;
+      if (o.child_group_id && depth < 3 && !seen.has(o.child_group_id)) {
+        const c = build(o.child_group_id, depth + 1, new Set([...seen, groupId]));
+        if (c && c.options.length > 0) child = c;
+      }
+      return { id: o.id, name: o.name, price: o.price, child_group: child };
+    });
+    return { id: rg.id, name: rg.name, required: rg.required, min_select: Number(rg.min_select) || 0, max_select: rg.max_select == null ? null : Number(rg.max_select), allow_split: rg.allow_split, options };
+  }
+
+  const byItem: Record<string, ModifierGroup[]> = {};
+  const itemIds = new Set([...Object.keys(groupIdsByItem), ...Object.keys(looseByItem)]);
+  for (const itemId of itemIds) {
+    const out: ModifierGroup[] = [];
+    for (const gid of groupIdsByItem[itemId] ?? []) {
+      if (childGroupIds.has(gid)) continue; // rendered nested, not top-level
+      const g = build(gid, 0, new Set());
+      if (g && g.options.length > 0) out.push(g);
+    }
+    const loose = looseByItem[itemId] ?? [];
+    if (loose.length > 0) out.push({ id: "loose:" + itemId, name: "Add-ons", required: false, min_select: 0, max_select: null, allow_split: false, options: loose.map((o) => ({ id: o.id, name: o.name, price: o.price })) });
+    byItem[itemId] = out;
+  }
+  return byItem;
+}
+
 export async function fetchMenu(businessId: string): Promise<MenuItem[]> {
-  const { data, error } = await supabase
-    .from("catalog_items")
-    .select("id, name, price, category, image_url, out_of_stock, is_active")
-    .eq("business_id", businessId)
-    .eq("is_active", true)
-    .order("category", { ascending: true })
-    .order("name", { ascending: true });
+  const [{ data, error }, { data: vars }, { data: mods }, { data: groups }] = await Promise.all([
+    supabase
+      .from("catalog_items")
+      .select("id, name, price, category, image_url, out_of_stock, default_course_id, is_active")
+      .eq("business_id", businessId)
+      .eq("is_active", true)
+      .order("category", { ascending: true })
+      .order("name", { ascending: true }),
+    supabase.from("catalog_item_variations").select("id, catalog_item_id, name, price").eq("business_id", businessId).eq("is_active", true).order("created_at", { ascending: true }),
+    supabase.from("catalog_item_modifiers").select("id, catalog_item_id, name, price, group_id, child_group_id, sort_order").eq("business_id", businessId).order("sort_order", { ascending: true }),
+    supabase.from("catalog_modifier_groups").select("id, catalog_item_id, name, required, min_select, max_select, allow_split, sort_order").eq("business_id", businessId).order("sort_order", { ascending: true }),
+  ]);
   if (error) throw error;
+
+  const varsByItem: Record<string, Variation[]> = {};
+  for (const v of vars ?? []) (varsByItem[v.catalog_item_id as string] ??= []).push({ id: v.id as string, name: (v.name as string) || "", price: Number(v.price) || 0 });
+
+  const groupsByItem = buildModifierMaps(
+    (mods ?? []).map((m) => ({ id: m.id as string, catalog_item_id: m.catalog_item_id as string, name: (m.name as string) || "", price: Number(m.price) || 0, group_id: (m.group_id as string | null) ?? null, child_group_id: (m.child_group_id as string | null) ?? null })),
+    (groups ?? []).map((g) => ({ id: g.id as string, catalog_item_id: g.catalog_item_id as string, name: (g.name as string) || "", required: (g.required as boolean | null) ?? false, min_select: Number(g.min_select) || 0, max_select: g.max_select == null ? null : Number(g.max_select), allow_split: (g.allow_split as boolean | null) ?? false }))
+  );
+
   return (data ?? []).map((r) => ({
     id: r.id as string,
     name: (r.name as string) || "Item",
@@ -28,7 +102,23 @@ export async function fetchMenu(businessId: string): Promise<MenuItem[]> {
     category: (r.category as string | null) ?? null,
     imageUrl: (r.image_url as string | null) ?? null,
     outOfStock: (r.out_of_stock as boolean | null) === true,
+    defaultCourseId: (r.default_course_id as string | null) ?? null,
+    variations: varsByItem[r.id as string] ?? [],
+    modifierGroups: groupsByItem[r.id as string] ?? [],
   }));
+}
+
+export type Course = { id: string; name: string; sortOrder: number };
+
+export async function fetchCourses(businessId: string): Promise<Course[]> {
+  const { data, error } = await supabase
+    .from("courses")
+    .select("id, name, sort_order")
+    .eq("business_id", businessId)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((c) => ({ id: c.id as string, name: (c.name as string) || "Course", sortOrder: Number(c.sort_order) || 0 }));
 }
 
 export type OpenCheck = {

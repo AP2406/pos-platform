@@ -11,17 +11,22 @@ import {
   SeatTab,
   NumPad,
   BottomSheet,
+  ModifierSheet,
   color,
   space,
   radius,
   text,
   gradient,
+  type SheetItem,
+  type SheetInitial,
+  type ConfirmSpec,
 } from "@/design";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSession } from "@/state/session";
-import { fetchMenu, fetchCheckCart, type MenuItem } from "@/lib/reads";
+import { fetchMenu, fetchCheckCart, fetchCourses, type MenuItem, type Course } from "@/lib/reads";
+import { itemNeedsSheet, type ModPosition } from "@/lib/modifiers";
 import { quote, verifyApprovals, fire } from "@/lib/api";
-import { cartReducer, initialCart, cartSubtotal, cartSeats, type DiningOption } from "@/state/cart";
+import { cartReducer, initialCart, cartSubtotal, cartSeats, type DiningOption, type CartLine as Line } from "@/state/cart";
 import { money } from "@/lib/format";
 
 const DINING: { key: DiningOption; label: string }[] = [
@@ -47,6 +52,7 @@ export default function Register() {
 
   const [cart, dispatch] = useReducer(cartReducer, initialCart);
   const [menu, setMenu] = useState<MenuItem[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [cat, setCat] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [totals, setTotals] = useState({ subtotal: 0, tax: 0, total: 0 });
@@ -54,14 +60,32 @@ export default function Register() {
   const [customPrice, setCustomPrice] = useState("");
   const [splitOpen, setSplitOpen] = useState(false);
 
+  // The open check id — from params, or captured from the first fire of a new check
+  // so subsequent course fires append to the same ticket.
+  const [ticketId, setTicketId] = useState<string | null>(params.ticket ?? null);
+
+  // Modifier picker: the item being customized + (for edits) the line it came from.
+  const [sheetItem, setSheetItem] = useState<SheetItem | null>(null);
+  const [sheetInitial, setSheetInitial] = useState<SheetInitial | undefined>(undefined);
+  const [editLineId, setEditLineId] = useState<string | null>(null);
+
+  const [activeCourse, setActiveCourse] = useState(1);
+  const [fireOpen, setFireOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [lineEditId, setLineEditId] = useState<string | null>(null);
+
   const bizId = s.businessId!;
   const staffId = s.staff?.id ?? null;
+  const tableMode = !!params.element;
+  const coursingOn = tableMode && courses.length > 0;
 
-  // Load menu + (optionally) an existing check / mode.
+  // Load menu + courses.
   useEffect(() => {
     (async () => {
       try {
-        setMenu(await fetchMenu(bizId));
+        const [m, c] = await Promise.all([fetchMenu(bizId), fetchCourses(bizId)]);
+        setMenu(m);
+        setCourses(c);
       } catch {
         /* ignore */
       }
@@ -76,19 +100,17 @@ export default function Register() {
           const lines = await fetchCheckCart(params.ticket!);
           dispatch({
             type: "LOAD",
-            lines: lines.map((l) => ({ catalogItemId: l.catalogItemId, name: l.name, unitPrice: l.unitPrice, quantity: l.quantity, seat: l.seat, course: 1, note: l.note })),
+            lines: lines.map((l) => ({ catalogItemId: l.catalogItemId, variationId: null, name: l.name, unitPrice: l.unitPrice, quantity: l.quantity, seat: l.seat, course: 1, note: l.note, modifiers: null, customized: false, firedQty: l.quantity })),
           });
         } catch {
           /* ignore */
         }
       })();
     }
-    // Only on first mount for these params.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Totals via the compute-only /api/v1/quote (matches the eventual charge). Falls
-  // back to a bare subtotal if the network hiccups.
+  // Totals via compute-only /api/v1/quote (matches the eventual charge).
   useEffect(() => {
     const items = cart.lines.map((l) => ({ catalog_item_id: l.catalogItemId, unit_price: l.unitPrice, quantity: l.quantity }));
     if (items.length === 0) {
@@ -128,10 +150,65 @@ export default function Register() {
   }, [menu, cat, search]);
 
   const seats = cartSeats(cart);
+  const courseName = (n: number) => courses[n - 1]?.name ?? "Course " + n;
+
+  // The course a new line of this item lands on (its default course, else active).
+  function courseForItem(m: MenuItem): number {
+    if (!coursingOn) return 1;
+    if (m.defaultCourseId) {
+      const idx = courses.findIndex((c) => c.id === m.defaultCourseId);
+      if (idx >= 0) return idx + 1;
+    }
+    return activeCourse;
+  }
+
+  // Tap a menu tile: force the picker for items with sizes/forced modifiers so a
+  // line can never exist with an unmet required group; otherwise quick-add.
+  function tapItem(m: MenuItem) {
+    if (m.outOfStock) {
+      Alert.alert("86'd", m.name + " is out of stock.");
+      return;
+    }
+    if (itemNeedsSheet(m)) {
+      setEditLineId(null);
+      setSheetInitial(undefined);
+      setSheetItem(m);
+      return;
+    }
+    dispatch({ type: "ADD", item: { catalogItemId: m.id, name: m.name, unitPrice: m.price }, course: courseForItem(m) });
+  }
+
+  function onSheetConfirm(spec: ConfirmSpec) {
+    if (editLineId) {
+      dispatch({ type: "REPLACE_LINE", id: editLineId, spec: { catalogItemId: spec.catalogItemId, variationId: spec.variationId, name: spec.name, unitPrice: spec.unitPrice, note: spec.note, modifiers: spec.modifiers } });
+    } else {
+      const m = menu.find((x) => x.id === spec.catalogItemId);
+      dispatch({ type: "ADD_LINE", spec: { catalogItemId: spec.catalogItemId, variationId: spec.variationId, name: spec.name, unitPrice: spec.unitPrice, note: spec.note, modifiers: spec.modifiers, course: m ? courseForItem(m) : activeCourse } });
+    }
+    setSheetItem(null);
+    setEditLineId(null);
+  }
+
+  // Re-open the picker on an existing customized line, prefilled from its modifiers.
+  function editLineOptions(l: Line) {
+    const m = menu.find((x) => x.id === l.catalogItemId);
+    if (!m) return;
+    const positions: Record<string, ModPosition> = {};
+    for (const mod of l.modifiers ?? []) if (mod.modifier_id && mod.position && mod.position !== "whole") positions[mod.modifier_id] = mod.position;
+    setSheetInitial({
+      variationId: l.variationId,
+      selected: (l.modifiers ?? []).map((mod) => mod.modifier_id).filter((x): x is string => !!x),
+      positions,
+      note: l.note ?? "",
+    });
+    setEditLineId(l.id);
+    setLineEditId(null);
+    setSheetItem(m);
+  }
 
   function addCustom() {
     const price = Math.round((Number(customPrice) || 0) * 100) / 100;
-    if (price > 0) dispatch({ type: "ADD", item: { catalogItemId: null, name: "Custom", unitPrice: price } });
+    if (price > 0) dispatch({ type: "ADD", item: { catalogItemId: null, name: "Custom", unitPrice: price }, course: coursingOn ? activeCourse : 1 });
     setCustomPrice("");
     setCustomOpen(false);
   }
@@ -146,8 +223,6 @@ export default function Register() {
       Alert.alert(a.label, `${a.label} is part of the write path — deferred until the live money test.`);
       return;
     }
-    // Sensitive: exercise the LIVE verify-only endpoint (no money moves). Applying
-    // the action to the check is deferred.
     try {
       const res = await verifyApprovals(bizId, staffId, { actions: [{ present: true, label: a.label, permKey: a.permKey, amount: null }] });
       if ("blocked" in res && res.blocked.length > 0) {
@@ -167,30 +242,49 @@ export default function Register() {
     );
   }
 
-  const [sending, setSending] = useState(false);
-  // Fire the cart to the kitchen — money-independent (open check + kitchen tickets).
-  async function onSend() {
-    if (cart.lines.length === 0 || sending) return;
+  // Fire a set of (unfired) lines to the kitchen — money-independent. Persists the
+  // open check + kitchen tickets, captures the ticket id for later course fires.
+  async function fireLines(lines: Line[], label: string, andExit: boolean) {
+    const unfired = lines.filter((l) => l.firedQty < l.quantity);
+    if (unfired.length === 0 || sending) return;
     setSending(true);
     try {
-      const items = cart.lines.map((l) => ({ catalog_item_id: l.catalogItemId, name: l.name, unit_price: l.unitPrice, quantity: l.quantity, note: l.note, seat: l.seat }));
+      const items = unfired.map((l) => ({ catalog_item_id: l.catalogItemId, name: l.name, unit_price: l.unitPrice, quantity: l.quantity - l.firedQty, note: l.note, seat: l.seat }));
       const res = await fire(bizId, staffId, {
-        ticketId: params.ticket ?? null,
+        ticketId,
         elementId: params.element ?? null,
-        label: params.table || (params.mode === "togo" ? "Takeout" : params.mode === "tab" ? "Tab" : null),
+        label,
         ticketType: params.element ? "table" : params.mode === "tab" ? "bar" : "togo",
         channel: cart.diningOption,
         items,
       });
-      Alert.alert("Sent to kitchen", res.fired + (res.fired === 1 ? " item" : " items") + " fired.");
-      dispatch({ type: "CLEAR" });
-      router.replace("/floor");
+      setTicketId(res.ticketId);
+      dispatch({ type: "MARK_FIRED", ids: unfired.map((l) => l.id) });
+      if (andExit) {
+        Alert.alert("Sent to kitchen", res.fired + (res.fired === 1 ? " item" : " items") + " fired.");
+        dispatch({ type: "CLEAR" });
+        router.replace("/floor");
+      }
     } catch (e) {
       Alert.alert("Couldn't send", String((e as Error).message));
     } finally {
       setSending(false);
     }
   }
+
+  const baseLabel = params.table || (params.mode === "togo" ? "Takeout" : params.mode === "tab" ? "Tab" : "Ticket");
+  const unfiredCount = cart.lines.reduce((n, l) => n + Math.max(0, l.quantity - l.firedQty), 0);
+
+  async function fireCourse(n: number) {
+    await fireLines(cart.lines.filter((l) => l.course === n), baseLabel + " · " + courseName(n), false);
+    setFireOpen(false);
+  }
+  async function fireAll() {
+    await fireLines(cart.lines, baseLabel, !coursingOn);
+    setFireOpen(false);
+  }
+
+  const editLine = cart.lines.find((l) => l.id === lineEditId) ?? null;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -207,12 +301,7 @@ export default function Register() {
           <SegmentedTabs tabs={categories} value={cat} onChange={setCat} />
           <ScrollView contentContainerStyle={styles.menuGrid}>
             {shownMenu.map((m) => (
-              <MenuTile
-                key={m.id}
-                name={m.name}
-                price={money(m.price, "CAD")}
-                onPress={() => dispatch({ type: "ADD", item: { catalogItemId: m.id, name: m.name, unitPrice: m.price } })}
-              />
+              <MenuTile key={m.id} name={m.name + (m.outOfStock ? " (86)" : "")} price={money(m.price, "CAD")} onPress={() => tapItem(m)} />
             ))}
             {shownMenu.length === 0 && <Text style={[text.bodyDim, { padding: space.md }]}>No items.</Text>}
           </ScrollView>
@@ -221,6 +310,14 @@ export default function Register() {
         {/* Cart side */}
         <View style={styles.cartSide}>
           <SegmentedTabs tabs={DINING} value={cart.diningOption} onChange={(o) => dispatch({ type: "SET_DINING", option: o })} />
+
+          {coursingOn && (
+            <View style={styles.courseRow}>
+              {courses.map((c, i) => (
+                <SeatTab key={c.id} label={c.name} active={activeCourse === i + 1} onPress={() => setActiveCourse(i + 1)} />
+              ))}
+            </View>
+          )}
 
           <View style={styles.seatRow}>
             <SeatTab label="Check" active={cart.activeSeat == null} onPress={() => dispatch({ type: "SET_ACTIVE_SEAT", seat: null })} />
@@ -232,16 +329,15 @@ export default function Register() {
 
           <ScrollView style={styles.lines}>
             {cart.lines.length === 0 && <Text style={[text.bodyDim, { paddingVertical: space.md }]}>Tap the menu to add items.</Text>}
-            {cart.lines.map((l) => (
-              <Pressable key={l.id} onLongPress={() => dispatch({ type: "REMOVE", id: l.id })}>
-                <CartLine
-                  name={l.name + (l.seat != null ? "  · S" + l.seat : "")}
-                  qty={l.quantity}
-                  price={money(l.unitPrice * l.quantity, "CAD")}
-                  note={l.note ?? undefined}
-                />
-              </Pressable>
-            ))}
+            {cart.lines.map((l) => {
+              const fired = l.firedQty >= l.quantity && l.quantity > 0;
+              const tag = [l.seat != null ? "S" + l.seat : null, coursingOn ? courseName(l.course) : null, fired ? "✓ fired" : l.firedQty > 0 ? l.firedQty + " fired" : null].filter(Boolean).join(" · ");
+              return (
+                <Pressable key={l.id} onPress={() => setLineEditId(l.id)}>
+                  <CartLine name={l.name + (tag ? "  · " + tag : "")} qty={l.quantity} price={money(l.unitPrice * l.quantity, "CAD")} note={l.note ?? undefined} />
+                </Pressable>
+              );
+            })}
           </ScrollView>
 
           <View style={styles.actionsGrid}>
@@ -258,7 +354,11 @@ export default function Register() {
             <Row label="Total" value={money(totals.total, "CAD")} bold />
           </View>
 
-          <Button title="Send to kitchen" onPress={onSend} loading={sending} disabled={cart.lines.length === 0} style={{ marginBottom: space.sm }} />
+          {coursingOn ? (
+            <Button title={"Fire course…" + (unfiredCount > 0 ? " (" + unfiredCount + ")" : "")} onPress={() => setFireOpen(true)} disabled={unfiredCount === 0} style={{ marginBottom: space.sm }} />
+          ) : (
+            <Button title="Send to kitchen" onPress={() => fireLines(cart.lines, baseLabel, true)} loading={sending} disabled={unfiredCount === 0} style={{ marginBottom: space.sm }} />
+          )}
 
           <View style={styles.pay}>
             <Button title="Split" variant="ghost" onPress={() => setSplitOpen(true)} style={{ flex: 1 }} />
@@ -270,6 +370,58 @@ export default function Register() {
           </View>
         </View>
       </View>
+
+      {/* Forced/nested modifier picker */}
+      <ModifierSheet item={sheetItem} initial={sheetInitial} isEdit={!!editLineId} onClose={() => { setSheetItem(null); setEditLineId(null); }} onConfirm={onSheetConfirm} />
+
+      {/* Fire by course */}
+      <BottomSheet visible={fireOpen} onClose={() => setFireOpen(false)} title="Fire to kitchen">
+        {courses.map((c, i) => {
+          const n = i + 1;
+          const pending = cart.lines.filter((l) => l.course === n).reduce((x, l) => x + Math.max(0, l.quantity - l.firedQty), 0);
+          return <Button key={c.id} title={c.name + (pending > 0 ? " · " + pending : " · nothing new")} variant="secondary" disabled={pending === 0 || sending} onPress={() => fireCourse(n)} />;
+        })}
+        <Button title={"Fire everything (" + unfiredCount + ")"} onPress={fireAll} disabled={unfiredCount === 0 || sending} loading={sending} />
+      </BottomSheet>
+
+      {/* Line editor — seat / course / options / remove */}
+      <BottomSheet visible={!!editLine} onClose={() => setLineEditId(null)} title={editLine?.name}>
+        {editLine ? (
+          <>
+            <Text style={text.caption}>Seat</Text>
+            <View style={styles.seatRow}>
+              <SeatTab label="Check" active={editLine.seat == null} onPress={() => dispatch({ type: "SET_LINE_SEAT", id: editLine.id, seat: null })} />
+              {seats.map((n) => (
+                <SeatTab key={n} label={"Seat " + n} active={editLine.seat === n} onPress={() => dispatch({ type: "SET_LINE_SEAT", id: editLine.id, seat: n })} />
+              ))}
+              <SeatTab label="+ Seat" onPress={() => dispatch({ type: "SET_LINE_SEAT", id: editLine.id, seat: (seats[seats.length - 1] ?? 0) + 1 })} />
+            </View>
+            {coursingOn && (
+              <>
+                <Text style={text.caption}>Course</Text>
+                <View style={styles.seatRow}>
+                  {courses.map((c, i) => (
+                    <SeatTab key={c.id} label={c.name} active={editLine.course === i + 1} onPress={() => dispatch({ type: "SET_LINE_COURSE", id: editLine.id, course: i + 1 })} />
+                  ))}
+                </View>
+              </>
+            )}
+            <View style={styles.editActions}>
+              <Button title="−" variant="secondary" onPress={() => dispatch({ type: "DEC", id: editLine.id })} style={{ flex: 1 }} />
+              <Text style={styles.qtyVal}>{editLine.quantity}</Text>
+              <Button title="+" variant="secondary" onPress={() => dispatch({ type: "INC", id: editLine.id })} style={{ flex: 1 }} />
+            </View>
+            {editLine.customized && editLine.firedQty === 0 && menu.some((m) => m.id === editLine.catalogItemId) && (
+              <Button title="Edit options" variant="secondary" onPress={() => editLineOptions(editLine)} />
+            )}
+            {editLine.firedQty === 0 ? (
+              <Button title="Remove" variant="danger" onPress={() => { dispatch({ type: "REMOVE", id: editLine.id }); setLineEditId(null); }} />
+            ) : (
+              <Text style={text.caption}>Fired items can't be removed here — void them after charging.</Text>
+            )}
+          </>
+        ) : null}
+      </BottomSheet>
 
       {/* Custom price */}
       <BottomSheet visible={customOpen} onClose={() => setCustomOpen(false)} title="Custom amount">
@@ -289,11 +441,7 @@ export default function Register() {
           const checkLevel = cart.lines.filter((l) => l.seat == null).reduce((x, l) => x + l.unitPrice * l.quantity, 0);
           return checkLevel > 0 ? <Row label="Unassigned" value={money(checkLevel, "CAD")} /> : null;
         })()}
-        <Button
-          title="Complete split — deferred"
-          disabled
-          onPress={() => {}}
-        />
+        <Button title="Complete split — deferred" disabled onPress={() => {}} />
         <Text style={text.caption}>Allocation is live; finalizing a split is deferred until the money-write endpoints land.</Text>
       </BottomSheet>
     </SafeAreaView>
@@ -316,6 +464,7 @@ const styles = StyleSheet.create({
   menuHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   menuGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.md, paddingVertical: space.md },
   cartSide: { width: 360, maxWidth: "45%", backgroundColor: color.card, borderLeftWidth: 1, borderLeftColor: color.border, padding: space.lg, gap: space.sm },
+  courseRow: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
   seatRow: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
   lines: { flex: 1 },
   actionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
@@ -326,4 +475,6 @@ const styles = StyleSheet.create({
   charge: { minHeight: 56, borderRadius: radius.card, alignItems: "center", justifyContent: "center" },
   chargeTxt: { color: "#fff", fontSize: 18, fontWeight: "600" },
   customAmt: { color: color.text, fontSize: 32, textAlign: "center", paddingVertical: space.sm },
+  editActions: { flexDirection: "row", alignItems: "center", gap: space.md, marginVertical: space.xs },
+  qtyVal: { fontFamily: "Poppins_600SemiBold", fontSize: 18, color: color.text, minWidth: 32, textAlign: "center" },
 });
