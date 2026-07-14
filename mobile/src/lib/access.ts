@@ -41,6 +41,20 @@ export function defaultRoleAccess(roleKey: string): NativeRoleAccess {
   }
 }
 
+// Who sees ALL tables on the floor vs only their own checks. Managers/owners/
+// shift-leads see everything; servers/hosts see only the tables they own.
+export function seesAllTables(roleKey: string): boolean {
+  switch ((roleKey || "").toLowerCase().replace(/[\s-]/g, "_")) {
+    case "owner":
+    case "manager":
+    case "shift_lead":
+    case "shiftlead":
+      return true;
+    default:
+      return false;
+  }
+}
+
 // Who can BUMP on the KDS (fired -> ready). A Kitchen-Display device lets anyone
 // bump; otherwise kitchen/manager/owner only. Servers/hosts get a READ-ONLY glance.
 export function canBumpKds(roleKey: string, deviceHome: DeviceHome | null): boolean {

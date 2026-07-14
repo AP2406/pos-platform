@@ -31,6 +31,7 @@ import {
   type Aging,
 } from "@/lib/reads";
 import { formatElapsed, minutesSince, money } from "@/lib/format";
+import { seesAllTables } from "@/lib/access";
 
 const RINGABLE = new Set(["table", "booth"]);
 const DECOR = new Set(["wall", "room", "label", "counter", "station"]);
@@ -70,6 +71,9 @@ export default function Floor() {
   const s = useSession();
   const router = useRouter();
   const bizId = s.businessId!;
+  const staffId = s.staff?.id ?? null;
+  // Servers see only tables they own; managers/owners see everything.
+  const scoped = !seesAllTables(s.staff?.role ?? "");
 
   const [view, setView] = useState<"map" | "list">("map");
   const [plans, setPlans] = useState<FloorPlan[]>([]);
@@ -256,8 +260,10 @@ export default function Floor() {
 
   const listVisible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return openChecks.filter((c) => !q || c.label.toLowerCase().includes(q) || (c.customerPhone ?? "").toLowerCase().includes(q));
-  }, [openChecks, query]);
+    return openChecks
+      .filter((c) => !scoped || c.staffId === staffId)
+      .filter((c) => !q || c.label.toLowerCase().includes(q) || (c.customerPhone ?? "").toLowerCase().includes(q));
+  }, [openChecks, query, scoped, staffId]);
 
   const planTabs = plans.map((p) => ({ key: p.id, label: p.name }));
   const activeBg = plans.find((p) => p.id === activePlan)?.background ?? null;
@@ -334,7 +340,10 @@ export default function Floor() {
                 {/* Tables — FIXED on-screen size, positioned by the fit */}
                 {tables.map((t) => {
                   const summary = summaries[t.id];
-                  const st = statusById[t.id] ?? "available";
+                  // A server can't see other servers' checks: show those tables as
+                  // "taken" (neutral, no order detail, not tappable).
+                  const otherServer = scoped && !!summary && summary.staffId !== staffId;
+                  const st = otherServer ? "occupied" : statusById[t.id] ?? "available";
                   const occupied = st !== "available";
                   const k = TSIZE / (Math.max(t.w, t.h) || 1);
                   const tw = t.w * k, th = t.h * k;
@@ -350,15 +359,15 @@ export default function Floor() {
                       rotation={t.rotation}
                       shape={t.shape}
                       kind={t.kind}
-                      fill={fillForTable(t, st)}
+                      fill={otherServer ? "#3A4152" : fillForTable(t, st)}
                       label={t.label}
                       occupied={occupied}
                       seats={seatCountByTable[t.id]}
                       sectionName={t.sectionId ? sectionName[t.sectionId] ?? null : null}
-                      covers={summary?.guests ?? null}
-                      timer={summary ? (summary.checkDropped ? "dropped" : formatElapsed(summary.openedAt, now)) : null}
-                      total={summary && summary.subtotal > 0 ? money(summary.subtotal, "CAD") : null}
-                      onPress={() => openTable(t, summary)}
+                      covers={otherServer ? null : summary?.guests ?? null}
+                      timer={otherServer ? null : summary ? (summary.checkDropped ? "dropped" : formatElapsed(summary.openedAt, now)) : null}
+                      total={otherServer ? null : summary && summary.subtotal > 0 ? money(summary.subtotal, "CAD") : null}
+                      onPress={otherServer ? undefined : () => openTable(t, summary)}
                     />
                   );
                 })}

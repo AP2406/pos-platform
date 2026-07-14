@@ -40,12 +40,13 @@ export type OpenCheck = {
   openedAt: string;
   checkDropped: boolean;
   customerPhone: string | null;
+  staffId: string | null;
 };
 
 export async function fetchOpenChecks(businessId: string): Promise<OpenCheck[]> {
   const { data, error } = await supabase
     .from("open_tickets")
-    .select("id, label, ticket_type, guest_count, channel, opened_at, check_dropped_at, customer_phone")
+    .select("id, label, ticket_type, guest_count, channel, opened_at, check_dropped_at, customer_phone, staff_id")
     .eq("business_id", businessId)
     .order("opened_at", { ascending: true });
   if (error) throw error;
@@ -58,6 +59,7 @@ export async function fetchOpenChecks(businessId: string): Promise<OpenCheck[]> 
     openedAt: t.opened_at as string,
     checkDropped: t.check_dropped_at != null,
     customerPhone: (t.customer_phone as string | null) ?? null,
+    staffId: (t.staff_id as string | null) ?? null,
   }));
 }
 
@@ -164,12 +166,13 @@ export type TableSummary = {
   subtotal: number;
   itemCount: number;
   checkDropped: boolean;
+  staffId: string | null;
 };
 
 export async function fetchTableSummaries(businessId: string): Promise<Record<string, TableSummary>> {
   const { data, error } = await supabase
     .from("open_tickets")
-    .select("id, element_id, opened_at, guest_count, cart, check_dropped_at")
+    .select("id, element_id, opened_at, guest_count, cart, check_dropped_at, staff_id")
     .eq("business_id", businessId)
     .not("element_id", "is", null);
   if (error) throw error;
@@ -192,6 +195,7 @@ export async function fetchTableSummaries(businessId: string): Promise<Record<st
       subtotal: Math.round(subtotal * 100) / 100,
       itemCount,
       checkDropped: t.check_dropped_at != null,
+      staffId: (t.staff_id as string | null) ?? null,
     };
   }
   return byElement;
