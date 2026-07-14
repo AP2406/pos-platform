@@ -7,7 +7,6 @@ import {
   SearchField,
   TableCard,
   TableShape,
-  WoodFloor,
   Button,
   color,
   floor as F,
@@ -290,9 +289,8 @@ export default function Floor() {
               <SegmentedTabs tabs={planTabs} value={activePlan ?? ""} onChange={(k) => setActivePlan(k)} />
             </View>
           )}
-          {/* Full-bleed warm-wood floor */}
+          {/* Full-screen floor — one background, shared with the rest of the screen */}
           <View style={styles.floor} onLayout={onCanvasLayout}>
-            <WoodFloor width={size.w} height={size.h} />
             {elements.length === 0 ? (
               <Text style={styles.emptyTxt}>No floor plan for this room. Design it in the web app.</Text>
             ) : (
@@ -404,8 +402,8 @@ const styles = StyleSheet.create({
   toggleOn: { backgroundColor: color.card2 },
   controls: { paddingHorizontal: space.lg, gap: space.sm, paddingBottom: space.xs },
   // Full-bleed floor: fills the whole area edge-to-edge, no inset/rounding.
-  floor: { flex: 1, backgroundColor: F.wood, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  emptyTxt: { color: "#6E665A", fontSize: 15, textAlign: "center" },
+  floor: { flex: 1, backgroundColor: color.bg, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  emptyTxt: { color: color.textDim, fontSize: 15, textAlign: "center" },
   zoneLabel: { position: "absolute", left: 12, bottom: 8, fontFamily: "Poppins_600SemiBold", fontSize: 12 },
   legend: { flexDirection: "row", justifyContent: "center", gap: space.lg, paddingVertical: space.xs },
   legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
