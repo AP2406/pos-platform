@@ -37,7 +37,7 @@ const RINGABLE = new Set(["table", "booth"]);
 const DECOR = new Set(["wall", "room", "label", "counter", "station"]);
 const TSIZE = 82; // fixed on-screen table size (longest side, px)
 const STOOL = 22; // fixed on-screen stool size (px)
-const MARGIN = 56; // floor margin around the room, screen px
+const MARGIN = 48; // small border so edge tables don't clip (~half a table)
 
 const LEGEND: { status: TableStatus; label: string }[] = [
   { status: "available", label: "Available" },
@@ -207,16 +207,17 @@ export default function Floor() {
     return { minX, minY, maxX, maxY };
   }, [elements, tables, decor, stools]);
 
-  // Position the room to fill the floor (fit-to-contain on positions), but render
-  // tables at a FIXED on-screen size (TSIZE) so they're small objects with
-  // generous floor around them — the floor surface is decoupled from table size.
+  // Stretch the layout to fill the whole screen on BOTH axes (independent X/Y fit),
+  // so the floor plan uses the full width AND height. Tables keep a fixed size
+  // (undistorted) — only their positions spread; décor/zones stretch with the room.
   const roomW = bbox ? Math.max(1, bbox.maxX - bbox.minX) : 1;
   const roomH = bbox ? Math.max(1, bbox.maxY - bbox.minY) : 1;
-  const S = size.w > 0 && size.h > 0 && bbox ? Math.min((size.w - 2 * MARGIN) / roomW, (size.h - 2 * MARGIN) / roomH) : 1;
-  const offX = bbox ? (size.w - roomW * S) / 2 - bbox.minX * S : 0;
-  const offY = bbox ? (size.h - roomH * S) / 2 - bbox.minY * S : 0;
-  const sx = (x: number) => x * S + offX;
-  const sy = (y: number) => y * S + offY;
+  const Sx = size.w > 0 && bbox ? (size.w - 2 * MARGIN) / roomW : 1;
+  const Sy = size.h > 0 && bbox ? (size.h - 2 * MARGIN) / roomH : 1;
+  const offX = bbox ? MARGIN - bbox.minX * Sx : 0;
+  const offY = bbox ? MARGIN - bbox.minY * Sy : 0;
+  const sx = (x: number) => x * Sx + offX;
+  const sy = (y: number) => y * Sy + offY;
 
   const statusById = useMemo(() => {
     const m: Record<string, TableStatus> = {};
@@ -298,13 +299,13 @@ export default function Floor() {
               <>
                 {/* Section zones (positions + sizes scale with the room) */}
                 {zones.map((z) => (
-                  <View key={z.id} style={{ position: "absolute", left: sx(z.minX) - 14, top: sy(z.minY) - 14, width: (z.maxX - z.minX) * S + 28, height: (z.maxY - z.minY) * S + 28, borderRadius: 22, backgroundColor: z.color + "22", borderWidth: 1, borderColor: z.color + "44" }}>
+                  <View key={z.id} style={{ position: "absolute", left: sx(z.minX) - 14, top: sy(z.minY) - 14, width: (z.maxX - z.minX) * Sx + 28, height: (z.maxY - z.minY) * Sy + 28, borderRadius: 22, backgroundColor: z.color + "22", borderWidth: 1, borderColor: z.color + "44" }}>
                     {z.name ? <Text style={[styles.zoneLabel, { color: z.color }]}>{z.name}</Text> : null}
                   </View>
                 ))}
                 {/* Structural décor scales with the room */}
                 {decor.map((el) => (
-                  <TableShape key={el.id} x={sx(el.x)} y={sy(el.y)} w={el.w * S} h={el.h * S} rotation={el.rotation} shape={el.shape} kind={el.kind} label={el.label} />
+                  <TableShape key={el.id} x={sx(el.x)} y={sy(el.y)} w={el.w * Sx} h={el.h * Sy} rotation={el.rotation} shape={el.shape} kind={el.kind} label={el.label} />
                 ))}
                 {/* Bar stools — fixed-size round seats at their scaled positions */}
                 {stools.map((el) => {
