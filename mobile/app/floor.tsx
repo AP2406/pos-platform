@@ -255,7 +255,7 @@ export default function Floor() {
 
   function openTable(el: FloorElement, summary: TableSummary | undefined) {
     if (summary) router.push({ pathname: "/register", params: { ticket: summary.ticketId } });
-    else router.push({ pathname: "/register", params: { table: el.label ?? "" } });
+    else router.push({ pathname: "/register", params: { table: el.label ?? "", element: el.id } });
   }
 
   const listVisible = useMemo(() => {

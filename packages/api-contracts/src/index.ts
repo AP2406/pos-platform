@@ -103,3 +103,26 @@ export type KdsMutateResponse = { ok: true };
 export type OrdersFulfillOp = "ready" | "reopen";
 export type OrdersFulfillRequest = { op: OrdersFulfillOp };
 export type OrdersFulfillResponse = { ok: true };
+
+// ---- Fire to kitchen (create/persist open check + kitchen tickets; NOT money) --
+// Sends the cart to the kitchen: upserts an open_ticket and inserts station-split
+// kitchen_tickets. No orders row, no tender, no charge — the money-independent
+// half of the order lifecycle.
+export type FireItemInput = {
+  catalog_item_id: string | null;
+  name: string;
+  unit_price: number;
+  quantity: number;
+  note?: string | null;
+  seat?: number | null;
+};
+export type FireRequest = {
+  ticketId?: string | null; // existing open check to resume, else a new one is created
+  elementId?: string | null; // table this check belongs to
+  label?: string | null; // display label (e.g. "Table 5" / "Online · Ana")
+  ticketType?: string | null; // "table" | "togo" | "bar" | ...
+  channel?: string | null; // e.g. "dine_in"
+  guestCount?: number | null;
+  items: FireItemInput[];
+};
+export type FireResponse = { ticketId: string; fired: number };

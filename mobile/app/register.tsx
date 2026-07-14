@@ -20,7 +20,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { useSession } from "@/state/session";
 import { fetchMenu, fetchCheckCart, type MenuItem } from "@/lib/reads";
-import { quote, verifyApprovals } from "@/lib/api";
+import { quote, verifyApprovals, fire } from "@/lib/api";
 import { cartReducer, initialCart, cartSubtotal, cartSeats, type DiningOption } from "@/state/cart";
 import { money } from "@/lib/format";
 
@@ -43,7 +43,7 @@ const ACTIONS: { label: string; permKey: string | null; sensitive: boolean }[] =
 export default function Register() {
   const s = useSession();
   const router = useRouter();
-  const params = useLocalSearchParams<{ ticket?: string; mode?: string }>();
+  const params = useLocalSearchParams<{ ticket?: string; mode?: string; table?: string; element?: string }>();
 
   const [cart, dispatch] = useReducer(cartReducer, initialCart);
   const [menu, setMenu] = useState<MenuItem[]>([]);
@@ -163,8 +163,33 @@ export default function Register() {
   function onCharge() {
     Alert.alert(
       "Charge — deferred",
-      `Tender is wired to /api/v1/orders/:id/tender, which is held until your live $1 txn+refund test. Nothing was charged.\n\nTotal would be ${money(totals.total, s.businessId ? "CAD" : "CAD")}.`
+      `Tender is wired to /api/v1/orders/:id/tender, which is held until your live $1 txn+refund test. Nothing was charged.\n\nTotal would be ${money(totals.total, "CAD")}.`
     );
+  }
+
+  const [sending, setSending] = useState(false);
+  // Fire the cart to the kitchen — money-independent (open check + kitchen tickets).
+  async function onSend() {
+    if (cart.lines.length === 0 || sending) return;
+    setSending(true);
+    try {
+      const items = cart.lines.map((l) => ({ catalog_item_id: l.catalogItemId, name: l.name, unit_price: l.unitPrice, quantity: l.quantity, note: l.note, seat: l.seat }));
+      const res = await fire(bizId, staffId, {
+        ticketId: params.ticket ?? null,
+        elementId: params.element ?? null,
+        label: params.table || (params.mode === "togo" ? "Takeout" : params.mode === "tab" ? "Tab" : null),
+        ticketType: params.element ? "table" : params.mode === "tab" ? "bar" : "togo",
+        channel: cart.diningOption,
+        items,
+      });
+      Alert.alert("Sent to kitchen", res.fired + (res.fired === 1 ? " item" : " items") + " fired.");
+      dispatch({ type: "CLEAR" });
+      router.replace("/floor");
+    } catch (e) {
+      Alert.alert("Couldn't send", String((e as Error).message));
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -232,6 +257,8 @@ export default function Register() {
             <Row label="Tax" value={money(totals.tax, "CAD")} />
             <Row label="Total" value={money(totals.total, "CAD")} bold />
           </View>
+
+          <Button title="Send to kitchen" onPress={onSend} loading={sending} disabled={cart.lines.length === 0} style={{ marginBottom: space.sm }} />
 
           <View style={styles.pay}>
             <Button title="Split" variant="ghost" onPress={() => setSplitOpen(true)} style={{ flex: 1 }} />

@@ -11,6 +11,8 @@ import {
   type KdsMutateResponse,
   type OrdersFulfillOp,
   type OrdersFulfillResponse,
+  type FireRequest,
+  type FireResponse,
 } from "@surge/api-contracts";
 
 // Typed client for the shared v1 HTTP API. Every call carries the Supabase access
@@ -93,6 +95,17 @@ export async function ordersFulfill(businessId: string, staffId: string | null, 
     body: JSON.stringify({ op }),
   });
   return parse<OrdersFulfillResponse>(res);
+}
+
+// POST /api/v1/fire — send the cart to the kitchen (open check + kitchen tickets).
+// Money-independent: no orders row, no tender, no charge.
+export async function fire(businessId: string, staffId: string | null, body: FireRequest): Promise<FireResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/fire`, {
+    method: "POST",
+    headers: await authHeaders(businessId, staffId),
+    body: JSON.stringify(body),
+  });
+  return parse<FireResponse>(res);
 }
 
 // NOTE: order / tender / refund / tab money-write calls are intentionally absent —
