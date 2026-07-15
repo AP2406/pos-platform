@@ -17,7 +17,13 @@ export const SURFACE_ROUTE: Record<Surface, "/floor" | "/register" | "/kds" | "/
 // customers) — auxiliary utilities, not primary surfaces, so they carry no
 // device-home semantics. Any authed staff who can reach the Floor may open them;
 // RLS remains the real data boundary.
-export const AUX_ROUTES = ["/clock", "/reservations", "/waitlist", "/customers"] as const;
+export const AUX_ROUTES = ["/clock", "/reservations", "/waitlist", "/customers", "/device-settings"] as const;
+
+// Owner/manager gate for device configuration + other management surfaces.
+export function isManager(roleKey: string): boolean {
+  const k = (roleKey || "").toLowerCase().replace(/[\s-]/g, "_");
+  return k === "owner" || k === "manager";
+}
 
 // Sensible defaults per role (works before an owner configures anything). Handles
 // both the seeded role keys and the legacy enum values returned by the PIN gate.
@@ -81,9 +87,39 @@ export function canBumpKds(roleKey: string, deviceHome: DeviceHome | null): bool
   }
 }
 
-// Effective access: a Kitchen-Display DEVICE forces KDS for anyone; otherwise the
-// role default, overridden by the owner's settings.native_access for that role.
-export function resolveNativeAccess(roleKey: string, config: NativeAccessConfig | null, deviceHome: DeviceHome | null): NativeRoleAccess {
+// A physical device can be assigned a STATION (Device settings). When set it drives
+// what the device shows for anyone signed in — a shared-terminal override, the same
+// way a Kitchen-Display device forces KDS. `null` = no override (role-based).
+export type DeviceStation = "server" | "kitchen" | "bar" | "host" | "owner";
+
+export const DEVICE_STATIONS: { key: DeviceStation; label: string }[] = [
+  { key: "server", label: "Server" },
+  { key: "kitchen", label: "Kitchen" },
+  { key: "bar", label: "Bar" },
+  { key: "host", label: "Host" },
+  { key: "owner", label: "Owner (all)" },
+];
+
+export function stationAccess(station: DeviceStation): NativeRoleAccess {
+  switch (station) {
+    case "kitchen":
+      return { surfaces: ["kds"], home: "kds" };
+    case "bar":
+      return { surfaces: ["register", "floor", "kds", "orders"], home: "register" };
+    case "host":
+      return { surfaces: ["floor", "orders"], home: "floor" };
+    case "server":
+      return { surfaces: ["floor", "register", "kds", "orders"], home: "floor" };
+    case "owner":
+      return { surfaces: ["floor", "register", "kds", "sales", "orders"], home: "floor" };
+  }
+}
+
+// Effective access: an assigned device STATION wins (shared-terminal override), else
+// a Kitchen-Display device forces KDS, else the role default overridden by the
+// owner's settings.native_access for that role.
+export function resolveNativeAccess(roleKey: string, config: NativeAccessConfig | null, deviceHome: DeviceHome | null, station?: DeviceStation | null): NativeRoleAccess {
+  if (station) return stationAccess(station);
   if (deviceHome === "kds") return { surfaces: ["kds"], home: "kds" };
   const base = defaultRoleAccess(roleKey);
   const key = (roleKey || "").toLowerCase().replace(/[\s-]/g, "_");

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
 import { resolveNativeAccess, type NativeRoleAccess, type NativeAccessConfig, type DeviceHome } from "@/lib/access";
+import { loadDeviceProfile, saveDeviceProfile, DEFAULT_DEVICE_PROFILE, type DeviceProfile } from "@/lib/device-profile";
 
 export type Staff = { id: string; name: string; role: string };
 export type Biz = { id: string; name: string; role: string };
@@ -15,8 +16,10 @@ type SessionValue = {
   businessName: string | null;
   staff: Staff | null;
   access: NativeRoleAccess | null; // allowed surfaces + home for the signed-in staff/device
-  deviceHome: DeviceHome | null; // this device's mode (null = POS default)
-  setDeviceHome: (mode: DeviceHome | null) => void;
+  deviceHome: DeviceHome | null; // derived from the device profile's station (kds when Kitchen)
+  setDeviceHome: (mode: DeviceHome | null) => void; // sign-in POS/KDS toggle (maps to station)
+  deviceProfile: DeviceProfile; // this physical device's config (label/station/floor/printer)
+  setDeviceProfile: (p: DeviceProfile) => void;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   pickBusiness: (id: string) => Promise<void>;
@@ -34,7 +37,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [staff, setStaff] = useState<Staff | null>(null);
   const [nativeConfig, setNativeConfig] = useState<NativeAccessConfig | null>(null);
-  const [deviceHome, setDeviceHomeState] = useState<DeviceHome | null>(null);
+  const [deviceProfile, setDeviceProfileState] = useState<DeviceProfile>(DEFAULT_DEVICE_PROFILE);
+  // This device's KDS mode is derived from its assigned station.
+  const deviceHome: DeviceHome | null = deviceProfile.station === "kitchen" ? "kds" : null;
 
   const loadBusinesses = useCallback(async (userId: string) => {
     const { data: members } = await supabase.from("business_members").select("business_id, role").eq("user_id", userId);
@@ -78,15 +83,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, [loadBusinesses]);
 
-  // This device's mode (persisted). A "kds" device always lands on KDS.
+  // This device's profile (persisted locally; migrates the legacy pos/kds flag).
   useEffect(() => {
-    AsyncStorage.getItem("surge_device_home").then((v) => setDeviceHomeState(v === "kds" ? "kds" : v === "pos" ? "pos" : null));
+    loadDeviceProfile().then(setDeviceProfileState);
   }, []);
 
+  const setDeviceProfile = useCallback((p: DeviceProfile) => {
+    setDeviceProfileState(p);
+    saveDeviceProfile(p);
+  }, []);
+
+  // Sign-in POS/KDS toggle → the Kitchen station (leaves richer stations intact).
   const setDeviceHome = useCallback((mode: DeviceHome | null) => {
-    setDeviceHomeState(mode);
-    if (mode) AsyncStorage.setItem("surge_device_home", mode);
-    else AsyncStorage.removeItem("surge_device_home");
+    setDeviceProfileState((prev) => {
+      const station = mode === "kds" ? "kitchen" : prev.station === "kitchen" ? null : prev.station;
+      const next = { ...prev, station } as DeviceProfile;
+      saveDeviceProfile(next);
+      return next;
+    });
   }, []);
 
   // Owner's role->surface overrides (settings.native_access) for the active business.
@@ -102,9 +116,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     })();
   }, [businessId]);
 
+  const station = deviceProfile.station;
   const access = useMemo<NativeRoleAccess | null>(
-    () => (staff ? resolveNativeAccess(staff.role, nativeConfig, deviceHome) : deviceHome === "kds" ? resolveNativeAccess("", nativeConfig, deviceHome) : null),
-    [staff, nativeConfig, deviceHome]
+    () => (staff ? resolveNativeAccess(staff.role, nativeConfig, deviceHome, station) : station ? resolveNativeAccess("", nativeConfig, deviceHome, station) : null),
+    [staff, nativeConfig, deviceHome, station]
   );
 
   const signIn = useCallback(async (email: string, password: string) => {
@@ -151,13 +166,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       access,
       deviceHome,
       setDeviceHome,
+      deviceProfile,
+      setDeviceProfile,
       signIn,
       signOut,
       pickBusiness,
       setStaffByPin,
       clearStaff,
     }),
-    [ready, userEmail, businesses, businessId, staff, access, deviceHome, setDeviceHome, signIn, signOut, pickBusiness, setStaffByPin, clearStaff]
+    [ready, userEmail, businesses, businessId, staff, access, deviceHome, setDeviceHome, deviceProfile, setDeviceProfile, signIn, signOut, pickBusiness, setStaffByPin, clearStaff]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

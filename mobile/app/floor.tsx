@@ -32,7 +32,7 @@ import {
   type Aging,
 } from "@/lib/reads";
 import { formatElapsed, minutesSince, money } from "@/lib/format";
-import { seesAllTables } from "@/lib/access";
+import { seesAllTables, isManager } from "@/lib/access";
 
 const RINGABLE = new Set(["table", "booth"]);
 const DECOR = new Set(["wall", "room", "label", "counter", "station"]);
@@ -94,7 +94,10 @@ export default function Floor() {
       try {
         const [pl, secs, ag] = await Promise.all([fetchFloorPlans(bizId), fetchSections(bizId), fetchTableAging(bizId)]);
         setPlans(pl);
-        setActivePlan((cur) => cur ?? pl[0]?.id ?? null);
+        // Open to this device's default room if it's configured and still exists.
+        const preferred = s.deviceProfile.defaultPlanId;
+        const defaultPlan = (preferred && pl.some((p) => p.id === preferred) ? preferred : null) ?? pl[0]?.id ?? null;
+        setActivePlan((cur) => cur ?? defaultPlan);
         setSections(secs);
         setAging(ag);
 
@@ -420,6 +423,9 @@ export default function Floor() {
         <Button title="Reservations" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/reservations"); }} />
         <Button title="Waitlist" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/waitlist"); }} />
         <Button title="Customers" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/customers"); }} />
+        {isManager(s.staff?.role ?? "") && (
+          <Button title="Device settings" variant="ghost" onPress={() => { setMoreOpen(false); router.push("/device-settings"); }} />
+        )}
       </BottomSheet>
     </SafeAreaView>
   );
