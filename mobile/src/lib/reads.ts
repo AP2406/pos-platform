@@ -355,7 +355,8 @@ export async function fetchOrdersHub(businessId: string): Promise<OrderHubRow[]>
   const sinceIso = new Date(new Date().toDateString()).toISOString();
   const { data, error } = await supabase
     .from("orders")
-    .select("id, sale_number, channel, dining_option, created_at, fulfilled_at, total, customer:customers(name)")
+    // dining_option lives in the snapshot jsonb (not a column) — read it via a JSON path.
+    .select("id, sale_number, channel, dining_option:snapshot->>dining_option, created_at, fulfilled_at, total, customer:customers(name)")
     .eq("business_id", businessId)
     .neq("is_training", true)
     .neq("status", "voided")
@@ -428,18 +429,24 @@ export async function fetchSalesHistory(businessId: string, sinceIso: string): P
   });
 }
 
-export type SaleDetailLine = { name: string; quantity: number; unitPrice: number; note: string | null };
+export type SaleDetailLine = { name: string; quantity: number; unitPrice: number; note: string | null; seat: number | null; allergy: string | null; voided: boolean };
 export type SaleDetail = {
   id: string;
   saleNumber: number | null;
   createdAt: string;
+  seatedAt: string | null;
+  fulfilledAt: string | null;
   status: SaleStatus;
+  fulfilled: boolean;
+  channel: string | null;
   diningOption: string | null;
+  guests: number | null;
   customerName: string | null;
   serverName: string | null;
   subtotal: number;
   discount: number;
   comp: number;
+  serviceCharge: number;
   tax: number;
   tip: number;
   total: number;
@@ -451,7 +458,8 @@ export type SaleDetail = {
 export async function fetchOrderDetail(businessId: string, orderId: string): Promise<SaleDetail | null> {
   const { data: o } = await supabase
     .from("orders")
-    .select("id, sale_number, created_at, status, dining_option, subtotal, discount, comp, tax, tip, total, snapshot, customer:customers(name), server:staff_members(name)")
+    // dining_option is snapshot-only; the rest are real columns.
+    .select("id, sale_number, created_at, seated_at, fulfilled_at, status, channel, guest_count, subtotal, discount, comp, service_charge, tax, tip, total, snapshot, customer:customers(name), server:staff_members(name)")
     .eq("id", orderId)
     .eq("business_id", businessId)
     .maybeSingle();
@@ -460,7 +468,7 @@ export async function fetchOrderDetail(businessId: string, orderId: string): Pro
     supabase.from("payments").select("method, amount").eq("business_id", businessId).eq("order_id", orderId),
     supabase.from("refunds").select("amount, reason_code").eq("business_id", businessId).eq("order_id", orderId),
   ]);
-  const snap = (o.snapshot ?? null) as { items?: Array<Record<string, unknown>> } | null;
+  const snap = (o.snapshot ?? null) as { items?: Array<Record<string, unknown>>; dining_option?: string | null } | null;
   const items = Array.isArray(snap?.items) ? snap!.items : [];
   const cust = o.customer as { name?: string } | { name?: string }[] | null;
   const srv = o.server as { name?: string } | { name?: string }[] | null;
@@ -470,13 +478,19 @@ export async function fetchOrderDetail(businessId: string, orderId: string): Pro
     id: o.id as string,
     saleNumber: o.sale_number != null ? Number(o.sale_number) : null,
     createdAt: o.created_at as string,
+    seatedAt: (o.seated_at as string | null) ?? null,
+    fulfilledAt: (o.fulfilled_at as string | null) ?? null,
     status: o.status === "voided" ? "voided" : refundTotal > 0 ? "refunded" : "paid",
-    diningOption: (o.dining_option as string | null) ?? null,
+    fulfilled: o.fulfilled_at != null,
+    channel: (o.channel as string | null) ?? null,
+    diningOption: (snap?.dining_option as string | null) ?? null,
+    guests: o.guest_count != null ? Number(o.guest_count) : null,
     customerName: oneName(cust),
     serverName: oneName(srv),
     subtotal: Number(o.subtotal) || 0,
     discount: Number(o.discount) || 0,
     comp: Number(o.comp) || 0,
+    serviceCharge: Number(o.service_charge) || 0,
     tax: Number(o.tax) || 0,
     tip: Number(o.tip) || 0,
     total: Number(o.total) || 0,
@@ -485,6 +499,9 @@ export async function fetchOrderDetail(businessId: string, orderId: string): Pro
       quantity: Number(it.quantity) || 1,
       unitPrice: Number(it.unit_price) || 0,
       note: (it.note as string | null) ?? null,
+      seat: it.seat == null ? null : Number(it.seat),
+      allergy: (it.allergy as string | null) ?? null,
+      voided: !!(it as { void?: unknown }).void,
     })),
     payments: (pays ?? []).map((p) => ({ method: (p.method as string) || "other", amount: Number(p.amount) || 0 })),
     refunds: (refs ?? []).map((r) => ({ amount: Number(r.amount) || 0, reasonCode: (r.reason_code as string | null) ?? null })),

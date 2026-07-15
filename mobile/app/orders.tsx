@@ -128,7 +128,7 @@ export default function Orders() {
         {visible.length === 0 && <EmptyState>{"No " + view + " orders."}</EmptyState>}
         {visible.map((r) => (
           <View key={r.id} style={styles.row}>
-            <View style={styles.rowMain}>
+            <Pressable style={styles.rowMain} onPress={() => router.push({ pathname: "/history/[id]", params: { id: r.id } })}>
               <Text style={styles.rowTitle}>
                 {r.saleNumber != null ? "#" + r.saleNumber : "Order"}
                 {r.customerName ? " · " + r.customerName : ""}
@@ -136,7 +136,7 @@ export default function Orders() {
               <Text style={styles.rowSub}>
                 {CHANNEL_LABEL[channelOf(r)]} · {timeOf(r.createdAt)}
               </Text>
-            </View>
+            </Pressable>
             <Text style={styles.total}>{money(r.total, "CAD")}</Text>
             {view === "active" ? (
               <Button title="Mark ready" onPress={() => fulfill(r.id, "ready")} loading={busyId === r.id} />
