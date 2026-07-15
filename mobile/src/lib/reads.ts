@@ -685,40 +685,94 @@ export async function fetchCustomers(businessId: string, term: string): Promise<
   }));
 }
 
+export type HouseAccount = { enabled: boolean; balance: number; limit: number };
 export type CustomerDetail = CustomerRow & {
   notes: string | null;
-  loyaltyPoints: number | null;
+  taxExempt: boolean;
+  loyaltyPoints: number | null; // no tier program exists in the schema — points only
   storeCredit: number; // dollars
+  houseAccount: HouseAccount | null;
   visits: number;
+  lifetimeSpend: number;
   lastVisit: string | null;
 };
 
-// Lookup extras: loyalty balance, store credit, visit count + last visit.
+// Full profile: contact, loyalty/credit/house-account balances, lifetime stats.
 export async function fetchCustomerDetail(businessId: string, customerId: string): Promise<CustomerDetail | null> {
   const { data: c } = await supabase
     .from("customers")
-    .select("id, name, phone, email, notes")
+    .select("id, name, phone, email, notes, tax_exempt")
     .eq("id", customerId)
     .eq("business_id", businessId)
     .maybeSingle();
   if (!c) return null;
-  const [{ data: loy }, { data: sc }, { data: orders }] = await Promise.all([
+  const [{ data: loy }, { data: sc }, { data: ha }, { data: orders }] = await Promise.all([
     supabase.from("loyalty_accounts").select("points").eq("business_id", businessId).eq("customer_id", customerId).maybeSingle(),
     supabase.from("store_credit_accounts").select("balance_cents").eq("business_id", businessId).eq("customer_id", customerId).maybeSingle(),
-    supabase.from("orders").select("created_at").eq("business_id", businessId).eq("customer_id", customerId).neq("status", "voided").order("created_at", { ascending: false }).limit(500),
+    supabase.from("house_accounts").select("enabled, balance_cents, limit_cents").eq("business_id", businessId).eq("customer_id", customerId).maybeSingle(),
+    supabase.from("orders").select("created_at, total").eq("business_id", businessId).eq("customer_id", customerId).neq("status", "voided").order("created_at", { ascending: false }).limit(500),
   ]);
   const rows = orders ?? [];
+  const lifetimeSpend = Math.round(rows.reduce((s, o) => s + (Number(o.total) || 0), 0) * 100) / 100;
   return {
     id: c.id as string,
     name: (c.name as string | null) || "Guest",
     phone: (c.phone as string | null) ?? null,
     email: (c.email as string | null) ?? null,
     notes: (c.notes as string | null) ?? null,
+    taxExempt: (c.tax_exempt as boolean | null) === true,
     loyaltyPoints: loy ? Number(loy.points) || 0 : null,
     storeCredit: sc ? (Number(sc.balance_cents) || 0) / 100 : 0,
+    houseAccount: ha ? { enabled: (ha.enabled as boolean | null) === true, balance: (Number(ha.balance_cents) || 0) / 100, limit: (Number(ha.limit_cents) || 0) / 100 } : null,
     visits: rows.length,
+    lifetimeSpend,
     lastVisit: rows.length ? (rows[0].created_at as string) : null,
   };
+}
+
+// A customer's orders (newest first) → tap through to the order detail.
+export type CustomerOrder = { id: string; saleNumber: number | null; createdAt: string; total: number; status: SaleStatus };
+
+export async function fetchCustomerOrders(businessId: string, customerId: string): Promise<CustomerOrder[]> {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("id, sale_number, created_at, total, status")
+    .eq("business_id", businessId)
+    .eq("customer_id", customerId)
+    .neq("is_training", true)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  const rows = data ?? [];
+  const ids = rows.map((o) => o.id as string);
+  const refunded = new Set<string>();
+  if (ids.length > 0) {
+    const { data: rf } = await supabase.from("refunds").select("order_id").eq("business_id", businessId).in("order_id", ids);
+    for (const r of rf ?? []) refunded.add(r.order_id as string);
+  }
+  return rows.map((o) => ({
+    id: o.id as string,
+    saleNumber: o.sale_number != null ? Number(o.sale_number) : null,
+    createdAt: o.created_at as string,
+    total: Number(o.total) || 0,
+    status: o.status === "voided" ? "voided" : refunded.has(o.id as string) ? "refunded" : "paid",
+  }));
+}
+
+// Merged account-activity ledger (loyalty points + store credit + house account).
+export type LedgerEntry = { source: "loyalty" | "credit" | "house"; kind: string; amount: number; unit: "pts" | "$"; createdAt: string; orderId: string | null; note: string | null };
+
+export async function fetchCustomerLedger(businessId: string, customerId: string): Promise<LedgerEntry[]> {
+  const [{ data: loy }, { data: sc }, { data: ha }] = await Promise.all([
+    supabase.from("loyalty_transactions").select("points, kind, order_id, created_at").eq("business_id", businessId).eq("customer_id", customerId).order("created_at", { ascending: false }).limit(40),
+    supabase.from("store_credit_ledger").select("delta_cents, kind, order_id, created_at").eq("business_id", businessId).eq("customer_id", customerId).order("created_at", { ascending: false }).limit(40),
+    supabase.from("house_account_ledger").select("delta_cents, kind, note, order_id, created_at").eq("business_id", businessId).eq("customer_id", customerId).order("created_at", { ascending: false }).limit(40),
+  ]);
+  const out: LedgerEntry[] = [];
+  for (const r of loy ?? []) out.push({ source: "loyalty", kind: (r.kind as string) || "adjust", amount: Number(r.points) || 0, unit: "pts", createdAt: r.created_at as string, orderId: (r.order_id as string | null) ?? null, note: null });
+  for (const r of sc ?? []) out.push({ source: "credit", kind: (r.kind as string) || "adjust", amount: (Number(r.delta_cents) || 0) / 100, unit: "$", createdAt: r.created_at as string, orderId: (r.order_id as string | null) ?? null, note: null });
+  for (const r of ha ?? []) out.push({ source: "house", kind: (r.kind as string) || "adjust", amount: (Number(r.delta_cents) || 0) / 100, unit: "$", createdAt: r.created_at as string, orderId: (r.order_id as string | null) ?? null, note: (r.note as string | null) ?? null });
+  return out.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 60);
 }
 
 // Read an existing open check's cart lines (jsonb) so the register can resume it.
