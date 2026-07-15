@@ -344,7 +344,7 @@ export default function Register() {
         {/* Menu side */}
         <View style={styles.menuSide}>
           <View style={styles.menuHeader}>
-            <Pressable onPress={() => router.back()} hitSlop={12}>
+            <Pressable onPress={() => router.replace("/floor")} hitSlop={12}>
               <Text style={text.bodyDim}>‹ Floor</Text>
             </Pressable>
             <Button title="Custom" variant="secondary" onPress={() => setCustomOpen(true)} />

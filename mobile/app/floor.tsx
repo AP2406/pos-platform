@@ -429,7 +429,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
   // Slim top bar (TB-style thin header).
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs, gap: space.md },
-  headerTitle: { flex: 1, fontFamily: "Poppins_600SemiBold", fontSize: 17, color: color.text },
+  headerTitle: { flex: 1, fontFamily: "Poppins_600SemiBold", fontSize: 20, color: color.text },
   headerSub: { fontFamily: "Poppins_400Regular", fontSize: 13, color: color.textDim },
   actions: { flexDirection: "row", alignItems: "center", gap: space.sm },
   toggle: { flexDirection: "row", backgroundColor: color.card, borderRadius: 999, padding: 2, borderWidth: 1, borderColor: color.border },
