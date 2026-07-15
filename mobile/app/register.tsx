@@ -28,7 +28,7 @@ import { categoryIcon } from "@/lib/category-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSession } from "@/state/session";
 import { fetchMenu, fetchCheckCart, fetchCourses, fetchUpsells, type MenuItem, type Course, type UpsellPrompt } from "@/lib/reads";
-import { itemNeedsSheet, type ModPosition } from "@/lib/modifiers";
+import { itemNeedsSheet, itemRequiresChoice, type ModPosition } from "@/lib/modifiers";
 import { ALLERGENS, allergyString } from "@/lib/allergens";
 import { quote, verifyApprovals, fire } from "@/lib/api";
 import { cartReducer, initialCart, cartSubtotal, cartSeats, type DiningOption, type CartLine as Line } from "@/state/cart";
@@ -227,6 +227,24 @@ export default function Register() {
     maybeUpsell(m);
   }
 
+  // Fast path (long-press / "+"): add immediately, opening the picker ONLY when a
+  // choice is genuinely required (a size or a group minimum) so known-item entry
+  // stays a single tap.
+  function quickAdd(m: MenuItem) {
+    if (m.outOfStock) {
+      Alert.alert("86'd", m.name + " is out of stock.");
+      return;
+    }
+    if (itemRequiresChoice(m)) {
+      setEditLineId(null);
+      setSheetInitial(undefined);
+      setSheetItem(m);
+      return;
+    }
+    dispatch({ type: "ADD", item: { catalogItemId: m.id, name: m.name, unitPrice: m.price }, course: courseForItem(m) });
+    maybeUpsell(m);
+  }
+
   function onSheetConfirm(spec: ConfirmSpec) {
     if (editLineId) {
       dispatch({ type: "REPLACE_LINE", id: editLineId, spec: { catalogItemId: spec.catalogItemId, variationId: spec.variationId, name: spec.name, unitPrice: spec.unitPrice, note: spec.note, modifiers: spec.modifiers } });
@@ -372,6 +390,8 @@ export default function Register() {
                   fallbackIcon={categoryIcon(m.category)}
                   dim={m.outOfStock}
                   onPress={() => setDetailItem(m)}
+                  onLongPress={() => quickAdd(m)}
+                  onQuickAdd={() => quickAdd(m)}
                 />
               ))}
               {shownMenu.length === 0 && <EmptyState>No items.</EmptyState>}

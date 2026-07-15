@@ -11,6 +11,8 @@ export function MenuTile({
   fallbackIcon,
   dim,
   onPress,
+  onLongPress,
+  onQuickAdd,
 }: {
   name: string;
   price?: string;
@@ -18,10 +20,12 @@ export function MenuTile({
   fallbackIcon?: string;
   dim?: boolean;
   onPress?: () => void;
+  onLongPress?: () => void; // fast path: add immediately (picker only if required)
+  onQuickAdd?: () => void; // same fast path via the visible "+" affordance
 }) {
   const hasImg = !!imageUrl;
   return (
-    <Pressable onPress={onPress} style={[styles.tile, dim && styles.dim]} accessibilityRole="button">
+    <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={250} style={[styles.tile, dim && styles.dim]} accessibilityRole="button">
       {hasImg ? (
         <Image source={{ uri: imageUrl! }} style={styles.img} resizeMode="cover" />
       ) : (
@@ -29,6 +33,11 @@ export function MenuTile({
           <Text style={styles.fallbackIcon}>{fallbackIcon ?? "🍽️"}</Text>
         </View>
       )}
+      {onQuickAdd && !dim ? (
+        <Pressable onPress={onQuickAdd} hitSlop={8} style={styles.add} accessibilityRole="button" accessibilityLabel={"Add " + name}>
+          <Text style={styles.addTxt}>+</Text>
+        </Pressable>
+      ) : null}
       <View style={[styles.caption, hasImg && styles.captionOverImg]}>
         <Text style={[styles.name, hasImg && styles.nameOverImg]} numberOfLines={2}>
           {name}
@@ -52,6 +61,8 @@ const styles = StyleSheet.create({
     minWidth: touch.min * 2,
   },
   dim: { opacity: 0.45 },
+  add: { position: "absolute", top: space.xs, right: space.xs, width: 30, height: 30, borderRadius: 999, backgroundColor: "rgba(37,99,235,0.92)", alignItems: "center", justifyContent: "center" },
+  addTxt: { color: "#fff", fontSize: 20, lineHeight: 22, fontFamily: fontFamily.semibold },
   img: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined },
   fallback: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: color.card2 },
   fallbackIcon: { fontSize: 40, opacity: 0.9 },

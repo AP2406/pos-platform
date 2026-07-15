@@ -123,6 +123,16 @@ export function itemNeedsSheet(item: { variations: Variation[]; modifierGroups: 
   return item.modifierGroups.some((g) => g.options.length > 0);
 }
 
+// The lighter gate for FAST quick-add: only force the picker when a choice is
+// genuinely required — a size/variation, or a top-level group with a minimum.
+// Optional-only add-ons don't block a quick-add (the base line is valid; a server
+// can still edit it). Nested required groups can't be unmet until their parent
+// option is chosen, so only top-level minimums matter at add time.
+export function itemRequiresChoice(item: { variations: Variation[]; modifierGroups: ModifierGroup[] }): boolean {
+  if (item.variations.length > 0) return true;
+  return item.modifierGroups.some((g) => groupMin(g) > 0);
+}
+
 export type BuiltLine = { name: string; unitPrice: number; variationId: string | null; modifiers: LineModifier[] };
 
 // Compose the cart line from the current selection: unit price = base/variation +
