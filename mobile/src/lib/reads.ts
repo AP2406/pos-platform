@@ -7,10 +7,13 @@ import type { ModOption, ModifierGroup, Variation } from "./modifiers";
 export type MenuItem = {
   id: string;
   name: string;
+  shortName: string | null;
   price: number;
   category: string | null;
+  salesCategory: string | null; // reporting "section"
   imageUrl: string | null;
   outOfStock: boolean;
+  allergens: string[];
   defaultCourseId: string | null;
   variations: Variation[];
   // Nested modifier group tree (forced/required, min/max, half-split, follow-ups).
@@ -76,7 +79,7 @@ export async function fetchMenu(businessId: string): Promise<MenuItem[]> {
   const [{ data, error }, { data: vars }, { data: mods }, { data: groups }] = await Promise.all([
     supabase
       .from("catalog_items")
-      .select("id, name, price, category, image_url, out_of_stock, default_course_id, is_active")
+      .select("id, name, short_name, price, category, sales_category, image_url, out_of_stock, allergens, default_course_id, is_active")
       .eq("business_id", businessId)
       .eq("is_active", true)
       .order("category", { ascending: true })
@@ -95,17 +98,23 @@ export async function fetchMenu(businessId: string): Promise<MenuItem[]> {
     (groups ?? []).map((g) => ({ id: g.id as string, catalog_item_id: g.catalog_item_id as string, name: (g.name as string) || "", required: (g.required as boolean | null) ?? false, min_select: Number(g.min_select) || 0, max_select: g.max_select == null ? null : Number(g.max_select), allow_split: (g.allow_split as boolean | null) ?? false }))
   );
 
-  return (data ?? []).map((r) => ({
-    id: r.id as string,
-    name: (r.name as string) || "Item",
-    price: Number(r.price) || 0,
-    category: (r.category as string | null) ?? null,
-    imageUrl: (r.image_url as string | null) ?? null,
-    outOfStock: (r.out_of_stock as boolean | null) === true,
-    defaultCourseId: (r.default_course_id as string | null) ?? null,
-    variations: varsByItem[r.id as string] ?? [],
-    modifierGroups: groupsByItem[r.id as string] ?? [],
-  }));
+  return (data ?? []).map((r) => {
+    const al = (r as { allergens?: unknown }).allergens;
+    return {
+      id: r.id as string,
+      name: (r.name as string) || "Item",
+      shortName: (r.short_name as string | null) ?? null,
+      price: Number(r.price) || 0,
+      category: (r.category as string | null) ?? null,
+      salesCategory: (r.sales_category as string | null) ?? null,
+      imageUrl: (r.image_url as string | null) ?? null,
+      outOfStock: (r.out_of_stock as boolean | null) === true,
+      allergens: Array.isArray(al) ? al.map((a) => String(a)) : [],
+      defaultCourseId: (r.default_course_id as string | null) ?? null,
+      variations: varsByItem[r.id as string] ?? [],
+      modifierGroups: groupsByItem[r.id as string] ?? [],
+    };
+  });
 }
 
 export type Course = { id: string; name: string; sortOrder: number };

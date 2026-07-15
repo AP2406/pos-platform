@@ -12,6 +12,9 @@ import {
   NumPad,
   BottomSheet,
   ModifierSheet,
+  CategoryRail,
+  MenuItemSheet,
+  EmptyState,
   color,
   space,
   radius,
@@ -21,6 +24,7 @@ import {
   type SheetInitial,
   type ConfirmSpec,
 } from "@/design";
+import { categoryIcon } from "@/lib/category-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSession } from "@/state/session";
 import { fetchMenu, fetchCheckCart, fetchCourses, fetchUpsells, type MenuItem, type Course, type UpsellPrompt } from "@/lib/reads";
@@ -58,6 +62,7 @@ export default function Register() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [upsells, setUpsells] = useState<UpsellPrompt[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
+  const [detailItem, setDetailItem] = useState<MenuItem | null>(null);
   const [cat, setCat] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [totals, setTotals] = useState({ subtotal: 0, tax: 0, total: 0 });
@@ -142,13 +147,18 @@ export default function Register() {
     };
   }, [cart, bizId, staffId]);
 
-  const categories = useMemo(() => {
-    const set: string[] = [];
+  // Category rail: distinct icon + live item count per category.
+  const railCats = useMemo(() => {
+    const counts = new Map<string, number>();
     for (const m of menu) {
       const c = m.category || "Other";
-      if (!set.includes(c)) set.push(c);
+      counts.set(c, (counts.get(c) ?? 0) + 1);
     }
-    return [{ key: "all", label: "All" }, ...set.map((c) => ({ key: c, label: c }))];
+    const names = [...counts.keys()].sort((a, b) => a.localeCompare(b));
+    return [
+      { key: "all", label: "All", count: menu.length, icon: "🍴" },
+      ...names.map((c) => ({ key: c, label: c, count: counts.get(c) ?? 0, icon: categoryIcon(c) })),
+    ];
   }, [menu]);
 
   const shownMenu = useMemo(() => {
@@ -350,13 +360,23 @@ export default function Register() {
             <Button title="Custom" variant="secondary" onPress={() => setCustomOpen(true)} />
           </View>
           <SearchField value={search} onChangeText={setSearch} placeholder="Search menu" />
-          <SegmentedTabs tabs={categories} value={cat} onChange={setCat} />
-          <ScrollView contentContainerStyle={styles.menuGrid}>
-            {shownMenu.map((m) => (
-              <MenuTile key={m.id} name={m.name + (m.outOfStock ? " (86)" : "")} price={money(m.price, "CAD")} onPress={() => tapItem(m)} />
-            ))}
-            {shownMenu.length === 0 && <Text style={[text.bodyDim, { padding: space.md }]}>No items.</Text>}
-          </ScrollView>
+          <View style={styles.browse}>
+            <CategoryRail categories={railCats} value={cat} onChange={setCat} />
+            <ScrollView style={styles.gridScroll} contentContainerStyle={styles.menuGrid}>
+              {shownMenu.map((m) => (
+                <MenuTile
+                  key={m.id}
+                  name={m.name}
+                  price={money(m.price, "CAD")}
+                  imageUrl={m.imageUrl}
+                  fallbackIcon={categoryIcon(m.category)}
+                  dim={m.outOfStock}
+                  onPress={() => setDetailItem(m)}
+                />
+              ))}
+              {shownMenu.length === 0 && <EmptyState>No items.</EmptyState>}
+            </ScrollView>
+          </View>
         </View>
 
         {/* Cart side */}
@@ -432,6 +452,17 @@ export default function Register() {
           </View>
         </View>
       </View>
+
+      {/* Catalog detail (read-only preview) → hands back to the add flow */}
+      <MenuItemSheet
+        item={detailItem}
+        onClose={() => setDetailItem(null)}
+        onAdd={(it) => {
+          setDetailItem(null);
+          const full = menu.find((m) => m.id === it.id);
+          if (full) tapItem(full);
+        }}
+      />
 
       {/* Forced/nested modifier picker */}
       <ModifierSheet item={sheetItem} initial={sheetInitial} isEdit={!!editLineId} onClose={() => { setSheetItem(null); setEditLineId(null); }} onConfirm={onSheetConfirm} />
@@ -549,7 +580,9 @@ const styles = StyleSheet.create({
   row: { flex: 1, flexDirection: "row" },
   menuSide: { flex: 2, padding: space.lg, gap: space.sm },
   menuHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  menuGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.md, paddingVertical: space.md },
+  browse: { flex: 1, flexDirection: "row", gap: space.sm },
+  gridScroll: { flex: 1 },
+  menuGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.md, paddingVertical: space.md, paddingBottom: space.xl },
   cartSide: { width: 360, maxWidth: "45%", backgroundColor: color.card, borderLeftWidth: 1, borderLeftColor: color.border, padding: space.lg, gap: space.sm },
   courseRow: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
   seatRow: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
