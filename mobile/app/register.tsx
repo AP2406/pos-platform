@@ -31,6 +31,7 @@ import { fetchMenu, fetchCheckCart, fetchCourses, fetchUpsells, type MenuItem, t
 import { itemNeedsSheet, itemRequiresChoice, type ModPosition } from "@/lib/modifiers";
 import { ALLERGENS, allergyString } from "@/lib/allergens";
 import { quote, verifyApprovals, fire } from "@/lib/api";
+import { printKitchenChit } from "@/lib/printing";
 import { cartReducer, initialCart, cartSubtotal, cartSeats, type DiningOption, type CartLine as Line } from "@/state/cart";
 import { money } from "@/lib/format";
 
@@ -340,6 +341,13 @@ export default function Register() {
       });
       setTicketId(res.ticketId);
       dispatch({ type: "MARK_FIRED", ids: unfired.map((l) => l.id) });
+      // Print the kitchen chit (no-op until a printer is configured + the SDK is
+      // linked — never blocks or fails the fire).
+      printKitchenChit(s.deviceProfile.printerTarget, {
+        label,
+        items: unfired.map((l) => ({ name: l.name, quantity: l.quantity - l.firedQty, note: l.note, allergy: l.allergy, seat: l.seat })),
+        firedAt: new Date().toISOString(),
+      }).catch(() => {});
       if (andExit) {
         Alert.alert("Sent to kitchen", res.fired + (res.fired === 1 ? " item" : " items") + " fired.");
         dispatch({ type: "CLEAR" });

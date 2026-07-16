@@ -23,7 +23,8 @@
       "expo-router",
       "expo-font",
       "expo-asset",
-      "expo-dev-client"
+      "expo-dev-client",
+      "./plugins/withPrinting"
     ],
     "experiments": {
       "typedRoutes": true

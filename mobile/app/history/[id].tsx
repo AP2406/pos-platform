@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Button, ScreenHeader, EmptyState, color, space, text } from "@/design";
 import { useSession } from "@/state/session";
 import { fetchOrderDetail, type SaleDetail, type SaleDetailLine } from "@/lib/reads";
+import { printReceipt } from "@/lib/printing";
 import { money } from "@/lib/format";
 
 const CHANNEL_LABEL: Record<string, string> = { dine_in: "Dine-in", takeout: "Takeout", pickup: "Pickup", delivery: "Delivery", online: "Online", kiosk: "Kiosk", qr: "QR" };
@@ -58,8 +59,25 @@ export default function OrderDetail() {
     return [...by.entries()].sort((a, b) => (a[0] ?? 9999) - (b[0] ?? 9999));
   }, [d]);
 
-  function reprint() {
-    Alert.alert("Reprint", "Native receipt printing is coming soon — this is a placeholder.");
+  async function reprint() {
+    if (!d) return;
+    const printerId = s.deviceProfile.printerTarget;
+    const res = await printReceipt(printerId, {
+      businessName: s.businessName ?? "Surge",
+      saleNumber: d.saleNumber,
+      createdAt: d.createdAt,
+      items: d.items.map((it) => ({ name: it.name, quantity: it.quantity, unitPrice: it.unitPrice })),
+      subtotal: d.subtotal,
+      discount: d.discount,
+      tax: d.tax,
+      tip: d.tip,
+      total: d.total,
+      payments: d.payments,
+    });
+    if (!res.ok) Alert.alert("Couldn't print", res.error);
+    else if (res.printed) Alert.alert("Receipt sent", "Printed to this device's printer.");
+    else if (!printerId) Alert.alert("No printer", "Set a printer for this device in Device settings.");
+    else Alert.alert("Printing not enabled", "This build has no printer driver yet — the receipt is prepared and will print once a printer is connected.");
   }
 
   const st = d ? STATUS[d.status] : null;
