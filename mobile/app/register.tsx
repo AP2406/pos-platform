@@ -301,15 +301,15 @@ export default function Register() {
 
   async function onAction(a: (typeof ACTIONS)[number]) {
     if (!a.sensitive || !a.permKey) {
-      Alert.alert(a.label, `${a.label} is part of the write path — deferred until the live money test.`);
+      Alert.alert(a.label, `${a.label} is coming soon — this pilot build doesn't apply it to the check yet.`);
       return;
     }
     try {
       const res = await verifyApprovals(bizId, staffId, { actions: [{ present: true, label: a.label, permKey: a.permKey, amount: null }] });
       if ("blocked" in res && res.blocked.length > 0) {
-        Alert.alert("Manager approval required", `${a.label} needs a manager PIN. (Verification is live; applying ${a.label} is deferred until the live money test.)`);
+        Alert.alert("Manager approval required", `${a.label} needs a manager PIN. (Applying ${a.label} is coming soon.)`);
       } else {
-        Alert.alert(a.label, `Authorized. Applying ${a.label} is deferred until the live money test.`);
+        Alert.alert(a.label, `Authorized. Applying ${a.label} is coming soon.`);
       }
     } catch (e) {
       Alert.alert("Couldn't verify", String((e as Error).message));
@@ -317,9 +317,10 @@ export default function Register() {
   }
 
   function onCharge() {
+    // Payments are intentionally not in this pilot build. Clear, honest, no charge.
     Alert.alert(
-      "Charge — deferred",
-      `Tender is wired to /api/v1/orders/:id/tender, which is held until your live $1 txn+refund test. Nothing was charged.\n\nTotal would be ${money(totals.total, "CAD")}.`
+      "Payments coming soon",
+      `This pilot build takes and fires orders but doesn't process payments yet. Nothing was charged.\n\nOrder total would be ${money(totals.total, "CAD")}.`
     );
   }
 
@@ -471,11 +472,14 @@ export default function Register() {
           )}
 
           <View style={styles.pay}>
-            <Button title="Split" variant="ghost" onPress={() => setSplitOpen(true)} style={{ flex: 1 }} />
-            <Pressable style={{ flex: 2 }} onPress={onCharge} disabled={cart.lines.length === 0}>
-              <LinearGradient colors={gradient.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.charge}>
-                <Text style={styles.chargeTxt}>Charge {money(totals.total, "CAD")}</Text>
-              </LinearGradient>
+            <Button title="Split (preview)" variant="ghost" onPress={() => setSplitOpen(true)} style={{ flex: 1 }} />
+            {/* Payments are not in this pilot — render Charge as clearly disabled
+                (muted, lock) with a coming-soon affordance; the tap only explains. */}
+            <Pressable style={{ flex: 2 }} onPress={onCharge} accessibilityRole="button" accessibilityState={{ disabled: true }}>
+              <View style={styles.chargeDisabled}>
+                <Text style={styles.chargeDisabledLabel}>🔒 Charge {money(totals.total, "CAD")}</Text>
+                <Text style={styles.chargeDisabledSub}>Payments coming soon</Text>
+              </View>
             </Pressable>
           </View>
         </View>
@@ -576,19 +580,20 @@ export default function Register() {
         <Button title="Add" onPress={addCustom} disabled={!(Number(customPrice) > 0)} />
       </BottomSheet>
 
-      {/* Split allocation (preview live; finalize stubbed) */}
-      <BottomSheet visible={splitOpen} onClose={() => setSplitOpen(false)} title="Split by seat">
+      {/* Split allocation preview — money-free. Finalizing a split is a payment
+          action and is disabled in this pilot (Payments coming soon). */}
+      <BottomSheet visible={splitOpen} onClose={() => setSplitOpen(false)} title="Split by seat · preview">
         {seats.length === 0 && <Text style={text.bodyDim}>Assign items to seats to split. (No seats yet.)</Text>}
         {seats.map((n) => {
           const sub = cart.lines.filter((l) => l.seat === n).reduce((x, l) => x + l.unitPrice * l.quantity, 0);
-          return <Row key={n} label={"Seat " + n} value={money(sub, "CAD")} />;
+          return <Row key={n} label={seatLabel(n)} value={money(sub, "CAD")} />;
         })}
         {(() => {
           const checkLevel = cart.lines.filter((l) => l.seat == null).reduce((x, l) => x + l.unitPrice * l.quantity, 0);
           return checkLevel > 0 ? <Row label="Unassigned" value={money(checkLevel, "CAD")} /> : null;
         })()}
-        <Button title="Complete split — deferred" disabled onPress={() => {}} />
-        <Text style={text.caption}>Allocation is live; finalizing a split is deferred until the money-write endpoints land.</Text>
+        <Button title="🔒 Split the payment — coming soon" disabled onPress={() => {}} />
+        <Text style={text.caption}>The per-seat breakdown above is live. Splitting the actual payment goes live after the pilot.</Text>
       </BottomSheet>
     </SafeAreaView>
   );
@@ -621,6 +626,9 @@ const styles = StyleSheet.create({
   trow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   pay: { flexDirection: "row", gap: space.sm },
   charge: { minHeight: 56, borderRadius: radius.card, alignItems: "center", justifyContent: "center" },
+  chargeDisabled: { minHeight: 56, borderRadius: radius.card, alignItems: "center", justifyContent: "center", backgroundColor: color.card2, borderWidth: 1, borderColor: color.border },
+  chargeDisabledLabel: { color: color.textDim, fontSize: 16, fontFamily: "Poppins_600SemiBold" },
+  chargeDisabledSub: { color: color.textFaint, fontSize: 11, fontFamily: "Poppins_400Regular", marginTop: 1 },
   chargeTxt: { color: "#fff", fontSize: 18, fontWeight: "600" },
   customAmt: { color: color.text, fontSize: 32, textAlign: "center", paddingVertical: space.sm },
   editActions: { flexDirection: "row", alignItems: "center", gap: space.md, marginVertical: space.xs },
