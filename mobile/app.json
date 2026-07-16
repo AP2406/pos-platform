@@ -6,15 +6,24 @@
     "version": "0.1.0",
     "orientation": "landscape",
     "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "backgroundColor": "#0B0E14",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0E192B"
+    },
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.surgetechpos.pos"
+      "bundleIdentifier": "com.surgetechpos.pos",
+      "buildNumber": "1"
     },
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      "expo-dev-client"
     ],
     "experiments": {
       "typedRoutes": true

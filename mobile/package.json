@@ -7,7 +7,8 @@
     "start": "expo start",
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "android": "expo run:android"
   },
   "dependencies": {
     "@expo-google-fonts/poppins": "^0.2.3",
@@ -19,6 +20,7 @@
     "expo": "~52.0.0",
     "expo-asset": "~11.0.5",
     "expo-constants": "~17.0.0",
+    "expo-dev-client": "~5.0.20",
     "expo-font": "~13.0.0",
     "expo-linear-gradient": "~14.0.0",
     "expo-linking": "~7.0.0",
