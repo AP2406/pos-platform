@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { View } from "react-native";
+import { View, LogBox } from "react-native";
 import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold } from "@expo-google-fonts/poppins";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -7,7 +7,13 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { color } from "@surge/design-tokens";
 import { SessionProvider, useSession } from "@/state/session";
+import { NoticeHost } from "@/design";
 import { SURFACE_ROUTE, AUX_ROUTES, type Surface } from "@/lib/access";
+
+// v1 API failures are handled gracefully (they surface via the top NoticeHost
+// banner and callers degrade), so suppress the redundant dev LogBox overlay that
+// otherwise covers tappable UI. Dev-only; production never shows LogBox.
+LogBox.ignoreLogs(["Network request failed"]);
 
 const queryClient = new QueryClient();
 
@@ -47,6 +53,7 @@ export default function RootLayout() {
         <StatusBar style="light" />
         <SessionProvider>
           <Gate />
+          <NoticeHost />
         </SessionProvider>
       </QueryClientProvider>
     </SafeAreaProvider>

@@ -17,5 +17,6 @@ export * from "./BottomSheet";
 export * from "./ModifierSheet";
 export * from "./ScreenHeader";
 export * from "./EmptyState";
+export * from "./NoticeHost";
 export * from "./CategoryRail";
 export * from "./MenuItemSheet";

@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "./config";
 import { supabase } from "./supabase";
+import { notify } from "./notice";
 import {
   API_HEADERS,
   type SessionResponse,
@@ -36,10 +37,21 @@ async function authHeaders(businessId: string, staffId?: string | null): Promise
   return headers;
 }
 
-async function parse<T>(res: Response): Promise<T> {
+// One place to fetch + parse the v1 envelope. On failure it surfaces a brief,
+// non-blocking top notice (see NoticeHost) AND throws so callers still degrade.
+async function send<T>(url: string, init: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url, init);
+  } catch {
+    notify("Can't reach the Surge API — some actions are unavailable.");
+    throw new Error("Network request failed");
+  }
   const json = await res.json().catch(() => null);
   if (!res.ok) {
     const msg = json?.error?.message ?? `Request failed (${res.status})`;
+    // 404 here means the v1 routes aren't deployed on the configured API host.
+    notify(res.status === 404 ? "Surge API isn't available on this server yet." : msg);
     throw new Error(msg);
   }
   return json as T;
@@ -47,10 +59,9 @@ async function parse<T>(res: Response): Promise<T> {
 
 // GET /api/v1/session — confirm token + headers resolve to the expected business/staff.
 export async function getSession(businessId: string, staffId?: string | null): Promise<SessionResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/session`, {
+  return send<SessionResponse>(`${API_BASE_URL}/api/v1/session`, {
     headers: await authHeaders(businessId, staffId),
   });
-  return parse<SessionResponse>(res);
 }
 
 // POST /api/v1/approvals/verify — verify-only (no money moves).
@@ -59,12 +70,11 @@ export async function verifyApprovals(
   staffId: string | null,
   body: ApprovalsVerifyRequest
 ): Promise<ApprovalsVerifyResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/approvals/verify`, {
+  return send<ApprovalsVerifyResponse>(`${API_BASE_URL}/api/v1/approvals/verify`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
     body: JSON.stringify(body),
   });
-  return parse<ApprovalsVerifyResponse>(res);
 }
 
 // POST /api/v1/quote — Subtotal / Tax / Total for a cart. Compute-only (no write).
@@ -73,77 +83,70 @@ export async function quote(
   staffId: string | null,
   body: QuoteRequest
 ): Promise<QuoteResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/quote`, {
+  return send<QuoteResponse>(`${API_BASE_URL}/api/v1/quote`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
     body: JSON.stringify(body),
   });
-  return parse<QuoteResponse>(res);
 }
 
 // POST /api/v1/kds/:id — bump (fired->ready) / recall (ready->fired). Kitchen
 // state, not money.
 export async function kdsMutate(businessId: string, staffId: string | null, ticketId: string, op: KdsOp): Promise<KdsMutateResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/kds/${ticketId}`, {
+  return send<KdsMutateResponse>(`${API_BASE_URL}/api/v1/kds/${ticketId}`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
     body: JSON.stringify({ op }),
   });
-  return parse<KdsMutateResponse>(res);
 }
 
 // POST /api/v1/orders/:id/fulfill — Orders-hub Mark-ready / Reopen. Fulfillment
 // state (+ order-ready email on "ready"), not money.
 export async function ordersFulfill(businessId: string, staffId: string | null, orderId: string, op: OrdersFulfillOp): Promise<OrdersFulfillResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/orders/${orderId}/fulfill`, {
+  return send<OrdersFulfillResponse>(`${API_BASE_URL}/api/v1/orders/${orderId}/fulfill`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
     body: JSON.stringify({ op }),
   });
-  return parse<OrdersFulfillResponse>(res);
 }
 
 // POST /api/v1/fire — send the cart to the kitchen (open check + kitchen tickets).
 // Money-independent: no orders row, no tender, no charge.
 export async function fire(businessId: string, staffId: string | null, body: FireRequest): Promise<FireResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/fire`, {
+  return send<FireResponse>(`${API_BASE_URL}/api/v1/fire`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
     body: JSON.stringify(body),
   });
-  return parse<FireResponse>(res);
 }
 
 // POST /api/v1/clock — the acting staff clocks in/out (op "toggle") or toggles a
 // break (op "break"). Staff state, not money.
 export async function clockToggle(businessId: string, staffId: string | null, op: ClockOp): Promise<ClockResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/clock`, {
+  return send<ClockResponse>(`${API_BASE_URL}/api/v1/clock`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
     body: JSON.stringify({ op }),
   });
-  return parse<ClockResponse>(res);
 }
 
 // POST /api/v1/reservations — create a booking or walk-in waitlist entry. FOH state.
 export async function createReservation(businessId: string, staffId: string | null, body: ReservationInput): Promise<ReservationCreateResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/reservations`, {
+  return send<ReservationCreateResponse>(`${API_BASE_URL}/api/v1/reservations`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
     body: JSON.stringify(body),
   });
-  return parse<ReservationCreateResponse>(res);
 }
 
 // POST /api/v1/reservations/:id — advance status (seat/cancel/no-show/done) or
 // page a waitlisted guest. FOH state, not money.
 export async function reservationMutate(businessId: string, staffId: string | null, id: string, body: ReservationMutateRequest): Promise<ReservationMutateResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/reservations/${id}`, {
+  return send<ReservationMutateResponse>(`${API_BASE_URL}/api/v1/reservations/${id}`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
     body: JSON.stringify(body),
   });
-  return parse<ReservationMutateResponse>(res);
 }
 
 // NOTE: order / tender / refund / tab money-write calls are intentionally absent —

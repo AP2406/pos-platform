@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, type LayoutChangeEvent } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import {
@@ -76,6 +76,7 @@ export default function Floor() {
   // Servers see only tables they own; managers/owners see everything.
   const scoped = !seesAllTables(s.staff?.role ?? "");
 
+  const { height: winH } = useWindowDimensions();
   const [view, setView] = useState<"map" | "list">("map");
   const [moreOpen, setMoreOpen] = useState(false);
   const [plans, setPlans] = useState<FloorPlan[]>([]);
@@ -419,13 +420,17 @@ export default function Floor() {
       </Pressable>
 
       <BottomSheet visible={moreOpen} onClose={() => setMoreOpen(false)} title="Staff tools">
-        <Button title="Time clock" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/clock"); }} />
-        <Button title="Reservations" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/reservations"); }} />
-        <Button title="Waitlist" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/waitlist"); }} />
-        <Button title="Customers" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/customers"); }} />
-        {isManager(s.staff?.role ?? "") && (
-          <Button title="Device settings" variant="ghost" onPress={() => { setMoreOpen(false); router.push("/device-settings"); }} />
-        )}
+        {/* Scrollable so every item (incl. owner-only Device settings) is reachable
+            regardless of device height. */}
+        <ScrollView style={{ maxHeight: winH * 0.55 }} contentContainerStyle={{ gap: space.sm }} showsVerticalScrollIndicator={false}>
+          <Button title="Time clock" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/clock"); }} />
+          <Button title="Reservations" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/reservations"); }} />
+          <Button title="Waitlist" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/waitlist"); }} />
+          <Button title="Customers" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/customers"); }} />
+          {isManager(s.staff?.role ?? "") && (
+            <Button title="Device settings" variant="ghost" onPress={() => { setMoreOpen(false); router.push("/device-settings"); }} />
+          )}
+        </ScrollView>
       </BottomSheet>
     </SafeAreaView>
   );
