@@ -9,8 +9,11 @@ export async function middleware(request: NextRequest) {
   // path + query. Cannot loop — the destination host is www.surgetechpos.com,
   // which never ends in ".vercel.app". The www/app split itself is handled at
   // the Vercel domain layer, not here, so this doesn't interfere with it.
+  // EXCEPTION: never canonicalize the /api surface. Marketing-host canonicalization
+  // is for pages/SEO; the v1 API must stay reachable on branch/preview
+  // (*.vercel.app) deployments so the native app can point at a preview build.
   const host = (request.headers.get("host") || "").toLowerCase();
-  if (host.endsWith(".vercel.app")) {
+  if (host.endsWith(".vercel.app") && !request.nextUrl.pathname.startsWith("/api/")) {
     const target = new URL(request.nextUrl.pathname + request.nextUrl.search, CANONICAL_ORIGIN);
     return NextResponse.redirect(target, 308);
   }

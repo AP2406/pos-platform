@@ -22,7 +22,7 @@
     "extra": {
       "supabaseUrl": "https://zbymwnfhbpdgfrykwrpd.supabase.co",
       "supabaseAnonKey": "sb_publishable_Jx1T5pGsCBdruNYDTy-Ybg_-uyzPV0c",
-      "apiBaseUrl": "https://app.surgetechpos.com"
+      "apiBaseUrl": "https://pos-platform-git-mobile-foundation-ap2406s-projects.vercel.app"
     }
   }
 }
