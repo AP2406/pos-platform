@@ -1,46 +1,37 @@
-import { NativeModules } from "react-native";
-import type { PrinterDriver, PrinterTarget, PrintJob, PrintResult } from "./types";
+import type { PrinterDriver, PrinterTarget, PrintJob, PrintResult, PrinterBrand, PrinterConnection, PrintWidth } from "./types";
 import { noopDriver } from "./noop-driver";
 import { renderPlainText } from "./format";
+import * as SurgePrinter from "../../../modules/surge-printer";
 
-// Boundary to the native Star/Epson SDK module. The pilot build has no such module
-// linked, so `SurgePrinter` is undefined here and we transparently fall back to the
-// no-op driver — the app runs identically, just screen-only.
-//
-// TO GO LIVE: add the Expo native module `SurgePrinter` exposing
-//   printJob(target: PrinterTargetJSON, escposText: string): Promise<{printed: boolean}>
-//   discover(): Promise<PrinterTargetJSON[]>
-// backed by StarXpandSDK / Epson ePOS. This file already hands it the resolved
-// target + a plain-text render; the native side expands that into ESC/POS.
-
-type NativePrinterModule = {
-  printJob(target: PrinterTarget, payload: string): Promise<{ printed: boolean }>;
-  discover?(): Promise<PrinterTarget[]>;
-};
-
-function nativeModule(): NativePrinterModule | null {
-  const m = (NativeModules as Record<string, unknown>).SurgePrinter;
-  return m ? (m as NativePrinterModule) : null;
-}
+// Boundary to the SurgePrinter native module (modules/surge-printer). On device
+// the module is linked and currently returns a no-op success; in Expo Go / when
+// unlinked it isn't available and we fall back to the no-op driver — so the app
+// runs identically either way. Once the Star/Epson SDK is bound in the Swift
+// module (printed:true), printing goes live with no changes here.
 
 export const nativeDriver: PrinterDriver = {
   name: "native",
   async print(target: PrinterTarget | null, job: PrintJob): Promise<PrintResult> {
     if (!target) return { ok: true, printed: false }; // no printer configured
-    const mod = nativeModule();
-    if (!mod) return noopDriver.print(target, job); // SDK not linked (pilot) → no-op
+    if (!SurgePrinter.isNativePrinterAvailable()) return noopDriver.print(target, job);
     try {
-      const res = await mod.printJob(target, renderPlainText(job));
+      const res = await SurgePrinter.printJob(target, renderPlainText(job));
       return { ok: true, printed: !!res?.printed };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "Print failed." };
     }
   },
   async discover(): Promise<PrinterTarget[]> {
-    const mod = nativeModule();
-    if (!mod?.discover) return [];
+    if (!SurgePrinter.isNativePrinterAvailable()) return [];
     try {
-      return await mod.discover();
+      const found = await SurgePrinter.discover();
+      return found.map((t) => ({
+        id: t.id,
+        brand: t.brand as PrinterBrand,
+        connection: t.connection as PrinterConnection,
+        address: t.address ?? null,
+        widthMm: (t.widthMm === 80 ? 80 : 58) as PrintWidth,
+      }));
     } catch {
       return [];
     }
