@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { SearchField, ScreenHeader, EmptyState, color, space, text } from "@/design";
 import { useSession } from "@/state/session";
+import { notify } from "@/lib/notice";
 import { fetchCustomers, type CustomerRow } from "@/lib/reads";
 
 export default function Customers() {
@@ -19,7 +20,7 @@ export default function Customers() {
       try {
         setRows(await fetchCustomers(bizId, t));
       } catch {
-        /* transient */
+        notify("Couldn't load the latest — check your connection.");
       }
     },
     [bizId]

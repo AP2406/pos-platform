@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { SegmentedTabs, Button, ScreenHeader, EmptyState, color, space, text } from "@/design";
 import { useSession } from "@/state/session";
+import { notify } from "@/lib/notice";
 import { supabase, realtimeChannel } from "@/lib/supabase";
 import { fetchOrdersHub, type OrderHubRow } from "@/lib/reads";
 import { ordersFulfill } from "@/lib/api";
@@ -51,7 +52,7 @@ export default function Orders() {
     try {
       setRows(await fetchOrdersHub(bizId));
     } catch {
-      /* transient */
+      notify("Couldn't load the latest — check your connection.");
     }
   }, [bizId]);
 

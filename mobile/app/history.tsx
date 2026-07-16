@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { SegmentedTabs, SearchField, ScreenHeader, EmptyState, color, space, text } from "@/design";
 import { useSession } from "@/state/session";
+import { notify } from "@/lib/notice";
 import { fetchSalesHistory, type SaleRow, type SaleStatus } from "@/lib/reads";
 import { money } from "@/lib/format";
 
@@ -38,7 +39,7 @@ export default function History() {
     try {
       setRows(await fetchSalesHistory(bizId, sinceFor(range)));
     } catch {
-      /* ignore */
+      notify("Couldn't load the latest — check your connection.");
     }
   }, [bizId, range]);
 

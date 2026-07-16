@@ -19,12 +19,18 @@
       "distribution": "internal",
       "ios": {
         "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://pos-platform-git-mobile-foundation-ap2406s-projects.vercel.app"
       }
     },
     "production": {
       "autoIncrement": true,
       "ios": {
         "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://pos-platform-git-mobile-foundation-ap2406s-projects.vercel.app"
       }
     }
   },

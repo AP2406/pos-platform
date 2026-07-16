@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { SegmentedTabs, KdsTicket, ScreenHeader, EmptyState, color, space, text } from "@/design";
 import { useSession } from "@/state/session";
+import { notify } from "@/lib/notice";
 import { supabase, realtimeChannel } from "@/lib/supabase";
 import { fetchKitchenTickets, fetchKitchenStations, fetchKdsAging, type KitchenTicket, type KitchenStation, type KdsItem, type Aging } from "@/lib/reads";
 import { kdsMutate } from "@/lib/api";
@@ -36,7 +37,7 @@ export default function Kds() {
     try {
       setTickets(await fetchKitchenTickets(bizId));
     } catch {
-      /* transient */
+      notify("Couldn't load the latest — check your connection.");
     }
   }, [bizId]);
 

@@ -16,6 +16,7 @@ import {
   type TableStatus,
 } from "@/design";
 import { useSession } from "@/state/session";
+import { notify } from "@/lib/notice";
 import { supabase, realtimeChannel } from "@/lib/supabase";
 import {
   fetchFloorPlans,
@@ -125,7 +126,7 @@ export default function Floor() {
           }
         }
       } catch {
-        /* ignore */
+        notify("Couldn't load the latest — check your connection.");
       }
     })();
   }, [bizId]);
