@@ -25,6 +25,12 @@ controls which screens the device shows), and its **default room**.
   for details, or the **+** to quick-add). Add an item with **required options** or
   **sizes** (the picker blocks until you choose). Try **coursing**, **per-seat**
   ordering, **seat names**, **allergen tags**, and an **upsell** prompt.
+- **Scan to add** — on the Register tap **Scan**. Point the camera at a product
+  barcode, or **type/paste** a code in the field (also works with a USB/Bluetooth
+  wedge scanner). Demo codes seeded on the Aathy Bistro menu you can type:
+  `049000000443` → Soda (a real Coca-Cola can UPC — a physical can scans too),
+  `010000000108` → Burger, `020000000206` → Fries. An unknown code shows
+  "No item for …".
 - **Send to Kitchen** — fire the order; confirm it appears on the **Kitchen**
   display, then **bump** it; check it in the **Orders** hub and **Mark ready**.
 - **Tickets / Sales** — open a past sale → full detail (timeline, items by seat,

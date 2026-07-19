@@ -13,6 +13,7 @@ export type MenuItem = {
   salesCategory: string | null; // reporting "section"
   imageUrl: string | null;
   outOfStock: boolean;
+  barcode: string | null; // UPC / EAN for scan-to-add
   allergens: string[];
   defaultCourseId: string | null;
   variations: Variation[];
@@ -79,7 +80,7 @@ export async function fetchMenu(businessId: string): Promise<MenuItem[]> {
   const [{ data, error }, { data: vars }, { data: mods }, { data: groups }] = await Promise.all([
     supabase
       .from("catalog_items")
-      .select("id, name, short_name, price, category, sales_category, image_url, out_of_stock, allergens, default_course_id, is_active")
+      .select("id, name, short_name, price, category, sales_category, image_url, out_of_stock, barcode, allergens, default_course_id, is_active")
       .eq("business_id", businessId)
       .eq("is_active", true)
       .order("category", { ascending: true })
@@ -109,6 +110,7 @@ export async function fetchMenu(businessId: string): Promise<MenuItem[]> {
       salesCategory: (r.sales_category as string | null) ?? null,
       imageUrl: (r.image_url as string | null) ?? null,
       outOfStock: (r.out_of_stock as boolean | null) === true,
+      barcode: (r.barcode as string | null) ?? null,
       allergens: Array.isArray(al) ? al.map((a) => String(a)) : [],
       defaultCourseId: (r.default_course_id as string | null) ?? null,
       variations: varsByItem[r.id as string] ?? [],

@@ -24,7 +24,13 @@
       "expo-font",
       "expo-asset",
       "expo-dev-client",
-      "./plugins/withPrinting"
+      "./plugins/withPrinting",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Surge POS uses the camera to scan item barcodes at the register."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

@@ -15,6 +15,7 @@ import {
   CategoryRail,
   MenuItemSheet,
   EmptyState,
+  ScanSheet,
   color,
   space,
   radius,
@@ -23,8 +24,10 @@ import {
   type SheetItem,
   type SheetInitial,
   type ConfirmSpec,
+  type ScanResult,
 } from "@/design";
 import { categoryIcon } from "@/lib/category-icons";
+import { barcodeIndex, matchBarcode } from "@/lib/barcode";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSession } from "@/state/session";
 import { fetchMenu, fetchCheckCart, fetchCourses, fetchUpsells, type MenuItem, type Course, type UpsellPrompt } from "@/lib/reads";
@@ -64,6 +67,7 @@ export default function Register() {
   const [upsells, setUpsells] = useState<UpsellPrompt[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [detailItem, setDetailItem] = useState<MenuItem | null>(null);
+  const [scanOpen, setScanOpen] = useState(false);
   const [cat, setCat] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [totals, setTotals] = useState({ subtotal: 0, tax: 0, total: 0 });
@@ -246,6 +250,24 @@ export default function Register() {
     maybeUpsell(m);
   }
 
+  // Barcode/UPC scan → catalog match over the already-loaded menu (in-memory).
+  const codeIndex = useMemo(() => barcodeIndex(menu), [menu]);
+  function onScan(code: string): ScanResult {
+    const m = matchBarcode(codeIndex, code);
+    if (!m) return { found: false };
+    if (m.outOfStock) return { found: false, message: m.name + " is 86'd" };
+    if (itemRequiresChoice(m)) {
+      // Needs a size/required option — close the scanner and open the picker.
+      setScanOpen(false);
+      setEditLineId(null);
+      setSheetInitial(undefined);
+      setSheetItem(m);
+      return { found: true, name: m.name };
+    }
+    dispatch({ type: "ADD", item: { catalogItemId: m.id, name: m.name, unitPrice: m.price }, course: courseForItem(m) });
+    return { found: true, name: m.name };
+  }
+
   function onSheetConfirm(spec: ConfirmSpec) {
     if (editLineId) {
       dispatch({ type: "REPLACE_LINE", id: editLineId, spec: { catalogItemId: spec.catalogItemId, variationId: spec.variationId, name: spec.name, unitPrice: spec.unitPrice, note: spec.note, modifiers: spec.modifiers } });
@@ -384,7 +406,10 @@ export default function Register() {
             <Pressable onPress={() => router.replace("/floor")} hitSlop={12}>
               <Text style={text.bodyDim}>‹ Floor</Text>
             </Pressable>
-            <Button title="Custom" variant="secondary" onPress={() => setCustomOpen(true)} />
+            <View style={styles.menuHeaderActions}>
+              <Button title="Scan" variant="secondary" onPress={() => setScanOpen(true)} />
+              <Button title="Custom" variant="secondary" onPress={() => setCustomOpen(true)} />
+            </View>
           </View>
           <SearchField value={search} onChangeText={setSearch} placeholder="Search menu" />
           <View style={styles.browse}>
@@ -484,6 +509,9 @@ export default function Register() {
           </View>
         </View>
       </View>
+
+      {/* Barcode/UPC scan-to-add */}
+      <ScanSheet visible={scanOpen} onClose={() => setScanOpen(false)} onCode={onScan} />
 
       {/* Catalog detail (read-only preview) → hands back to the add flow */}
       <MenuItemSheet
@@ -613,6 +641,7 @@ const styles = StyleSheet.create({
   row: { flex: 1, flexDirection: "row" },
   menuSide: { flex: 2, padding: space.lg, gap: space.sm },
   menuHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  menuHeaderActions: { flexDirection: "row", alignItems: "center", gap: space.sm },
   browse: { flex: 1, flexDirection: "row", gap: space.sm },
   gridScroll: { flex: 1 },
   menuGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.md, paddingVertical: space.md, paddingBottom: space.xl },
