@@ -169,3 +169,17 @@ export type ReservationMutateRequest =
   | { op: "status"; status: ReservationStatus; elementId?: string | null }
   | { op: "page" };
 export type ReservationMutateResponse = { ok: true; channel?: "sms" | "email" };
+
+// ---- Ticket append (move an item to another table's open check; NOT money) ----
+// Appends one (unfired) cart line to the destination table's open_ticket, creating
+// the check if the table has none. No kitchen ticket, no tender — order shaping.
+export type TicketAppendItem = {
+  catalog_item_id: string | null;
+  name: string;
+  unit_price: number;
+  quantity: number;
+  note?: string | null;
+  seat?: number | null;
+};
+export type TicketAppendRequest = { elementId: string; label?: string | null; item: TicketAppendItem };
+export type TicketAppendResponse = { ticketId: string };

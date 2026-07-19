@@ -119,6 +119,22 @@ export async function fetchMenu(businessId: string): Promise<MenuItem[]> {
   });
 }
 
+// Tables an item can be moved to (for "move item to another table"), with an
+// occupied flag. Excludes the passed current element.
+export type MoveTarget = { elementId: string; label: string; occupied: boolean };
+
+export async function fetchTables(businessId: string, excludeElementId?: string | null): Promise<MoveTarget[]> {
+  const [{ data: els }, { data: open }] = await Promise.all([
+    supabase.from("floor_elements").select("id, label, sort_order").eq("business_id", businessId).eq("is_active", true).in("kind", ["table", "booth"]).order("sort_order", { ascending: true }),
+    supabase.from("open_tickets").select("element_id").eq("business_id", businessId).is("parent_ticket_id", null).not("element_id", "is", null),
+  ]);
+  const occupied = new Set<string>();
+  for (const o of open ?? []) occupied.add(o.element_id as string);
+  return (els ?? [])
+    .filter((e) => (e.id as string) !== excludeElementId)
+    .map((e) => ({ elementId: e.id as string, label: (e.label as string) || "Table", occupied: occupied.has(e.id as string) }));
+}
+
 export type Course = { id: string; name: string; sortOrder: number };
 
 export async function fetchCourses(businessId: string): Promise<Course[]> {

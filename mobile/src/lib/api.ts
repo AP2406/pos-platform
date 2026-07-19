@@ -20,6 +20,8 @@ import {
   type ReservationCreateResponse,
   type ReservationMutateRequest,
   type ReservationMutateResponse,
+  type TicketAppendRequest,
+  type TicketAppendResponse,
 } from "@surge/api-contracts";
 
 // Typed client for the shared v1 HTTP API. Every call carries the Supabase access
@@ -143,6 +145,16 @@ export async function createReservation(businessId: string, staffId: string | nu
 // page a waitlisted guest. FOH state, not money.
 export async function reservationMutate(businessId: string, staffId: string | null, id: string, body: ReservationMutateRequest): Promise<ReservationMutateResponse> {
   return send<ReservationMutateResponse>(`${API_BASE_URL}/api/v1/reservations/${id}`, {
+    method: "POST",
+    headers: await authHeaders(businessId, staffId),
+    body: JSON.stringify(body),
+  });
+}
+
+// POST /api/v1/tickets/append — move an item to another table's open check.
+// Order shaping (no kitchen ticket, no tender).
+export async function appendToTicket(businessId: string, staffId: string | null, body: TicketAppendRequest): Promise<TicketAppendResponse> {
+  return send<TicketAppendResponse>(`${API_BASE_URL}/api/v1/tickets/append`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
     body: JSON.stringify(body),

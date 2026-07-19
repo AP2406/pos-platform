@@ -30,12 +30,12 @@ import { categoryIcon } from "@/lib/category-icons";
 import { barcodeIndex, matchBarcode } from "@/lib/barcode";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSession } from "@/state/session";
-import { fetchMenu, fetchCheckCart, fetchCourses, fetchUpsells, type MenuItem, type Course, type UpsellPrompt } from "@/lib/reads";
+import { fetchMenu, fetchCheckCart, fetchCourses, fetchUpsells, fetchTables, type MenuItem, type Course, type UpsellPrompt, type MoveTarget } from "@/lib/reads";
 import { itemNeedsSheet, itemRequiresChoice, type ModPosition } from "@/lib/modifiers";
 import { ALLERGENS, allergyString } from "@/lib/allergens";
-import { quote, verifyApprovals, fire } from "@/lib/api";
+import { quote, verifyApprovals, fire, appendToTicket } from "@/lib/api";
 import { printKitchenChit } from "@/lib/printing";
-import { cartReducer, initialCart, cartSubtotal, cartSeats, type DiningOption, type CartLine as Line } from "@/state/cart";
+import { cartReducer, initialCart, cartSubtotal, cartSeats, lineEffectiveTotal, lineEffectiveUnit, lineDiscountAmount, type DiningOption, type CartLine as Line, type LineDiscount } from "@/state/cart";
 import { money } from "@/lib/format";
 
 type Suggestion = { item: MenuItem; label: string; discount: number };
@@ -89,6 +89,14 @@ export default function Register() {
   const [sending, setSending] = useState(false);
   const [lineEditId, setLineEditId] = useState<string | null>(null);
   const [editAllergens, setEditAllergens] = useState<string[]>([]);
+  const [editDiscKind, setEditDiscKind] = useState<LineDiscount["kind"]>("percent");
+  const [editDiscVal, setEditDiscVal] = useState("");
+  const [customMod, setCustomMod] = useState("");
+  const [customModPrice, setCustomModPrice] = useState("");
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveTargets, setMoveTargets] = useState<MoveTarget[]>([]);
+  const [movingLineId, setMovingLineId] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
 
   const bizId = s.businessId!;
   const staffId = s.staff?.id ?? null;
@@ -117,7 +125,7 @@ export default function Register() {
           const lines = await fetchCheckCart(params.ticket!);
           dispatch({
             type: "LOAD",
-            lines: lines.map((l) => ({ catalogItemId: l.catalogItemId, variationId: null, name: l.name, unitPrice: l.unitPrice, quantity: l.quantity, seat: l.seat, course: 1, note: l.note, modifiers: null, allergy: null, customized: false, firedQty: l.quantity })),
+            lines: lines.map((l) => ({ catalogItemId: l.catalogItemId, variationId: null, name: l.name, unitPrice: l.unitPrice, quantity: l.quantity, seat: l.seat, course: 1, note: l.note, modifiers: null, allergy: null, discount: null, customized: false, firedQty: l.quantity })),
           });
         } catch {
           /* ignore */
@@ -129,7 +137,8 @@ export default function Register() {
 
   // Totals via compute-only /api/v1/quote (matches the eventual charge).
   useEffect(() => {
-    const items = cart.lines.map((l) => ({ catalog_item_id: l.catalogItemId, unit_price: l.unitPrice, quantity: l.quantity }));
+    // Tax on the DISCOUNTED per-unit price so the preview matches the discount.
+    const items = cart.lines.map((l) => ({ catalog_item_id: l.catalogItemId, unit_price: lineEffectiveUnit(l), quantity: l.quantity }));
     if (items.length === 0) {
       setTotals({ subtotal: 0, tax: 0, total: 0 });
       return;
@@ -182,6 +191,10 @@ export default function Register() {
   // Open the line editor, seeding the allergen chips from the line's allergy string.
   function openLineEditor(l: Line) {
     setEditAllergens((l.allergy ?? "").split(",").map((s) => LABEL_TO_KEY[s.trim()]).filter(Boolean));
+    setEditDiscKind(l.discount?.kind ?? "percent");
+    setEditDiscVal(l.discount ? String(l.discount.value) : "");
+    setCustomMod("");
+    setCustomModPrice("");
     setLineEditId(l.id);
   }
   function toggleLineAllergen(lineId: string, key: string) {
@@ -190,6 +203,48 @@ export default function Register() {
       dispatch({ type: "SET_LINE_ALLERGY", id: lineId, allergy: next.length ? allergyString(next) : null });
       return next;
     });
+  }
+  function applyDiscount(id: string) {
+    const v = Math.round((Number(editDiscVal) || 0) * 100) / 100;
+    dispatch({ type: "SET_LINE_DISCOUNT", id, discount: v > 0 ? { kind: editDiscKind, value: v } : null });
+  }
+  function addCustomMod(id: string) {
+    const name = customMod.trim();
+    if (!name) return;
+    dispatch({ type: "ADD_LINE_MODIFIER", id, name, price: Number(customModPrice) || 0 });
+    setCustomMod("");
+    setCustomModPrice("");
+  }
+  // Move an UNFIRED line to another table (order shaping — no kitchen ticket, no tender).
+  async function openMove(l: Line) {
+    setMovingLineId(l.id);
+    setLineEditId(null);
+    try {
+      setMoveTargets(await fetchTables(bizId, params.element ?? null));
+    } catch {
+      setMoveTargets([]);
+    }
+    setMoveOpen(true);
+  }
+  async function doMove(target: MoveTarget) {
+    const l = cart.lines.find((x) => x.id === movingLineId);
+    if (!l || moving) return;
+    setMoving(true);
+    try {
+      await appendToTicket(bizId, staffId, {
+        elementId: target.elementId,
+        label: target.label,
+        item: { catalog_item_id: l.catalogItemId, name: l.name, unit_price: lineEffectiveUnit(l), quantity: l.quantity, note: l.note, seat: l.seat },
+      });
+      dispatch({ type: "REMOVE", id: l.id });
+      Alert.alert("Moved", l.name + " → " + target.label);
+    } catch (e) {
+      Alert.alert("Couldn't move", String((e as Error).message));
+    } finally {
+      setMoving(false);
+      setMoveOpen(false);
+      setMovingLineId(null);
+    }
   }
 
   // The course a new line of this item lands on (its default course, else active).
@@ -467,10 +522,11 @@ export default function Register() {
             {cart.lines.length === 0 && <Text style={[text.bodyDim, { paddingVertical: space.md }]}>Tap the menu to add items.</Text>}
             {cart.lines.map((l) => {
               const fired = l.firedQty >= l.quantity && l.quantity > 0;
-              const tag = [l.seat != null ? seatLabel(l.seat) : null, coursingOn ? courseName(l.course) : null, fired ? "✓ fired" : l.firedQty > 0 ? l.firedQty + " fired" : null].filter(Boolean).join(" · ");
+              const disc = l.discount ? (l.discount.kind === "percent" ? "−" + l.discount.value + "%" : "−" + money(l.discount.value, "CAD")) : null;
+              const tag = [l.seat != null ? seatLabel(l.seat) : null, coursingOn ? courseName(l.course) : null, disc, fired ? "✓ fired" : l.firedQty > 0 ? l.firedQty + " fired" : null].filter(Boolean).join(" · ");
               return (
                 <Pressable key={l.id} onPress={() => openLineEditor(l)}>
-                  <CartLine name={l.name + (tag ? "  · " + tag : "")} qty={l.quantity} price={money(l.unitPrice * l.quantity, "CAD")} note={l.note ?? undefined} allergy={l.allergy ?? undefined} />
+                  <CartLine name={l.name + (tag ? "  · " + tag : "")} qty={l.quantity} price={money(lineEffectiveTotal(l), "CAD")} note={l.note ?? undefined} allergy={l.allergy ?? undefined} />
                 </Pressable>
               );
             })}
@@ -589,16 +645,51 @@ export default function Register() {
               <Text style={styles.qtyVal}>{editLine.quantity}</Text>
               <Button title="+" variant="secondary" onPress={() => dispatch({ type: "INC", id: editLine.id })} style={{ flex: 1 }} />
             </View>
+
+            {/* Per-item discount */}
+            <Text style={text.caption}>Discount</Text>
+            <View style={styles.discRow}>
+              <Pressable onPress={() => setEditDiscKind("percent")} style={[styles.discToggle, editDiscKind === "percent" && styles.discToggleOn]}>
+                <Text style={[styles.discToggleTxt, editDiscKind === "percent" && { color: color.text }]}>%</Text>
+              </Pressable>
+              <Pressable onPress={() => setEditDiscKind("amount")} style={[styles.discToggle, editDiscKind === "amount" && styles.discToggleOn]}>
+                <Text style={[styles.discToggleTxt, editDiscKind === "amount" && { color: color.text }]}>$</Text>
+              </Pressable>
+              <TextInput value={editDiscVal} onChangeText={setEditDiscVal} placeholder={editDiscKind === "percent" ? "0" : "0.00"} placeholderTextColor={color.textFaint} keyboardType="decimal-pad" style={styles.discInput} />
+              <Button title="Apply" variant="secondary" onPress={() => applyDiscount(editLine.id)} />
+              {editLine.discount ? <Button title="Clear" variant="ghost" onPress={() => { dispatch({ type: "SET_LINE_DISCOUNT", id: editLine.id, discount: null }); setEditDiscVal(""); }} /> : null}
+            </View>
+            {editLine.discount ? <Text style={text.caption}>−{money(lineDiscountAmount(editLine), "CAD")} off · line {money(lineEffectiveTotal(editLine), "CAD")}</Text> : null}
+
+            {/* Free-text modifier (distinct from the kitchen Note) */}
+            <Text style={text.caption}>Add modifier</Text>
+            <View style={styles.discRow}>
+              <TextInput value={customMod} onChangeText={setCustomMod} placeholder="e.g. extra hot, on the side" placeholderTextColor={color.textFaint} style={[styles.discInput, { flex: 3 }]} />
+              <TextInput value={customModPrice} onChangeText={setCustomModPrice} placeholder="+$" placeholderTextColor={color.textFaint} keyboardType="decimal-pad" style={[styles.discInput, { flex: 1 }]} />
+              <Button title="Add" variant="secondary" onPress={() => addCustomMod(editLine.id)} disabled={!customMod.trim()} />
+            </View>
+
             {editLine.customized && editLine.firedQty === 0 && menu.some((m) => m.id === editLine.catalogItemId) && (
               <Button title="Edit options" variant="secondary" onPress={() => editLineOptions(editLine)} />
             )}
             {editLine.firedQty === 0 ? (
-              <Button title="Remove" variant="danger" onPress={() => { dispatch({ type: "REMOVE", id: editLine.id }); setLineEditId(null); }} />
+              <>
+                <Button title="Move to another table" variant="secondary" onPress={() => openMove(editLine)} />
+                <Button title="Remove" variant="danger" onPress={() => { dispatch({ type: "REMOVE", id: editLine.id }); setLineEditId(null); }} />
+              </>
             ) : (
-              <Text style={text.caption}>Fired items can't be removed here — void them after charging.</Text>
+              <Text style={text.caption}>Fired items can't be moved or removed here — that's a fast-follow (kitchen reconciliation).</Text>
             )}
           </>
         ) : null}
+      </BottomSheet>
+
+      {/* Move item → pick a destination table (unfired lines only) */}
+      <BottomSheet visible={moveOpen} onClose={() => setMoveOpen(false)} title="Move item to table">
+        {moveTargets.length === 0 && <Text style={text.bodyDim}>No other tables available.</Text>}
+        {moveTargets.map((t) => (
+          <Button key={t.elementId} title={t.label + (t.occupied ? " · occupied" : " · open")} variant="secondary" disabled={moving} onPress={() => doMove(t)} />
+        ))}
       </BottomSheet>
 
       {/* Custom price */}
@@ -661,6 +752,11 @@ const styles = StyleSheet.create({
   chargeTxt: { color: "#fff", fontSize: 18, fontWeight: "600" },
   customAmt: { color: color.text, fontSize: 32, textAlign: "center", paddingVertical: space.sm },
   editActions: { flexDirection: "row", alignItems: "center", gap: space.md, marginVertical: space.xs },
+  discRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  discToggle: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.card, borderWidth: 1, borderColor: color.border, backgroundColor: color.card2 },
+  discToggleOn: { borderColor: color.blue, backgroundColor: color.card },
+  discToggleTxt: { fontFamily: "Poppins_600SemiBold", fontSize: 15, color: color.textDim },
+  discInput: { flex: 2, backgroundColor: color.card2, borderRadius: radius.card, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.sm, color: color.text, fontFamily: "Poppins_400Regular", fontSize: 15 },
   qtyVal: { fontFamily: "Poppins_600SemiBold", fontSize: 18, color: color.text, minWidth: 32, textAlign: "center" },
   seatName: { backgroundColor: color.card2, borderRadius: radius.card, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.xs, color: color.text, fontFamily: "Poppins_400Regular", fontSize: 14 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
