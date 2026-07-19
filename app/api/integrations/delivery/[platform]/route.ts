@@ -1,5 +1,7 @@
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { isDeliveryPlatform, verifyDeliverySignature, mapDeliverectOrder, type DeliveryPlatform, type NormalizedDeliveryOrder } from "@/lib/services/delivery";
+import { fireDeliveryOrderToKitchen } from "@/lib/services/delivery-kitchen";
+import { sendDeliverectStatus } from "@/lib/services/deliverect";
 import { integrationEnabled } from "@/lib/services/integrations";
 
 export const runtime = "nodejs";
@@ -121,5 +123,29 @@ export async function POST(req: Request, ctx: { params: Promise<{ platform: stri
     console.error(`delivery webhook ${plat}: inject failed`, error);
     return json({ ok: false, error: "ingest failed" }, 500);
   }
-  return json({ ok: true, result: data }, 200);
+
+  // A replayed webhook already produced its order + kitchen ticket — don't double-fire.
+  const replayed = (data as { replayed?: boolean } | null)?.replayed === true;
+  let kitchen: { fired: number; tickets: number } | { error: string } | { skipped: string } = { skipped: "replayed" };
+  if (!replayed) {
+    // Fire to the KDS. The order itself is already recorded as PAID by the RPC
+    // (pre-paid channel order) — this is the kitchen half, money-independent.
+    kitchen = await fireDeliveryOrderToKitchen(admin, {
+      businessId,
+      platform: plat,
+      displayId: order.display_id,
+      externalId: order.external_id,
+      items: order.items.map((i) => ({ name: i.name, quantity: i.quantity, note: i.note })),
+    });
+    if ("error" in kitchen) console.error(`delivery webhook ${plat}: kitchen fire failed`, kitchen.error);
+
+    // Acknowledge acceptance back to the channel. No-ops until a merchant token
+    // is connected (see the creds boundary in lib/services/deliverect.ts).
+    if (plat === "deliverect") {
+      const ack = await sendDeliverectStatus(admin, businessId, order.external_id, "accept");
+      if (!ack.sent && ack.skipped) console.log(`deliverect status accept skipped: ${ack.skipped}`);
+    }
+  }
+
+  return json({ ok: true, result: data, kitchen }, 200);
 }

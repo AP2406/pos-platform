@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail, isEmailConfigured } from "@/lib/services/email";
 import { sendSms, isSmsConfigured } from "@/lib/services/sms";
+import { sendDeliverectStatus } from "@/lib/services/deliverect";
 
 // Param-based order-fulfillment cores (no cookies) shared by the web kitchen
 // actions and the native v1 fulfillment endpoint, so both run the SAME order-ready
@@ -27,11 +28,13 @@ export async function markOrderFulfilledCore(supabase: Sb, business: CoreBiz, or
   if (settings.pickup_notify !== false) {
     const { data: ord } = await supabase
       .from("orders")
-      .select("dining_option, customer_id, sale_number")
+      // dining_option is snapshot-only (NOT a column) — selecting it as a column
+      // errored the whole query, which silently killed this ready notification.
+      .select("snapshot, customer_id, sale_number")
       .eq("id", orderId)
       .eq("business_id", business.id)
       .maybeSingle();
-    const dopt = (ord?.dining_option as string | null) ?? null;
+    const dopt = ((ord?.snapshot ?? null) as { dining_option?: string | null } | null)?.dining_option ?? null;
     if (ord?.customer_id && (dopt === "takeout" || dopt === "pickup" || dopt === "delivery")) {
       const { data: cust } = await supabase.from("customers").select("name, email, phone").eq("id", ord.customer_id as string).maybeSingle();
       const biz = business.name || "your order";
@@ -56,6 +59,20 @@ export async function markOrderFulfilledCore(supabase: Sb, business: CoreBiz, or
       }
     }
   }
+
+  // Channel (Deliverect) orders: report READY back so the courier is dispatched.
+  // Creds-gated — no-ops until a merchant token is connected. Never blocks.
+  const { data: dlv } = await supabase
+    .from("delivery_orders")
+    .select("external_id")
+    .eq("order_id", orderId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (dlv?.external_id) {
+    const res = await sendDeliverectStatus(supabase, business.id, dlv.external_id as string, "ready");
+    if (!res.sent && res.skipped) console.log("deliverect ready skipped:", res.skipped);
+  }
+
   return { ok: true };
 }
 
