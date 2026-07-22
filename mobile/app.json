@@ -25,6 +25,7 @@
       "expo-asset",
       "expo-dev-client",
       "./plugins/withPrinting",
+      "./plugins/withFmtConstevalFix",
       [
         "expo-camera",
         {
