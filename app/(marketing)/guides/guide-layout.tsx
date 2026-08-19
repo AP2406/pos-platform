@@ -20,24 +20,24 @@ export function guideMetadata(slug: string): Metadata {
 }
 
 export function GuideH2({ children }: { children: React.ReactNode }) {
-  return <h2 className="mt-12 text-2xl font-semibold tracking-tight text-slate-900">{children}</h2>;
+  return <h2 className="mt-12 text-2xl font-bold tracking-[-0.01em] text-[#0A2540]">{children}</h2>;
 }
 export function GuideP({ children }: { children: React.ReactNode }) {
-  return <p className="mt-4 leading-relaxed text-slate-600">{children}</p>;
+  return <p className="mt-4 leading-relaxed text-[#42566B]">{children}</p>;
 }
 
 function RelatedGuides({ currentSlug }: { currentSlug: string }) {
   const others = GUIDES.filter((g) => g.slug !== currentSlug).slice(0, 3);
   if (!others.length) return null;
   return (
-    <section className="relative border-t border-slate-100 bg-slate-50/70 py-14">
+    <section className="border-t border-[#D9E1EA] bg-[#F4F7FA] py-14">
       <div className="mx-auto max-w-2xl px-6">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Keep reading</h2>
+        <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-[#7A8CA0]">Keep reading</h2>
         <ul className="mt-4 space-y-3">
           {others.map((g) => (
             <li key={g.slug}>
-              <Link href={"/guides/" + g.slug} className="group block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
-                <span className="font-semibold text-slate-900 group-hover:text-blue-700">{g.title}</span>
+              <Link href={"/guides/" + g.slug} className="group block rounded-md border border-[#D9E1EA] bg-white p-4 transition-colors hover:bg-[#F4F7FA]">
+                <span className="font-bold text-[#0A2540] group-hover:text-[#1B6DC1]">{g.title}</span>
               </Link>
             </li>
           ))}
@@ -56,14 +56,14 @@ export function GuideArticle({ slug, lede, cta, children }: { slug: string; lede
       <JsonLd data={breadcrumbTrail([{ name: "Home", path: "" }, { name: "Guides", path: "/guides" }, { name: g.title, path }])} />
 
       <article className="relative overflow-hidden pb-8 pt-36">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-[70%] bg-gradient-to-b from-blue-50 via-sky-50/50 to-transparent" />
+        
         <div className="relative mx-auto max-w-2xl px-6">
-          <Link href="/guides" className="text-sm font-semibold text-blue-600 hover:text-blue-700">&larr; All guides</Link>
+          <Link href="/guides" className="text-sm font-bold text-[#1B6DC1] hover:underline">&larr; All guides</Link>
           <div className="mt-4"><LandingEyebrow>Guide</LandingEyebrow></div>
-          <h1 className="mt-4 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">{g.title}</h1>
-          <p className="mt-5 text-lg text-slate-600">{lede}</p>
+          <h1 className="mt-4 text-[36px] font-bold leading-[1.15] tracking-[-0.015em] text-[#0A2540] sm:text-[42px]">{g.title}</h1>
+          <p className="mt-5 text-lg leading-relaxed text-[#42566B]">{lede}</p>
           {children}
-          <p className="mt-8 text-xs text-slate-400">This guide is general information, not financial or legal advice. Card network rules and rates change &mdash; confirm the current details before acting.</p>
+          <p className="mt-8 text-xs text-[#7A8CA0]">This guide is general information, not financial or legal advice. Card network rules and rates change &mdash; confirm the current details before acting.</p>
         </div>
       </article>
 

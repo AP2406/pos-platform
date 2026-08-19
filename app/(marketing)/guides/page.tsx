@@ -16,25 +16,23 @@ export default function GuidesIndexPage() {
   return (
     <>
       <JsonLd data={breadcrumb("Guides", "/guides")} />
-      <section className="relative overflow-hidden pb-10 pt-36">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-[80%] bg-gradient-to-b from-blue-50 via-sky-50/50 to-transparent" />
-        <div className="pointer-events-none absolute -right-24 top-16 h-[28rem] w-[28rem] rounded-full bg-cyan-300/25 blur-[120px]" />
-        <div className="relative mx-auto max-w-3xl px-6 text-center">
+      <section className="border-b border-[#D9E1EA] bg-[linear-gradient(180deg,#F4F7FA,#FFFFFF)]">
+        <div className="mx-auto max-w-3xl px-6 pb-14 pt-40 text-center">
           <LandingEyebrow>Guides</LandingEyebrow>
-          <h1 className="mt-5 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">Straight answers on payments &amp; POS.</h1>
-          <p className="mx-auto mt-5 max-w-xl text-lg text-slate-600">No jargon, no sales pitch — just how card fees, Interac and merchant statements actually work, so you can spot what you&rsquo;re overpaying.</p>
+          <h1 className="mt-4 text-[38px] font-bold leading-[1.12] tracking-[-0.015em] text-[#0A2540] sm:text-[44px]">Straight answers on payments &amp; POS.</h1>
+          <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-[#42566B]">No jargon, no sales pitch — just how card fees, Interac and merchant statements actually work, so you can spot what you&rsquo;re overpaying.</p>
         </div>
       </section>
 
-      <section className="relative pb-24">
+      <section className="bg-white py-16">
         <div className="mx-auto max-w-3xl px-6">
           <ul className="space-y-4">
             {GUIDES.map((g) => (
               <li key={g.slug}>
-                <Link href={"/guides/" + g.slug} className="group block rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
-                  <h2 className="text-lg font-semibold text-slate-900 group-hover:text-blue-700">{g.title}</h2>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-600">{g.excerpt}</p>
-                  <span className="mt-3 inline-block text-sm font-semibold text-blue-600">Read the guide &rarr;</span>
+                <Link href={"/guides/" + g.slug} className="group block rounded-md border border-[#D9E1EA] bg-white p-6 transition-colors hover:bg-[#F4F7FA]">
+                  <h2 className="text-lg font-bold text-[#0A2540] group-hover:text-[#1B6DC1]">{g.title}</h2>
+                  <p className="mt-2 text-sm leading-relaxed text-[#42566B]">{g.excerpt}</p>
+                  <span className="mt-3 inline-block text-sm font-bold text-[#1B6DC1]">Read the guide &rarr;</span>
                 </Link>
               </li>
             ))}

@@ -80,20 +80,20 @@ export function BookWizard() {
 
   return (
     <>
-      <button type="button" onClick={start} className="rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-8 py-4 text-sm font-semibold text-white shadow-[0_14px_44px_-10px_rgba(37,99,235,0.6)] transition-transform hover:scale-105">Book my free call</button>
+      <button type="button" onClick={start} className="rounded-[4px] bg-[#0A2540] px-8 py-4 text-[15.5px] font-bold text-white transition-colors hover:bg-[#123456]">Book my free call</button>
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 backdrop-blur-sm sm:items-center" onClick={() => setOpen(false)}>
           <div className="relative w-full max-w-lg [animation:surge-rise_0.35s_ease-out]" onClick={(e) => e.stopPropagation()}>
             <div className="absolute -inset-[2px] overflow-hidden rounded-[calc(1.5rem+2px)]">
-              <div className="absolute left-1/2 top-1/2 h-[260%] w-[260%] bg-[conic-gradient(from_0deg,#2563eb,#06b6d4,#38bdf8,#a5f3fc,#06b6d4,#2563eb)] [animation:surge-spin_12s_linear_infinite]" />
+              
             </div>
             <div className="relative max-h-[88vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
               <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">&times;</button>
 
               {status === "ok" ? (
                 <div className="py-6 text-center">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"><svg viewBox="0 0 20 20" className="h-7 w-7" fill="none"><path d="M4 10l4 4 8-9" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg></div>
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[4px] bg-[#1E7B4D] text-white"><svg viewBox="0 0 20 20" className="h-7 w-7" fill="none"><path d="M4 10l4 4 8-9" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg></div>
                   <h3 className="mt-4 text-2xl font-bold tracking-tight text-slate-900">You are booked in</h3>
                   <p className="mx-auto mt-2 max-w-sm text-sm text-slate-600">Thanks{name ? ", " + name : ""}! We will reach out shortly to lock in your free call and show you your exact savings.</p>
                   <button type="button" onClick={() => setOpen(false)} className="mt-6 rounded-full border border-slate-200 bg-white px-6 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50">Done</button>
@@ -102,7 +102,7 @@ export function BookWizard() {
                 <>
                   <div className="pr-8">
                     <div className="text-xs font-semibold uppercase tracking-wider text-blue-600">Free 15-min call &bull; Step {Math.min(step + 1, TOTAL)} of {TOTAL}</div>
-                    <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 transition-all duration-300" style={{ width: pct + "%" }} /></div>
+                    <div className="mt-3 h-1.5 w-full overflow-hidden rounded-[2px] bg-[#E4EAF1]"><div className="h-full rounded-[2px] bg-[#0A2540] transition-all duration-300" style={{ width: pct + "%" }} /></div>
                   </div>
 
                   <div key={step} className="mt-6 [animation:surge-rise_0.3s_ease-out]">
@@ -125,7 +125,7 @@ export function BookWizard() {
                               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
                               <input id="b-vol" type="number" inputMode="numeric" min="0" value={volumeInput} onChange={(e) => setVolumeInput(e.target.value)} placeholder="e.g. 20000" className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-7 pr-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
                             </div>
-                            <button type="button" onClick={submitVolumeNumber} disabled={!volumeInput} className="shrink-0 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-5 py-3 text-sm font-semibold text-white transition disabled:opacity-50">Continue</button>
+                            <button type="button" onClick={submitVolumeNumber} disabled={!volumeInput} className="shrink-0 rounded-[4px] bg-[#0A2540] px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-[#123456] disabled:opacity-50">Continue</button>
                           </div>
                         </div>
                         <div className="my-4 flex items-center gap-3 text-xs text-slate-400"><span className="h-px flex-1 bg-slate-200" />or pick a range<span className="h-px flex-1 bg-slate-200" /></div>
@@ -168,7 +168,7 @@ export function BookWizard() {
                           <input id="b-preferred" type="text" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="e.g. weekday mornings" className={inputClass} />
                         </div>
                         {status === "error" ? (<p className="mt-3 text-sm text-red-600">{error}</p>) : null}
-                        <button type="submit" disabled={status === "sending"} className="mt-5 flex w-full items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_40px_-10px_rgba(37,99,235,0.6)] transition hover:shadow-[0_16px_50px_-8px_rgba(6,182,212,0.6)] disabled:opacity-60">{status === "sending" ? "Booking..." : "Book my free call"}</button>
+                        <button type="submit" disabled={status === "sending"} className="mt-5 flex w-full items-center justify-center rounded-[4px] bg-[#0A2540] px-6 py-3.5 text-sm font-bold text-white transition-colors hover:bg-[#123456] disabled:opacity-60">{status === "sending" ? "Booking..." : "Book my free call"}</button>
                       </form>
                     )}
                   </div>

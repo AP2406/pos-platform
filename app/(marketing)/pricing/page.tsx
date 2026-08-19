@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
 import { JsonLd, breadcrumb, decodeEntities } from "../jsonld";
+import { Crumb, Tick, btnPrimary, btnOutline, PageHero, CtaBand } from "../ui";
 
 export const metadata: Metadata = {
   title: { absolute: "Payment Processing Rates & Pricing (GTA) | Surge" },
@@ -9,15 +10,6 @@ export const metadata: Metadata = {
   alternates: { canonical: "/pricing" },
   openGraph: { ...OG_BASE, url: "/pricing" },
 };
-
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-blue-700">
-      <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      {children}
-    </span>
-  );
-}
 
 function Check({ className }: { className?: string }) {
   return (
@@ -93,187 +85,166 @@ export default function PricingPage() {
       <JsonLd data={faqSchema} />
       <JsonLd data={serviceSchema} />
       <JsonLd data={breadcrumb("Pricing", "/pricing")} />
-      <section className="relative overflow-hidden pb-12 pt-36">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-[80%] bg-gradient-to-b from-blue-50 via-sky-50/50 to-transparent" />
-        <div className="pointer-events-none absolute -right-24 top-16 h-[28rem] w-[28rem] rounded-full bg-cyan-300/25 blur-[120px]" />
-        <div className="relative mx-auto max-w-3xl px-6 text-center">
-          <Eyebrow>Pricing</Eyebrow>
-          <h1 className="mt-5 text-5xl font-bold tracking-tight text-slate-900 sm:text-6xl">One rate. No surprises.</h1>
-          <p className="mx-auto mt-5 max-w-xl text-lg text-slate-600">The number you see is the number you pay. A lower rate, free Basic POS, and a one-time setup of just $10 &mdash; no contract holding you hostage.</p>
-        </div>
-      </section>
 
-      <section className="relative pb-16">
+      <PageHero crumb="Pricing" title="One rate. No surprises." sub="The number you see is the number you pay. A lower rate, free Basic POS, and a one-time setup of just $10 — no contract holding you hostage." />
+
+      <section className="bg-white py-16">
         <div className="mx-auto max-w-3xl px-6">
-          <div className="relative">
-            <div className="absolute -inset-[2px] overflow-hidden rounded-[calc(1.5rem+2px)]">
-              <div className="absolute left-1/2 top-1/2 h-[260%] w-[260%] bg-[conic-gradient(from_0deg,#2563eb,#06b6d4,#38bdf8,#a5f3fc,#06b6d4,#2563eb)] [animation:surge-spin_10s_linear_infinite]" />
-            </div>
-            <div className="relative rounded-3xl bg-white p-8 shadow-2xl sm:p-10">
+          <div className="overflow-hidden rounded-md border border-[#D9E1EA] shadow-[0_10px_30px_-18px_rgba(10,37,64,0.35)]">
+            <div className="bg-[#0A2540] px-6 py-4 text-center text-sm font-bold uppercase tracking-[0.05em] text-white">The Surge rate</div>
+            <div className="p-7 sm:p-9">
               <div className="text-center">
-                <div className="text-sm font-semibold uppercase tracking-wider text-blue-700">The Surge rate</div>
-                <div className="mt-3 flex items-end justify-center gap-2">
-                  <span className="text-6xl font-bold tracking-tight text-slate-900 sm:text-7xl">2.5%</span>
-                  <span className="mb-2 text-2xl font-semibold text-slate-500">+ $0.15</span>
+                <div className="flex items-end justify-center gap-2">
+                  <span className="text-6xl font-bold tracking-tight text-[#0A2540] sm:text-7xl">2.5%</span>
+                  <span className="mb-2 text-2xl font-semibold text-[#42566B]">+ $0.15</span>
                 </div>
-                <div className="mt-2 text-sm text-slate-500">per in-person transaction &mdash; tap, chip, swipe, or mobile wallet</div>
+                <div className="mt-2 text-sm text-[#7A8CA0]">per in-person transaction &mdash; tap, chip, swipe, or mobile wallet</div>
               </div>
 
-              <div className="mt-7 overflow-hidden rounded-2xl border border-slate-200">
+              <div className="mt-7 overflow-hidden rounded-[4px] border border-[#D9E1EA]">
                 {rates.map((r, i) => (
-                  <div key={r.label} className={"flex items-center justify-between px-4 py-3 text-sm" + (i > 0 ? " border-t border-slate-200" : "")}>
-                    <span className="text-slate-600">{r.label}</span>
-                    <span className="font-semibold tabular-nums text-slate-900">{r.value}</span>
+                  <div key={r.label} className={"flex items-center justify-between px-4 py-3 text-sm" + (i > 0 ? " border-t border-[#D9E1EA]" : "")}>
+                    <span className="text-[#42566B]">{r.label}</span>
+                    <span className="font-bold tabular-nums text-[#0A2540]">{r.value}</span>
                   </div>
                 ))}
               </div>
-              <p className="mt-2 px-1 text-[11px] leading-relaxed text-slate-400">In person = tapped, inserted or swiped at your counter. Online &amp; keyed-in = paid on a website or payment link, or typed in by hand (like a phone order).</p>
+              <p className="mt-2 px-1 text-[11px] leading-relaxed text-[#7A8CA0]">In person = tapped, inserted or swiped at your counter. Online &amp; keyed-in = paid on a website or payment link, or typed in by hand (like a phone order).</p>
 
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                {noFees.map((f) => (<span key={f} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{f}</span>))}
+              <div className="mt-6 grid gap-2.5 sm:grid-cols-2">
+                {noFees.map((f) => (<div key={f} className="flex items-center gap-2.5 text-sm font-semibold text-[#1A2B3C]"><Tick />{f}</div>))}
               </div>
 
-              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Other fees, no surprises</div>
+              <div className="mt-6 rounded-[4px] border border-[#D9E1EA] bg-[#F4F7FA] p-4">
+                <div className="text-xs font-bold uppercase tracking-[0.05em] text-[#7A8CA0]">Other fees, no surprises</div>
                 <div className="mt-3 space-y-2">
                   {otherFees.map((o) => (
                     <div key={o.label} className="flex items-center justify-between text-sm">
-                      <span className="text-slate-600">{o.label}</span>
-                      <span className="font-semibold tabular-nums text-slate-900">{o.value}</span>
+                      <span className="text-[#42566B]">{o.label}</span>
+                      <span className="font-bold tabular-nums text-[#0A2540]">{o.value}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <Link href="/book" className="mt-7 flex w-full items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-6 py-4 text-sm font-semibold text-white shadow-[0_12px_40px_-10px_rgba(37,99,235,0.6)] transition-shadow hover:shadow-[0_16px_50px_-8px_rgba(6,182,212,0.6)]">See your exact savings on a free call</Link>
-              <p className="mt-3 text-center text-xs text-slate-400">Your final rate is confirmed on a quick call. Most local businesses qualify for the rate above.</p>
+              <Link href="/book" className={"mt-7 flex w-full items-center justify-center " + btnPrimary}>See your exact savings on a free call</Link>
+              <p className="mt-3 text-center text-xs text-[#7A8CA0]">Your final rate is confirmed on a quick call. Most local businesses qualify for the rate above.</p>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="relative overflow-hidden bg-gradient-to-b from-white via-blue-50/50 to-white py-20">
-        <div className="relative mx-auto max-w-6xl px-6">
-          <div className="mb-10 flex flex-col items-center text-center">
-            <Eyebrow>Software</Eyebrow>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Pick the plan that fits</h2>
-            <p className="mx-auto mt-3 max-w-xl text-slate-600">Start free with Basic, upgrade to Advanced as you grow, or have us build something completely custom for your business.</p>
+      <section className="border-y border-[#D9E1EA] bg-[#F4F7FA] py-20">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="mx-auto mb-12 max-w-2xl text-center">
+            <Crumb>Software</Crumb>
+            <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">Pick the plan that fits</h2>
+            <p className="mx-auto mt-4 leading-relaxed text-[#42566B]">Start free with Basic, upgrade to Advanced as you grow, or have us build something completely custom for your business.</p>
           </div>
 
           <div className="grid items-stretch gap-6 md:grid-cols-3">
-            <div className="flex h-full flex-col rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
-              <div className="text-sm font-semibold uppercase tracking-wider text-slate-500">Basic</div>
-              <div className="mt-3 flex items-end gap-1">
-                <span className="text-4xl font-bold tracking-tight text-slate-900">Free</span>
-                <span className="mb-1 text-sm text-slate-500">with payments</span>
+            <div className="flex h-full flex-col rounded-md border border-[#D9E1EA] bg-white p-7">
+              <div className="text-sm font-bold uppercase tracking-[0.05em] text-[#7A8CA0]">Basic</div>
+              <div className="mt-3 flex items-end gap-1.5">
+                <span className="text-4xl font-bold tracking-tight text-[#0A2540]">Free</span>
+                <span className="mb-1 text-sm text-[#7A8CA0]">with payments</span>
               </div>
-              <p className="mt-2 text-sm text-slate-500">Everything you need to ring up sales and get paid.</p>
+              <p className="mt-2 text-sm text-[#42566B]">Everything you need to ring up sales and get paid.</p>
               <div className="mt-6 space-y-3">
                 {basicFeatures.map((f) => (
                   <div key={f} className="flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600"><Check className="h-3 w-3" /></span>
-                    <span className="text-sm text-slate-700">{f}</span>
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border border-[#D9E1EA] bg-[#F4F7FA] text-[#42566B]"><Check className="h-3 w-3" /></span>
+                    <span className="text-sm text-[#42566B]">{f}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-auto pt-7"><Link href="/book" className="flex w-full items-center justify-center rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-50">Start with Basic</Link></div>
+              <div className="mt-auto pt-7"><Link href="/book" className={"flex w-full items-center justify-center " + btnOutline}>Start with Basic</Link></div>
             </div>
 
-            <div className="relative flex h-full flex-col rounded-3xl border-2 border-blue-300 bg-white p-7 shadow-lg">
-              <span className="absolute -top-3 left-7 rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-3 py-1 text-xs font-semibold text-white shadow">30-day free trial</span>
-              <div className="text-sm font-semibold uppercase tracking-wider text-blue-700">Advanced</div>
-              <div className="mt-3 flex items-end gap-1">
-                <span className="text-4xl font-bold tracking-tight text-slate-900">$29</span>
-                <span className="mb-1 text-sm text-slate-500">/ month, after trial</span>
+            <div className="relative flex h-full flex-col rounded-md border border-[#D9E1EA] border-t-[3px] border-t-[#0A2540] bg-white p-7 shadow-[0_10px_30px_-18px_rgba(10,37,64,0.35)]">
+              <span className="absolute -top-3.5 left-7 rounded-[3px] bg-[#1E7B4D] px-2.5 py-1 text-xs font-bold text-white">30-day free trial</span>
+              <div className="text-sm font-bold uppercase tracking-[0.05em] text-[#1B6DC1]">Advanced</div>
+              <div className="mt-3 flex items-end gap-1.5">
+                <span className="text-4xl font-bold tracking-tight text-[#0A2540]">$29</span>
+                <span className="mb-1 text-sm text-[#7A8CA0]">/ month, after trial</span>
               </div>
-              <p className="mt-2 text-sm text-slate-500">For shops that want to run the whole operation.</p>
+              <p className="mt-2 text-sm text-[#42566B]">For shops that want to run the whole operation.</p>
               <div className="mt-6 space-y-3">
                 {advancedFeatures.map((f) => (
                   <div key={f} className="flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700"><Check className="h-3 w-3" /></span>
-                    <span className="text-sm text-slate-700">{f}</span>
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] bg-[#0A2540] text-white"><Check className="h-3 w-3" /></span>
+                    <span className="text-sm text-[#42566B]">{f}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-auto pt-7"><Link href="/book" className="flex w-full items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-6 py-3 text-sm font-semibold text-white shadow-[0_12px_40px_-10px_rgba(37,99,235,0.6)] transition-shadow hover:shadow-[0_16px_50px_-8px_rgba(6,182,212,0.6)]">Start my free trial</Link></div>
+              <div className="mt-auto pt-7"><Link href="/book" className={"flex w-full items-center justify-center " + btnPrimary}>Start my free trial</Link></div>
             </div>
 
-            <div className="flex h-full flex-col rounded-3xl border border-cyan-200 bg-gradient-to-b from-cyan-50/60 to-white p-7 shadow-sm">
-              <div className="text-sm font-semibold uppercase tracking-wider text-cyan-700">Custom</div>
-              <div className="mt-3 flex items-end gap-1">
-                <span className="text-4xl font-bold tracking-tight text-slate-900">Custom</span>
-                <span className="mb-1 text-sm text-slate-500">priced per project</span>
+            <div className="flex h-full flex-col rounded-md border border-[#D9E1EA] bg-white p-7">
+              <div className="text-sm font-bold uppercase tracking-[0.05em] text-[#7A8CA0]">Custom</div>
+              <div className="mt-3 flex items-end gap-1.5">
+                <span className="text-4xl font-bold tracking-tight text-[#0A2540]">Custom</span>
+                <span className="mb-1 text-sm text-[#7A8CA0]">priced per project</span>
               </div>
-              <p className="mt-2 text-sm text-slate-500">Bespoke software built around how your business runs.</p>
+              <p className="mt-2 text-sm text-[#42566B]">Bespoke software built around how your business runs.</p>
               <div className="mt-6 space-y-3">
                 {customFeatures.map((f) => (
                   <div key={f} className="flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-cyan-700"><Check className="h-3 w-3" /></span>
-                    <span className="text-sm text-slate-700">{f}</span>
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border border-[#D9E1EA] bg-[#F4F7FA] text-[#42566B]"><Check className="h-3 w-3" /></span>
+                    <span className="text-sm text-[#42566B]">{f}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-auto pt-7"><Link href="/book" className="flex w-full items-center justify-center rounded-full border border-cyan-300 bg-white px-6 py-3 text-sm font-semibold text-cyan-700 transition-colors hover:bg-cyan-50">Book a call to scope it</Link></div>
+              <div className="mt-auto pt-7"><Link href="/book" className={"flex w-full items-center justify-center " + btnOutline}>Book a call to scope it</Link></div>
             </div>
           </div>
-          <p className="mt-5 text-center text-xs text-slate-400">Basic and Advanced run on the same 2.5% + $0.15 payment rate. Custom builds are quoted per project.</p>
+          <p className="mt-5 text-center text-xs text-[#7A8CA0]">Basic and Advanced run on the same 2.5% + $0.15 payment rate. Custom builds are quoted per project.</p>
         </div>
       </section>
 
-      <section className="relative overflow-hidden bg-[#0E1A2B] py-20 text-white">
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent" />
-        <div className="pointer-events-none absolute -left-40 top-0 h-[28rem] w-[28rem] rounded-full bg-blue-500/20 blur-[120px]" />
-        <div className="relative mx-auto max-w-4xl px-6">
-          <div className="mb-8 text-center">
-            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Surge vs the big processors</h2>
-            <p className="mx-auto mt-3 max-w-xl text-white/70">Same payments. Less taken off the top, and nothing buried in the fine print.</p>
+      <section className="bg-white py-20">
+        <div className="mx-auto max-w-4xl px-6">
+          <div className="mx-auto mb-10 max-w-2xl text-center">
+            <Crumb>Compare</Crumb>
+            <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">Surge vs the big processors</h2>
+            <p className="mx-auto mt-4 leading-relaxed text-[#42566B]">Same payments. Less taken off the top, and nothing buried in the fine print.</p>
           </div>
-          <div className="overflow-hidden rounded-2xl border border-white/10">
-            <div className="grid grid-cols-3 bg-white/[0.06] text-xs font-semibold uppercase tracking-wider text-white/60">
-              <div className="px-4 py-3"> </div>
-              <div className="px-4 py-3 text-center text-cyan-300">Surge</div>
-              <div className="px-4 py-3 text-center">Typical processor</div>
+          <div className="overflow-hidden rounded-md border border-[#D9E1EA]">
+            <div className="grid grid-cols-3 bg-[#0A2540] text-xs font-bold uppercase tracking-[0.05em] text-white">
+              <div className="px-4 py-3.5"> </div>
+              <div className="px-4 py-3.5 text-center">Surge</div>
+              <div className="px-4 py-3.5 text-center text-[#B9C8D8]">Typical processor</div>
             </div>
-            {compare.map((row) => (
-              <div key={row.label} className="grid grid-cols-3 border-t border-white/10 text-sm">
-                <div className="px-4 py-3 text-white/70">{row.label}</div>
-                <div className="px-4 py-3 text-center font-semibold text-white">{row.surge}</div>
-                <div className="px-4 py-3 text-center text-white/50">{row.typical}</div>
+            {compare.map((row, i) => (
+              <div key={row.label} className={"grid grid-cols-3 text-sm" + (i > 0 ? " border-t border-[#D9E1EA]" : "")}>
+                <div className="px-4 py-3.5 font-semibold text-[#42566B]">{row.label}</div>
+                <div className="px-4 py-3.5 text-center font-bold text-[#0A2540]">{row.surge}</div>
+                <div className="px-4 py-3.5 text-center text-[#7A8CA0]">{row.typical}</div>
               </div>
             ))}
           </div>
-          <p className="mt-4 text-center text-xs text-white/40">Typical figures shown for comparison and may vary by provider.</p>
+          <p className="mt-4 text-center text-xs text-[#7A8CA0]">Typical figures shown for comparison and may vary by provider.</p>
         </div>
       </section>
 
-      <section className="relative overflow-hidden bg-gradient-to-b from-white via-blue-50/50 to-white py-20">
-        <div className="relative mx-auto max-w-3xl px-6">
-          <div className="mb-8 text-center">
-            <Eyebrow>Questions</Eyebrow>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">The honest answers</h2>
+      <section className="border-t border-[#D9E1EA] bg-[#F4F7FA] py-20">
+        <div className="mx-auto max-w-3xl px-6">
+          <div className="mb-10 text-center">
+            <Crumb>Questions</Crumb>
+            <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">The honest answers</h2>
           </div>
           <div className="space-y-4">
             {faqs.map((f) => (
-              <div key={f.q} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="text-base font-semibold text-slate-900">{f.q}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-600" dangerouslySetInnerHTML={{ __html: f.a }} />
+              <div key={f.q} className="rounded-md border border-[#D9E1EA] bg-white p-6">
+                <h3 className="text-base font-bold text-[#0A2540]">{f.q}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-[#42566B]" dangerouslySetInnerHTML={{ __html: f.a }} />
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-sky-500 to-cyan-500 py-24 text-white">
-        <div className="pointer-events-none absolute -left-20 -top-20 h-80 w-80 rounded-full bg-white/15 blur-[100px]" />
-        <div className="pointer-events-none absolute -right-20 -bottom-24 h-80 w-80 rounded-full bg-cyan-200/30 blur-[110px]" />
-        <div className="relative mx-auto max-w-4xl px-6 text-center">
-          <h2 className="text-4xl font-bold tracking-tight sm:text-5xl">Ready to stop overpaying?</h2>
-          <p className="mx-auto mt-4 max-w-xl text-white/85">Book a free 15-minute call and we will show you the exact amount you would save by switching to Surge.</p>
-          <div className="mt-8 flex justify-center">
-            <Link href="/book" className="rounded-full bg-white px-8 py-4 text-sm font-semibold text-blue-700 shadow-lg transition-transform hover:scale-105">Book my free savings call</Link>
-          </div>
-        </div>
-      </section>
+      <CtaBand title="Ready to stop overpaying?" sub="Book a free 15-minute call and we will show you the exact amount you would save by switching to Surge." cta="Book my free savings call" />
     </>
   );
 }
