@@ -29,6 +29,14 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#0b0e14",
+  // The POS runs as an installed app on tablets and phones: draw edge-to-edge
+  // behind notches/home bars (safe-area padding is applied where needed) and
+  // disable pinch/double-tap zoom so fast register taps never zoom the UI.
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

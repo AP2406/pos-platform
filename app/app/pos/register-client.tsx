@@ -3170,7 +3170,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
           </div>
         </div>
       ) : (
-        <div className="h-full flex flex-col">
+        <div className="h-full flex flex-col pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)]">
           {/* P1-22: offline warning — payment and firing need a connection. */}
           {!online && (
             <div className="shrink-0 flex items-center gap-2 bg-amber-500/15 border-b border-amber-500/40 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
@@ -3305,7 +3305,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
 
               </div>
 
-              <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-5">
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain select-none p-3 space-y-5">
                 {/* E7/E4: quick tickets + favorites, pinned as full-size tiles at the top of the grid. Hidden while searching. */}
                 {search.length === 0 && (savedTickets.length > 0 || cart.some((l) => !l.void)) && (
                   <div>
@@ -3433,7 +3433,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                 );
               })()}
 
-              <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-3 space-y-2">
                 {cart.length === 0 ? (
                   <p className="text-sm text-muted-foreground">{tableMode ? "Pick a seat, then tap items to add to it." : "Tap items to add them to the sale."}</p>
                 ) : !tableMode ? (

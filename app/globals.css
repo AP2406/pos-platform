@@ -212,3 +212,18 @@
     @apply font-sans;
   }
 }
+/* App-mode hardening — the POS runs as an installed app on tablets/phones.
+   Stop pull-to-refresh from reloading mid-sale, kill the double-tap zoom
+   delay on register taps, and drop the grey tap flash for a native feel. */
+html,
+body {
+  overscroll-behavior-y: none;
+}
+body {
+  -webkit-tap-highlight-color: transparent;
+}
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
