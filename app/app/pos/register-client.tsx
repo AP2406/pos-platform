@@ -380,6 +380,8 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
   const [terminalReady, setTerminalReady] = useState<boolean | null>(null);
   const [tenderOpen, setTenderOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [activeCat, setActiveCat] = useState("All");
   const [mgrOpen, setMgrOpen] = useState(false);
   const [mgrPin, setMgrPin] = useState("");
@@ -3177,7 +3179,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
             </div>
           )}
           {/* Slim dark top bar */}
-          <div className="shrink-0 flex items-center justify-between gap-3 h-12 px-3 bg-sidebar text-sidebar-foreground border-b border-sidebar-border">
+          <div className="shrink-0 flex items-center justify-between gap-3 h-14 px-3 bg-sidebar text-sidebar-foreground border-b border-sidebar-border">
             <div className="min-w-0 flex items-baseline gap-2">
               <span className="font-semibold truncate">{tableBinding ? tableBinding.tableLabel : businessName}</span>
               {tableBinding && (
@@ -3199,45 +3201,70 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                 )
               )}
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {tableBinding && staffList && staffList.length > 0 && (
-                <button type="button" onClick={() => setServerSheet(true)} className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent">
-                  {serverName ? serverName : "Assign server"}
-                </button>
-              )}
-              {tableMode && (
-                <button type="button" onClick={openMoveTable} disabled={pending} className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent disabled:opacity-50">
-                  Move
-                </button>
-              )}
+            <div className="relative flex items-center gap-2 shrink-0">
               {hasStaff && (
                 <button
                   type="button"
                   onClick={callManager}
                   disabled={mgrCalled}
                   title="Silently alert a manager"
-                  className={"flex items-center gap-1.5 text-xs rounded-md border px-2.5 py-1.5 " + (mgrCalled ? "border-emerald-500/50 text-emerald-400" : "border-sidebar-border hover:bg-sidebar-accent")}
+                  className={"flex h-10 items-center gap-2 rounded-lg border px-3.5 text-sm font-semibold " + (mgrCalled ? "border-emerald-500/50 text-emerald-400" : "border-sidebar-border hover:bg-sidebar-accent")}
                 >
-                  {mgrCalled ? "✓ Manager alerted" : "🛎️ Manager"}
+                  {mgrCalled ? (
+                    <>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M20 6L9 17l-5-5" /></svg>
+                      Alerted
+                    </>
+                  ) : (
+                    <>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 01-3.4 0" /></svg>
+                      Manager
+                    </>
+                  )}
                 </button>
               )}
               <RegisterRefund businessName={businessName} />
               {!tableBinding && openTickets.length > 0 && (
-                <button type="button" onClick={() => setTicketsOpen(true)} className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent">
+                <button type="button" onClick={() => setTicketsOpen(true)} className="flex h-10 items-center gap-2 rounded-lg border border-sidebar-border px-3.5 text-sm font-semibold hover:bg-sidebar-accent">
                   Tickets
                   <span className="px-1.5 rounded-full bg-sidebar-accent tabular-nums">{openTickets.length}</span>
                 </button>
               )}
               {tableBinding ? (
-                <button type="button" onClick={exitToFloor} className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M15 18l-6-6 6-6" /></svg>
+                <button type="button" onClick={exitToFloor} className="flex h-10 items-center gap-2 rounded-lg border border-sidebar-border px-3.5 text-sm font-semibold hover:bg-sidebar-accent">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M15 18l-6-6 6-6" /></svg>
                   Tables
                 </button>
               ) : (
-                <Link href="/app" className="flex items-center gap-1.5 text-xs rounded-md border border-sidebar-border px-2.5 py-1.5 hover:bg-sidebar-accent">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
+                <Link href="/app" className="flex h-10 items-center gap-2 rounded-lg border border-sidebar-border px-3.5 text-sm font-semibold hover:bg-sidebar-accent">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
                   Exit
                 </Link>
+              )}
+              {((tableBinding && staffList && staffList.length > 0) || tableMode) && (
+                <>
+                  <button type="button" onClick={() => setMoreOpen((v) => !v)} aria-label="More actions" className={"flex h-10 w-10 items-center justify-center rounded-lg border " + (moreOpen ? "border-sidebar-foreground bg-sidebar-accent" : "border-sidebar-border hover:bg-sidebar-accent")}>
+                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>
+                  </button>
+                  {moreOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
+                      <div className="absolute right-0 top-12 z-50 w-56 rounded-lg border border-sidebar-border bg-sidebar p-1 shadow-lg">
+                        {tableBinding && staffList && staffList.length > 0 && (
+                          <button type="button" onClick={() => { setMoreOpen(false); setServerSheet(true); }} className="flex w-full items-center justify-between rounded-md px-3 py-3 text-sm hover:bg-sidebar-accent">
+                            <span className="font-medium">Assign server</span>
+                            {serverName && <span className="text-xs text-sidebar-foreground/70 truncate max-w-[100px]">{serverName}</span>}
+                          </button>
+                        )}
+                        {tableMode && (
+                          <button type="button" onClick={() => { setMoreOpen(false); openMoveTable(); }} disabled={pending} className="flex w-full items-center rounded-md px-3 py-3 text-sm font-medium hover:bg-sidebar-accent disabled:opacity-50">
+                            Move table
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -3245,9 +3272,13 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
           {/* Items + cart */}
           <div className="flex-1 min-h-0 flex flex-col md:flex-row">
             <div className="flex-1 min-h-0 flex flex-col border-b md:border-b-0 md:border-r border-border">
-              <div className="shrink-0 px-3 pt-3 space-y-3">
-                {categories.length > 0 && (
-                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+              <div className="shrink-0 px-3 pt-3 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <button type="button" aria-label="Search items" onClick={() => setSearchOpen((v) => { if (v) setSearch(""); return !v; })} className={"flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border " + (searchOpen || search.length > 0 ? "border-foreground bg-accent" : "border-border text-muted-foreground hover:bg-accent")}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                  </button>
+                  {categories.length > 0 && (
+                  <div className="flex-1 min-w-0 flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                     {["All", ...categories].map((c) => {
                       const active = activeCat === c;
                       return (
@@ -3257,34 +3288,47 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                       );
                     })}
                   </div>
-                )}
-
-                <div className="flex gap-2">
-                  <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search items" className="h-10 flex-1" />
-                  <Button type="button" variant="outline" className="h-10 shrink-0" onClick={() => { setCustomName(""); setCustomPrice(""); setCustomOpen(true); }}>
-                    Custom
-                  </Button>
+                  )}
+                  <button type="button" aria-label="Custom item" title="Custom item" onClick={() => { setCustomName(""); setCustomPrice(""); setCustomOpen(true); }} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-accent">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M12 5v14M5 12h14" /></svg>
+                  </button>
                 </div>
 
-                {/* E7/E4: quick tickets + favorites — one tap to add a saved set of items. */}
-                {(savedTickets.length > 0 || cart.some((l) => !l.void)) && (
-                  <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-                    {savedTickets.map((t) => (
-                      <span key={t.id} className="shrink-0 inline-flex items-center rounded-full border border-border overflow-hidden">
-                        <button type="button" onClick={() => addSavedLines(t.lines)} className="text-xs px-2.5 py-1.5 hover:bg-accent" title={"Add " + t.lines.length + " item" + (t.lines.length === 1 ? "" : "s")}>
-                          {t.scope === "favorite" ? "★ " : ""}{t.name}
-                        </button>
-                        <button type="button" onClick={() => { if (confirm("Delete saved ticket “" + t.name + "”?")) startTransition(async () => { await deleteSavedTicket(t.id); refreshSaved(); }); }} className="px-1.5 py-1.5 text-muted-foreground hover:text-red-600 border-l border-border" title="Delete">×</button>
-                      </span>
-                    ))}
-                    {cart.some((l) => !l.void) && (
-                      <button type="button" onClick={() => setSaveDialog({ scope: "quick", name: "" })} className="shrink-0 text-xs rounded-full border border-dashed border-border px-2.5 py-1.5 text-muted-foreground hover:bg-accent">＋ Save ticket</button>
-                    )}
+                {(searchOpen || search.length > 0) && (
+                  <div className="flex gap-2">
+                    <Input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search items" className="h-10 flex-1" />
+                    <Button type="button" variant="outline" className="h-10 shrink-0" onClick={() => { setSearch(""); setSearchOpen(false); }}>
+                      Close
+                    </Button>
                   </div>
                 )}
+
               </div>
 
               <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-5">
+                {/* E7/E4: quick tickets + favorites, pinned as full-size tiles at the top of the grid. Hidden while searching. */}
+                {search.length === 0 && (savedTickets.length > 0 || cart.some((l) => !l.void)) && (
+                  <div>
+                    <div className="text-xs font-semibold tracking-tight text-muted-foreground mb-2 px-0.5">★ Favorites</div>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
+                      {savedTickets.map((t) => (
+                        <div key={t.id} className="relative">
+                          <button type="button" onClick={() => addSavedLines(t.lines)} title={"Add " + t.lines.length + " item" + (t.lines.length === 1 ? "" : "s")} className="w-full min-h-[110px] rounded-xl border border-line bg-card shadow-elevation-sm p-2.5 pr-7 flex flex-col justify-between text-left active:scale-[0.97] transition-transform">
+                            <span className="font-semibold text-sm leading-snug line-clamp-2">{t.scope === "favorite" ? "★ " : ""}{t.name}</span>
+                            <span className="text-xs text-muted-foreground">{t.lines.length + (t.lines.length === 1 ? " item" : " items")}</span>
+                          </button>
+                          <button type="button" onClick={() => { if (confirm("Delete saved ticket “" + t.name + "”?")) startTransition(async () => { await deleteSavedTicket(t.id); refreshSaved(); }); }} className="absolute top-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background/80 text-xs leading-none text-muted-foreground hover:text-red-600" title="Delete">×</button>
+                        </div>
+                      ))}
+                      {cart.some((l) => !l.void) && (
+                        <button type="button" onClick={() => setSaveDialog({ scope: "quick", name: "" })} className="min-h-[110px] rounded-xl border border-dashed border-border p-2.5 flex flex-col justify-between text-left text-muted-foreground hover:bg-accent">
+                          <span className="font-semibold text-sm">＋ Save current</span>
+                          <span className="text-xs">as quick ticket</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {visibleItems.length === 0 ? (
                   <p className="text-sm text-muted-foreground p-4">No items match. Add some in the Catalog, or clear the search.</p>
                 ) : (
@@ -3344,12 +3388,12 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
               <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-border">
                 <h2 className="font-medium">Current sale</h2>
                 {cart.length > 0 && (
-                  <div className="flex items-center gap-3">
-                    <button type="button" onClick={printBill} className="text-xs text-muted-foreground underline hover:text-foreground">Bill</button>
+                  <div className="flex items-center gap-1.5">
+                    <button type="button" onClick={printBill} className="rounded-md border border-border px-3 py-2 text-xs font-semibold hover:bg-accent">Bill</button>
                     {!tableBinding && (
-                      <button type="button" onClick={openHold} className="text-xs text-muted-foreground underline hover:text-foreground">Hold</button>
+                      <button type="button" onClick={openHold} className="rounded-md border border-border px-3 py-2 text-xs font-semibold hover:bg-accent">Hold</button>
                     )}
-                    <button type="button" onClick={clearCart} className="text-xs text-muted-foreground underline hover:text-foreground">Clear</button>
+                    <button type="button" onClick={() => { if (confirm("Clear this sale? All unsent items will be removed.")) clearCart(); }} className="ml-2 rounded-md border border-red-500/40 px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-500/10">Clear</button>
                   </div>
                 )}
               </div>
@@ -3547,7 +3591,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                 {businessId && cart.some((l) => !l.void) && (
                   <div className="px-2 pb-2">
                     {!cfdTipRequest ? (
-                      <button type="button" onClick={() => { setCfdGuestMsg(null); setCfdTipRequest(true); }} className="w-full text-xs rounded-md border border-border px-2 py-2 hover:bg-accent">📱 Ask guest to tip &amp; sign on the display</button>
+                      <button type="button" onClick={() => { setCfdGuestMsg(null); setCfdTipRequest(true); }} className="w-full flex items-center justify-center gap-1.5 text-xs rounded-md border border-border px-2 py-2 hover:bg-accent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 shrink-0"><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></svg>Ask guest to tip &amp; sign on the display</button>
                     ) : (
                       <div className="text-xs rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-2 flex items-center justify-between gap-2">
                         <span className="text-amber-700 dark:text-amber-500">Waiting for the guest on the display…</span>
@@ -3580,8 +3624,11 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                     <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
                   </div>
                   {scAvailable && (serviceApplied || scAuto) && (
-                    <button type="button" onClick={() => setSheet("service")} className="w-full flex justify-between text-sm rounded px-1 -mx-1 hover:bg-accent/50">
-                      <span className="text-muted-foreground text-left">{(scIsAuto ? "Auto-gratuity" : scCfg.label) + " (" + scCfg.pct + "%)" + (serviceApplied ? (scIsAuto ? " · taxed" : "") : " · waived")}</span>
+                    <button type="button" onClick={() => setSheet("service")} className="w-full flex justify-between items-center text-sm rounded px-1 -mx-1 hover:bg-accent/50">
+                      <span className="flex items-center gap-1 text-muted-foreground text-left">
+                        {(scIsAuto ? "Auto-gratuity" : scCfg.label) + " (" + scCfg.pct + "%)" + (serviceApplied ? (scIsAuto ? " · taxed" : "") : " · waived")}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3 shrink-0 opacity-60"><path d="M9 6l6 6-6 6" /></svg>
+                      </span>
                       <span className={"tabular-nums " + (serviceApplied ? "" : "text-muted-foreground line-through")}>{serviceApplied ? "$" + serviceChargeAmt.toFixed(2) : "$0.00"}</span>
                     </button>
                   )}
