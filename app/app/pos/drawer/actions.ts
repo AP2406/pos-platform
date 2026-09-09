@@ -3,8 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
-import { getActiveStaff } from "../staff-session";
-import { actorCan, approverByPin } from "@/lib/services/permissions-server";
+import { approverByPin } from "@/lib/services/permissions-server";
+import { posAuthorize } from "@/lib/services/pos-action-guard";
 import { businessDateFor, parseCutoff } from "@/lib/services/business-day";
 import { sendEmail, isEmailConfigured } from "@/lib/services/email";
 import { CASH_MOVEMENT_REASONS, isValidReason } from "../reason-codes";
@@ -21,7 +21,7 @@ export async function recordCashMovement(input: {
   reason_note?: string;
   approver_pin?: string;
 }): Promise<{ ok: true } | { needs_approval: true } | { error: string }> {
-  const { business } = await requireBusiness();
+  const { business, role } = await requireBusiness();
   const supabase = await createClient();
 
   const kind = input.kind;
@@ -59,8 +59,13 @@ export async function recordCashMovement(input: {
   // adjustment; otherwise someone who holds it must approve by PIN.
   // Behavior-preserving (server/host need a manager; manager/owner don't).
   if (kind !== "no_sale") {
-    const active = await getActiveStaff();
-    if (active && !(await actorCan(supabase, business.id, active.id, "open_drawer"))) {
+    // Was `if (active && !actorCan(...))` — which skipped authorization
+    // entirely when no cashier was signed in at the PIN pad, and this file has
+    // no web-role check to catch it. posAuthorize falls back to the member role
+    // instead of skipping.
+    const auth = await posAuthorize(supabase, business.id, role, "open_drawer");
+    if (!auth.ok) return { error: auth.error };
+    if (auth.needsApproval) {
       if (!input.approver_pin) return { needs_approval: true };
       const approver = await approverByPin(supabase, business.id, input.approver_pin, "open_drawer");
       if (!approver) return { error: "That PIN can't approve this." };
@@ -362,9 +367,12 @@ export async function closeDrawerSession(input: {
   // Ending the day is gated on the `close_day` permission, enforced server-side.
   // If the active operator lacks it, a manager must approve by PIN. Non-staffed
   // tills (no active cashier — QSR/retail/transportation) are unaffected.
-  const active = await getActiveStaff();
+  // Same fail-open as the cash-movement gate above: no PIN session meant no
+  // check at all. Falls back to the web member role now.
+  const auth = await posAuthorize(supabase, business.id, role, "close_day");
+  if (!auth.ok) return { error: auth.error };
   let approver: { id: string; name: string } | null = null;
-  if (active && !(await actorCan(supabase, business.id, active.id, "close_day"))) {
+  if (auth.needsApproval) {
     if (!input.approver_pin) return { needs_approval: true };
     approver = await approverByPin(supabase, business.id, input.approver_pin, "close_day");
     if (!approver) return { error: "That PIN can't end the day." };
@@ -444,8 +452,11 @@ export async function closeDrawerSession(input: {
     reason_note: openChecks.length > 0 ? overrideReason.slice(0, 500) : null,
     metadata: {
       drawer_session_id: session.id,
-      staff_id: active?.id ?? null,
-      staff_name: active?.name ?? null,
+      staff_id: auth.actor.staffId,
+      staff_name: auth.actor.name,
+      // false when the day was ended from the web without a PIN session, so
+      // the log distinguishes "Sam at the till" from "an owner remotely".
+      pin_session: auth.pinned,
       approved_by: approver?.id ?? null,
       approver_name: approver?.name ?? null,
       open_check_count: openChecks.length,

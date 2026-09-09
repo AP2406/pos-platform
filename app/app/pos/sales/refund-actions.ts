@@ -2,7 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
-import { actorCan, approverByPin } from "@/lib/services/permissions-server";
+import { approverByPin } from "@/lib/services/permissions-server";
+import { posAuthorize } from "@/lib/services/pos-action-guard";
 import { requiresApproval } from "@/lib/services/config/approval";
 import { refundTransfer } from "@/lib/services/finix";
 import { revalidatePath } from "next/cache";
@@ -135,7 +136,9 @@ export async function refundItems(input: { order_id: string; lines: RefundLineIn
   // matrix (server/host need a manager; manager/owner don't).
   const active = await getActiveStaffRow(supabase, business.id);
   let approver: { id: string; name: string } | null = null;
-  if (active && !(await actorCan(supabase, business.id, active.id, "refund"))) {
+  const auth = await posAuthorize(supabase, business.id, role, "refund");
+  if (!auth.ok) return { error: auth.error };
+  if (auth.needsApproval) {
     // CUST-1 approval matrix: default mode requires a manager (today); an owner
     // can set mode 'none' to drop the requirement. (Threshold wiring is later.)
     const { mode } = await requiresApproval("refund", null);

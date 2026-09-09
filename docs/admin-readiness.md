@@ -115,9 +115,69 @@ matrix. The rest are triaged, not done:
 caller's *own* browser for push, so every member must be able to call it. The
 typechecker caught that one when a bulk pass gated it by mistake.
 
+## Register authorization + identity link (Sept 9, 2026)
+
+### A fail-open check in the cash drawer
+
+The register's money-sensitive actions guard on the *cashier's* PIN identity,
+not the web role. The shape was:
+
+```ts
+const active = await getActiveStaff();
+if (active && !(await actorCan(supabase, biz, active.id, "open_drawer"))) {
+  ...require an approver PIN...
+}
+```
+
+Read quickly, that is a permission check. It is not: when nobody is signed in
+at the PIN pad `active` is null, the branch is skipped, and the mutation
+proceeds **unauthorized**. The skip was deliberate — quick-service, retail and
+transportation tills have no PIN session and must still work — but a
+`"use server"` function is a public POST endpoint, so dropping the cookie was
+enough to walk past it.
+
+Four sites had the shape. Three (`voidOrder`, refunds, reopen) gate on
+`owner || manager` earlier in the function, so the fail-open was not reachable.
+**`pos/drawer/actions.ts` has no web-role check at all**, which made two actions
+genuinely exploitable by any signed-in member — including a server, a trainee,
+or the new bookkeeper:
+
+- `recordCashMovement` — record a pay-in / pay-out / safe drop against the till
+- `endDay` — close out the drawer, including the open-checks override
+
+`lib/services/pos-action-guard.ts` replaces the pattern. `posAuthorize()`
+resolves the actor from the signed PIN cookie when there is one (staff matrix,
+caps and per-person overrides all apply, and `needsApproval` preserves the
+approver-PIN flow), and **falls back to the web member role when there is not**,
+rather than skipping. Non-staffed tills keep working; the hole closes. 9 tests
+in `tests/unit/pos-action-guard.test.ts`.
+
+The drawer's audit metadata now also records `pin_session`, so the log
+distinguishes "Sam ended the day at the till" from "an owner ended it remotely".
+
+### Migration 0100 — one person, two identities
+
+`staff_members.user_id` (nullable, `on delete set null`) with a partial unique
+index on `(business_id, user_id)`. Nullable on purpose: a line cook who only
+taps a PIN never needs a web account.
+
+This is the join that lets the audit trail attribute a PIN-approved void and a
+dashboard-approved void to the same person, and lets per-person overrides reach
+both surfaces. **The column exists and is indexed; nothing populates it yet** —
+the staff invite flow still creates the two records independently. That is the
+next piece of work, and until it lands `systemRoleForLegacy()` is still guessing
+the bridge.
+
 ### Still open
-- **One identity per person** — `staff_members.user_id`, so a web login and a
-  PIN are the same human and per-person permission overrides apply everywhere.
+- **Populate `staff_members.user_id`.** The column landed in 0100 but nothing
+  writes it. Needs: a link control in `/app/staff`, `staff-actions.ts` setting
+  `user_id` when a PIN profile and a web member are the same person, and
+  `systemRoleForLegacy()` retired in favour of the real link.
+- **The remaining ~52 register/KDS actions.** `posAuthorize` exists and the
+  money-sensitive sites use it; the rest of `pos/ticket-actions.ts` (28) and
+  `kitchen/actions.ts` (12) still have no per-action permission check. They are
+  lower risk (a cashier at a till editing their own open check), but they should
+  go through the same guard.
 - **Reports filters** beyond dates: staff and channel.
 - **A real QuickBooks / Xero sync**, versus today's honest CSV.
 - **A passive-investor persona**: access is still membership-based, so an
