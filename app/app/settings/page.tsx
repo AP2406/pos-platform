@@ -14,6 +14,7 @@ import { ShowPhotosForm } from "./show-photos-form";
 import { StaffCard } from "./staff-card";
 import { RolesCard } from "./roles-card";
 import { listRoles } from "./roles-actions";
+import { loadStaffList, type StaffListRow } from "./staff-data";
 import { DayCloseCard } from "./day-close-card";
 import { CoaCard } from "./coa-card";
 import { BasisCard } from "./basis-card";
@@ -149,23 +150,12 @@ export default async function SettingsPage() {
   const showItemPhotos =
     (business as { show_item_photos?: boolean }).show_item_photos !== false;
 
-  let staffList: { id: string; name: string; role: string; role_id: string | null; is_active: boolean; has_pin: boolean; pay_rate: number | null; overrides: Record<string, boolean> }[] = [];
+  let staffList: StaffListRow[] = [];
   let rolesList: Awaited<ReturnType<typeof listRoles>> = [];
   if (role === "owner" || role === "manager") {
     // Migration-resilient: permission_overrides (0070) may not exist yet.
     const fetchStaff = async (cols: string) => supabase.from("staff_members").select(cols).eq("business_id", business.id).order("created_at", { ascending: true });
-    const full = await fetchStaff("id, name, role, role_id, is_active, pin_hash, pay_rate, permission_overrides");
-    const sdata = (full.error ? (await fetchStaff("id, name, role, role_id, is_active, pin_hash, pay_rate")).data : full.data) as Record<string, unknown>[] | null;
-    staffList = ((sdata ?? []) as Record<string, unknown>[]).map((s) => ({
-      id: s.id as string,
-      name: s.name as string,
-      role: s.role as string,
-      role_id: (s.role_id as string | null) ?? null,
-      is_active: s.is_active as boolean,
-      has_pin: !!s.pin_hash,
-      pay_rate: (s.pay_rate as number | null) ?? null,
-      overrides: (s.permission_overrides ?? {}) as Record<string, boolean>,
-    }));
+    staffList = await loadStaffList(supabase, business.id);
     rolesList = await listRoles();
   }
 

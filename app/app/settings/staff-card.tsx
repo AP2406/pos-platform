@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createStaff, updateStaff, setStaffPin, setStaffActive, setStaffPayRate, setStaffPermissionOverride } from "./staff-actions";
+import { linkStaffToWebAccount, unlinkStaffWebAccount } from "./staff-link-actions";
+import { ASSIGNABLE_WEB_ROLES, WEB_ROLE_LABELS, WEB_ROLE_HINTS, type WebRole } from "@/lib/services/route-access";
 import { PERMISSION_KEYS, PERMISSION_LABELS, type PermissionKey } from "@/lib/services/permissions";
 
 type Staff = {
@@ -16,6 +18,10 @@ type Staff = {
   has_pin: boolean;
   pay_rate: number | null;
   overrides: Record<string, boolean>;
+  // 0100: the web login this PIN identity belongs to, if any.
+  user_id: string | null;
+  login_email: string | null;
+  web_role: string | null;
 };
 type RolePick = { id: string; name: string; key: string | null; permissions?: string[] };
 
@@ -52,6 +58,9 @@ export function StaffCard({
   const [newPin, setNewPin] = useState("");
   const [rowError, setRowError] = useState<string | null>(null);
   const [showOverrides, setShowOverrides] = useState(false);
+  const [linkEmail, setLinkEmail] = useState("");
+  const [linkRole, setLinkRole] = useState<WebRole>("staff");
+  const [linkNote, setLinkNote] = useState<string | null>(null);
 
   const roleById = new Map(roles.map((r) => [r.id, r]));
   function roleGrants(s: Staff, key: string): boolean {
@@ -101,7 +110,21 @@ export function StaffCard({
       }
       setStaff((prev) => [
         ...prev,
-        { id: res.id, name: name.trim(), role: "staff", role_id: roleId, is_active: true, has_pin: true, pay_rate: null, overrides: {} },
+        {
+          id: res.id,
+          name: name.trim(),
+          role: "staff",
+          role_id: roleId,
+          is_active: true,
+          has_pin: true,
+          pay_rate: null,
+          overrides: {},
+          // New staff start PIN-only; dashboard access is granted per person
+          // from the Manage panel.
+          user_id: null,
+          login_email: null,
+          web_role: null,
+        },
       ]);
       setName("");
       setRoleId(defaultRoleId);
@@ -115,6 +138,9 @@ export function StaffCard({
     setEditRoleId(s.role_id ?? defaultRoleId);
     setEditPayRate(s.pay_rate != null ? String(s.pay_rate) : "");
     setNewPin("");
+    setLinkEmail("");
+    setLinkRole("staff");
+    setLinkNote(null);
     setManageId((prev) => (prev === s.id ? null : s.id));
   }
 
@@ -171,6 +197,51 @@ export function StaffCard({
           prev.map((x) => (x.id === s.id ? { ...x, is_active: !x.is_active } : x))
         );
       }
+    });
+  }
+
+  function handleLink(s: Staff) {
+    setRowError(null);
+    setLinkNote(null);
+    startTransition(async () => {
+      const res = await linkStaffToWebAccount(s.id, linkEmail.trim(), linkRole);
+      if ("error" in res) {
+        setRowError(res.error);
+        return;
+      }
+      setStaff((prev) =>
+        prev.map((x) =>
+          x.id === s.id
+            ? { ...x, user_id: res.userId, login_email: res.email, web_role: linkRole }
+            : x
+        )
+      );
+      setLinkNote(
+        res.invited
+          ? "Invitation sent to " + res.email + ". They'll set a password from that email."
+          : res.email + " already had a Surge login — access granted."
+      );
+      setLinkEmail("");
+    });
+  }
+
+  function handleUnlink(s: Staff, revokeAccess: boolean) {
+    setRowError(null);
+    setLinkNote(null);
+    startTransition(async () => {
+      const res = await unlinkStaffWebAccount(s.id, { revokeAccess });
+      if ("error" in res) {
+        setRowError(res.error);
+        return;
+      }
+      setStaff((prev) =>
+        prev.map((x) =>
+          x.id === s.id ? { ...x, user_id: null, login_email: null, web_role: null } : x
+        )
+      );
+      setLinkNote(
+        revokeAccess ? "Unlinked and dashboard access removed." : "Unlinked. Their dashboard login still works."
+      );
     });
   }
 
@@ -236,6 +307,55 @@ export function StaffCard({
                       <Button size="sm" variant="outline" onClick={() => handleToggleActive(s)} disabled={pending}>
                         {s.is_active ? "Disable" : "Enable"}
                       </Button>
+                    </div>
+
+                    {/* 0100: dashboard access. A PIN identity and a web login
+                        are two rows; linking them means the audit trail and
+                        per-person overrides follow one person across both. */}
+                    <div className="rounded-md border border-border p-2.5">
+                      <p className="text-xs font-medium mb-1">Dashboard access</p>
+                      {s.user_id ? (
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] text-muted-foreground">
+                            Signs in as <span className="text-foreground">{s.login_email ?? "a linked account"}</span>
+                            {s.web_role ? " · " + (WEB_ROLE_LABELS[s.web_role as WebRole] ?? s.web_role) : ""}.
+                            Their PIN and this login are the same person.
+                          </p>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" disabled={pending} onClick={() => handleUnlink(s, false)}>
+                              Unlink
+                            </Button>
+                            <Button size="sm" variant="outline" disabled={pending} onClick={() => handleUnlink(s, true)}>
+                              Unlink &amp; remove access
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] text-muted-foreground">
+                            {s.name} works with a PIN only. Add an email to give them the dashboard too — most kitchen and floor staff never need one.
+                          </p>
+                          <div className="flex flex-wrap items-end gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Email</Label>
+                              <Input type="email" value={linkEmail} onChange={(e) => setLinkEmail(e.target.value)} placeholder="name@example.com" className="h-9 w-52" />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Access level</Label>
+                              <select value={linkRole} onChange={(e) => setLinkRole(e.target.value as WebRole)} className="h-9 rounded-md border border-border bg-transparent text-foreground px-2 text-sm">
+                                {ASSIGNABLE_WEB_ROLES.map((r) => (
+                                  <option key={r} value={r}>{WEB_ROLE_LABELS[r]}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <Button size="sm" disabled={pending || !linkEmail} onClick={() => handleLink(s)}>
+                              Grant access
+                            </Button>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">{WEB_ROLE_HINTS[linkRole]}</p>
+                        </div>
+                      )}
+                      {linkNote && <p className="text-[11px] mt-1.5 text-emerald-600 dark:text-emerald-400">{linkNote}</p>}
                     </div>
 
                     {/* CUST-1: per-user permission overrides */}

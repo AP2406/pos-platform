@@ -5,9 +5,8 @@ import { AssistantWidget } from "./_components/assistant-widget";
 import { VocabProvider } from "./_components/vocab-provider";
 import { resolveNav, getVocab, getFields } from "@/lib/modules/resolve";
 import { buildNav } from "@/lib/modules/nav";
-import { canAccess } from "@/lib/services/route-access";
+import { canAccess, roleKeyForWebRole } from "@/lib/services/route-access";
 import { hasFloorService } from "@/lib/modules/modes";
-import { systemRoleForLegacy } from "@/lib/services/permissions";
 
 export default async function AppLayout({
   children,
@@ -40,6 +39,14 @@ export default async function AppLayout({
 
   // CUST-1: per-role nav visibility — hide the optional modules this viewer's
   // role marked hidden (core nav is never hide-able). Migration-resilient.
+  //
+  // This used to read `systemRoleForLegacy(role)`, which maps the *staff* role
+  // enum (owner|manager|staff|trainee) onto a matrix key. Passing a
+  // business_members role through it worked by coincidence for owner/manager
+  // and was simply wrong for the rest — and after 0099 it would have collapsed
+  // shift_lead and bookkeeper onto "server", so they'd inherit a server's
+  // hidden nav. The web role keys now line up with roles.key directly, except
+  // for the two legacy names.
   let hiddenNav: string[] = [];
   try {
     const navClient = await createClient();
@@ -47,7 +54,7 @@ export default async function AppLayout({
       .from("roles")
       .select("hidden_nav")
       .eq("business_id", business.id)
-      .eq("key", systemRoleForLegacy(role))
+      .eq("key", roleKeyForWebRole(role))
       .maybeSingle();
     if (roleRow && Array.isArray((roleRow as { hidden_nav?: unknown }).hidden_nav)) {
       hiddenNav = (roleRow as { hidden_nav: unknown[] }).hidden_nav as string[];

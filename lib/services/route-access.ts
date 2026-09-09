@@ -85,6 +85,30 @@ export const WEB_ROLE_HINTS: Record<WebRole, string> = {
   trainee: "Read-only service screens.",
 };
 
+/**
+ * The `roles.key` a web member role corresponds to.
+ *
+ * Distinct from systemRoleForLegacy(), which maps the *staff* enum
+ * (staff_members.role) and is still the right call for a PIN identity with no
+ * role_id. This one maps a business_members role, where the names already match
+ * except for the two legacy values.
+ */
+export function roleKeyForWebRole(role: string | null | undefined): string {
+  switch (role) {
+    case "staff":
+      return "server";
+    case "trainee":
+      return "host";
+    case "owner":
+    case "manager":
+    case "shift_lead":
+    case "bookkeeper":
+      return role;
+    default:
+      return "server"; // unknown → least privilege
+  }
+}
+
 export function webPermissions(role: string | null | undefined): Set<PermissionKey> {
   const list = WEB_ROLE_PERMISSIONS[(role ?? "") as WebRole];
   // Unknown role → no elevated access (fail closed), matching the old guards.

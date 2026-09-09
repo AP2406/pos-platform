@@ -163,21 +163,56 @@ taps a PIN never needs a web account.
 
 This is the join that lets the audit trail attribute a PIN-approved void and a
 dashboard-approved void to the same person, and lets per-person overrides reach
-both surfaces. **The column exists and is indexed; nothing populates it yet** —
-the staff invite flow still creates the two records independently. That is the
-next piece of work, and until it lands `systemRoleForLegacy()` is still guessing
-the bridge.
+both surfaces.
+
+**Linking (Sept 9, later):** `/app/staff` → Manage now has a *Dashboard access*
+panel. Enter an email and an access level and it resolves an existing Surge
+login (looked up through `public.profiles`, because `auth.admin.listUsers` 500s
+on this project) or sends an invite, upserts the `business_members` row, and
+sets `staff_members.user_id`. Unlink is separate from revoking access, so
+"they've stopped using the dashboard" and "they've left" are different actions —
+and removing the last owner's membership is refused outright.
+
+Both `/app/staff` and `/app/settings` were building the staff query by hand, so
+adding `user_id` meant editing it twice; they now share `loadStaffList()`.
+
+**On retiring `systemRoleForLegacy()`:** only one of its two call sites was
+wrong. `app/app/layout.tsx` passed a *business_members* role through a mapper
+built for the *staff* enum — harmless for owner/manager, meaningless for the
+rest, and after 0099 it would have collapsed shift_lead and bookkeeper onto
+"server", handing them a server's hidden-nav config. That site now uses
+`roleKeyForWebRole()`. The other call, in `resolvePermissions()`, is correct and
+stays: a PIN-only staff member with no `role_id` has no login to consult, so the
+legacy enum genuinely is the only signal.
+
+### Register actions: what got gated, and what deliberately didn't
+
+Two of `pos/ticket-actions.ts` map to real permission keys and now go through
+`posAuthorize`: `discardTicket` (deletes a held check, so `delete_item_prepay`)
+and `sendVoidNotice` (tells the line to bin fired food, so `void`).
+
+The other ~45 register and KDS actions are **intentionally left open**, and
+"wrap them all in `posAuthorize`" would be the wrong change. Opening a table
+check, adding an item, firing a course, bumping a ticket, marking an item ready
+— these are the job. There is no permission key for them and there shouldn't
+be; inventing one is a product decision, not a refactor, and gating them would
+stop servers serving. All 28 already call `requireBusiness()` and filter on
+`business_id`, so tenancy is enforced; what's absent is intra-tenant privilege,
+which for core service is correct.
 
 ### Still open
-- **Populate `staff_members.user_id`.** The column landed in 0100 but nothing
-  writes it. Needs: a link control in `/app/staff`, `staff-actions.ts` setting
-  `user_id` when a PIN profile and a web member are the same person, and
-  `systemRoleForLegacy()` retired in favour of the real link.
-- **The remaining ~52 register/KDS actions.** `posAuthorize` exists and the
-  money-sensitive sites use it; the rest of `pos/ticket-actions.ts` (28) and
-  `kitchen/actions.ts` (12) still have no per-action permission check. They are
-  lower risk (a cashier at a till editing their own open check), but they should
-  go through the same guard.
+- **Backfill existing staff.** Linking works going forward, but every current
+  `staff_members` row still has `user_id = null`, including people who already
+  have a dashboard login. Someone has to link them once, by hand, from
+  `/app/staff` → Manage.
+- **Invite email delivery.** `linkStaffToWebAccount` calls
+  `inviteUserByEmail()`, which needs SMTP configured on the Supabase project. If
+  it isn't, linking an address that has no account yet returns "Couldn't send
+  the invitation" — linking an address that *already* has a Surge login works
+  regardless.
+- **`systemRoleForLegacy()` in `resolvePermissions`.** Still the right call for
+  a PIN-only staff member with no `role_id` — there is no login to consult. It
+  can only retire once every staff row has either a `role_id` or a `user_id`.
 - **Reports filters** beyond dates: staff and channel.
 - **A real QuickBooks / Xero sync**, versus today's honest CSV.
 - **A passive-investor persona**: access is still membership-based, so an
