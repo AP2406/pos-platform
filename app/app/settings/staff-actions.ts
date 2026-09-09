@@ -3,9 +3,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
+import { canAccess } from "@/lib/services/route-access";
 
+// Same matrix the pages and the sidebar use, so a role that can see this
+// screen can act on it — and the two can never drift apart.
 function canManage(role: string): boolean {
-  return role === "owner" || role === "manager";
+  return canAccess(role, "edit_staff");
 }
 
 // The granular role_id is the source of truth for permissions; we still set the

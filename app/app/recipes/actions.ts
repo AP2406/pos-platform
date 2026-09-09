@@ -3,10 +3,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
+import { canAccess } from "@/lib/services/route-access";
 
 // Recipe costing is back-office: owner/manager only (RLS still scopes to tenant).
+// Same matrix the pages and the sidebar use, so a role that can see this
+// screen can act on it — and the two can never drift apart.
 function canManage(role: string): boolean {
-  return role === "owner" || role === "manager";
+  return canAccess(role, "edit_menu");
 }
 
 const UNITS = ["unit", "each", "g", "kg", "ml", "L", "oz", "lb", "tbsp", "tsp", "cup", "slice"];

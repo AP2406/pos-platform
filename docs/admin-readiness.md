@@ -74,11 +74,48 @@ both the web and mobile projects, and a 36-route HTTP sweep as a manager.
    said "Done · ready" where the iPad says "Ready"; both now read the same
    constant.
 
-### Still open
+## Server actions — partly done (Sept 9, 2026)
 
-- **Server actions** still use `role !== "owner" && role !== "manager"` (~60
-  files). Fail-closed, so nothing is exposed, but a shift lead can read the
-  approvals page and not act on it. Each needs a permission decision.
+Gating a page is not a security boundary in Next.js: every `"use server"`
+function compiles to a callable POST endpoint, reachable with a session
+regardless of what the page that renders the button decided. So each mutation
+needs its own check.
+
+`lib/services/action-guard.ts` provides both: `authorizeAction(perm)` for
+retrofitting an existing action in one line, and `createAuthorizedAction(perm,
+schema, handler)` — the HOF — so new actions get session, permission and Zod
+validation structurally. Both fail closed, and both check the permission
+*before* the demo lock and before validation, so a refusal leaks neither account
+state nor the input schema. 12 tests in `tests/unit/action-guard.test.ts`.
+
+**The audit's premise was half wrong.** The claim was that write actions are
+uniformly `owner || manager` — safe but mismatched. In fact:
+
+- **19 of 21 catalog mutations had no role check at all.** Any signed-in member
+  — a server, a trainee — could create, rename, reprice, 86 or delete menu
+  items, modifiers and variations. Only `saveCategoryColors` and
+  `setCatalogItemTaxes` were guarded. Now all 21 require `edit_menu`.
+- Several files *did* guard, via a local `canManage(role)` helper that a naive
+  grep misses (schedule, recipes, waste, purchasing, staff, roles, menu push).
+  Those weren't holes; their helper now delegates to `canAccess`, so the new
+  roles work without restructuring the actions.
+- `inventory/actions.ts` (3) had no check; now `edit_menu`.
+
+Counted honestly: **353 server actions across 68 files.** 33 are now on the
+matrix. The rest are triaged, not done:
+
+| Group | Actions | Why not yet |
+| --- | --- | --- |
+| `pos/ticket-actions` (28), `kitchen/actions` (12), `pos/drawer` (4), `pos/split`, `pos/saved-ticket`, `pos/staff-session` | ~52 | Register and KDS operations. Authorization here is the staff PIN at the till, not the web role — gating them on `business_members.role` would break the iPad. These need the *staff* matrix, which is the identity-unification work below. |
+| Money path: `pos/finix-*`, `pos/*-refund`, `accounting/deposit-actions`, `tips` | ~25 | Each needs a reason code and audit decision, not just a permission key. Do these one at a time. |
+| `trips/*`, `vehicles`, `drivers`, `partners` | ~30 | Transportation vertical; separate review. |
+| Everything else | remainder | Lower risk, mostly already `canManage`-guarded. |
+
+`settings/notifications-actions.ts` is deliberately ungated: it registers the
+caller's *own* browser for push, so every member must be able to call it. The
+typechecker caught that one when a bulk pass gated it by mistake.
+
+### Still open
 - **One identity per person** — `staff_members.user_id`, so a web login and a
   PIN are the same human and per-person permission overrides apply everywhere.
 - **Reports filters** beyond dates: staff and channel.

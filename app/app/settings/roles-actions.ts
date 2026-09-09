@@ -5,6 +5,7 @@ import { requireBusiness, assertConfigEditable } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { PERMISSION_KEYS } from "@/lib/services/permissions";
 import { NAV_MODULES } from "@/lib/nav-modules";
+import { canAccess } from "@/lib/services/route-access";
 
 export type RoleRow = {
   id: string;
@@ -21,8 +22,10 @@ export type RoleRow = {
   sort_order: number;
 };
 
+// Same matrix the pages and the sidebar use, so a role that can see this
+// screen can act on it — and the two can never drift apart.
 function canManage(role: string): boolean {
-  return role === "owner" || role === "manager";
+  return canAccess(role, "edit_staff");
 }
 
 function cleanPerms(perms: string[]): string[] {

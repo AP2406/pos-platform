@@ -4,9 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { sendEmail, isEmailConfigured } from "@/lib/services/email";
 import { revalidatePath } from "next/cache";
+import { canAccess } from "@/lib/services/route-access";
 
+// Same matrix the pages and the sidebar use, so a role that can see this
+// screen can act on it — and the two can never drift apart.
 function canManage(role: string): boolean {
-  return role === "owner" || role === "manager";
+  return canAccess(role, "edit_menu");
 }
 
 function num(v: unknown): number {
