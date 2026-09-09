@@ -39,12 +39,37 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
-  // Reviewer link → sign the reviewer account in for this request (cookies land
-  // on both the request, so server components see the session, and the response).
+  // ===========================================================================
+  // TEMPORARY: LOGIN DISABLED FOR AN OUTSIDE DESIGN REVIEW
+  //
+  // TO PUT THE LOGIN BACK: set OPEN_PREVIEW below to `false`. That single edit
+  // restores normal behaviour — everything else in this file is unchanged.
+  //
+  // While it's `true`, any request to /app is silently signed in as the
+  // dedicated reviewer account, so no sign-in page is ever shown. This is not a
+  // hole punched through auth: the request still carries a real Supabase
+  // session, so RLS confines it to that account's one business (Aathy Bistro)
+  // and every permission check still runs. /app/debug and /hq stay blocked.
+  //
+  // The `NODE_ENV` term is deliberate and should stay: this same file is
+  // deployed to Vercel, and the project's database holds other people's
+  // businesses. Open access is a local-dev-behind-a-tunnel thing only.
+  // ===========================================================================
+  const OPEN_PREVIEW = true;
+
   let previewSignIn = false;
   const previewToken = process.env.PREVIEW_LOGIN_TOKEN;
   const key = request.nextUrl.searchParams.get("key");
-  if (previewToken && key && key === previewToken && process.env.PREVIEW_REVIEWER_EMAIL && process.env.PREVIEW_REVIEWER_PASSWORD) {
+  const openPreview = OPEN_PREVIEW && process.env.NODE_ENV !== "production";
+  const keyMatches = !!previewToken && !!key && key === previewToken;
+  // An existing Supabase session means we don't need to sign in again — without
+  // this, open mode would do a password sign-in on every request and trip the
+  // auth rate limit within a page load or two.
+  const hasSession = request.cookies
+    .getAll()
+    .some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"));
+  const needsPreviewSignIn = keyMatches || (openPreview && !hasSession);
+  if (needsPreviewSignIn && process.env.PREVIEW_REVIEWER_EMAIL && process.env.PREVIEW_REVIEWER_PASSWORD) {
     const { error } = await supabase.auth.signInWithPassword({
       email: process.env.PREVIEW_REVIEWER_EMAIL,
       password: process.env.PREVIEW_REVIEWER_PASSWORD,
@@ -55,7 +80,11 @@ export async function updateSession(request: NextRequest) {
       response.cookies.set(PREVIEW_COOKIE, "1", { httpOnly: true, sameSite: "lax", path: "/" });
     }
   }
-  const isPreview = previewSignIn || request.cookies.get(PREVIEW_COOKIE)?.value === "1";
+  // In open mode every visitor is a preview visitor, whether or not they picked
+  // up the marker cookie — otherwise someone arriving with a stale session but
+  // no marker would slip past the /app/debug and /hq blocks below.
+  const isPreview =
+    previewSignIn || openPreview || request.cookies.get(PREVIEW_COOKIE)?.value === "1";
 
   // Refreshes auth cookie if expired. A stale/invalid refresh token makes
   // getUser() throw ("Invalid Refresh Token") — treat that as logged out rather
@@ -68,9 +97,10 @@ export async function updateSession(request: NextRequest) {
     user = null;
   }
 
-  // A reviewer landing on the login page or the marketing root with a valid key
-  // goes straight to the dashboard.
-  if (previewSignIn && user && (path === "/login" || path === "/" || path === "/preview")) {
+  // A reviewer landing on the login page or the marketing root goes straight to
+  // the dashboard. In open mode this applies on every request, not just the one
+  // that signed in — the sign-in page shouldn't exist for a reviewer at all.
+  if ((previewSignIn || openPreview) && user && (path === "/login" || path === "/" || path === "/preview")) {
     const url = request.nextUrl.clone();
     url.pathname = "/app";
     url.search = "";

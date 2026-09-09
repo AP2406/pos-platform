@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { OrdersClient, type OrderRow } from "./orders-client";
+import { must, soft } from "@/lib/supabase/query";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function OrdersHubPage() {
   // lib/services/order-fulfill.ts). PostgREST rejected the whole select, the
   // error was discarded by `const { data }`, and this page silently rendered
   // ZERO orders while the table held hundreds.
-  const { data, error } = await supabase
+  const ordersRes = await supabase
     .from("orders")
     .select("id, sale_number, total, created_at, channel, snapshot, fulfilled_at, customer_id, status")
     .eq("business_id", business.id)
@@ -27,13 +28,19 @@ export default async function OrdersHubPage() {
     .order("created_at", { ascending: false })
     .limit(200);
 
-  if (error) console.error("OrdersHubPage orders query:", error);
-  const rows = (data ?? []) as Record<string, unknown>[];
+  // The page IS this query — an empty hub must mean "no orders", never "the
+  // query broke". must() throws so the error boundary shows it.
+  const rows = must("the orders hub", ordersRes) as Record<string, unknown>[];
   const custIds = Array.from(new Set(rows.map((o) => o.customer_id as string | null).filter((x): x is string => !!x)));
   const nameById: Record<string, string> = {};
   if (custIds.length > 0) {
-    const { data: custs } = await supabase.from("customers").select("id, name").eq("business_id", business.id).in("id", custIds);
-    for (const c of custs ?? []) nameById[c.id as string] = c.name as string;
+    // Enrichment: losing names should cost the names, not the page.
+    const custs = soft<{ id: string; name: string }[]>(
+      "orders hub → customer names",
+      await supabase.from("customers").select("id, name").eq("business_id", business.id).in("id", custIds),
+      []
+    );
+    for (const c of custs) nameById[c.id] = c.name;
   }
 
   const orders: OrderRow[] = rows.map((o) => ({
