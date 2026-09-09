@@ -39,23 +39,22 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
-  // ===========================================================================
-  // TEMPORARY: LOGIN DISABLED FOR AN OUTSIDE DESIGN REVIEW
+  // Open-preview switch — OFF. Flip to `true` only to share a local dev server
+  // (behind a tunnel) with an outside reviewer whose fetcher can't carry a
+  // `?key=` query string; set it back when they're done. Pair it with the twin
+  // flag in app/robots.ts, which otherwise tells well-behaved crawlers to skip
+  // /app and makes the link look broken.
   //
-  // TO PUT THE LOGIN BACK: set OPEN_PREVIEW below to `false`. That single edit
-  // restores normal behaviour — everything else in this file is unchanged.
+  // While on, a request to /app is signed in as the dedicated reviewer account
+  // with no sign-in page. That is not a hole punched through auth: the request
+  // still carries a real Supabase session, so RLS confines it to that account's
+  // one business and every permission check still runs; /app/debug and /hq stay
+  // blocked either way.
   //
-  // While it's `true`, any request to /app is silently signed in as the
-  // dedicated reviewer account, so no sign-in page is ever shown. This is not a
-  // hole punched through auth: the request still carries a real Supabase
-  // session, so RLS confines it to that account's one business (Aathy Bistro)
-  // and every permission check still runs. /app/debug and /hq stay blocked.
-  //
-  // The `NODE_ENV` term is deliberate and should stay: this same file is
-  // deployed to Vercel, and the project's database holds other people's
-  // businesses. Open access is a local-dev-behind-a-tunnel thing only.
-  // ===========================================================================
-  const OPEN_PREVIEW = true;
+  // The NODE_ENV term is load-bearing and must stay. This file deploys to
+  // Vercel and the database behind it holds other tenants' businesses, so even
+  // a committed `true` cannot open production.
+  const OPEN_PREVIEW = false;
 
   let previewSignIn = false;
   const previewToken = process.env.PREVIEW_LOGIN_TOKEN;

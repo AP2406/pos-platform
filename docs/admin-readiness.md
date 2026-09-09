@@ -115,6 +115,28 @@ matrix. The rest are triaged, not done:
 caller's *own* browser for push, so every member must be able to call it. The
 typechecker caught that one when a bulk pass gated it by mistake.
 
+## Reviewer preview — how to reopen it, and the trap in it
+
+Sharing this dashboard with an outside reviewer twice ran into the same wall, so
+it's written down. Two switches, both `false`, flip together:
+
+- `OPEN_PREVIEW` in `lib/supabase/middleware.ts` — signs every `/app` request in
+  as a throwaway reviewer account, no sign-in page.
+- `OPEN_PREVIEW` in `app/robots.ts` — **this is the one that isn't obvious.**
+  `Disallow: /app/` means a well-behaved fetcher refuses the dashboard on *any*
+  host. It reads as "the tunnel is broken" when it's really the crawler obeying
+  robots.txt. Two different tunnels were blamed before this was found.
+
+Both carry `NODE_ENV !== "production"`, so even committed `true` cannot open the
+deployed site. `scripts/create-preview-reviewer.mjs` mints the account (RLS keeps
+it to one business); delete the `PREVIEW_*` lines from `.env.local` and the auth
+user to revoke.
+
+If the fetcher still won't load it, stop fighting the transport: publish
+screenshots instead. `docs/review-screens/` holds 22 of them, regenerated with
+Playwright against a local dev server, and raw GitHub URLs are fetchable by
+everything.
+
 ## Register authorization + identity link (Sept 9, 2026)
 
 ### A fail-open check in the cash drawer

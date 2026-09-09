@@ -44,3 +44,6 @@ API-key-for-Auto-capture-leads.txt
 # Local Claude Code agent settings
 .claude/
 *.zip
+
+# Reviewer share links — contains a live preview token, never commit.
+docs/admin-review-links.md
