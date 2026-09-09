@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { Plus, LogOut, Clock, CalendarCheck, Users, ClipboardList, Settings, UserRound, LayoutGrid, List, KeyRound } from "lucide-react-native";
 import {
   SegmentedTabs,
   SearchField,
@@ -9,11 +10,20 @@ import {
   TableShape,
   Button,
   BottomSheet,
+  EmptyState,
+  Brand,
   color,
   floor as F,
   space,
   text,
-  type TableStatus,
+  serviceStageColor,
+  agingTier,
+  STAGE_LABEL,
+  STAGE_ORDER,
+  AGING_LABEL,
+  aging as agingColors,
+  type ServiceStage,
+  type AgingTier,
 } from "@/design";
 import { useSession } from "@/state/session";
 import { notify } from "@/lib/notice";
@@ -25,49 +35,30 @@ import {
   fetchTableSummaries,
   fetchTableAging,
   fetchOpenChecks,
+  fetchKitchenTickets,
   type FloorPlan,
   type FloorElement,
   type FloorSection,
   type TableSummary,
   type OpenCheck,
+  type KitchenTicket,
   type Aging,
 } from "@/lib/reads";
-import { formatElapsed, minutesSince, money } from "@/lib/format";
+import { serviceStage, kitchenStateByElement, type KitchenState } from "@/lib/service-stage";
+import { demoOn } from "@/lib/demo/state";
+import { formatDuration, formatOverdue, minutesSince, money } from "@/lib/format";
 import { seesAllTables, isManager } from "@/lib/access";
 
 const RINGABLE = new Set(["table", "booth"]);
 const DECOR = new Set(["wall", "room", "label", "counter", "station"]);
-const TSIZE = 82; // fixed on-screen table size (longest side, px)
+const TSIZE = 152; // on-screen table size cap (longest side, px) — Floor v2 rich tiles
+const TMIN_SHORT = 126; // floor for the short side so name + state + who + total + elapsed fit
 const STOOL = 22; // fixed on-screen stool size (px)
-const MARGIN = 48; // small border so edge tables don't clip (~half a table)
+const MARGIN = 84; // border so edge tables (up to 152px, centered) never clip
 
-const LEGEND: { status: TableStatus; label: string }[] = [
-  { status: "available", label: "Available" },
-  { status: "occupied", label: "Occupied" },
-  { status: "warning", label: "Warning" },
-  { status: "late", label: "Late" },
-];
-
-function tableStatus(summary: TableSummary | undefined, aging: Aging, now: number): TableStatus {
-  if (!summary) return "available";
-  if (summary.checkDropped) return "paid";
-  const m = minutesSince(summary.openedAt, now) ?? 0;
-  if (summary.itemCount <= 0 || summary.subtotal <= 0) return "occupied";
-  if (m >= aging.redMin) return "late";
-  if (m >= aging.yellowMin) return "warning";
-  return "occupied";
-}
-
-// Bold, saturated table fill by status (purple available, warm-red occupied/late).
-function statusFill(status: TableStatus): string {
-  switch (status) {
-    case "occupied": return F.statusOccupied;
-    case "warning": return F.statusWarning;
-    case "late": return F.statusLate;
-    case "paid": return F.statusPaid;
-    default: return F.statusAvailable;
-  }
-}
+// Primary legend — the service lifecycle, read straight from the tokens so the
+// legend can never disagree with the tiles/cards (same labels, same colors).
+const LEGEND: { stage: ServiceStage; label: string }[] = STAGE_ORDER.map((stage) => ({ stage, label: STAGE_LABEL[stage] }));
 
 export default function Floor() {
   const s = useSession();
@@ -80,13 +71,18 @@ export default function Floor() {
   const { height: winH } = useWindowDimensions();
   const [view, setView] = useState<"map" | "list">("map");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [orderPickerOpen, setOrderPickerOpen] = useState(false);
   const [plans, setPlans] = useState<FloorPlan[]>([]);
   const [activePlan, setActivePlan] = useState<string | null>(null);
   const [elements, setElements] = useState<FloorElement[]>([]);
   const [sections, setSections] = useState<FloorSection[]>([]);
   const [summaries, setSummaries] = useState<Record<string, TableSummary>>({});
+  const [kitchen, setKitchen] = useState<KitchenTicket[]>([]);
   const [aging, setAging] = useState<Aging>({ yellowMin: 60, redMin: 90 });
   const [openChecks, setOpenChecks] = useState<OpenCheck[]>([]);
+  // Table name per element across ALL rooms, so a Board card for a table on the
+  // Patio still reads "Table 4" while the Map shows the Main floor.
+  const [tableName, setTableName] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
   const [now, setNow] = useState(0);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -107,10 +103,13 @@ export default function Floor() {
         const secName: Record<string, string> = Object.fromEntries(secs.map((x) => [x.id, x.name]));
         const { data: allEls } = await supabase
           .from("floor_elements")
-          .select("plan_id, section_id")
+          .select("id, label, plan_id, section_id")
           .eq("business_id", bizId)
           .eq("is_active", true)
           .in("kind", ["table", "booth"]);
+        const names: Record<string, string> = {};
+        for (const e of allEls ?? []) if (e.label) names[e.id as string] = e.label as string;
+        setTableName(names);
         const byPlan: Record<string, { count: number; sections: Set<string> }> = {};
         for (const e of allEls ?? []) {
           const p = (e.plan_id as string) ?? "none";
@@ -147,9 +146,10 @@ export default function Floor() {
 
   const loadLive = useCallback(async () => {
     try {
-      const [sum, checks] = await Promise.all([fetchTableSummaries(bizId), fetchOpenChecks(bizId)]);
+      const [sum, checks, kt] = await Promise.all([fetchTableSummaries(bizId), fetchOpenChecks(bizId), fetchKitchenTickets(bizId)]);
       setSummaries(sum);
       setOpenChecks(checks);
+      setKitchen(kt);
     } catch {
       /* ignore */
     }
@@ -160,6 +160,8 @@ export default function Floor() {
     loadLive();
     const channel = realtimeChannel("floor-" + bizId)
       .on("postgres_changes", { event: "*", schema: "public", table: "open_tickets", filter: "business_id=eq." + bizId }, () => loadLive())
+      // Kitchen bumps flip a table Sent → Ready — reload so the board keeps up.
+      .on("postgres_changes", { event: "*", schema: "public", table: "kitchen_tickets", filter: "business_id=eq." + bizId }, () => loadLive())
       .subscribe();
     const iv = setInterval(() => {
       setNow(Date.now());
@@ -183,9 +185,29 @@ export default function Floor() {
     () => elements.filter((e) => e.kind === "seat" && e.parentId && (kindById[e.parentId] === "counter" || kindById[e.parentId] === "station")),
     [elements, kindById]
   );
-  // Fill: explicit section color from the data when set, else the bold status color.
-  const fillForTable = (t: FloorElement, status: TableStatus) =>
-    t.sectionId && sectionColor[t.sectionId] ? sectionColor[t.sectionId] : statusFill(status);
+  // Per-table kitchen state (open vs bumped tickets), keyed by element_id.
+  const kstate = useMemo<Record<string, KitchenState>>(() => kitchenStateByElement(kitchen), [kitchen]);
+
+  // Service stage + secondary aging tier per table. The stage color IS the fill
+  // (status must read at a glance); section identity still shows via the zone
+  // backgrounds + the "N seats · Section" line on vacant tiles.
+  const stageById = useMemo(() => {
+    const m: Record<string, ServiceStage> = {};
+    for (const t of tables) {
+      const sum = summaries[t.id];
+      m[t.id] = sum ? serviceStage({ checkDropped: sum.checkDropped, elementId: t.id }, kstate) : "available";
+    }
+    return m;
+  }, [tables, summaries, kstate]);
+
+  const agingById = useMemo(() => {
+    const m: Record<string, AgingTier> = {};
+    for (const t of tables) {
+      const sum = summaries[t.id];
+      m[t.id] = sum ? agingTier(minutesSince(sum.openedAt, now), aging.yellowMin, aging.redMin) : "normal";
+    }
+    return m;
+  }, [tables, summaries, aging, now]);
 
   const seatCountByTable = useMemo(() => {
     const childCount: Record<string, number> = {};
@@ -228,12 +250,6 @@ export default function Floor() {
   const sx = (x: number) => x * Sx + offX;
   const sy = (y: number) => y * Sy + offY;
 
-  const statusById = useMemo(() => {
-    const m: Record<string, TableStatus> = {};
-    for (const t of tables) m[t.id] = tableStatus(summaries[t.id], aging, now);
-    return m;
-  }, [tables, summaries, aging, now]);
-
   const zones = useMemo(() => {
     const byId: Record<string, { minX: number; minY: number; maxX: number; maxY: number }> = {};
     for (const e of elements) {
@@ -265,12 +281,21 @@ export default function Floor() {
     else router.push({ pathname: "/register", params: { table: el.label ?? "", element: el.id } });
   }
 
-  const listVisible = useMemo(() => {
+  // Board rows: each open check with its derived stage + aging, sorted by urgency
+  // (Pay → Ready → Sent → Open), longest-open first within a stage.
+  const boardRows = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const rank: Record<ServiceStage, number> = { pay: 0, ready: 1, sent: 2, open: 3, available: 4 };
     return openChecks
       .filter((c) => !scoped || c.staffId === staffId)
-      .filter((c) => !q || c.label.toLowerCase().includes(q) || (c.customerPhone ?? "").toLowerCase().includes(q));
-  }, [openChecks, query, scoped, staffId]);
+      .filter((c) => !q || c.label.toLowerCase().includes(q) || ((c.elementId && tableName[c.elementId]) ?? "").toLowerCase().includes(q) || (c.customerPhone ?? "").toLowerCase().includes(q))
+      .map((c) => ({
+        c,
+        stage: serviceStage({ checkDropped: c.checkDropped, elementId: c.elementId }, kstate),
+        tier: agingTier(minutesSince(c.openedAt, now), aging.yellowMin, aging.redMin),
+      }))
+      .sort((a, b) => rank[a.stage] - rank[b.stage] || (minutesSince(b.c.openedAt, now) ?? 0) - (minutesSince(a.c.openedAt, now) ?? 0));
+  }, [openChecks, query, scoped, staffId, kstate, aging, now, tableName]);
 
   const planTabs = plans.map((p) => ({ key: p.id, label: p.name }));
   const activeBg = plans.find((p) => p.id === activePlan)?.background ?? null;
@@ -280,18 +305,11 @@ export default function Floor() {
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          Floor <Text style={styles.headerSub}>· {s.businessName} · {s.staff?.name}</Text>
-        </Text>
+        {/* Product identity: SURGE · business · room. Staff identity moves to the
+            right as a quiet chip; Sign out lives in Staff tools, not the floor. */}
+        <Brand business={s.businessName} room={plans.find((p) => p.id === activePlan)?.name ?? null} demo={demoOn()} />
         <View style={styles.actions}>
-          <View style={styles.toggle}>
-            <Pressable onPress={() => setView("map")} style={[styles.toggleBtn, view === "map" && styles.toggleOn]}>
-              <Text style={[text.caption, view === "map" && { color: color.text }]}>Map</Text>
-            </Pressable>
-            <Pressable onPress={() => setView("list")} style={[styles.toggleBtn, view === "list" && styles.toggleOn]}>
-              <Text style={[text.caption, view === "list" && { color: color.text }]}>List</Text>
-            </Pressable>
-          </View>
+          {/* Grouped nav: Floor (this screen) · Orders · Sales · Kitchen · More */}
           {(s.access?.surfaces ?? []).includes("orders") && (
             <Button title="Orders" variant="ghost" onPress={() => router.push("/orders")} />
           )}
@@ -302,13 +320,34 @@ export default function Floor() {
             <Button title="Kitchen" variant="ghost" onPress={() => router.push("/kds")} />
           )}
           <Button title="More" variant="ghost" onPress={() => setMoreOpen(true)} />
+          {/* One primary entry point — the picker chooses dine-in / takeout / pickup / delivery. */}
           {(s.access?.surfaces ?? []).includes("register") && (
-            <>
-              <Button title="New tab" variant="secondary" onPress={() => router.push("/register?mode=tab")} />
-              <Button title="New to-go" onPress={() => router.push("/register?mode=togo")} />
-            </>
+            <Button title="New order" icon={<Plus size={18} color={color.onPrimary} strokeWidth={2.5} />} onPress={() => setOrderPickerOpen(true)} />
           )}
         </View>
+      </View>
+
+      {/* Local view controls — Map / Board toggle + who's signed in. */}
+      <View style={styles.viewBar}>
+        <View style={styles.toggle}>
+          <Pressable onPress={() => setView("map")} style={[styles.toggleBtn, view === "map" && styles.toggleOn]} accessibilityRole="tab" accessibilityState={{ selected: view === "map" }}>
+            <LayoutGrid size={16} color={view === "map" ? color.onPrimary : color.textDim} strokeWidth={2.25} />
+            <Text style={[styles.toggleTxt, view === "map" && styles.toggleTxtOn]}>Map</Text>
+          </Pressable>
+          <Pressable onPress={() => setView("list")} style={[styles.toggleBtn, view === "list" && styles.toggleOn]} accessibilityRole="tab" accessibilityState={{ selected: view === "list" }}>
+            <List size={16} color={view === "list" ? color.onPrimary : color.textDim} strokeWidth={2.25} />
+            <Text style={[styles.toggleTxt, view === "list" && styles.toggleTxtOn]}>Board{openChecks.length > 0 ? " · " + openChecks.length : ""}</Text>
+          </Pressable>
+        </View>
+        <View style={styles.spacer} />
+        {s.staff?.name ? (
+          <Pressable onPress={() => setMoreOpen(true)} style={styles.who} accessibilityRole="button" accessibilityLabel={"Signed in as " + s.staff.name + ". Staff tools"}>
+            <UserRound size={16} color={color.textDim} strokeWidth={2.25} />
+            <Text style={styles.whoTxt} numberOfLines={1}>
+              {s.staff.name}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {view === "map" ? (
@@ -322,7 +361,13 @@ export default function Floor() {
           <View style={[styles.floor, colorBg ? { backgroundColor: colorBg } : null]} onLayout={onCanvasLayout}>
             {imageBg ? <Image source={{ uri: imageBg }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
             {elements.length === 0 ? (
-              <Text style={styles.emptyTxt}>No floor plan for this room. Design it in the web app.</Text>
+              <EmptyState
+                icon={<LayoutGrid size={26} color={color.textDim} strokeWidth={2} />}
+                title={plans.length === 0 ? "No floor plan yet" : "This room has no tables yet"}
+                body="Lay out tables, booths and the bar in the Surge web dashboard — they appear here live."
+                actionLabel={(s.access?.surfaces ?? []).includes("register") ? "Start a takeout order" : undefined}
+                onAction={(s.access?.surfaces ?? []).includes("register") ? () => router.push("/register?mode=togo") : undefined}
+              />
             ) : (
               <>
                 {/* Section zones (positions + sizes scale with the room) */}
@@ -348,18 +393,28 @@ export default function Floor() {
                     </View>
                   );
                 })}
-                {/* Tables — FIXED on-screen size, positioned by the fit */}
+                {/* Tables — rich lifecycle tiles, positioned by the fit */}
                 {tables.map((t) => {
                   const summary = summaries[t.id];
                   // A server can't see other servers' checks: show those tables as
                   // "taken" (neutral, no order detail, not tappable).
                   const otherServer = scoped && !!summary && summary.staffId !== staffId;
-                  const st = otherServer ? "occupied" : statusById[t.id] ?? "available";
-                  const occupied = st !== "available";
-                  const k = TSIZE / (Math.max(t.w, t.h) || 1);
-                  const tw = t.w * k, th = t.h * k;
+                  const stage = otherServer ? "open" : stageById[t.id] ?? "available";
+                  const occupied = !!summary;
+                  const tier = otherServer ? "normal" : agingById[t.id] ?? "normal";
+                  // Fit the long side to TSIZE, then floor the short side (aspect kept)
+                  // so the rich content stays legible on wide/narrow tables alike.
+                  const kLong = TSIZE / (Math.max(t.w, t.h) || 1);
+                  let tw = t.w * kLong, th = t.h * kLong;
+                  const short = Math.min(tw, th) || 1;
+                  if (short < TMIN_SHORT) {
+                    const b = TMIN_SHORT / short;
+                    tw *= b;
+                    th *= b;
+                  }
                   const tx = sx(t.x + t.w / 2) - tw / 2;
                   const ty = sy(t.y + t.h / 2) - th / 2;
+                  const overBy = summary ? Math.max(0, (minutesSince(summary.openedAt, now) ?? 0) - aging.redMin) : 0;
                   return (
                     <TableShape
                       key={t.id}
@@ -370,14 +425,19 @@ export default function Floor() {
                       rotation={t.rotation}
                       shape={t.shape}
                       kind={t.kind}
-                      fill={otherServer ? "#3A4152" : fillForTable(t, st)}
+                      stage={stage}
+                      fill={otherServer ? "#3A4152" : undefined}
                       label={t.label}
                       occupied={occupied}
                       seats={seatCountByTable[t.id]}
                       sectionName={t.sectionId ? sectionName[t.sectionId] ?? null : null}
+                      stageLabel={otherServer ? "In use" : occupied ? STAGE_LABEL[stage] : null}
+                      serverName={otherServer ? null : summary?.serverName ?? null}
                       covers={otherServer ? null : summary?.guests ?? null}
-                      timer={otherServer ? null : summary ? (summary.checkDropped ? "dropped" : formatElapsed(summary.openedAt, now)) : null}
+                      timer={otherServer ? null : summary ? formatDuration(summary.openedAt, now) : null}
                       total={otherServer ? null : summary && summary.subtotal > 0 ? money(summary.subtotal, "CAD") : null}
+                      agingLabel={tier === "late" ? AGING_LABEL.late + (overBy > 0 ? " " + formatOverdue(overBy) : "") : null}
+                      timerColor={tier === "warning" ? agingColors.warning : tier === "late" ? agingColors.late : null}
                       onPress={otherServer ? undefined : () => openTable(t, summary)}
                     />
                   );
@@ -387,11 +447,22 @@ export default function Floor() {
           </View>
           <View style={styles.legend}>
             {LEGEND.map((l) => (
-              <View key={l.status} style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: statusFill(l.status) }]} />
-                <Text style={text.caption}>{l.label}</Text>
+              <View key={l.stage} style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: serviceStageColor(l.stage) }]} />
+                <Text style={styles.legendLabel}>{l.label}</Text>
               </View>
             ))}
+            <View style={styles.legendSep} />
+            <View style={styles.legendItem}>
+              <Clock size={13} color={agingColors.warning} strokeWidth={2.5} />
+              <Text style={styles.legendLabel}>Over {aging.yellowMin} min</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendBadge, { backgroundColor: agingColors.late }]}>
+                <Text style={styles.legendBadgeTxt}>{AGING_LABEL.late}</Text>
+              </View>
+              <Text style={styles.legendLabel}>Over {aging.redMin} min</Text>
+            </View>
           </View>
         </>
       ) : (
@@ -400,15 +471,28 @@ export default function Floor() {
             <SearchField value={query} onChangeText={setQuery} placeholder="Find a check — name or phone" />
           </View>
           <ScrollView contentContainerStyle={styles.grid}>
-            {listVisible.length === 0 && <Text style={[text.bodyDim, { padding: space.lg }]}>No open checks.</Text>}
-            {listVisible.map((c) => (
+            {boardRows.length === 0 && (
+              <EmptyState
+                icon={<ClipboardList size={26} color={color.textDim} strokeWidth={2} />}
+                title={query.trim() ? "No checks match" : "No open checks"}
+                body={query.trim() ? "Try a table name or the guest's phone number." : "Seat a table on the Map or start a new order — every open check shows here with its status and running total."}
+                actionLabel={query.trim() ? "Clear search" : (s.access?.surfaces ?? []).includes("register") ? "New order" : undefined}
+                onAction={query.trim() ? () => setQuery("") : (s.access?.surfaces ?? []).includes("register") ? () => setOrderPickerOpen(true) : undefined}
+              />
+            )}
+            {boardRows.map(({ c, stage, tier }) => (
               <TableCard
                 key={c.id}
-                label={c.label}
-                sub={c.guests > 0 ? c.guests + " guests" : c.channel ?? c.ticketType ?? undefined}
-                minutes={minutesSince(c.openedAt, now)}
-                elapsedLabel={c.checkDropped ? "check dropped" : formatElapsed(c.openedAt, now)}
-                checkDropped={c.checkDropped}
+                label={(c.elementId && tableName[c.elementId]) || c.label}
+                stage={stage}
+                stageLabel={STAGE_LABEL[stage]}
+                serverName={c.serverName}
+                guests={c.guests}
+                sub={c.channel ?? c.ticketType ?? undefined}
+                total={c.subtotal > 0 ? money(c.subtotal, "CAD") : undefined}
+                durationLabel={formatDuration(c.openedAt, now)}
+                agingTier={tier}
+                lateBy={tier === "late" ? Math.max(0, (minutesSince(c.openedAt, now) ?? 0) - aging.redMin) : 0}
                 onPress={() => router.push({ pathname: "/register", params: { ticket: c.id } })}
               />
             ))}
@@ -416,22 +500,43 @@ export default function Floor() {
         </>
       )}
 
-      <Pressable onPress={s.signOut} style={styles.signout}>
-        <Text style={text.caption}>Sign out</Text>
-      </Pressable>
-
       <BottomSheet visible={moreOpen} onClose={() => setMoreOpen(false)} title="Staff tools">
         {/* Scrollable so every item (incl. owner-only Device settings) is reachable
-            regardless of device height. */}
-        <ScrollView style={{ maxHeight: winH * 0.55 }} contentContainerStyle={{ gap: space.sm }} showsVerticalScrollIndicator={false}>
-          <Button title="Time clock" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/clock"); }} />
-          <Button title="Reservations" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/reservations"); }} />
-          <Button title="Waitlist" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/waitlist"); }} />
-          <Button title="Customers" variant="secondary" onPress={() => { setMoreOpen(false); router.push("/customers"); }} />
+            regardless of device height. Sign out lives here, off the floor. */}
+        <ScrollView style={{ maxHeight: winH * 0.6 }} contentContainerStyle={{ gap: space.sm }} showsVerticalScrollIndicator={false}>
+          {s.staff?.name ? (
+            <View style={styles.whoCard}>
+              <UserRound size={20} color={color.textDim} strokeWidth={2} />
+              <View style={{ flex: 1 }}>
+                <Text style={text.bodyMedium}>{s.staff.name}</Text>
+                <Text style={text.caption}>{s.businessName}</Text>
+              </View>
+            </View>
+          ) : null}
+          <Button title="Time clock" variant="secondary" icon={<Clock size={18} color={color.text} strokeWidth={2} />} onPress={() => { setMoreOpen(false); router.push("/clock"); }} />
+          <Button title="Reservations" variant="secondary" icon={<CalendarCheck size={18} color={color.text} strokeWidth={2} />} onPress={() => { setMoreOpen(false); router.push("/reservations"); }} />
+          <Button title="Waitlist" variant="secondary" icon={<ClipboardList size={18} color={color.text} strokeWidth={2} />} onPress={() => { setMoreOpen(false); router.push("/waitlist"); }} />
+          <Button title="Customers" variant="secondary" icon={<Users size={18} color={color.text} strokeWidth={2} />} onPress={() => { setMoreOpen(false); router.push("/customers"); }} />
           {isManager(s.staff?.role ?? "") && (
-            <Button title="Device settings" variant="ghost" onPress={() => { setMoreOpen(false); router.push("/device-settings"); }} />
+            <Button title="Device settings" variant="secondary" icon={<Settings size={18} color={color.text} strokeWidth={2} />} onPress={() => { setMoreOpen(false); router.push("/device-settings"); }} />
           )}
+          <View style={{ flexDirection: "row", gap: space.sm }}>
+            <Button title="Switch staff" variant="ghost" icon={<KeyRound size={18} color={color.text} strokeWidth={2} />} onPress={() => { setMoreOpen(false); s.clearStaff(); }} style={{ flex: 1 }} />
+            <Button title="Sign out" variant="ghost" icon={<LogOut size={18} color={color.text} strokeWidth={2} />} onPress={() => { setMoreOpen(false); s.signOut(); }} style={{ flex: 1 }} />
+          </View>
         </ScrollView>
+      </BottomSheet>
+
+      <BottomSheet visible={orderPickerOpen} onClose={() => setOrderPickerOpen(false)} title="New order">
+        {/* One entry point, four order types. Dine-in opens a fresh check (the
+            server assigns a table by tapping the map); the others preset the
+            order type in the register. Nothing is charged here. */}
+        <View style={{ gap: space.sm }}>
+          <Button title="Dine-in" size="lg" onPress={() => { setOrderPickerOpen(false); router.push("/register?mode=tab"); }} />
+          <Button title="Takeout" variant="secondary" onPress={() => { setOrderPickerOpen(false); router.push("/register?mode=togo"); }} />
+          <Button title="Pickup" variant="secondary" onPress={() => { setOrderPickerOpen(false); router.push("/register?mode=pickup"); }} />
+          <Button title="Delivery" variant="secondary" onPress={() => { setOrderPickerOpen(false); router.push("/register?mode=delivery"); }} />
+        </View>
       </BottomSheet>
     </SafeAreaView>
   );
@@ -440,21 +545,31 @@ export default function Floor() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
   // Slim top bar (TB-style thin header).
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs, gap: space.md },
-  headerTitle: { flex: 1, fontFamily: "Poppins_600SemiBold", fontSize: 20, color: color.text },
-  headerSub: { fontFamily: "Poppins_400Regular", fontSize: 13, color: color.textDim },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.sm, gap: space.md },
   actions: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  toggle: { flexDirection: "row", backgroundColor: color.card, borderRadius: 999, padding: 2, borderWidth: 1, borderColor: color.border },
-  toggleBtn: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: 999 },
-  toggleOn: { backgroundColor: color.card2 },
+  // Local Map/Board control bar inside the Floor screen.
+  viewBar: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.lg, paddingBottom: space.sm, gap: space.md },
+  spacer: { flex: 1 },
+  toggle: { flexDirection: "row", backgroundColor: color.card, borderRadius: 999, padding: 3, borderWidth: 1, borderColor: color.border },
+  // ≥44pt touch target per segment.
+  toggleBtn: { flexDirection: "row", gap: 6, minHeight: 44, minWidth: 96, paddingHorizontal: space.lg, alignItems: "center", justifyContent: "center", borderRadius: 999 },
+  toggleOn: { backgroundColor: color.blue },
+  toggleTxt: { fontFamily: "Poppins_500Medium", fontSize: 14, color: color.textDim },
+  toggleTxtOn: { color: color.onPrimary, fontFamily: "Poppins_600SemiBold" },
+  who: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 40, paddingHorizontal: space.md, borderRadius: 999, backgroundColor: color.card, borderWidth: 1, borderColor: color.border, maxWidth: 220 },
+  whoTxt: { fontFamily: "Poppins_500Medium", fontSize: 14, color: color.textDim },
+  whoCard: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: 12, backgroundColor: color.card2, borderWidth: 1, borderColor: color.border, marginBottom: space.xs },
   controls: { paddingHorizontal: space.lg, gap: space.sm, paddingBottom: space.xs },
   // Full-bleed floor: fills the whole area edge-to-edge, no inset/rounding.
   floor: { flex: 1, backgroundColor: color.bg, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  emptyTxt: { color: color.textDim, fontSize: 15, textAlign: "center" },
   zoneLabel: { position: "absolute", left: 12, bottom: 8, fontFamily: "Poppins_600SemiBold", fontSize: 12 },
-  legend: { flexDirection: "row", justifyContent: "center", gap: space.lg, paddingVertical: space.xs },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  legendDot: { width: 10, height: 10, borderRadius: 999 },
+  // Legend: labeled swatches, wraps; lifted off textDim for contrast.
+  legend: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", alignItems: "center", columnGap: space.md, rowGap: space.xs, paddingVertical: space.sm, paddingHorizontal: space.lg },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs, minHeight: 24 },
+  legendDot: { width: 12, height: 12, borderRadius: 999 },
+  legendLabel: { fontFamily: "Poppins_500Medium", fontSize: 14, color: color.text },
+  legendBadge: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 1 },
+  legendBadgeTxt: { fontFamily: "Poppins_600SemiBold", fontSize: 11, color: "#FFFFFF" },
+  legendSep: { width: 1, height: 16, backgroundColor: color.border, marginHorizontal: space.xs },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: space.md, padding: space.xl },
-  signout: { alignItems: "center", paddingVertical: space.xs },
 });

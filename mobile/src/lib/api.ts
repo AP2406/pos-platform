@@ -1,6 +1,15 @@
 import { API_BASE_URL } from "./config";
 import { supabase } from "./supabase";
 import { notify } from "./notice";
+import { demoOn } from "./demo/state";
+import * as demo from "./demo/api";
+
+// Demo mode: writes land in the in-memory demo store instead of the v1 API. The
+// acting staff's display name comes from the session (set by SessionProvider).
+let actingStaffName: string | null = null;
+export function setActingStaffName(name: string | null): void {
+  actingStaffName = name;
+}
 import {
   API_HEADERS,
   type SessionResponse,
@@ -85,6 +94,7 @@ export async function quote(
   staffId: string | null,
   body: QuoteRequest
 ): Promise<QuoteResponse> {
+  if (demoOn()) return demo.quote(body);
   return send<QuoteResponse>(`${API_BASE_URL}/api/v1/quote`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
@@ -95,6 +105,7 @@ export async function quote(
 // POST /api/v1/kds/:id — bump (fired->ready) / recall (ready->fired). Kitchen
 // state, not money.
 export async function kdsMutate(businessId: string, staffId: string | null, ticketId: string, op: KdsOp): Promise<KdsMutateResponse> {
+  if (demoOn()) return demo.kdsMutate(ticketId, op);
   return send<KdsMutateResponse>(`${API_BASE_URL}/api/v1/kds/${ticketId}`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
@@ -105,6 +116,7 @@ export async function kdsMutate(businessId: string, staffId: string | null, tick
 // POST /api/v1/orders/:id/fulfill — Orders-hub Mark-ready / Reopen. Fulfillment
 // state (+ order-ready email on "ready"), not money.
 export async function ordersFulfill(businessId: string, staffId: string | null, orderId: string, op: OrdersFulfillOp): Promise<OrdersFulfillResponse> {
+  if (demoOn()) return demo.ordersFulfill(orderId, op);
   return send<OrdersFulfillResponse>(`${API_BASE_URL}/api/v1/orders/${orderId}/fulfill`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
@@ -115,6 +127,7 @@ export async function ordersFulfill(businessId: string, staffId: string | null, 
 // POST /api/v1/fire — send the cart to the kitchen (open check + kitchen tickets).
 // Money-independent: no orders row, no tender, no charge.
 export async function fire(businessId: string, staffId: string | null, body: FireRequest): Promise<FireResponse> {
+  if (demoOn()) return demo.fire(actingStaffName, body);
   return send<FireResponse>(`${API_BASE_URL}/api/v1/fire`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
@@ -125,6 +138,7 @@ export async function fire(businessId: string, staffId: string | null, body: Fir
 // POST /api/v1/clock — the acting staff clocks in/out (op "toggle") or toggles a
 // break (op "break"). Staff state, not money.
 export async function clockToggle(businessId: string, staffId: string | null, op: ClockOp): Promise<ClockResponse> {
+  if (demoOn()) return demo.clockToggle(actingStaffName, op);
   return send<ClockResponse>(`${API_BASE_URL}/api/v1/clock`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
@@ -134,6 +148,7 @@ export async function clockToggle(businessId: string, staffId: string | null, op
 
 // POST /api/v1/reservations — create a booking or walk-in waitlist entry. FOH state.
 export async function createReservation(businessId: string, staffId: string | null, body: ReservationInput): Promise<ReservationCreateResponse> {
+  if (demoOn()) return demo.createReservation(body);
   return send<ReservationCreateResponse>(`${API_BASE_URL}/api/v1/reservations`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
@@ -144,6 +159,7 @@ export async function createReservation(businessId: string, staffId: string | nu
 // POST /api/v1/reservations/:id — advance status (seat/cancel/no-show/done) or
 // page a waitlisted guest. FOH state, not money.
 export async function reservationMutate(businessId: string, staffId: string | null, id: string, body: ReservationMutateRequest): Promise<ReservationMutateResponse> {
+  if (demoOn()) return demo.reservationMutate(id, body);
   return send<ReservationMutateResponse>(`${API_BASE_URL}/api/v1/reservations/${id}`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),
@@ -154,6 +170,7 @@ export async function reservationMutate(businessId: string, staffId: string | nu
 // POST /api/v1/tickets/append — move an item to another table's open check.
 // Order shaping (no kitchen ticket, no tender).
 export async function appendToTicket(businessId: string, staffId: string | null, body: TicketAppendRequest): Promise<TicketAppendResponse> {
+  if (demoOn()) return demo.appendToTicket(actingStaffName, body);
   return send<TicketAppendResponse>(`${API_BASE_URL}/api/v1/tickets/append`, {
     method: "POST",
     headers: await authHeaders(businessId, staffId),

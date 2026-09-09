@@ -1,8 +1,18 @@
 import { supabase } from "./supabase";
 import type { ModOption, ModifierGroup, Variation } from "./modifiers";
+import { demoOn } from "./demo/state";
+import * as demo from "./demo/reads";
 
 // Direct Supabase reads (RLS enforces tenancy). All money WRITES go through the
 // v1 HTTP API; these are pure reads for the floor + register.
+
+// A Supabase embed (`server:staff_members(name)`) resolves to an object or a
+// single-row array depending on the relationship — normalize to the first name.
+function firstName(embed: { name?: string | null } | { name?: string | null }[] | null): string | null {
+  const row = Array.isArray(embed) ? embed[0] : embed;
+  const name = row?.name?.trim();
+  return name ? name.split(/\s+/)[0] : null;
+}
 
 export type MenuItem = {
   id: string;
@@ -77,6 +87,7 @@ function buildModifierMaps(
 }
 
 export async function fetchMenu(businessId: string): Promise<MenuItem[]> {
+  if (demoOn()) return demo.fetchMenu();
   const [{ data, error }, { data: vars }, { data: mods }, { data: groups }] = await Promise.all([
     supabase
       .from("catalog_items")
@@ -124,6 +135,7 @@ export async function fetchMenu(businessId: string): Promise<MenuItem[]> {
 export type MoveTarget = { elementId: string; label: string; occupied: boolean };
 
 export async function fetchTables(businessId: string, excludeElementId?: string | null): Promise<MoveTarget[]> {
+  if (demoOn()) return demo.fetchTables(businessId, excludeElementId);
   const [{ data: els }, { data: open }] = await Promise.all([
     supabase.from("floor_elements").select("id, label, sort_order").eq("business_id", businessId).eq("is_active", true).in("kind", ["table", "booth"]).order("sort_order", { ascending: true }),
     supabase.from("open_tickets").select("element_id").eq("business_id", businessId).is("parent_ticket_id", null).not("element_id", "is", null),
@@ -138,6 +150,7 @@ export async function fetchTables(businessId: string, excludeElementId?: string 
 export type Course = { id: string; name: string; sortOrder: number };
 
 export async function fetchCourses(businessId: string): Promise<Course[]> {
+  if (demoOn()) return demo.fetchCourses();
   const { data, error } = await supabase
     .from("courses")
     .select("id, name, sort_order")
@@ -159,6 +172,7 @@ export type UpsellPrompt = {
 };
 
 export async function fetchUpsells(businessId: string): Promise<UpsellPrompt[]> {
+  if (demoOn()) return demo.fetchUpsells();
   const { data, error } = await supabase
     .from("upsell_prompts")
     .select("trigger_scope, trigger_item_id, trigger_category, suggest_item_id, label, combo_discount")
@@ -186,26 +200,46 @@ export type OpenCheck = {
   checkDropped: boolean;
   customerPhone: string | null;
   staffId: string | null;
+  elementId: string | null; // table this check sits on (null for togo/bar/delivery)
+  subtotal: number; // running cart subtotal
+  itemCount: number;
+  serverName: string | null; // server's first name
 };
 
 export async function fetchOpenChecks(businessId: string): Promise<OpenCheck[]> {
+  if (demoOn()) return demo.fetchOpenChecks(businessId);
   const { data, error } = await supabase
     .from("open_tickets")
-    .select("id, label, ticket_type, guest_count, channel, opened_at, check_dropped_at, customer_phone, staff_id")
+    .select("id, label, ticket_type, guest_count, channel, opened_at, check_dropped_at, customer_phone, staff_id, element_id, cart, server:staff_members(name)")
     .eq("business_id", businessId)
     .order("opened_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((t) => ({
-    id: t.id as string,
-    label: (t.label as string) || "Ticket",
-    ticketType: (t.ticket_type as string | null) ?? null,
-    channel: (t.channel as string | null) ?? null,
-    guests: Number(t.guest_count) || 0,
-    openedAt: t.opened_at as string,
-    checkDropped: t.check_dropped_at != null,
-    customerPhone: (t.customer_phone as string | null) ?? null,
-    staffId: (t.staff_id as string | null) ?? null,
-  }));
+  return (data ?? []).map((t) => {
+    const cart = (t.cart ?? null) as { items?: Array<{ unit_price?: number; quantity?: number }> } | null;
+    const items = Array.isArray(cart?.items) ? cart!.items : [];
+    let subtotal = 0;
+    let itemCount = 0;
+    for (const it of items) {
+      const q = Number(it.quantity) || 0;
+      subtotal += (Number(it.unit_price) || 0) * q;
+      itemCount += q;
+    }
+    return {
+      id: t.id as string,
+      label: (t.label as string) || "Ticket",
+      ticketType: (t.ticket_type as string | null) ?? null,
+      channel: (t.channel as string | null) ?? null,
+      guests: Number(t.guest_count) || 0,
+      openedAt: t.opened_at as string,
+      checkDropped: t.check_dropped_at != null,
+      customerPhone: (t.customer_phone as string | null) ?? null,
+      staffId: (t.staff_id as string | null) ?? null,
+      elementId: (t.element_id as string | null) ?? null,
+      subtotal: Math.round(subtotal * 100) / 100,
+      itemCount,
+      serverName: firstName((t.server as { name?: string | null } | { name?: string | null }[] | null) ?? null),
+    };
+  });
 }
 
 export type CheckLine = {
@@ -312,12 +346,14 @@ export type TableSummary = {
   itemCount: number;
   checkDropped: boolean;
   staffId: string | null;
+  serverName: string | null; // server's FIRST name, for the floor board
 };
 
 export async function fetchTableSummaries(businessId: string): Promise<Record<string, TableSummary>> {
+  if (demoOn()) return demo.fetchTableSummaries(businessId);
   const { data, error } = await supabase
     .from("open_tickets")
-    .select("id, element_id, opened_at, guest_count, cart, check_dropped_at, staff_id")
+    .select("id, element_id, opened_at, guest_count, cart, check_dropped_at, staff_id, server:staff_members(name)")
     .eq("business_id", businessId)
     .not("element_id", "is", null);
   if (error) throw error;
@@ -341,6 +377,7 @@ export async function fetchTableSummaries(businessId: string): Promise<Record<st
       itemCount,
       checkDropped: t.check_dropped_at != null,
       staffId: (t.staff_id as string | null) ?? null,
+      serverName: firstName((t.server as { name?: string | null } | { name?: string | null }[] | null) ?? null),
     };
   }
   return byElement;
@@ -350,6 +387,7 @@ export type Aging = { yellowMin: number; redMin: number };
 
 // Turn-time thresholds from businesses.settings.table_aging (fallback 60 / 90).
 export async function fetchTableAging(businessId: string): Promise<Aging> {
+  if (demoOn()) return demo.fetchTableAging();
   const { data } = await supabase.from("businesses").select("settings").eq("id", businessId).maybeSingle();
   const ta = ((data?.settings ?? {}) as { table_aging?: { yellow_min?: number; red_min?: number } }).table_aging ?? {};
   return { yellowMin: Number(ta.yellow_min) || 60, redMin: Number(ta.red_min) || 90 };
@@ -366,18 +404,22 @@ export type OrderHubRow = {
   fulfilledAt: string | null;
   total: number;
   customerName: string | null;
+  cancelled: boolean; // voided orders show under the Cancelled filter
+  itemCount: number;
+  itemSummary: string | null; // "2× Margherita · 1× Caesar" (first few lines)
 };
 
-// Today's non-voided orders for the fulfillment hub (channel-segmented).
+// Today's orders for the fulfillment hub (channel-segmented). Voided orders are
+// included so the Cancelled filter has real rows; callers filter by state.
 export async function fetchOrdersHub(businessId: string): Promise<OrderHubRow[]> {
+  if (demoOn()) return demo.fetchOrdersHub();
   const sinceIso = new Date(new Date().toDateString()).toISOString();
   const { data, error } = await supabase
     .from("orders")
-    // dining_option lives in the snapshot jsonb (not a column) — read it via a JSON path.
-    .select("id, sale_number, channel, dining_option:snapshot->>dining_option, created_at, fulfilled_at, total, customer:customers(name)")
+    // dining_option + line items live in the snapshot jsonb (not columns) — read them via JSON paths.
+    .select("id, sale_number, channel, status, dining_option:snapshot->>dining_option, items:snapshot->items, created_at, fulfilled_at, total, customer:customers(name)")
     .eq("business_id", businessId)
     .neq("is_training", true)
-    .neq("status", "voided")
     .gte("created_at", sinceIso)
     .order("created_at", { ascending: false })
     .limit(200);
@@ -385,6 +427,10 @@ export async function fetchOrdersHub(businessId: string): Promise<OrderHubRow[]>
   return (data ?? []).map((o) => {
     const cust = o.customer as { name?: string } | { name?: string }[] | null;
     const name = (Array.isArray(cust) ? cust[0]?.name : cust?.name) ?? null;
+    const items = Array.isArray(o.items) ? (o.items as Array<Record<string, unknown>>) : [];
+    const live = items.filter((it) => !(it as { void?: unknown }).void);
+    const itemCount = live.reduce((n, it) => n + (Number(it.quantity) || 1), 0);
+    const itemSummary = live.length ? live.slice(0, 3).map((it) => (Number(it.quantity) || 1) + "× " + String(it.name ?? "Item")).join(" · ") + (live.length > 3 ? " · +" + (live.length - 3) + " more" : "") : null;
     return {
       id: o.id as string,
       saleNumber: o.sale_number != null ? Number(o.sale_number) : null,
@@ -394,6 +440,9 @@ export async function fetchOrdersHub(businessId: string): Promise<OrderHubRow[]>
       fulfilledAt: (o.fulfilled_at as string | null) ?? null,
       total: Number(o.total) || 0,
       customerName: name,
+      cancelled: o.status === "voided",
+      itemCount,
+      itemSummary,
     };
   });
 }
@@ -401,26 +450,31 @@ export async function fetchOrdersHub(businessId: string): Promise<OrderHubRow[]>
 // ---- Order history (read-only) ----------------------------------------------
 
 export type SaleStatus = "paid" | "voided" | "refunded";
+export type SaleLine = { name: string; quantity: number; unitPrice: number };
 export type SaleRow = {
   id: string;
   saleNumber: number | null;
   createdAt: string;
   total: number;
+  subtotal: number;
+  tip: number;
   method: string;
   status: SaleStatus;
   customerName: string | null;
   serverName: string | null;
+  lines: SaleLine[]; // non-voided snapshot lines, for top-items rollups
 };
 
 export async function fetchSalesHistory(businessId: string, sinceIso: string): Promise<SaleRow[]> {
+  if (demoOn()) return demo.fetchSalesHistory(businessId, sinceIso);
   const { data, error } = await supabase
     .from("orders")
-    .select("id, sale_number, created_at, total, payment_method, status, customer:customers(name), server:staff_members(name)")
+    .select("id, sale_number, created_at, total, subtotal, tip, payment_method, status, items:snapshot->items, customer:customers(name), server:staff_members(name)")
     .eq("business_id", businessId)
     .neq("is_training", true)
     .gte("created_at", sinceIso)
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(500);
   if (error) throw error;
   const rows = data ?? [];
   const ids = rows.map((o) => o.id as string);
@@ -434,15 +488,21 @@ export async function fetchSalesHistory(businessId: string, sinceIso: string): P
     const srv = o.server as { name?: string } | { name?: string }[] | null;
     const oneName = (v: typeof cust) => (Array.isArray(v) ? v[0]?.name : v?.name) ?? null;
     const status: SaleStatus = o.status === "voided" ? "voided" : refunded.has(o.id as string) ? "refunded" : "paid";
+    const items = Array.isArray(o.items) ? (o.items as Array<Record<string, unknown>>) : [];
     return {
       id: o.id as string,
       saleNumber: o.sale_number != null ? Number(o.sale_number) : null,
       createdAt: o.created_at as string,
       total: Number(o.total) || 0,
+      subtotal: Number(o.subtotal) || 0,
+      tip: Number(o.tip) || 0,
       method: (o.payment_method as string | null) ?? "cash",
       status,
       customerName: oneName(cust),
       serverName: oneName(srv),
+      lines: items
+        .filter((it) => !(it as { void?: unknown }).void)
+        .map((it) => ({ name: String(it.name ?? "Item"), quantity: Number(it.quantity) || 1, unitPrice: Number(it.unit_price) || 0 })),
     };
   });
 }
@@ -474,6 +534,7 @@ export type SaleDetail = {
 };
 
 export async function fetchOrderDetail(businessId: string, orderId: string): Promise<SaleDetail | null> {
+  if (demoOn()) return demo.fetchOrderDetail(businessId, orderId);
   const { data: o } = await supabase
     .from("orders")
     // dining_option is snapshot-only; the rest are real columns.
@@ -559,6 +620,7 @@ function parseKdsItems(raw: unknown): KdsItem[] {
 
 // Open (unbumped) tickets + those bumped in the last ~30 min (for the recall strip).
 export async function fetchKitchenTickets(businessId: string): Promise<KitchenTicket[]> {
+  if (demoOn()) return demo.fetchKitchenTickets(businessId);
   const sinceIso = new Date(Date.now() - 30 * 60000).toISOString();
   const { data, error } = await supabase
     .from("kitchen_tickets")
@@ -581,6 +643,7 @@ export async function fetchKitchenTickets(businessId: string): Promise<KitchenTi
 }
 
 export async function fetchKitchenStations(businessId: string): Promise<KitchenStation[]> {
+  if (demoOn()) return demo.fetchKitchenStations();
   const { data, error } = await supabase
     .from("kitchen_stations")
     .select("id, name")
@@ -592,6 +655,7 @@ export async function fetchKitchenStations(businessId: string): Promise<KitchenS
 
 // Kitchen aging thresholds from businesses.settings.kds (fallback 10 / 18 min).
 export async function fetchKdsAging(businessId: string): Promise<Aging> {
+  if (demoOn()) return demo.fetchKdsAging();
   const { data } = await supabase.from("businesses").select("settings").eq("id", businessId).maybeSingle();
   const kds = ((data?.settings ?? {}) as { kds?: { warnMin?: number; lateMin?: number } }).kds ?? {};
   return { yellowMin: Number(kds.warnMin) || 10, redMin: Number(kds.lateMin) || 18 };
@@ -603,6 +667,7 @@ export type MyShift = { onShift: boolean; onBreak: boolean; since: string | null
 
 // The acting staff member's own open shift (if any).
 export async function fetchMyShift(businessId: string, staffId: string): Promise<MyShift> {
+  if (demoOn()) return demo.fetchMyShift();
   const { data } = await supabase
     .from("time_clock_entries")
     .select("clock_in, on_break_since")
@@ -623,6 +688,7 @@ export type OnShiftRow = { staffId: string; name: string; since: string; onBreak
 
 // Everyone currently on the clock (glance for the whole floor).
 export async function fetchOnShift(businessId: string): Promise<OnShiftRow[]> {
+  if (demoOn()) return demo.fetchOnShift();
   const { data, error } = await supabase
     .from("time_clock_entries")
     .select("staff_id, clock_in, on_break_since, staff:staff_members(name)")
@@ -660,6 +726,7 @@ export type ReservationRow = {
 
 // Active bookings + waitlist (excludes closed-out rows), soonest first.
 export async function fetchReservations(businessId: string): Promise<ReservationRow[]> {
+  if (demoOn()) return demo.fetchReservations();
   const { data, error } = await supabase
     .from("reservations")
     .select("id, guest_name, party_size, phone, email, scheduled_at, quoted_wait_min, element_id, status, notes, paged_at, created_at")
@@ -690,6 +757,7 @@ export type CustomerRow = { id: string; name: string; phone: string | null; emai
 
 // Search customers by name / phone / email (blank term = most recent).
 export async function fetchCustomers(businessId: string, term: string): Promise<CustomerRow[]> {
+  if (demoOn()) return demo.fetchCustomers(businessId, term);
   let q = supabase.from("customers").select("id, name, phone, email").eq("business_id", businessId);
   const t = term.trim();
   if (t) q = q.or(`name.ilike.%${t}%,phone.ilike.%${t}%,email.ilike.%${t}%`);
@@ -717,6 +785,7 @@ export type CustomerDetail = CustomerRow & {
 
 // Full profile: contact, loyalty/credit/house-account balances, lifetime stats.
 export async function fetchCustomerDetail(businessId: string, customerId: string): Promise<CustomerDetail | null> {
+  if (demoOn()) return demo.fetchCustomerDetail(businessId, customerId);
   const { data: c } = await supabase
     .from("customers")
     .select("id, name, phone, email, notes, tax_exempt")
@@ -752,6 +821,7 @@ export async function fetchCustomerDetail(businessId: string, customerId: string
 export type CustomerOrder = { id: string; saleNumber: number | null; createdAt: string; total: number; status: SaleStatus };
 
 export async function fetchCustomerOrders(businessId: string, customerId: string): Promise<CustomerOrder[]> {
+  if (demoOn()) return demo.fetchCustomerOrders(businessId, customerId);
   const { data, error } = await supabase
     .from("orders")
     .select("id, sale_number, created_at, total, status")
@@ -781,6 +851,7 @@ export async function fetchCustomerOrders(businessId: string, customerId: string
 export type LedgerEntry = { source: "loyalty" | "credit" | "house"; kind: string; amount: number; unit: "pts" | "$"; createdAt: string; orderId: string | null; note: string | null };
 
 export async function fetchCustomerLedger(businessId: string, customerId: string): Promise<LedgerEntry[]> {
+  if (demoOn()) return demo.fetchCustomerLedger(businessId, customerId);
   const [{ data: loy }, { data: sc }, { data: ha }] = await Promise.all([
     supabase.from("loyalty_transactions").select("points, kind, order_id, created_at").eq("business_id", businessId).eq("customer_id", customerId).order("created_at", { ascending: false }).limit(40),
     supabase.from("store_credit_ledger").select("delta_cents, kind, order_id, created_at").eq("business_id", businessId).eq("customer_id", customerId).order("created_at", { ascending: false }).limit(40),
@@ -793,8 +864,57 @@ export async function fetchCustomerLedger(businessId: string, customerId: string
   return out.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 60);
 }
 
+// The open check's header facts for the register's check panel: where it is, how
+// many guests, who owns it, when it opened. Read-only.
+export type CheckHeader = {
+  id: string;
+  label: string;
+  guests: number;
+  openedAt: string;
+  elementId: string | null;
+  serverName: string | null;
+  channel: string | null;
+  number: number | null; // human check number when the backend has one
+  lastFiredAt: string | null; // most recent kitchen fire for this check's table
+};
+
+export async function fetchCheckHeader(ticketId: string): Promise<CheckHeader | null> {
+  if (demoOn()) return demo.fetchCheckHeader(ticketId);
+  const { data, error } = await supabase
+    .from("open_tickets")
+    .select("id, label, guest_count, opened_at, element_id, channel, server:staff_members(name)")
+    .eq("id", ticketId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  // Prefer the table's own name over the ticket label ("Ticket" / "Table" defaults),
+  // and pick up the last time anything on this table was fired.
+  let tableLabel: string | null = null;
+  let lastFiredAt: string | null = null;
+  if (data.element_id) {
+    const [{ data: el }, { data: kt }] = await Promise.all([
+      supabase.from("floor_elements").select("label").eq("id", data.element_id as string).maybeSingle(),
+      supabase.from("kitchen_tickets").select("fired_at").eq("element_id", data.element_id as string).order("fired_at", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    tableLabel = (el?.label as string | null) ?? null;
+    lastFiredAt = (kt?.fired_at as string | null) ?? null;
+  }
+  return {
+    id: data.id as string,
+    label: tableLabel || (data.label as string) || "Check",
+    guests: Number(data.guest_count) || 0,
+    openedAt: data.opened_at as string,
+    elementId: (data.element_id as string | null) ?? null,
+    channel: (data.channel as string | null) ?? null,
+    serverName: firstName((data.server as { name?: string | null } | { name?: string | null }[] | null) ?? null),
+    number: null,
+    lastFiredAt,
+  };
+}
+
 // Read an existing open check's cart lines (jsonb) so the register can resume it.
 export async function fetchCheckCart(ticketId: string): Promise<CheckLine[]> {
+  if (demoOn()) return demo.fetchCheckCart(ticketId);
   const { data, error } = await supabase.from("open_tickets").select("cart").eq("id", ticketId).maybeSingle();
   if (error) throw error;
   const cart = (data?.cart ?? null) as { items?: Array<Record<string, unknown>> } | null;

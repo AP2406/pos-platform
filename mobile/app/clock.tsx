@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Button, ScreenHeader, EmptyState, color, space, text } from "@/design";
+import { Clock as ClockIcon, Coffee } from "lucide-react-native";
+import { Button, ScreenHeader, EmptyState, StatusChip, color, space, text, radius } from "@/design";
 import { useSession } from "@/state/session";
 import { supabase, realtimeChannel } from "@/lib/supabase";
 import { fetchMyShift, fetchOnShift, type MyShift, type OnShiftRow } from "@/lib/reads";
@@ -86,12 +87,14 @@ export default function Clock() {
               loading={busy === "toggle"}
               disabled={busy === "break"}
               onPress={() => act("toggle")}
+              size="lg"
               style={{ marginBottom: space.sm }}
             />
             {mine.onShift && (
               <Button
                 title={mine.onBreak ? "End break" : "Start break"}
                 variant="secondary"
+                icon={<Coffee size={18} color={color.text} strokeWidth={2} />}
                 loading={busy === "break"}
                 disabled={busy === "toggle"}
                 onPress={() => act("break")}
@@ -99,18 +102,16 @@ export default function Clock() {
             )}
           </View>
         ) : (
-          <EmptyState>No acting staff on this device.</EmptyState>
+          <EmptyState icon={<ClockIcon size={26} color={color.textDim} strokeWidth={2} />} title="Sign in with your PIN to clock in" body="The time clock records shifts for the person signed in on this iPad." />
         )}
 
-        <Text style={styles.section}>On the clock ({roster.length})</Text>
-        {roster.length === 0 && <EmptyState>Nobody is clocked in.</EmptyState>}
+        <Text style={text.eyebrow}>On the clock · {roster.length}</Text>
+        {roster.length === 0 && <EmptyState compact title="Nobody is clocked in" body="Team members appear here as soon as they clock in on any device." />}
         {roster.map((r) => (
           <View key={r.staffId} style={styles.row}>
             <Text style={styles.rowName}>{r.name}</Text>
-            <Text style={text.caption}>
-              {r.onBreakSince ? "On break · " : ""}
-              {formatElapsed(r.since, now)}
-            </Text>
+            {r.onBreakSince ? <StatusChip tint={color.warning} label="On break" size="sm" /> : <StatusChip tint={color.success} label="Working" size="sm" />}
+            <Text style={styles.rowTime}>{formatElapsed(r.since, now)}</Text>
           </View>
         ))}
       </ScrollView>
@@ -120,10 +121,10 @@ export default function Clock() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
-  body: { padding: space.lg, gap: space.sm },
-  card: { backgroundColor: color.card, borderRadius: 16, borderWidth: 1, borderColor: color.border, padding: space.lg, marginBottom: space.md },
-  name: { fontFamily: "Poppins_600SemiBold", fontSize: 18, color: color.text, marginBottom: space.xs },
-  section: { fontFamily: "Poppins_600SemiBold", fontSize: 14, color: color.textDim, marginTop: space.sm, marginBottom: space.xs },
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: color.card, borderRadius: 12, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.sm },
-  rowName: { fontFamily: "Poppins_500Medium", fontSize: 15, color: color.text },
+  body: { padding: space.lg, gap: space.sm, maxWidth: 640, width: "100%", alignSelf: "center" },
+  card: { backgroundColor: color.card, borderRadius: radius.tile, borderWidth: 1, borderColor: color.border, padding: space.xl, marginBottom: space.md },
+  name: { fontFamily: "Poppins_600SemiBold", fontSize: 22, color: color.text, marginBottom: space.xs },
+  row: { flexDirection: "row", alignItems: "center", gap: space.md, backgroundColor: color.card, borderRadius: radius.card, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.lg, paddingVertical: space.md, minHeight: 60 },
+  rowName: { flex: 1, fontFamily: "Poppins_500Medium", fontSize: 16, color: color.text },
+  rowTime: { fontFamily: "Poppins_600SemiBold", fontSize: 15, color: color.textDim, fontVariant: ["tabular-nums"], minWidth: 64, textAlign: "right" },
 });

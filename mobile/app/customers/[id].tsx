@@ -2,14 +2,15 @@ import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { StatCard, ScreenHeader, EmptyState, color, space, text } from "@/design";
+import { ChevronRight } from "lucide-react-native";
+import { StatCard, ScreenHeader, EmptyState, StatusChip, color, space, text } from "@/design";
 import { useSession } from "@/state/session";
 import { fetchCustomerDetail, fetchCustomerOrders, fetchCustomerLedger, type CustomerDetail, type CustomerOrder, type LedgerEntry, type SaleStatus } from "@/lib/reads";
 import { money } from "@/lib/format";
 
 const dateOf = (iso: string) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(iso));
 
-const STATUS_COLOR: Record<SaleStatus, string> = { paid: "#2FBF71", voided: "#E5484D", refunded: "#F5A623" };
+const STATUS_COLOR: Record<SaleStatus, string> = { paid: color.success, voided: color.late, refunded: color.warning };
 const SOURCE_LABEL: Record<LedgerEntry["source"], string> = { loyalty: "Loyalty", credit: "Credit", house: "House" };
 
 export default function CustomerProfile() {
@@ -49,9 +50,9 @@ export default function CustomerProfile() {
       <ScreenHeader title={d?.name ?? "Customer"} onBack={() => router.back()} backLabel="Back" />
 
       {!loaded ? (
-        <EmptyState>Loading…</EmptyState>
+        <EmptyState compact title="Loading…" />
       ) : !d ? (
-        <EmptyState>Customer not found.</EmptyState>
+        <EmptyState title="Customer not found" body="This profile may have been merged or removed." actionLabel="Back" onAction={() => router.back()} />
       ) : (
         <ScrollView contentContainerStyle={styles.body}>
           {/* Contact */}
@@ -99,16 +100,16 @@ export default function CustomerProfile() {
           {/* Order history */}
           <View style={styles.card}>
             <Text style={styles.cardLabel}>Orders ({orders.length})</Text>
-            {orders.length === 0 && <Text style={text.bodyDim}>No orders yet.</Text>}
+            {orders.length === 0 && <Text style={text.bodyDim}>No orders yet — their first visit will show here.</Text>}
             {orders.map((o) => (
               <Pressable key={o.id} style={styles.row} onPress={() => router.push({ pathname: "/history/[id]", params: { id: o.id } })}>
                 <View style={styles.rowMain}>
                   <Text style={styles.rowTitle}>{o.saleNumber != null ? "#" + o.saleNumber : "Order"}</Text>
                   <Text style={styles.rowSub}>{dateOf(o.createdAt)}</Text>
                 </View>
-                {o.status !== "paid" ? <Text style={[styles.badge, { color: STATUS_COLOR[o.status] }]}>{o.status}</Text> : null}
+                {o.status !== "paid" ? <StatusChip tint={STATUS_COLOR[o.status]} label={o.status === "voided" ? "Voided" : "Refunded"} size="sm" /> : null}
                 <Text style={styles.rowTotal}>{money(o.total, "CAD")}</Text>
-                <Text style={text.bodyDim}>›</Text>
+                <ChevronRight size={18} color={color.textFaint} strokeWidth={2.25} />
               </Pressable>
             ))}
           </View>
@@ -116,7 +117,7 @@ export default function CustomerProfile() {
           {/* Account activity (real ledger, merged) */}
           <View style={styles.card}>
             <Text style={styles.cardLabel}>Account activity</Text>
-            {ledger.length === 0 && <Text style={text.bodyDim}>No loyalty, credit, or house-account activity yet.</Text>}
+            {ledger.length === 0 && <Text style={text.bodyDim}>No loyalty points, store credit or house-account activity yet.</Text>}
             {ledger.map((e, i) => (
               <View key={i} style={styles.ledRow}>
                 <View style={[styles.srcChip, SRC_STYLE[e.source]]}>
@@ -129,12 +130,12 @@ export default function CustomerProfile() {
                     {e.note ? " · " + e.note : ""}
                   </Text>
                 </View>
-                <Text style={[styles.ledAmt, { color: e.amount < 0 ? color.late : "#2FBF71" }]}>{fmtAmt(e)}</Text>
+                <Text style={[styles.ledAmt, { color: e.amount < 0 ? color.late : color.success }]}>{fmtAmt(e)}</Text>
               </View>
             ))}
           </View>
 
-          <Text style={[text.caption, { textAlign: "center" }]}>Read-only. Adjustments are made from the register / web.</Text>
+          <Text style={[text.caption, { textAlign: "center" }]}>Loyalty and credit adjustments are made in the Surge web dashboard.</Text>
         </ScrollView>
       )}
     </SafeAreaView>

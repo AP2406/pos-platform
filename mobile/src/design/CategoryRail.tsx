@@ -1,25 +1,26 @@
-import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import { Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import type { LucideIcon } from "lucide-react-native";
 import { color, radius, space, fontFamily, fontSize } from "@surge/design-tokens";
 
-export type RailCategory = { key: string; label: string; count: number; icon: string };
+type IconComponent = LucideIcon;
+export type RailCategory = { key: string; label: string; count: number; Icon: IconComponent };
 
 // Left-edge category rail (thumb-zone): one tappable cell per category with its
-// distinct icon, label, and live item count. Vertical + scrollable so long menus
-// stay reachable. Presentation only — money-independent.
+// Lucide glyph, label, and live item count. Vertical + scrollable so long menus
+// stay reachable. The selected cell is a solid primary fill. Presentation only.
 export function CategoryRail({ categories, value, onChange }: { categories: RailCategory[]; value: string; onChange: (key: string) => void }) {
   return (
     <ScrollView style={styles.rail} contentContainerStyle={styles.railInner} showsVerticalScrollIndicator={false}>
       {categories.map((c) => {
         const on = c.key === value;
+        const Icon = c.Icon;
         return (
-          <Pressable key={c.key} onPress={() => onChange(c.key)} style={[styles.cell, on && styles.cellOn]} accessibilityRole="tab" accessibilityState={{ selected: on }}>
-            <Text style={styles.icon}>{c.icon}</Text>
+          <Pressable key={c.key} onPress={() => onChange(c.key)} style={[styles.cell, on && styles.cellOn]} accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={c.label + ", " + c.count + " items"}>
+            <Icon size={22} color={on ? color.onPrimary : color.textDim} strokeWidth={2} />
             <Text style={[styles.label, on && styles.labelOn]} numberOfLines={2}>
               {c.label}
             </Text>
-            <View style={[styles.count, on && styles.countOn]}>
-              <Text style={[styles.countTxt, on && styles.countTxtOn]}>{c.count}</Text>
-            </View>
+            <Text style={[styles.count, on && styles.countOn]}>{c.count}</Text>
           </Pressable>
         );
       })}
@@ -28,15 +29,12 @@ export function CategoryRail({ categories, value, onChange }: { categories: Rail
 }
 
 const styles = StyleSheet.create({
-  rail: { width: 84, flexGrow: 0 },
+  rail: { width: 92, flexGrow: 0 },
   railInner: { gap: space.xs, paddingRight: space.xs, paddingBottom: space.lg },
-  cell: { alignItems: "center", gap: 2, paddingVertical: space.sm, paddingHorizontal: space.xs, borderRadius: radius.card, borderWidth: 1, borderColor: "transparent" },
-  cellOn: { backgroundColor: color.card2, borderColor: color.blue },
-  icon: { fontSize: 24 },
-  label: { fontFamily: fontFamily.medium, fontSize: fontSize.caption, color: color.textDim, textAlign: "center" },
-  labelOn: { color: color.text },
-  count: { minWidth: 20, paddingHorizontal: 5, paddingVertical: 1, borderRadius: radius.pill, backgroundColor: color.card },
-  countOn: { backgroundColor: color.blue },
-  countTxt: { fontFamily: fontFamily.semibold, fontSize: 10, color: color.textDim, textAlign: "center" },
-  countTxtOn: { color: "#fff" },
+  cell: { minHeight: 76, alignItems: "center", justifyContent: "center", gap: 3, paddingVertical: space.sm, paddingHorizontal: space.xs, borderRadius: radius.card, backgroundColor: color.card, borderWidth: 1, borderColor: color.border },
+  cellOn: { backgroundColor: color.blue, borderColor: color.blue },
+  label: { fontFamily: fontFamily.medium, fontSize: fontSize.micro + 1, lineHeight: 15, color: color.text, textAlign: "center" },
+  labelOn: { color: color.onPrimary, fontFamily: fontFamily.semibold },
+  count: { fontFamily: fontFamily.medium, fontSize: fontSize.micro, color: color.textFaint },
+  countOn: { color: "rgba(255,255,255,0.8)" },
 });

@@ -27,17 +27,20 @@ export function BottomSheet({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)" },
   sheet: {
     backgroundColor: color.card,
-    borderTopLeftRadius: radius.tile,
-    borderTopRightRadius: radius.tile,
+    borderTopLeftRadius: radius.tile + 4,
+    borderTopRightRadius: radius.tile + 4,
     borderTopWidth: 1,
-    borderColor: color.border,
+    borderColor: color.borderStrong,
     padding: space.xl,
     paddingBottom: space.xxl,
     gap: space.md,
+    width: "100%",
+    maxWidth: 640,
+    alignSelf: "center",
   },
-  handle: { alignSelf: "center", width: 40, height: 4, borderRadius: 999, backgroundColor: color.border, marginBottom: space.sm },
-  title: { fontFamily: fontFamily.semibold, fontSize: fontSize.heading, color: color.text },
+  handle: { alignSelf: "center", width: 44, height: 5, borderRadius: 999, backgroundColor: color.borderStrong, marginBottom: space.sm },
+  title: { fontFamily: fontFamily.semibold, fontSize: fontSize.title, color: color.text },
 });

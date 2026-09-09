@@ -1,14 +1,18 @@
 import { Pressable, Text, View, Image, StyleSheet } from "react-native";
+import { Plus, type LucideIcon } from "lucide-react-native";
 import { color, radius, space, touch, fontFamily, fontSize } from "@surge/design-tokens";
 
-// Menu item tile. With a photo it renders the image + a legibility scrim behind
-// the name/price; without one it falls back to a category icon on a tinted block
-// so every tile still reads cleanly. `dim` (86'd) fades it. Presentation only.
+type IconComponent = LucideIcon;
+
+// Menu item tile — TEXT FIRST. The name is the biggest thing on the tile and
+// the price sits directly under it; a small category glyph (Lucide, never emoji)
+// anchors the top-left. With a photo, the image fills the tile behind a scrim.
+// `dim` (86'd) fades it and swaps the "+" for a "Sold out" tag. Presentation only.
 export function MenuTile({
   name,
   price,
   imageUrl,
-  fallbackIcon,
+  Icon,
   dim,
   onPress,
   onLongPress,
@@ -17,7 +21,7 @@ export function MenuTile({
   name: string;
   price?: string;
   imageUrl?: string | null;
-  fallbackIcon?: string;
+  Icon?: IconComponent;
   dim?: boolean;
   onPress?: () => void;
   onLongPress?: () => void; // fast path: add immediately (picker only if required)
@@ -25,24 +29,45 @@ export function MenuTile({
 }) {
   const hasImg = !!imageUrl;
   return (
-    <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={250} style={[styles.tile, dim && styles.dim]} accessibilityRole="button">
-      {hasImg ? (
-        <Image source={{ uri: imageUrl! }} style={styles.img} resizeMode="cover" />
-      ) : (
-        <View style={styles.fallback}>
-          <Text style={styles.fallbackIcon}>{fallbackIcon ?? "🍽️"}</Text>
-        </View>
-      )}
-      {onQuickAdd && !dim ? (
-        <Pressable onPress={onQuickAdd} hitSlop={8} style={styles.add} accessibilityRole="button" accessibilityLabel={"Add " + name}>
-          <Text style={styles.addTxt}>+</Text>
-        </Pressable>
-      ) : null}
-      <View style={[styles.caption, hasImg && styles.captionOverImg]}>
-        <Text style={[styles.name, hasImg && styles.nameOverImg]} numberOfLines={2}>
+    <Pressable
+      onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={250}
+      style={({ pressed }) => [styles.tile, dim && styles.dim, pressed && !dim && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={name + (price ? ", " + price : "") + (dim ? ", sold out" : "")}
+    >
+      {hasImg ? <Image source={{ uri: imageUrl! }} style={styles.img} resizeMode="cover" /> : null}
+      {hasImg ? <View style={styles.scrim} /> : null}
+
+      <View style={styles.top}>
+        {Icon ? (
+          <View style={[styles.glyph, hasImg && styles.glyphOverImg]}>
+            <Icon size={16} color={hasImg ? "#FFFFFF" : color.textDim} strokeWidth={2} />
+          </View>
+        ) : (
+          <View />
+        )}
+        {dim ? (
+          <View style={styles.soldOut}>
+            <Text style={styles.soldOutTxt}>Sold out</Text>
+          </View>
+        ) : onQuickAdd ? (
+          <Pressable onPress={onQuickAdd} hitSlop={10} style={styles.add} accessibilityRole="button" accessibilityLabel={"Add " + name}>
+            <Plus size={18} color={color.onPrimary} strokeWidth={2.5} />
+          </Pressable>
+        ) : null}
+      </View>
+
+      <View style={styles.caption}>
+        <Text style={[styles.name, hasImg && styles.onImg]} numberOfLines={2}>
           {name}
         </Text>
-        {price ? <Text style={[styles.price, hasImg && styles.priceOverImg]}>{price}</Text> : null}
+        {price ? (
+          <Text style={[styles.price, hasImg && styles.priceOverImg]} numberOfLines={1}>
+            {price}
+          </Text>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -50,26 +75,30 @@ export function MenuTile({
 
 const styles = StyleSheet.create({
   tile: {
-    width: 132,
-    height: 128,
+    width: 156,
+    height: 118,
     borderRadius: radius.tile,
     borderWidth: 1,
-    borderColor: color.border,
-    backgroundColor: color.card2,
+    borderColor: color.borderStrong,
+    backgroundColor: "#1F2538",
     overflow: "hidden",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
+    padding: space.sm + 2,
     minWidth: touch.min * 2,
   },
-  dim: { opacity: 0.45 },
-  add: { position: "absolute", top: space.xs, right: space.xs, width: 30, height: 30, borderRadius: 999, backgroundColor: "rgba(37,99,235,0.92)", alignItems: "center", justifyContent: "center" },
-  addTxt: { color: "#fff", fontSize: 20, lineHeight: 22, fontFamily: fontFamily.semibold },
+  pressed: { borderColor: color.blue, backgroundColor: "#222A40" },
+  dim: { opacity: 0.55 },
   img: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined },
-  fallback: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: color.card2 },
-  fallbackIcon: { fontSize: 40, opacity: 0.9 },
-  caption: { padding: space.sm },
-  captionOverImg: { backgroundColor: "rgba(0,0,0,0.55)" },
-  name: { fontFamily: fontFamily.medium, fontSize: fontSize.body, color: color.text },
-  nameOverImg: { color: "#fff" },
-  price: { fontFamily: fontFamily.regular, fontSize: fontSize.caption, color: color.textDim, marginTop: 2 },
-  priceOverImg: { color: "rgba(255,255,255,0.85)" },
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(6,8,14,0.55)" },
+  top: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  glyph: { width: 26, height: 26, borderRadius: radius.control, backgroundColor: "rgba(255,255,255,0.06)", alignItems: "center", justifyContent: "center" },
+  glyphOverImg: { backgroundColor: "rgba(0,0,0,0.45)" },
+  add: { width: 30, height: 30, borderRadius: radius.pill, backgroundColor: color.blue, alignItems: "center", justifyContent: "center" },
+  soldOut: { paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: color.lateSoft, borderWidth: 1, borderColor: color.late },
+  soldOutTxt: { fontFamily: fontFamily.semibold, fontSize: fontSize.micro, color: color.late },
+  caption: { gap: 1 },
+  name: { fontFamily: fontFamily.semibold, fontSize: 17, lineHeight: 21, color: color.text },
+  onImg: { color: "#FFFFFF" },
+  price: { fontFamily: fontFamily.semibold, fontSize: 15, color: color.textDim, fontVariant: ["tabular-nums"] },
+  priceOverImg: { color: "rgba(255,255,255,0.88)" },
 });

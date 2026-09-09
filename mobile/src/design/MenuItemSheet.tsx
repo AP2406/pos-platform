@@ -42,7 +42,7 @@ export function MenuItemSheet({ item, onClose, onAdd }: { item: DetailItem | nul
             <View style={styles.priceRow}>
               <Text style={styles.price}>{money(item.price)}</Text>
               {item.salesCategory || item.category ? <Text style={styles.section}>{item.salesCategory || item.category}</Text> : null}
-              {item.outOfStock ? <Text style={styles.oos}>86'd</Text> : null}
+              {item.outOfStock ? <Text style={styles.oos}>Sold out</Text> : null}
             </View>
 
             {allergyTags.length > 0 && (
@@ -83,7 +83,7 @@ export function MenuItemSheet({ item, onClose, onAdd }: { item: DetailItem | nul
                     <View key={o.id} style={styles.optChip}>
                       <Text style={styles.optName}>
                         {o.name}
-                        {o.child_group ? " ›" : ""}
+                        {o.child_group ? " (more options)" : ""}
                       </Text>
                       {o.price > 0 ? <Text style={styles.optPrice}>+{money(o.price)}</Text> : null}
                     </View>
@@ -93,7 +93,7 @@ export function MenuItemSheet({ item, onClose, onAdd }: { item: DetailItem | nul
             ))}
           </ScrollView>
 
-          <Button title={item.outOfStock ? "Out of stock" : "Add to order"} disabled={item.outOfStock} onPress={() => onAdd(item)} />
+          <Button title={item.outOfStock ? "Sold out today" : "Add to check"} size="lg" disabled={item.outOfStock} onPress={() => onAdd(item)} />
         </>
       ) : null}
     </BottomSheet>

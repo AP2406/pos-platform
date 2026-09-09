@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
+import { X, TriangleAlert } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { color, radius, space, fontFamily, fontSize } from "@surge/design-tokens";
 import { subscribeNotice } from "../lib/notice";
@@ -28,10 +29,11 @@ export function NoticeHost() {
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { paddingTop: insets.top + space.xs }]}>
       <Pressable onPress={() => setMsg(null)} style={styles.banner} accessibilityRole="alert">
+        <TriangleAlert size={18} color={color.warning} strokeWidth={2.25} />
         <Text style={styles.txt} numberOfLines={2}>
           {msg}
         </Text>
-        <Text style={styles.x}>✕</Text>
+        <X size={18} color={color.textDim} strokeWidth={2.25} />
       </Pressable>
     </View>
   );
@@ -48,10 +50,10 @@ const styles = StyleSheet.create({
     backgroundColor: color.card2,
     borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: color.late,
+    borderColor: color.warning,
     paddingHorizontal: space.md,
-    paddingVertical: space.sm,
+    paddingVertical: space.sm + 2,
+    minHeight: 48,
   },
   txt: { flex: 1, fontFamily: fontFamily.medium, fontSize: fontSize.caption, color: color.text },
-  x: { fontFamily: fontFamily.semibold, fontSize: fontSize.body, color: color.textDim },
 });

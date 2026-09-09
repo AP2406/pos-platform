@@ -3,6 +3,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
 import { resolveNativeAccess, type NativeRoleAccess, type NativeAccessConfig, type DeviceHome } from "@/lib/access";
 import { loadDeviceProfile, saveDeviceProfile, DEFAULT_DEVICE_PROFILE, type DeviceProfile } from "@/lib/device-profile";
+import { setDemoMode } from "@/lib/demo/state";
+import { setActingStaffName } from "@/lib/api";
 
 export type Staff = { id: string; name: string; role: string };
 export type Biz = { id: string; name: string; role: string };
@@ -29,6 +31,10 @@ type SessionValue = {
 
 const Ctx = createContext<SessionValue | null>(null);
 const BIZ_KEY = "surge_active_business";
+// The staff member this DEVICE is signed in as, kept across app restarts and dev
+// reloads (like Square/Toast: the iPad stays on the last PIN'd person until
+// "Switch staff" or Sign out). Keyed by business so switching locations re-asks.
+const STAFF_KEY = "surge_device_staff";
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
@@ -55,6 +61,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const saved = await AsyncStorage.getItem(BIZ_KEY);
     const pick = list.find((b) => b.id === saved) ?? list[0] ?? null;
     setBusinessId(pick?.id ?? null);
+    // Restore the device's signed-in staff member for that business.
+    try {
+      const raw = await AsyncStorage.getItem(STAFF_KEY);
+      const stored = raw ? (JSON.parse(raw) as { businessId?: string; staff?: Staff }) : null;
+      if (stored?.staff?.id && stored.businessId && stored.businessId === pick?.id) setStaff(stored.staff);
+    } catch {
+      /* ignore a bad cache */
+    }
   }, []);
 
   useEffect(() => {
@@ -87,6 +101,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadDeviceProfile().then(setDeviceProfileState);
   }, []);
+
+  // Demo restaurant mode follows the device profile (dev builds only — see lib/demo).
+  useEffect(() => {
+    setDemoMode(deviceProfile.demoMode === true);
+  }, [deviceProfile.demoMode]);
+
+  // The demo API shims attribute fires/clock-ins to the signed-in staff member.
+  useEffect(() => {
+    setActingStaffName(staff?.name ?? null);
+  }, [staff]);
 
   const setDeviceProfile = useCallback((p: DeviceProfile) => {
     setDeviceProfileState(p);
@@ -129,12 +153,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    await AsyncStorage.removeItem(STAFF_KEY);
+    setStaff(null);
     await supabase.auth.signOut();
   }, []);
 
   const pickBusiness = useCallback(async (id: string) => {
     setBusinessId(id);
     setStaff(null);
+    await AsyncStorage.removeItem(STAFF_KEY);
     await AsyncStorage.setItem(BIZ_KEY, id);
   }, []);
 
@@ -146,13 +173,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (error) return { error: error.message };
       const row = (Array.isArray(data) ? data[0] : data) as { id?: string; name?: string; role?: string } | null;
       if (!row?.id) return { error: "PIN not recognized." };
-      setStaff({ id: row.id, name: row.name ?? "Staff", role: row.role ?? "staff" });
+      const next: Staff = { id: row.id, name: row.name ?? "Staff", role: row.role ?? "staff" };
+      setStaff(next);
+      AsyncStorage.setItem(STAFF_KEY, JSON.stringify({ businessId, staff: next })).catch(() => {});
       return {};
     },
     [businessId]
   );
 
-  const clearStaff = useCallback(() => setStaff(null), []);
+  // "Switch staff": back to the PIN pad without signing the device out of Surge.
+  const clearStaff = useCallback(() => {
+    setStaff(null);
+    AsyncStorage.removeItem(STAFF_KEY).catch(() => {});
+  }, []);
 
   const value = useMemo<SessionValue>(
     () => ({

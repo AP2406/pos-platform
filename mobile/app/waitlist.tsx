@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Button, BottomSheet, ScreenHeader, EmptyState, color, radius, space, text } from "@/design";
+import { X, ClipboardList, Plus, Bell } from "lucide-react-native";
+import { Button, BottomSheet, ScreenHeader, EmptyState, StatusChip, color, radius, space, text } from "@/design";
 import { useSession } from "@/state/session";
 import { supabase, realtimeChannel } from "@/lib/supabase";
 import { fetchReservations, type ReservationRow } from "@/lib/reads";
@@ -79,7 +80,7 @@ export default function Waitlist() {
     try {
       if (op === "page") {
         const res = await reservationMutate(bizId, staffId, id, { op: "page" });
-        Alert.alert("Guest paged", res.channel === "sms" ? "Texted them their table is ready." : "Emailed them their table is ready.");
+        Alert.alert("Guest notified", res.channel === "sms" ? "We texted them that their table is ready." : "We emailed them that their table is ready.");
       } else {
         await reservationMutate(bizId, staffId, id, { op: "status", status: op === "seat" ? "seated" : "cancelled" });
       }
@@ -116,48 +117,67 @@ export default function Waitlist() {
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <ScreenHeader
         title="Waitlist"
+        subtitle={waiting.length > 0 ? waiting.length + " waiting" : undefined}
         onBack={() => router.replace("/floor")}
         right={
           <>
             <Button title="Reservations" variant="ghost" onPress={() => router.replace("/reservations")} />
-            <Button title="Add" onPress={() => setAdding(true)} />
+            <Button title="Add walk-in" icon={<Plus size={18} color={color.onPrimary} strokeWidth={2.5} />} onPress={() => setAdding(true)} />
           </>
         }
       />
 
       <ScrollView contentContainerStyle={styles.list}>
-        {waiting.length === 0 && <EmptyState>Nobody waiting.</EmptyState>}
-        {waiting.map((r, i) => (
-          <View key={r.id} style={styles.row}>
-            <Text style={styles.pos}>{i + 1}</Text>
-            <View style={styles.main}>
-              <Text style={styles.name}>
-                {r.guestName} · {r.partySize} {r.partySize === 1 ? "guest" : "guests"}
-              </Text>
-              <Text style={styles.sub}>
-                Waiting {formatElapsed(r.createdAt, now)}
-                {r.quotedWaitMin != null ? " · quoted " + r.quotedWaitMin + "m" : ""}
-                {r.pagedAt ? " · paged" : ""}
-                {r.status === "seated" ? " · seated" : ""}
-              </Text>
+        {waiting.length === 0 && (
+          <EmptyState
+            icon={<ClipboardList size={26} color={color.textDim} strokeWidth={2} />}
+            title="Nobody is waiting"
+            body="Add walk-in parties here, quote a wait, and text them when their table is ready."
+            actionLabel="Add walk-in"
+            onAction={() => setAdding(true)}
+          />
+        )}
+        {waiting.map((r, i) => {
+          const waitedMin = Math.floor((now - new Date(r.createdAt).getTime()) / 60000);
+          const over = r.quotedWaitMin != null && now > 0 && waitedMin > r.quotedWaitMin;
+          return (
+            <View key={r.id} style={styles.row}>
+              <View style={styles.posBox}>
+                <Text style={styles.pos}>{i + 1}</Text>
+              </View>
+              <View style={styles.main}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {r.guestName} · {r.partySize} {r.partySize === 1 ? "guest" : "guests"}
+                  </Text>
+                  {r.status === "seated" ? <StatusChip tint={color.success} label="Seated" size="sm" /> : r.pagedAt ? <StatusChip tint={color.blue} label="Texted" size="sm" /> : over ? <StatusChip tint={color.warning} label="Over quote" size="sm" /> : null}
+                </View>
+                <Text style={[styles.sub, over && { color: color.warning }]}>
+                  Waiting {formatElapsed(r.createdAt, now)}
+                  {r.quotedWaitMin != null ? " · quoted " + r.quotedWaitMin + " min" : ""}
+                  {!r.phone && !r.email ? " · no phone on file" : ""}
+                </Text>
+              </View>
+              <View style={styles.actions}>
+                {r.status !== "seated" && (r.phone || r.email) ? (
+                  <Button title={r.pagedAt ? "Text again" : "Text guest"} variant="secondary" icon={<Bell size={16} color={color.text} strokeWidth={2} />} loading={busyId === r.id} onPress={() => mutate(r.id, "page")} />
+                ) : null}
+                {r.status !== "seated" ? <Button title="Seat" variant="success" loading={busyId === r.id} onPress={() => mutate(r.id, "seat")} /> : null}
+                <Pressable onPress={() => mutate(r.id, "remove")} style={styles.remove} hitSlop={6} accessibilityRole="button" accessibilityLabel={"Remove " + r.guestName + " from the waitlist"}>
+                  <X size={20} color={color.textDim} strokeWidth={2.25} />
+                </Pressable>
+              </View>
             </View>
-            <View style={styles.actions}>
-              {r.status !== "seated" && (r.phone || r.email) ? (
-                <Button title={r.pagedAt ? "Re-page" : "Page"} variant="secondary" loading={busyId === r.id} onPress={() => mutate(r.id, "page")} />
-              ) : null}
-              {r.status !== "seated" ? <Button title="Seat" loading={busyId === r.id} onPress={() => mutate(r.id, "seat")} /> : null}
-              <Button title="✕" variant="ghost" onPress={() => mutate(r.id, "remove")} />
-            </View>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
 
       <BottomSheet visible={adding} onClose={() => setAdding(false)} title="Add walk-in">
         <TextInput value={name} onChangeText={setName} placeholder="Guest name" placeholderTextColor={color.textFaint} style={styles.input} autoFocus />
-        <TextInput value={phone} onChangeText={setPhone} placeholder="Phone (for the ready text)" placeholderTextColor={color.textFaint} style={styles.input} keyboardType="phone-pad" />
+        <TextInput value={phone} onChangeText={setPhone} placeholder="Mobile number — we'll text when the table's ready" placeholderTextColor={color.textFaint} style={styles.input} keyboardType="phone-pad" />
         <Stepper label="Party size" value={party} onChange={setParty} min={1} />
         <Stepper label="Quoted wait" value={wait} onChange={setWait} min={0} step={5} suffix="m" />
-        <Button title="Add to waitlist" loading={saving} onPress={addWalkIn} />
+        <Button title="Add to waitlist" size="lg" loading={saving} onPress={addWalkIn} />
       </BottomSheet>
     </SafeAreaView>
   );
@@ -165,17 +185,20 @@ export default function Waitlist() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
-  list: { padding: space.lg, gap: space.xs },
-  row: { flexDirection: "row", alignItems: "center", gap: space.md, backgroundColor: color.card, borderRadius: 12, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.sm },
-  pos: { fontFamily: "Poppins_600SemiBold", fontSize: 16, color: color.textDim, minWidth: 20, textAlign: "center" },
-  main: { flex: 1 },
-  name: { fontFamily: "Poppins_500Medium", fontSize: 15, color: color.text },
-  sub: { fontFamily: "Poppins_400Regular", fontSize: 12, color: color.textDim, marginTop: 1 },
-  actions: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  input: { backgroundColor: color.card2, borderRadius: radius.card, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.sm, color: color.text, fontFamily: "Poppins_400Regular", fontSize: 15 },
+  list: { padding: space.lg, gap: space.sm },
+  row: { flexDirection: "row", alignItems: "center", gap: space.md, backgroundColor: color.card, borderRadius: radius.card, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.lg, paddingVertical: space.md, minHeight: 72 },
+  posBox: { width: 36, height: 36, borderRadius: radius.pill, backgroundColor: color.card2, borderWidth: 1, borderColor: color.border, alignItems: "center", justifyContent: "center" },
+  pos: { fontFamily: "Poppins_600SemiBold", fontSize: 16, color: color.text },
+  main: { flex: 1, gap: 2 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  name: { flexShrink: 1, fontFamily: "Poppins_600SemiBold", fontSize: 17, color: color.text },
+  sub: { fontFamily: "Poppins_500Medium", fontSize: 14, color: color.textDim },
+  actions: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  remove: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radius.pill },
+  input: { minHeight: 48, backgroundColor: color.card2, borderRadius: radius.control, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.sm, color: color.text, fontFamily: "Poppins_400Regular", fontSize: 16 },
   stepRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   stepper: { flexDirection: "row", alignItems: "center", gap: space.md },
-  stepBtn: { width: 36, height: 36, borderRadius: 999, borderWidth: 1, borderColor: color.border, alignItems: "center", justifyContent: "center", backgroundColor: color.card2 },
-  stepGlyph: { fontFamily: "Poppins_600SemiBold", fontSize: 20, color: color.text },
-  stepVal: { fontFamily: "Poppins_600SemiBold", fontSize: 16, color: color.text, minWidth: 44, textAlign: "center" },
+  stepBtn: { width: 44, height: 44, borderRadius: 999, borderWidth: 1, borderColor: color.border, alignItems: "center", justifyContent: "center", backgroundColor: color.card2 },
+  stepGlyph: { fontFamily: "Poppins_600SemiBold", fontSize: 22, color: color.text },
+  stepVal: { fontFamily: "Poppins_600SemiBold", fontSize: 18, color: color.text, minWidth: 56, textAlign: "center" },
 });

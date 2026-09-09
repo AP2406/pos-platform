@@ -21,3 +21,4 @@ export * from "./NoticeHost";
 export * from "./ScanSheet";
 export * from "./CategoryRail";
 export * from "./MenuItemSheet";
+export * from "./Brand";

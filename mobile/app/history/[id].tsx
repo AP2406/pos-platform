@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Button, ScreenHeader, EmptyState, color, space, text } from "@/design";
+import { TriangleAlert, Printer } from "lucide-react-native";
+import { Button, ScreenHeader, EmptyState, StatusChip, color, space, text, radius } from "@/design";
 import { useSession } from "@/state/session";
 import { fetchOrderDetail, type SaleDetail, type SaleDetailLine } from "@/lib/reads";
 import { printReceipt } from "@/lib/printing";
@@ -14,9 +15,9 @@ const timeOf = (iso: string) => new Intl.DateTimeFormat("en-US", { hour: "numeri
 const dateTimeOf = (iso: string) => new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
 
 const STATUS: Record<string, { text: string; color: string }> = {
-  paid: { text: "Paid", color: "#2FBF71" },
-  voided: { text: "Voided", color: "#E5484D" },
-  refunded: { text: "Refunded", color: "#F5A623" },
+  paid: { text: "Paid", color: color.success },
+  voided: { text: "Voided", color: color.late },
+  refunded: { text: "Refunded", color: color.warning },
 };
 
 export default function OrderDetail() {
@@ -75,9 +76,9 @@ export default function OrderDetail() {
       payments: d.payments,
     });
     if (!res.ok) Alert.alert("Couldn't print", res.error);
-    else if (res.printed) Alert.alert("Receipt sent", "Printed to this device's printer.");
-    else if (!printerId) Alert.alert("No printer", "Set a printer for this device in Device settings.");
-    else Alert.alert("Printing not enabled", "This build has no printer driver yet — the receipt is prepared and will print once a printer is connected.");
+    else if (res.printed) Alert.alert("Receipt printed", "Sent to this iPad's printer.");
+    else if (!printerId) Alert.alert("No printer set up", "Choose a printer for this iPad in Device settings, then try again.");
+    else Alert.alert("Printer not connected", "This iPad can't reach the printer right now. Check that it's powered on and on the same Wi-Fi.");
   }
 
   const st = d ? STATUS[d.status] : null;
@@ -88,34 +89,28 @@ export default function OrderDetail() {
         title={d?.saleNumber != null ? "Sale #" + d.saleNumber : "Sale"}
         onBack={() => router.back()}
         backLabel="Back"
-        right={d ? <Button title="Reprint" variant="ghost" onPress={reprint} /> : undefined}
+        right={d ? <Button title="Print receipt" variant="secondary" icon={<Printer size={18} color={color.text} strokeWidth={2} />} onPress={reprint} /> : undefined}
       />
 
       {!loaded ? (
-        <EmptyState>Loading…</EmptyState>
+        <EmptyState compact title="Loading…" />
       ) : !d ? (
-        <EmptyState>Sale not found.</EmptyState>
+        <EmptyState title="Sale not found" body="It may have been removed, or it belongs to a different location." actionLabel="Back" onAction={() => router.back()} />
       ) : (
         <ScrollView contentContainerStyle={styles.body}>
           {/* Summary */}
           <View style={styles.card}>
             <View style={styles.badges}>
-              {st ? (
-                <View style={[styles.badge, { borderColor: st.color }]}>
-                  <Text style={[styles.badgeTxt, { color: st.color }]}>{st.text}</Text>
-                </View>
-              ) : null}
-              <View style={[styles.badge, { borderColor: d.fulfilled ? "#2FBF71" : "#F5A623" }]}>
-                <Text style={[styles.badgeTxt, { color: d.fulfilled ? "#2FBF71" : "#F5A623" }]}>{d.fulfilled ? "Ready" : "Preparing"}</Text>
-              </View>
+              {st ? <StatusChip tint={st.color} label={st.text} size="sm" /> : null}
+              {d.status !== "voided" ? <StatusChip tint={d.fulfilled ? color.success : color.warning} label={d.fulfilled ? "Ready" : "Preparing"} size="sm" /> : null}
               {d.diningOption || d.channel ? (
                 <View style={styles.chip}>
                   <Text style={styles.chipTxt}>{[label(d.diningOption), d.channel && d.channel !== d.diningOption ? label(d.channel) : null].filter(Boolean).join(" · ")}</Text>
                 </View>
               ) : null}
             </View>
-            <Text style={text.caption}>{dateTimeOf(d.createdAt)}</Text>
-            <Text style={text.caption}>{[d.serverName ? "Server " + d.serverName : null, d.customerName, d.guests ? d.guests + " guests" : null].filter(Boolean).join(" · ") || "—"}</Text>
+            <Text style={text.body}>{dateTimeOf(d.createdAt)}</Text>
+            <Text style={text.bodyDim}>{[d.serverName ? "Served by " + d.serverName : null, d.customerName, d.guests ? d.guests + (d.guests === 1 ? " guest" : " guests") : null].filter(Boolean).join(" · ") || "Walk-in"}</Text>
           </View>
 
           {/* Timeline */}
@@ -134,7 +129,7 @@ export default function OrderDetail() {
 
           {/* Items, grouped by seat */}
           <View style={styles.card}>
-            {d.items.length === 0 && <Text style={text.bodyDim}>No line items on this sale.</Text>}
+            {d.items.length === 0 && <Text style={text.bodyDim}>This sale has no line items.</Text>}
             {seatGroups.map(([seat, lines]) => (
               <View key={seat ?? "shared"} style={styles.group}>
                 <Text style={styles.groupLabel}>{seat == null ? "Shared" : "Seat " + seat}</Text>
@@ -143,7 +138,12 @@ export default function OrderDetail() {
                     <Text style={styles.qty}>{it.quantity}</Text>
                     <View style={styles.mid}>
                       <Text style={[styles.name, it.voided && styles.voided]}>{it.name}</Text>
-                      {it.allergy ? <Text style={styles.allergy}>⚠ {it.allergy}</Text> : null}
+                      {it.allergy ? (
+                        <View style={styles.allergyRow}>
+                          <TriangleAlert size={13} color={color.late} strokeWidth={2.5} />
+                          <Text style={styles.allergy}>{it.allergy}</Text>
+                        </View>
+                      ) : null}
                       {it.note ? <Text style={styles.note}>{it.note}</Text> : null}
                     </View>
                     <Text style={[styles.lineTotal, it.voided && styles.voided]}>{money(it.unitPrice * it.quantity, "CAD")}</Text>
@@ -178,7 +178,7 @@ export default function OrderDetail() {
             )}
           </View>
 
-          <Text style={[text.caption, { textAlign: "center" }]}>Read-only. Refunds are done from the register.</Text>
+          <Text style={[text.caption, { textAlign: "center" }]}>Closed sale. Refunds and voids are handled by a manager in the Surge web dashboard.</Text>
         </ScrollView>
       )}
     </SafeAreaView>
@@ -196,31 +196,30 @@ function Row({ label, value, bold, dim }: { label: string; value: string; bold?:
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
-  body: { padding: space.lg, gap: space.md, maxWidth: 520, width: "100%", alignSelf: "center" },
-  card: { backgroundColor: color.card, borderRadius: 12, borderWidth: 1, borderColor: color.border, padding: space.lg, gap: space.xs },
-  cardLabel: { fontFamily: "Poppins_600SemiBold", fontSize: 13, color: color.textDim, marginBottom: space.xs },
+  body: { padding: space.lg, gap: space.md, maxWidth: 560, width: "100%", alignSelf: "center" },
+  card: { backgroundColor: color.card, borderRadius: radius.card, borderWidth: 1, borderColor: color.border, padding: space.lg, gap: space.xs },
+  cardLabel: { fontFamily: "Poppins_600SemiBold", fontSize: 12, color: color.textDim, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: space.xs },
   badges: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs, marginBottom: space.xs },
-  badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: space.sm, paddingVertical: 1 },
-  badgeTxt: { fontFamily: "Poppins_600SemiBold", fontSize: 11 },
-  chip: { backgroundColor: color.card2, borderRadius: 999, paddingHorizontal: space.sm, paddingVertical: 2 },
-  chipTxt: { fontFamily: "Poppins_500Medium", fontSize: 11, color: color.textDim },
-  tl: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: 3 },
-  tlDot: { width: 8, height: 8, borderRadius: 999, backgroundColor: color.blue },
-  tlLabel: { fontFamily: "Poppins_500Medium", fontSize: 14, color: color.text, flex: 1 },
-  tlTime: { fontFamily: "Poppins_400Regular", fontSize: 13, color: color.textDim, fontVariant: ["tabular-nums"] },
+  chip: { backgroundColor: color.card2, borderRadius: 999, paddingHorizontal: space.sm + 2, paddingVertical: 4, borderWidth: 1, borderColor: color.border },
+  chipTxt: { fontFamily: "Poppins_500Medium", fontSize: 13, color: color.textDim },
+  tl: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: 4 },
+  tlDot: { width: 10, height: 10, borderRadius: 999, backgroundColor: color.blue },
+  tlLabel: { fontFamily: "Poppins_500Medium", fontSize: 16, color: color.text, flex: 1 },
+  tlTime: { fontFamily: "Poppins_400Regular", fontSize: 15, color: color.textDim, fontVariant: ["tabular-nums"] },
   group: { gap: 2, marginBottom: space.sm },
-  groupLabel: { fontFamily: "Poppins_600SemiBold", fontSize: 12, color: color.textDim, marginBottom: 2 },
-  line: { flexDirection: "row", gap: space.md, alignItems: "flex-start", paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: color.border },
-  qty: { fontFamily: "Poppins_600SemiBold", fontSize: 15, color: color.textDim, minWidth: 20 },
+  groupLabel: { fontFamily: "Poppins_600SemiBold", fontSize: 12, color: color.textDim, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 2 },
+  line: { flexDirection: "row", gap: space.md, alignItems: "flex-start", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: color.border },
+  qty: { fontFamily: "Poppins_600SemiBold", fontSize: 16, color: color.textDim, minWidth: 24 },
   mid: { flex: 1 },
-  name: { fontFamily: "Poppins_500Medium", fontSize: 15, color: color.text },
+  name: { fontFamily: "Poppins_500Medium", fontSize: 16, color: color.text },
   voided: { textDecorationLine: "line-through", color: color.textDim },
-  allergy: { fontFamily: "Poppins_600SemiBold", fontSize: 12, color: color.late, marginTop: 1 },
-  note: { fontFamily: "Poppins_400Regular", fontSize: 12, color: color.textDim },
-  lineTotal: { fontFamily: "Poppins_500Medium", fontSize: 15, color: color.text },
-  trow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 1 },
-  rl: { fontFamily: "Poppins_400Regular", fontSize: 15, color: color.text },
-  rv: { fontFamily: "Poppins_400Regular", fontSize: 15, color: color.text, fontVariant: ["tabular-nums"] },
+  allergyRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  allergy: { fontFamily: "Poppins_600SemiBold", fontSize: 13, color: color.late },
+  note: { fontFamily: "Poppins_400Regular", fontSize: 14, color: color.textDim },
+  lineTotal: { fontFamily: "Poppins_500Medium", fontSize: 16, color: color.text, fontVariant: ["tabular-nums"] },
+  trow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 2 },
+  rl: { fontFamily: "Poppins_400Regular", fontSize: 16, color: color.text },
+  rv: { fontFamily: "Poppins_400Regular", fontSize: 16, color: color.text, fontVariant: ["tabular-nums"] },
   boldTxt: { fontFamily: "Poppins_600SemiBold" },
   pays: { marginTop: space.sm, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: color.border, gap: 1 },
 });

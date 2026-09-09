@@ -9,13 +9,27 @@ export type DeviceProfile = {
   label: string; // friendly device name (e.g. "Bar iPad")
   station: DeviceStation | null; // drives role-based screen access; null = role-based
   defaultPlanId: string | null; // Floor opens to this room by default
-  printerTarget: string | null; // stubbed — UI + persistence only, no native binding yet
+  printerTarget: string | null; // receipt/kitchen printer id (see PRINTER_TARGETS)
+  demoMode?: boolean; // dev-only: show the demo restaurant instead of live data
+  lockAfterMin?: number; // idle minutes before the iPad returns to the PIN pad (0 = never)
 };
 
-export const DEFAULT_DEVICE_PROFILE: DeviceProfile = { label: "", station: null, defaultPlanId: null, printerTarget: null };
+// Auto-lock choices offered in Device settings. Kitchen-station iPads never lock.
+export const LOCK_OPTIONS: { key: number; label: string }[] = [
+  { key: 0, label: "Never" },
+  { key: 2, label: "2 min" },
+  { key: 5, label: "5 min" },
+  { key: 10, label: "10 min" },
+  { key: 30, label: "30 min" },
+];
+export const DEFAULT_LOCK_MIN = 10;
+// Coming back from the background after this long also locks (when locking is on).
+export const BACKGROUND_LOCK_MIN = 2;
 
-// Stubbed receipt/kitchen printer targets. Native printing is deferred, so these
-// are labels only — selecting one persists the choice but binds no hardware.
+export const DEFAULT_DEVICE_PROFILE: DeviceProfile = { label: "", station: null, defaultPlanId: null, printerTarget: null, demoMode: false, lockAfterMin: DEFAULT_LOCK_MIN };
+
+// Receipt/kitchen printer targets this device can be pointed at. The connection
+// itself is reported live by lib/printing (printerStatus).
 export const PRINTER_TARGETS: { id: string; label: string }[] = [
   { id: "none", label: "No printer" },
   { id: "front_star", label: "Front counter — Star TSP" },

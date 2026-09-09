@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput } from "react-native";
+import { Check, X } from "lucide-react-native";
 import { color, radius, space, fontFamily, fontSize } from "@surge/design-tokens";
 import { BottomSheet } from "./BottomSheet";
 import { Button } from "./Button";
@@ -26,6 +27,7 @@ export type SheetInitial = { variationId: string | null; selected: string[]; pos
 export type ConfirmSpec = { catalogItemId: string; variationId: string | null; name: string; unitPrice: number; note: string | null; modifiers: LineModifier[]; allergy: string | null };
 
 const money = (n: number) => "$" + (n || 0).toFixed(2);
+const POS_LABEL: Record<ModPosition, string> = { whole: "", left: "½ left", right: "½ right" };
 
 // Forced/nested modifier picker. Enforces per-group min/max, half/left-right
 // placement, and follow-up (child) groups; the confirm button is gated until
@@ -98,7 +100,7 @@ export function ModifierSheet({
                 style={[styles.opt, checked && styles.optOn, disabled && styles.optDisabled]}
               >
                 <View style={styles.optLeft}>
-                  <View style={[styles.box, single && styles.radio, checked && styles.boxOn]}>{checked ? <Text style={styles.check}>✓</Text> : null}</View>
+                  <View style={[styles.box, single && styles.radio, checked && styles.boxOn]}>{checked ? <Check size={14} color="#FFFFFF" strokeWidth={3} /> : null}</View>
                   <Text style={styles.optName}>{m.name}</Text>
                 </View>
                 {m.price > 0 ? <Text style={styles.optPrice}>+{money(m.price)}</Text> : null}
@@ -147,7 +149,7 @@ export function ModifierSheet({
                   return (
                     <Pressable key={v.id} onPress={() => setVariationId(v.id)} style={[styles.opt, on && styles.optOn]}>
                       <View style={styles.optLeft}>
-                        <View style={[styles.box, styles.radio, on && styles.boxOn]}>{on ? <Text style={styles.check}>✓</Text> : null}</View>
+                        <View style={[styles.box, styles.radio, on && styles.boxOn]}>{on ? <Check size={14} color="#FFFFFF" strokeWidth={3} /> : null}</View>
                         <Text style={styles.optName}>{v.name}</Text>
                       </View>
                       <Text style={styles.optPrice}>{money(v.price)}</Text>
@@ -170,9 +172,31 @@ export function ModifierSheet({
                 })}
               </View>
             </View>
-            <TextInput value={note} onChangeText={setNote} placeholder="Note for the kitchen (optional)" placeholderTextColor={color.textFaint} style={styles.note} />
+            <View style={styles.group}>
+              <Text style={[styles.groupName, { marginBottom: space.xs }]}>Special instructions</Text>
+              <TextInput value={note} onChangeText={setNote} placeholder="e.g. no onions, sauce on the side" placeholderTextColor={color.textFaint} style={styles.note} multiline />
+            </View>
           </ScrollView>
-          <Button title={cta} onPress={confirm} disabled={blocked} />
+
+          {/* Live summary of what's selected — visible pills, removable in place. */}
+          {built && built.modifiers.length > 0 ? (
+            <View style={styles.summary}>
+              <Text style={styles.summaryLabel}>Selected</Text>
+              <View style={styles.summaryRow}>
+                {built.modifiers.map((m) => {
+                  const pos = m.position && m.position !== "whole" ? " · " + POS_LABEL[m.position] : "";
+                  const price = m.price > 0 ? " +" + money(m.price) : "";
+                  return (
+                    <Pressable key={(m.modifier_id ?? m.name) + pos} onPress={() => m.modifier_id && setSelected((prev) => toggleMod(groups, prev, m.modifier_id as string))} style={styles.sumPill} accessibilityRole="button" accessibilityLabel={"Remove " + m.name}>
+                      <Text style={styles.sumPillTxt}>{m.name + pos + price}</Text>
+                      {m.modifier_id ? <X size={13} color={color.textDim} strokeWidth={2.5} /> : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+          <Button title={cta} onPress={confirm} disabled={blocked} size="lg" />
         </>
       ) : null}
     </BottomSheet>
@@ -183,31 +207,35 @@ export function ModifierSheet({
 export { activeGroups, groupOf };
 
 const styles = StyleSheet.create({
-  scroll: { maxHeight: 420 },
+  scroll: { maxHeight: 440 },
+  summary: { gap: space.xs, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: color.border },
+  summaryLabel: { fontFamily: fontFamily.semibold, fontSize: fontSize.micro, color: color.textDim, letterSpacing: 1, textTransform: "uppercase" },
+  summaryRow: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  sumPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: space.sm + 2, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: color.blueSoft, borderWidth: 1, borderColor: color.blue },
+  sumPillTxt: { fontFamily: fontFamily.medium, fontSize: fontSize.caption, color: color.text },
   group: { marginBottom: space.md },
   nested: { marginLeft: space.sm, paddingLeft: space.md, borderLeftWidth: 1, borderLeftColor: color.border },
   groupHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: space.xs },
   groupName: { fontFamily: fontFamily.medium, fontSize: fontSize.body, color: color.text },
   hint: { fontFamily: fontFamily.regular, fontSize: fontSize.caption, color: color.textDim },
   hintUnmet: { color: color.late },
-  opt: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: space.md, borderRadius: radius.card, borderWidth: 1, borderColor: color.border, backgroundColor: color.card2, marginBottom: space.xs },
-  optOn: { borderColor: color.blue, backgroundColor: color.card },
+  opt: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 48, paddingHorizontal: space.md, paddingVertical: space.sm + 2, borderRadius: radius.control, borderWidth: 1, borderColor: color.border, backgroundColor: color.card2, marginBottom: space.xs },
+  optOn: { borderColor: color.blue, backgroundColor: color.blueSoft },
   optDisabled: { opacity: 0.4 },
   optLeft: { flexDirection: "row", alignItems: "center", gap: space.sm, flex: 1 },
-  box: { width: 20, height: 20, borderRadius: 4, borderWidth: 1, borderColor: color.textDim, alignItems: "center", justifyContent: "center" },
+  box: { width: 22, height: 22, borderRadius: 5, borderWidth: 1.5, borderColor: color.textDim, alignItems: "center", justifyContent: "center" },
   radio: { borderRadius: 999 },
   boxOn: { backgroundColor: color.blue, borderColor: color.blue },
-  check: { color: "#fff", fontSize: 12, fontFamily: fontFamily.semibold },
   optName: { fontFamily: fontFamily.medium, fontSize: fontSize.body, color: color.text, flexShrink: 1 },
-  optPrice: { fontFamily: fontFamily.regular, fontSize: fontSize.caption, color: color.textDim },
+  optPrice: { fontFamily: fontFamily.medium, fontSize: fontSize.caption, color: color.textDim, fontVariant: ["tabular-nums"] },
   splitRow: { flexDirection: "row", gap: space.xs, paddingLeft: space.xl, marginBottom: space.xs },
   splitBtn: { paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.pill, borderWidth: 1, borderColor: color.border },
   splitOn: { borderColor: color.blue, backgroundColor: color.card },
   splitTxt: { fontFamily: fontFamily.medium, fontSize: fontSize.caption, color: color.textDim },
   splitTxtOn: { color: color.text },
-  note: { backgroundColor: color.card2, borderRadius: radius.card, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.sm, color: color.text, fontFamily: fontFamily.regular, fontSize: fontSize.body, marginTop: space.xs },
+  note: { minHeight: 48, backgroundColor: color.card2, borderRadius: radius.control, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.sm + 2, color: color.text, fontFamily: fontFamily.regular, fontSize: fontSize.body },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
-  chip: { paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.pill, borderWidth: 1, borderColor: color.border },
+  chip: { minHeight: 36, justifyContent: "center", paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.pill, borderWidth: 1, borderColor: color.border, backgroundColor: color.card2 },
   chipOn: { backgroundColor: color.late, borderColor: color.late },
   chipTxt: { fontFamily: fontFamily.medium, fontSize: fontSize.caption, color: color.textDim },
   chipTxtOn: { color: "#fff" },

@@ -22,3 +22,21 @@ export function formatElapsed(iso: string | null | undefined, nowMs?: number): s
   const m = mins % 60;
   return h + "h" + (m ? " " + m + "m" : "");
 }
+
+// Floor v2 service-board duration: the REAL elapsed time, uncapped — "18 min",
+// "1h 05m" (zero-padded). A seated table's clock should read true, never the
+// blunt "24h+" of formatElapsed; the aging badge, not a cap, flags over-time.
+export function formatDuration(iso: string | null | undefined, nowMs?: number): string {
+  const mins = minutesSince(iso, nowMs);
+  if (mins == null) return "";
+  if (mins < 60) return mins + " min";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h + "h " + String(m).padStart(2, "0") + "m";
+}
+
+// Compact "how far past the threshold": "25m" under an hour, "3h" after that.
+export function formatOverdue(minutes: number): string {
+  if (minutes < 60) return minutes + "m";
+  return Math.floor(minutes / 60) + "h";
+}

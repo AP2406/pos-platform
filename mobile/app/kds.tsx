@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { SegmentedTabs, KdsTicket, ScreenHeader, EmptyState, color, space, text } from "@/design";
+import { ChefHat, CircleCheck } from "lucide-react-native";
+import { SegmentedTabs, KdsTicket, ScreenHeader, EmptyState, color, space, radius, aging as agingColors, AGING_LABEL } from "@/design";
 import { useSession } from "@/state/session";
 import { notify } from "@/lib/notice";
 import { supabase, realtimeChannel } from "@/lib/supabase";
@@ -11,12 +12,14 @@ import { kdsMutate } from "@/lib/api";
 import { canBumpKds } from "@/lib/access";
 import { formatElapsed, minutesSince } from "@/lib/format";
 
-function agingColor(firedAt: string, aging: Aging, now: number): string {
+type Tier = "normal" | "warning" | "late";
+function tierOf(firedAt: string, aging: Aging, now: number): Tier {
   const m = minutesSince(firedAt, now) ?? 0;
-  if (m >= aging.redMin) return "#E5484D";
-  if (m >= aging.yellowMin) return "#F5A623";
-  return "#2FBF71";
+  if (m >= aging.redMin) return "late";
+  if (m >= aging.yellowMin) return "warning";
+  return "normal";
 }
+const TIER_COLOR: Record<Tier, string> = { normal: color.success, warning: agingColors.warning, late: agingColors.late };
 
 export default function Kds() {
   const s = useSession();
@@ -32,12 +35,15 @@ export default function Kds() {
   const [station, setStation] = useState<string>("all");
   const [now, setNow] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setTickets(await fetchKitchenTickets(bizId));
     } catch {
       notify("Couldn't load the latest — check your connection.");
+    } finally {
+      setLoaded(true);
     }
   }, [bizId]);
 
@@ -85,7 +91,7 @@ export default function Kds() {
     }
   }
 
-  const stationTabs = useMemo(() => [{ key: "all", label: "All" }, ...stations.map((x) => ({ key: x.id, label: x.name }))], [stations]);
+  const stationTabs = useMemo(() => [{ key: "all", label: "All stations" }, ...stations.map((x) => ({ key: x.id, label: x.name }))], [stations]);
 
   const inStation = (t: KitchenTicket) => station === "all" || t.stationId === station;
 
@@ -93,84 +99,129 @@ export default function Kds() {
   // so merge a table's tickets back into a single card (all items). Grouped by the
   // table (element_id) or, for non-table tickets, the base label; void notices stay
   // separate.
-  type KdsCard = { key: string; label: string; items: KdsItem[]; firedAt: string; rush: boolean; ids: string[] };
-  const cards = useMemo<KdsCard[]>(() => {
+  type KdsCard = { key: string; label: string; items: KdsItem[]; firedAt: string; fulfilledAt: string | null; rush: boolean; ids: string[] };
+  function group(list: KitchenTicket[]): KdsCard[] {
     const groups = new Map<string, KdsCard>();
-    for (const t of tickets) {
-      if (t.fulfilledAt || !inStation(t)) continue;
-      const base = (t.label ?? "Ticket").split(" · ")[0].trim() || "Ticket";
-      const isVoid = (t.label ?? "").toUpperCase().startsWith("VOID");
-      const key = isVoid ? t.id : t.elementId ?? "lbl:" + base;
+    for (const t of list) {
+      // Table tickets merge by table; off-premise tickets merge by their full
+      // label ("Takeout · Maya R.") so the guest's name stays on the card.
+      const full = (t.label ?? "Ticket").trim() || "Ticket";
+      const base = full.split(" · ")[0].trim() || "Ticket";
+      const isVoid = full.toUpperCase().startsWith("VOID");
+      const key = (isVoid ? t.id : t.elementId ?? "lbl:" + full) + (t.fulfilledAt ? ":done" : "");
       const g = groups.get(key);
-      if (!g) groups.set(key, { key, label: isVoid ? t.label ?? base : base, items: [...t.items], firedAt: t.firedAt, rush: t.rush, ids: [t.id] });
+      if (!g) groups.set(key, { key, label: t.elementId ? base : full, items: [...t.items], firedAt: t.firedAt, fulfilledAt: t.fulfilledAt, rush: t.rush, ids: [t.id] });
       else {
         g.items.push(...t.items);
         g.rush = g.rush || t.rush;
         if (new Date(t.firedAt).getTime() < new Date(g.firedAt).getTime()) g.firedAt = t.firedAt;
+        if (t.fulfilledAt && (!g.fulfilledAt || new Date(t.fulfilledAt).getTime() > new Date(g.fulfilledAt).getTime())) g.fulfilledAt = t.fulfilledAt;
         g.ids.push(t.id);
       }
     }
-    return [...groups.values()].sort((a, b) => (a.rush === b.rush ? new Date(a.firedAt).getTime() - new Date(b.firedAt).getTime() : a.rush ? -1 : 1));
-  }, [tickets, station, now]);
+    return [...groups.values()];
+  }
 
-  const recent = useMemo(
-    () => tickets.filter((t) => t.fulfilledAt && inStation(t)).sort((a, b) => new Date(b.fulfilledAt!).getTime() - new Date(a.fulfilledAt!).getTime()),
+  const cooking = useMemo<KdsCard[]>(
+    () => group(tickets.filter((t) => !t.fulfilledAt && inStation(t))).sort((a, b) => (a.rush === b.rush ? new Date(a.firedAt).getTime() - new Date(b.firedAt).getTime() : a.rush ? -1 : 1)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [tickets, station]
   );
-  const rushCount = cards.filter((c) => c.rush).length;
+  const ready = useMemo<KdsCard[]>(
+    () => group(tickets.filter((t) => !!t.fulfilledAt && inStation(t))).sort((a, b) => new Date(b.fulfilledAt!).getTime() - new Date(a.fulfilledAt!).getTime()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tickets, station]
+  );
+
+  const lateCount = cooking.filter((c) => tierOf(c.firedAt, aging, now) === "late").length;
+  const rushCount = cooking.filter((c) => c.rush).length;
+  const subtitle = [cooking.length + " in progress", lateCount > 0 ? lateCount + " late" : null, rushCount > 0 ? rushCount + " rush" : null].filter(Boolean).join(" · ");
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <ScreenHeader
-        title="Kitchen"
-        subtitle={cards.length + " firing" + (rushCount > 0 ? " · " + rushCount + " rush" : "")}
-        onBack={hasFloor ? () => router.replace("/floor") : undefined}
-        onSignOut={hasFloor ? undefined : s.signOut}
-      >
+      <ScreenHeader title="Kitchen" subtitle={subtitle} onBack={hasFloor ? () => router.replace("/floor") : undefined} onSignOut={hasFloor ? undefined : s.signOut}>
         {stationTabs.length > 1 && <SegmentedTabs tabs={stationTabs} value={station} onChange={setStation} />}
       </ScreenHeader>
 
-      <ScrollView contentContainerStyle={styles.grid}>
-        {cards.length === 0 && <EmptyState>Nothing firing.</EmptyState>}
-        {cards.map((c) => (
-          <KdsTicket
-            key={c.key}
-            label={c.label}
-            elapsedLabel={formatElapsed(c.firedAt, now)}
-            agingColor={agingColor(c.firedAt, aging, now)}
-            rush={c.rush}
-            items={c.items}
-            busy={busyId === c.ids[0]}
-            readOnly={!canBump}
-            onBump={() => mutate(c.ids, "bump")}
-          />
-        ))}
-      </ScrollView>
+      <View style={styles.board}>
+        {/* In progress */}
+        <View style={styles.column}>
+          <View style={styles.colHead}>
+            <ChefHat size={18} color={color.text} strokeWidth={2.25} />
+            <Text style={styles.colTitle}>In progress</Text>
+            <View style={styles.count}>
+              <Text style={styles.countTxt}>{cooking.length}</Text>
+            </View>
+            <View style={{ flex: 1 }} />
+            <Text style={styles.colHint}>
+              Amber after {aging.yellowMin} min · {AGING_LABEL.late} after {aging.redMin} min
+            </Text>
+          </View>
+          <ScrollView contentContainerStyle={styles.grid}>
+            {loaded && cooking.length === 0 && (
+              <EmptyState icon={<ChefHat size={26} color={color.textDim} strokeWidth={2} />} title="Nothing in the kitchen" body="Orders sent from the register appear here the moment they're fired, oldest first." />
+            )}
+            {cooking.map((c) => {
+              const tier = tierOf(c.firedAt, aging, now);
+              return (
+                <KdsTicket
+                  key={c.key}
+                  label={c.label}
+                  elapsedLabel={formatElapsed(c.firedAt, now)}
+                  agingColor={TIER_COLOR[tier]}
+                  agingLabel={tier === "normal" ? null : AGING_LABEL[tier]}
+                  rush={c.rush}
+                  items={c.items}
+                  busy={busyId === c.ids[0]}
+                  readOnly={!canBump}
+                  onBump={() => mutate(c.ids, "bump")}
+                />
+              );
+            })}
+          </ScrollView>
+        </View>
 
-      {canBump && recent.length > 0 && (
-        <View style={styles.recallStrip}>
-          <Text style={styles.recallLabel}>Recently ready — tap to recall</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recallRow}>
-            {recent.slice(0, 12).map((t) => (
-              <Pressable key={t.id} onPress={() => mutate([t.id], "recall")} style={styles.recallChip}>
-                <Text style={styles.recallChipTxt} numberOfLines={1}>
-                  {t.label || "Ticket"}
-                </Text>
-              </Pressable>
+        {/* Ready */}
+        <View style={[styles.column, styles.readyCol]}>
+          <View style={styles.colHead}>
+            <CircleCheck size={18} color={color.success} strokeWidth={2.25} />
+            <Text style={styles.colTitle}>Ready</Text>
+            <View style={[styles.count, { backgroundColor: color.successSoft }]}>
+              <Text style={[styles.countTxt, { color: color.success }]}>{ready.length}</Text>
+            </View>
+          </View>
+          <ScrollView contentContainerStyle={styles.readyList}>
+            {loaded && ready.length === 0 && <EmptyState compact title="Nothing waiting for pickup" body={canBump ? "Tickets you mark ready stay here for 30 minutes so you can recall one." : "Tickets the kitchen marks ready show here."} />}
+            {ready.map((c) => (
+              <KdsTicket
+                key={c.key}
+                label={c.label}
+                elapsedLabel={"ready " + formatElapsed(c.fulfilledAt, now)}
+                agingColor={color.success}
+                fulfilled
+                items={c.items}
+                busy={busyId === c.ids[0]}
+                readOnly={!canBump}
+                onRecall={() => mutate(c.ids, "recall")}
+              />
             ))}
           </ScrollView>
         </View>
-      )}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: space.md, padding: space.lg },
-  recallStrip: { borderTopWidth: 1, borderTopColor: color.border, paddingVertical: space.sm, paddingHorizontal: space.lg, gap: space.xs },
-  recallLabel: { fontFamily: "Poppins_500Medium", fontSize: 11, color: color.textDim },
-  recallRow: { gap: space.sm },
-  recallChip: { backgroundColor: color.card2, borderRadius: 999, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, paddingVertical: space.xs },
-  recallChipTxt: { fontFamily: "Poppins_500Medium", fontSize: 12, color: color.textDim, maxWidth: 140 },
+  board: { flex: 1, flexDirection: "row" },
+  column: { flex: 1, paddingHorizontal: space.lg, paddingTop: space.xs },
+  readyCol: { flex: 0, width: 300, borderLeftWidth: 1, borderLeftColor: color.border, backgroundColor: color.card },
+  colHead: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingBottom: space.sm },
+  colTitle: { fontFamily: "Poppins_600SemiBold", fontSize: 18, color: color.text },
+  colHint: { fontFamily: "Poppins_400Regular", fontSize: 13, color: color.textFaint },
+  count: { minWidth: 26, paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: color.card2 },
+  countTxt: { fontFamily: "Poppins_600SemiBold", fontSize: 13, color: color.text, textAlign: "center" },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: space.md, paddingBottom: space.xl },
+  readyList: { gap: space.md, paddingBottom: space.xl },
 });

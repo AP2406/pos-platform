@@ -1,4 +1,5 @@
 import { View, TextInput, StyleSheet } from "react-native";
+import { Search } from "lucide-react-native";
 import { color, radius, space, touch, fontFamily, fontSize } from "@surge/design-tokens";
 
 export function SearchField({
@@ -12,6 +13,7 @@ export function SearchField({
 }) {
   return (
     <View style={styles.wrap}>
+      <Search size={18} color={color.textFaint} strokeWidth={2.25} />
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -21,6 +23,7 @@ export function SearchField({
         autoCapitalize="none"
         autoCorrect={false}
         clearButtonMode="while-editing"
+        accessibilityLabel={placeholder}
       />
     </View>
   );
@@ -28,13 +31,15 @@ export function SearchField({
 
 const styles = StyleSheet.create({
   wrap: {
-    backgroundColor: color.card,
-    borderRadius: radius.card,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    backgroundColor: color.card2,
+    borderRadius: radius.control,
     borderWidth: 1,
     borderColor: color.border,
     paddingHorizontal: space.md,
     minHeight: touch.min,
-    justifyContent: "center",
   },
-  input: { color: color.text, fontFamily: fontFamily.regular, fontSize: fontSize.body },
+  input: { flex: 1, color: color.text, fontFamily: fontFamily.regular, fontSize: fontSize.body, paddingVertical: 0 },
 });
