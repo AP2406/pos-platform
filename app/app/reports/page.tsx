@@ -18,7 +18,35 @@ type OrderRow = {
   payment_method: string;
   status: string;
   staff_id: string | null;
+  channel: ChannelKey;
 };
+
+// Fulfillment channel. Two fields feed it and neither alone is enough:
+// `orders.channel` is populated only for third-party / online orders, while an
+// order rung in-house carries dining_option inside the SNAPSHOT (there is no
+// dining_option column — see lib/services/order-fulfill.ts). Anything with
+// neither is a counter sale, which is what "In-store" means here.
+const CHANNELS = ["dine_in", "takeout", "pickup", "delivery", "in_store"] as const;
+type ChannelKey = (typeof CHANNELS)[number];
+
+const CHANNEL_LABEL: Record<ChannelKey, string> = {
+  dine_in: "Dine-in",
+  takeout: "Takeout",
+  pickup: "Pickup",
+  delivery: "Delivery",
+  in_store: "In-store",
+};
+
+function channelOf(o: Record<string, unknown>): ChannelKey {
+  const snap = (o.snapshot ?? null) as { dining_option?: string | null } | null;
+  const d = (snap?.dining_option ?? "").toLowerCase();
+  if (d === "dine_in" || d === "takeout" || d === "pickup" || d === "delivery") return d;
+  const c = ((o.channel as string | null) ?? "").toLowerCase();
+  if (c.includes("delivery")) return "delivery";
+  if (c.includes("pickup")) return "pickup";
+  if (c.includes("takeout") || c.includes("togo")) return "takeout";
+  return "in_store";
+}
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -82,7 +110,7 @@ export default async function ReportsPage({
   ).toISOString();
   const { data: ordersData } = await supabase
     .from("orders")
-    .select("id, sale_number, created_at, subtotal, discount, tax, tip, total, payment_method, status, staff_id")
+    .select("id, sale_number, created_at, subtotal, discount, tax, tip, total, payment_method, status, staff_id, channel, snapshot")
     .eq("business_id", business.id)
     .neq("is_training", true)
     .gte("created_at", cutoffIso)
@@ -101,6 +129,10 @@ export default async function ReportsPage({
     payment_method: (o.payment_method as string | null) ?? "cash",
     status: (o.status as string | null) ?? "paid",
     staff_id: (o.staff_id as string | null) ?? null,
+    // Fulfillment channel. `orders.channel` is only set for third-party/online
+    // orders; everything rung in-house carries dining_option in the SNAPSHOT
+    // (there is no dining_option column — see order-fulfill.ts).
+    channel: channelOf(o),
   }));
 
   const now = Date.now();
@@ -357,11 +389,12 @@ export default async function ReportsPage({
 
   // Transaction-level CSV: one row per sale, for a bookkeeper/accountant hand-off.
   const exportRows: (string | number)[][] = [
-    ["Date/time", "Sale #", "Server", "Subtotal", "Discount", "Tax", "Tip", "Total", "Payment", "Status"],
+    ["Date/time", "Sale #", "Server", "Channel", "Subtotal", "Discount", "Tax", "Tip", "Total", "Payment", "Status"],
     ...orders.map((o) => [
       new Date(o.created_at).toLocaleString("en-CA", { timeZone: tz }),
       o.sale_number ?? "",
       o.staff_id ? exportNameById[o.staff_id] ?? "" : "",
+      CHANNEL_LABEL[o.channel],
       o.subtotal.toFixed(2),
       o.discount.toFixed(2),
       o.tax.toFixed(2),
@@ -400,6 +433,29 @@ export default async function ReportsPage({
     if (code === "none") return "—";
     return action === "comp" ? reasonLabel(COMP_REASONS, code) : reasonLabelForAction(action, code);
   };
+
+  // Channel mix for the selected range. Net = subtotal - discount (pre-tax), the
+  // same basis the summary tiles use, so the rows reconcile with the totals.
+  const channelRows = (() => {
+    const by = new Map<ChannelKey, { count: number; net: number }>();
+    for (const o of orders) {
+      const cur = by.get(o.channel) ?? { count: 0, net: 0 };
+      cur.count += 1;
+      cur.net += o.subtotal - o.discount;
+      by.set(o.channel, cur);
+    }
+    const total = Array.from(by.values()).reduce((a, v) => a + v.net, 0);
+    return CHANNELS.filter((k) => by.has(k)).map((k) => {
+      const v = by.get(k)!;
+      return {
+        key: k,
+        count: v.count,
+        net: round2(v.net),
+        avg: round2(v.count > 0 ? v.net / v.count : 0),
+        share: total > 0 ? Math.round((v.net / total) * 100) : 0,
+      };
+    }).sort((a, b) => b.net - a.net);
+  })();
 
   const tabs: { key: string; label: string }[] = [
     { key: "today", label: "Today" },
@@ -553,6 +609,38 @@ export default async function ReportsPage({
             <div className="tabular-nums">{money(other)}</div>
           </div>
         </div>
+      </div>
+
+      {/* Sales by channel — the revenue-centre split an operator uses to weigh
+          packaging and aggregator cost against dining-room covers. Only
+          channels that actually occurred are listed, so a dine-in-only
+          restaurant doesn't read four empty rows. */}
+      <div className="mb-4">
+        <h2 className="text-sm font-medium text-muted-foreground mb-2">Sales by channel</h2>
+        {channelRows.length === 0 ? (
+          <div className="bg-card border border-border rounded-lg p-6">
+            <p className="text-sm text-muted-foreground">No sales in this period.</p>
+          </div>
+        ) : (
+          <div className="bg-card border border-border rounded-lg overflow-hidden">
+            <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-4 py-2.5 bg-raised border-b border-border text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <div>Channel</div>
+              <div className="text-right">Orders</div>
+              <div className="text-right">Net sales</div>
+              <div className="text-right">Avg ticket</div>
+              <div className="text-right">Share</div>
+            </div>
+            {channelRows.map((r) => (
+              <div key={r.key} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-4 py-3 border-b border-border last:border-0 text-sm">
+                <div className="font-medium">{CHANNEL_LABEL[r.key]}</div>
+                <div className="text-right tabular-nums text-muted-foreground">{r.count}</div>
+                <div className="text-right tabular-nums">{money(r.net)}</div>
+                <div className="text-right tabular-nums text-muted-foreground">{money(r.avg)}</div>
+                <div className="text-right tabular-nums text-muted-foreground">{r.share}%</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

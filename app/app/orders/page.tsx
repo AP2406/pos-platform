@@ -13,15 +13,21 @@ export default async function OrdersHubPage() {
   const { business } = await requireBusiness();
   const supabase = await createClient();
 
-  const { data } = await supabase
+  // BUG: this selected `dining_option` as a column. There is no such column —
+  // it lives inside the order snapshot (see the same note in
+  // lib/services/order-fulfill.ts). PostgREST rejected the whole select, the
+  // error was discarded by `const { data }`, and this page silently rendered
+  // ZERO orders while the table held hundreds.
+  const { data, error } = await supabase
     .from("orders")
-    .select("id, sale_number, total, created_at, channel, dining_option, fulfilled_at, customer_id, status")
+    .select("id, sale_number, total, created_at, channel, snapshot, fulfilled_at, customer_id, status")
     .eq("business_id", business.id)
     .neq("is_training", true)
     .neq("status", "voided")
     .order("created_at", { ascending: false })
     .limit(200);
 
+  if (error) console.error("OrdersHubPage orders query:", error);
   const rows = (data ?? []) as Record<string, unknown>[];
   const custIds = Array.from(new Set(rows.map((o) => o.customer_id as string | null).filter((x): x is string => !!x)));
   const nameById: Record<string, string> = {};
@@ -36,7 +42,8 @@ export default async function OrdersHubPage() {
     total: Number(o.total) || 0,
     createdAt: o.created_at as string,
     channel: (o.channel as string | null) ?? null,
-    diningOption: (o.dining_option as string | null) ?? null,
+    diningOption:
+      ((o.snapshot ?? null) as { dining_option?: string | null } | null)?.dining_option ?? null,
     fulfilledAt: (o.fulfilled_at as string | null) ?? null,
     status: (o.status as string | null) ?? "paid",
     customerName: o.customer_id ? nameById[o.customer_id as string] ?? null : null,
