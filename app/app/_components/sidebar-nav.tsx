@@ -114,7 +114,10 @@ export function SidebarNav({ sections }: { sections: NavSection[] }) {
         <div key={section.key} className={si === 0 ? "" : "mt-5"}>
           {/* A heading only earns its space when there's more than one group. */}
           {sections.length > 1 && (
-            <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-sidebar-muted/70">
+            // Was text-sidebar-muted/70 — the extra 30% transparency on an
+            // already-dim token left the six group headings barely legible,
+            // which defeats the point of grouping.
+            <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.09em] text-sidebar-muted">
               {section.label}
             </p>
           )}
@@ -149,7 +152,11 @@ export function SidebarNav({ sections }: { sections: NavSection[] }) {
                     <span
                       className={`relative flex items-center gap-3 z-10 transition-colors ${
                         isActive
-                          ? "text-sidebar-foreground font-medium"
+                          ? // The active row already has an accent fill and a
+                            // left bar; tinting the label toward the accent is
+                            // what makes it read as selected rather than merely
+                            // highlighted.
+                            "text-sidebar-accent-foreground font-medium"
                           : "text-sidebar-muted group-hover:text-sidebar-foreground"
                       }`}
                     >

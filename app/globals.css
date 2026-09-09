@@ -55,6 +55,8 @@
   --color-card: var(--card);
   /* Design-system additions: raised surface, hairline borders, card elevation. */
   --color-surface-2: var(--surface-2);
+  --color-raised: var(--raised);
+  --color-raised-border: var(--raised-border);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --shadow-elevation: var(--elevation);
@@ -127,6 +129,8 @@
 
   /* Elevation + surfaces (Daylight) */
   --surface-2: oklch(0.97 0.006 265);
+  --raised: oklch(0.975 0.004 265);
+  --raised-border: oklch(0.21 0.02 265 / 0.08);
   --line: oklch(0.21 0.02 265 / 0.1);
   --line-strong: oklch(0.21 0.02 265 / 0.18);
   --elevation: 0 1px 2px oklch(0 0 0 / 0.06), 0 12px 28px -18px oklch(0 0 0 / 0.18);
@@ -134,25 +138,45 @@
 }
 
 .dark {
-  /* Midnight — deep ink, lifted cards, electric blue accent */
-  --background: oklch(0.17 0.013 265);
-  --foreground: oklch(0.97 0.004 265);
-  --card: oklch(0.215 0.017 265);
-  --card-foreground: oklch(0.97 0.004 265);
-  --popover: oklch(0.2 0.017 265);
-  --popover-foreground: oklch(0.97 0.004 265);
+  /* Midnight — deep ink, lifted cards, electric blue accent.
+   *
+   * SURFACE LADDER. The canvas and the card used to sit 0.045 apart in
+   * lightness (0.17 vs 0.215) with 9%-opacity borders, so panels dissolved into
+   * the page — everything read as one flat black rectangle with text on it.
+   * Four rungs now, each a clear step, so a card looks like an object and a
+   * table header looks like part of that object:
+   *
+   *   canvas   0.145   the page behind everything
+   *   surface  0.205   cards, panels, the header bar
+   *   raised   0.245   inputs, table headers, chips — inside a card
+   *   overlay  0.275   popovers, dropdowns, sheets — above everything
+   */
+  --background: oklch(0.145 0.012 265);
+  --foreground: oklch(0.98 0.004 265);
+  --card: oklch(0.205 0.016 265);
+  --card-foreground: oklch(0.98 0.004 265);
+  --popover: oklch(0.275 0.019 265);
+  --popover-foreground: oklch(0.98 0.004 265);
   --primary: oklch(0.66 0.19 250);
   --primary-foreground: oklch(0.16 0.02 265);
-  --secondary: oklch(0.255 0.018 265);
-  --secondary-foreground: oklch(0.97 0.004 265);
-  --muted: oklch(0.255 0.016 265);
-  --muted-foreground: oklch(0.7 0.022 265);
-  --accent: oklch(0.28 0.02 265);
-  --accent-foreground: oklch(0.97 0.004 265);
+  --secondary: oklch(0.245 0.017 265);
+  --secondary-foreground: oklch(0.98 0.004 265);
+  --muted: oklch(0.245 0.016 265);
+  /* Was 0.7 — column headers, timestamps and helper text sat too close to the
+     card to scan a report quickly. */
+  --muted-foreground: oklch(0.75 0.022 265);
+  --accent: oklch(0.29 0.02 265);
+  --accent-foreground: oklch(0.98 0.004 265);
   --destructive: oklch(0.62 0.2 22);
-  --border: oklch(1 0 0 / 9%);
-  --input: oklch(1 0 0 / 13%);
+  /* A hairline you can actually see. 9% vanished against the new canvas. */
+  --border: oklch(1 0 0 / 14%);
+  --input: oklch(1 0 0 / 20%);
   --ring: oklch(0.66 0.19 250);
+
+  /* Rung 3 of the ladder, for surfaces nested INSIDE a card: table headers,
+     inputs, inline chips. Referenced as bg-raised / border-raised. */
+  --raised: oklch(0.245 0.017 265);
+  --raised-border: oklch(1 0 0 / 10%);
   --chart-1: oklch(0.66 0.19 250);
   --chart-2: oklch(0.72 0.14 200);
   --chart-3: oklch(0.78 0.13 165);
@@ -162,19 +186,23 @@
   --brand: oklch(0.66 0.19 250);
   --brand-foreground: oklch(0.16 0.02 265);
 
-  --sidebar: oklch(0.135 0.012 265);
-  --sidebar-foreground: oklch(0.97 0.004 265);
-  --sidebar-muted: oklch(0.6 0.02 265);
+  /* Deeper than the canvas (0.145) so the rail reads as a distinct plane
+     rather than merging into the page, which is what happened once the canvas
+     darkened. */
+  --sidebar: oklch(0.115 0.011 265);
+  --sidebar-foreground: oklch(0.98 0.004 265);
+  /* Group headings and inactive items were 0.6 — too dim to scan six sections. */
+  --sidebar-muted: oklch(0.68 0.02 265);
   --sidebar-primary: oklch(0.66 0.19 250);
   --sidebar-primary-foreground: oklch(0.16 0.02 265);
-  --sidebar-accent: oklch(0.66 0.19 250 / 0.16);
-  --sidebar-accent-foreground: oklch(0.92 0.06 250);
-  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-accent: oklch(0.66 0.19 250 / 0.18);
+  --sidebar-accent-foreground: oklch(0.94 0.06 250);
+  --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: oklch(0.66 0.19 250);
 
   /* Floor table status — darker fills, brighter text for dark mode.
      Available is a gray clearly lighter than the floor canvas so empty tables
-     read as solid objects (the canvas uses --background ≈ 0.17). */
+     read as solid objects (the canvas uses --background ≈ 0.145). */
   --table-available-bg: oklch(0.27 0.01 265);
   --table-available-border: oklch(0.42 0.02 265);
   --table-seated-bg: oklch(0.33 0.08 255);
@@ -189,8 +217,8 @@
 
   /* Elevation + surfaces (Midnight) — lifted cards on deep ink */
   --surface-2: oklch(0.265 0.02 265);
-  --line: oklch(1 0 0 / 0.08);
-  --line-strong: oklch(1 0 0 / 0.16);
+  --line: oklch(1 0 0 / 0.12);
+  --line-strong: oklch(1 0 0 / 0.22);
   --elevation: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 14px 34px -20px oklch(0 0 0 / 0.75);
   --elevation-sm: 0 1px 0 oklch(1 0 0 / 0.03) inset, 0 8px 20px -14px oklch(0 0 0 / 0.7);
 }
