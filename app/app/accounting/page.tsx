@@ -7,6 +7,7 @@ import { accountingSummary, resolvePeriod, comparePeriod } from "./data";
 import { primeCostSummary, foodCostVariance } from "./cost";
 import { lockedThrough } from "@/lib/services/period-lock";
 import { LockBar } from "./lock-bar";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function AccountingPage({
   searchParams: Promise<{ period?: string; from?: string; to?: string; cmp?: string }>;
 }) {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "access_reports");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const sp = await searchParams;
@@ -116,8 +117,14 @@ export default async function AccountingPage({
           <a href={exportHref} className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent">
             Export CSV
           </a>
-          <a href={"/app/accounting/journal?" + exportHref.split("?")[1]} className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent">
-            Journal (QBO/Xero)
+          {/* No API sync exists — say "CSV" so nobody expects the numbers to
+              land in QuickBooks by themselves. */}
+          <a
+            href={"/app/accounting/journal?" + exportHref.split("?")[1]}
+            title="Downloads a double-entry journal CSV to import into QuickBooks or Xero. This is a file download, not a live sync."
+            className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent"
+          >
+            Journal CSV for QuickBooks / Xero
           </a>
           <Link href="/app/accounting/settlement" className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent">
             Settlement

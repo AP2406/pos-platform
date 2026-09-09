@@ -70,13 +70,17 @@ export const BUSINESS_MODES: BusinessMode[] = [
   {
     key: "full_service",
     label: "Full service",
-    tagline: "Sit-down dining with a ticket per table.",
+    tagline: "Sit-down dining with a check per table.",
     icon: "utensils",
     industry: "restaurant",
     status: "live",
     config: {
       modules: ["dashboard", "pos", "orders", "kitchen", "catalog", "customers", "staff", "settings"],
-      labels: { catalog: "Menu", orders: "Tickets" },
+      // One word per thing: a CHECK is an open table (unsettled), an ORDER is
+      // settled or off-premise. Renaming this nav entry to "Tickets" made the
+      // same destination read as Orders / Tickets / Tabs depending on the mode,
+      // while the screens inside kept saying Check and Order.
+      labels: { catalog: "Menu" },
     },
   },
   {
@@ -88,7 +92,7 @@ export const BUSINESS_MODES: BusinessMode[] = [
     status: "live",
     config: {
       modules: ["dashboard", "pos", "orders", "catalog", "customers", "staff", "settings"],
-      labels: { catalog: "Drinks", orders: "Tabs" },
+      labels: { catalog: "Drinks" },
     },
   },
   {

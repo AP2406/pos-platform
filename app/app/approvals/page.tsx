@@ -1,13 +1,13 @@
-import { redirect } from "next/navigation";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { listPendingApprovals } from "./actions";
 import { ApprovalsClient } from "./approvals-client";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function ApprovalsPage() {
   const { role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "void");
   const initial = await listPendingApprovals();
 
   return (

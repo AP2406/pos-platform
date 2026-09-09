@@ -4,6 +4,8 @@ import { AppShell } from "./_components/app-shell";
 import { AssistantWidget } from "./_components/assistant-widget";
 import { VocabProvider } from "./_components/vocab-provider";
 import { resolveNav, getVocab, getFields } from "@/lib/modules/resolve";
+import { buildNav } from "@/lib/modules/nav";
+import { canAccess } from "@/lib/services/route-access";
 import { hasFloorService } from "@/lib/modules/modes";
 import { systemRoleForLegacy } from "@/lib/services/permissions";
 
@@ -20,47 +22,21 @@ export default async function AppLayout({
     config: (business as { config?: unknown }).config,
   };
 
-  const nav = resolveNav({
+  const hasPos = resolveNav({
     ...businessConfig,
     driversEnabled: business.drivers_enabled,
-  }).map((item) => ({ href: item.href, label: item.label }));
+  }).some((n) => n.href === "/app/pos");
 
-  // POS-only extras: Reports for everyone, Activity log for owner/manager.
-  const hasPos = nav.some((n) => n.href === "/app/pos");
-  const extras: { href: string; label: string }[] = [];
-  if (hasPos) {
-    extras.push({ href: "/app/reports", label: "Reports" });
-    // Full-service tip pooling, owner/manager only.
-    if (hasFloorService(business) && (role === "owner" || role === "manager")) {
-      extras.push({ href: "/app/tips", label: "Tips" });
-    }
-    // Full-service time clock — any role can open it (staff clock in by PIN).
-    if (hasFloorService(business)) {
-      extras.push({ href: "/app/clock", label: "Time clock" });
-      extras.push({ href: "/app/checklists", label: "Checklists" });
-      extras.push({ href: "/app/reservations", label: "Reservations" });
-    }
-    if (role === "owner" || role === "manager") {
-      if (hasFloorService(business)) {
-        extras.push({ href: "/app/approvals", label: "Approvals" });
-        extras.push({ href: "/app/exceptions", label: "Exceptions" });
-        extras.push({ href: "/app/incidents", label: "Incidents" });
-        extras.push({ href: "/app/log", label: "Shift log" });
-        extras.push({ href: "/app/broadcasts", label: "Announcements" });
-        extras.push({ href: "/app/staff-records", label: "Staff records" });
-        extras.push({ href: "/app/accounting", label: "Accounting" });
-        extras.push({ href: "/app/labor", label: "Labor" });
-        extras.push({ href: "/app/schedule", label: "Schedule" });
-        extras.push({ href: "/app/attendance", label: "Attendance" });
-        extras.push({ href: "/app/insights", label: "Insights" });
-        extras.push({ href: "/app/pricing", label: "Happy hour" });
-        extras.push({ href: "/app/upsells", label: "Upsells" });
-        extras.push({ href: "/app/integrations", label: "Integrations" });
-      }
-      extras.push({ href: "/app/marketing", label: "Marketing" });
-      extras.push({ href: "/app/audit", label: "Activity log" });
-    }
-  }
+  // Every destination — core modules and the admin screens alike — now comes
+  // from buildNav(), grouped and already filtered to what this role can open.
+  const sections = buildNav({
+    ...businessConfig,
+    driversEnabled: business.drivers_enabled,
+    floorService: hasFloorService(business),
+    hasPos,
+    role,
+    multiLocation: businesses.length > 1,
+  });
 
   // CUST-1: per-role nav visibility — hide the optional modules this viewer's
   // role marked hidden (core nav is never hide-able). Migration-resilient.
@@ -77,8 +53,12 @@ export default async function AppLayout({
       hiddenNav = (roleRow as { hidden_nav: unknown[] }).hidden_nav as string[];
     }
   } catch { /* pre-0070 or no role row — show everything */ }
-  const visibleExtras = hiddenNav.length ? extras.filter((e) => !hiddenNav.includes(e.href)) : extras;
-  const finalNav = [...nav, ...visibleExtras];
+
+  const finalNav = hiddenNav.length
+    ? sections
+        .map((s) => ({ ...s, items: s.items.filter((i) => !hiddenNav.includes(i.href)) }))
+        .filter((s) => s.items.length > 0)
+    : sections;
 
   let showOnboarding = false;
   const onboarding =
@@ -106,6 +86,7 @@ export default async function AppLayout({
         businesses={businesses}
         activeBusinessId={business.id}
         nav={finalNav}
+        canViewRollup={canAccess(role, "access_reports")}
         showOnboarding={showOnboarding}
         isDemo={isDemo}
       >

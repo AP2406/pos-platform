@@ -5,12 +5,13 @@ import { hasFloorService } from "@/lib/modules/modes";
 import { ChevronLeft } from "lucide-react";
 import { listDeposits, listUndepositedDays } from "../deposit-actions";
 import { DepositsClient } from "./deposits-client";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function DepositsPage() {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "access_reports");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const [deposits, undeposited] = await Promise.all([listDeposits(), listUndepositedDays()]);

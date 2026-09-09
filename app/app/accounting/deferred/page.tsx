@@ -5,12 +5,13 @@ import { hasFloorService } from "@/lib/modules/modes";
 import { ChevronLeft } from "lucide-react";
 import { listDeferred, giftBreakageInfo } from "./actions";
 import { DeferredClient } from "./deferred-client";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function DeferredPage() {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "access_reports");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const [rows, breakage] = await Promise.all([listDeferred(), giftBreakageInfo()]);

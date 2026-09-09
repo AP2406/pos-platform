@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { canAccess } from "@/lib/services/route-access";
 import { createClient } from "@/lib/supabase/server";
 import { accountingSummary, resolvePeriod } from "../data";
 import { primeCostSummary } from "../cost";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 // Columns: Date, Account, Account Code, Debit, Credit, Memo.
 export async function GET(request: Request) {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") {
+  if (!canAccess(role, "export_data")) {
     return new NextResponse("Forbidden", { status: 403 });
   }
   const url = new URL(request.url);

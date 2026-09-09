@@ -4,12 +4,13 @@ import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
 import { listPriceWindows } from "./actions";
 import { PricingClient } from "./pricing-client";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function PricingPage() {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "edit_menu");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const supabase = await createClient();

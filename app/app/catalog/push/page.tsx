@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness, listBusinesses } from "@/lib/services/tenancy";
+import { requirePermission } from "@/lib/services/route-access";
 import { PushClient } from "./push-client";
 
 export default async function MenuPushPage() {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app/catalog");
+  requirePermission(role, "edit_menu", "/app/catalog");
   const supabase = await createClient();
 
   const all = await listBusinesses();

@@ -5,6 +5,7 @@ import { hasFloorService } from "@/lib/modules/modes";
 import { ScheduleClient } from "./schedule-client";
 import { listShiftTemplates, listTimeOff } from "./actions";
 import { todayKey, mondayOf, localMidnightUtc, weekDays, addDays } from "./week";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export default async function SchedulePage({
   searchParams: Promise<{ week?: string }>;
 }) {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "edit_staff");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const sp = await searchParams;

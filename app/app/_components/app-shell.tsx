@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { usePathname } from "next/navigation";
-import { SidebarNav } from "./sidebar-nav";
+import { SidebarNav, type NavSection } from "./sidebar-nav";
 import { SignOutButton } from "./sign-out";
 import { ThemeToggle } from "./theme-toggle";
 import { PageTransition } from "./page-transition";
@@ -10,7 +10,6 @@ import { OnboardingNudge } from "./onboarding-nudge";
 import { switchBusiness } from "@/lib/services/switch-business";
 import { modeLabel } from "@/lib/modules/modes";
 
-type NavItem = { href: string; label: string };
 type BizSummary = {
   id: string;
   name: string;
@@ -25,12 +24,14 @@ function WorkspaceSwitcher({
   fallbackName,
   fallbackIndustry,
   role,
+  canViewRollup,
 }: {
   businesses: BizSummary[];
   activeBusinessId: string;
   fallbackName: string;
   fallbackIndustry: string;
   role: string;
+  canViewRollup?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -107,6 +108,24 @@ function WorkspaceSwitcher({
                 );
               })}
             </div>
+            {/* Multi-location owners need to look at the group, not just hop
+                between locations one at a time. */}
+            {canViewRollup && businesses.length > 1 && (
+              <div className="border-t border-sidebar-border">
+                <a href="/app/locations" className="flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-sidebar-accent transition-colors">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 shrink-0 text-sidebar-muted">
+                    <path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6" />
+                  </svg>
+                  All {businesses.length} locations
+                </a>
+                <a href="/app/accounting/consolidated" className="flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-sidebar-accent transition-colors">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 shrink-0 text-sidebar-muted">
+                    <path d="M4 19V5m0 14h16M8 15V9m4 6V7m4 8v-4" />
+                  </svg>
+                  Consolidated books
+                </a>
+              </div>
+            )}
           <div className="border-t border-sidebar-border">
               <a href="/onboarding?add=1" className="flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-sidebar-accent transition-colors">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 shrink-0 text-sidebar-muted">
@@ -144,6 +163,7 @@ export function AppShell({
   businesses,
   activeBusinessId,
   nav,
+  canViewRollup,
   showOnboarding,
   isDemo,
   children,
@@ -153,7 +173,8 @@ export function AppShell({
   role: string;
   businesses: BizSummary[];
   activeBusinessId: string;
-  nav: NavItem[];
+  nav: NavSection[];
+  canViewRollup?: boolean;
   showOnboarding?: boolean;
   isDemo?: boolean;
   children: React.ReactNode;
@@ -256,11 +277,12 @@ export function AppShell({
             fallbackName={businessName}
             fallbackIndustry={industry}
             role={role}
+            canViewRollup={canViewRollup}
           />
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          <SidebarNav items={nav} />
+          <SidebarNav sections={nav} />
         </div>
 
         <div className="p-2 border-t border-sidebar-border space-y-1">

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
 import { resolvePeriod } from "../data";
 import { settlementReconciliation } from "../settlement";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function SettlementPage({
   searchParams: Promise<{ period?: string; from?: string; to?: string }>;
 }) {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "access_reports");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const sp = await searchParams;

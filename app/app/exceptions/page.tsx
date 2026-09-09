@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
 import { parseThresholds } from "@/lib/services/exception-thresholds";
 import { weekKey } from "@/lib/services/overtime";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export default async function ExceptionsPage({
   searchParams: Promise<{ range?: string }>;
 }) {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "void");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const sp = await searchParams;

@@ -6,6 +6,7 @@ import { hasFloorService } from "@/lib/modules/modes";
 import { listTimesheet } from "../clock/time-actions";
 import { TimesheetEditor } from "./timesheet-editor";
 import { parseOvertime, weekKey, splitOtHours } from "@/lib/services/overtime";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export default async function LaborPage({
   searchParams: Promise<{ range?: string }>;
 }) {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "access_reports");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const sp = await searchParams;

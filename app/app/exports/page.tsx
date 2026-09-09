@@ -1,4 +1,5 @@
 import { requireBusiness } from "@/lib/services/tenancy";
+import { canAccess } from "@/lib/services/route-access";
 import { PageHeader, SectionHeader } from "../_components/ui";
 
 function ExportCard({
@@ -23,7 +24,9 @@ function ExportCard({
 
 export default async function ExportsPage() {
   const { role } = await requireBusiness();
-  const canExport = role === "owner" || role === "manager";
+  // A bookkeeper's whole job is getting the data out, so this follows the
+  // permission matrix rather than the old owner/manager-only role check.
+  const canExport = canAccess(role, "export_data");
 
   return (
     <div className="max-w-2xl">
@@ -36,7 +39,7 @@ export default async function ExportsPage() {
         <div className="bg-card border border-border rounded-lg p-6">
           <SectionHeader>Export</SectionHeader>
           <p className="text-sm text-muted-foreground">
-            Only an owner or manager can export business data.
+            Your role can’t export business data. Ask an owner or manager for access.
           </p>
         </div>
       ) : (

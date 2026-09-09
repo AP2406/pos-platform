@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { ChevronLeft } from "lucide-react";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ function classify(visits: number, recencyDays: number): Seg {
 
 export default async function CustomerInsightsPage() {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "access_reports");
   if (business.industry === "transportation") redirect("/app/customers");
 
   const supabase = await createClient();

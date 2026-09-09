@@ -498,7 +498,7 @@ export default async function SettingsPage() {
           )}
           {hasFloorService(business) && (
             <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-6 mb-4">
-              <SectionHeader>Chart of accounts (QBO/Xero export)</SectionHeader>
+              <SectionHeader>Chart of accounts (journal CSV export)</SectionHeader>
               <CoaCard rows={coaRows} />
             </div>
           )}

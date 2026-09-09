@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { canAccess } from "@/lib/services/route-access";
 import { createClient } from "@/lib/supabase/server";
 import { getTodayBoundsUTC } from "@/lib/utils/dates";
 import { LiveOpsClient, type FloorTicket, type FeedOrder, type KdsTicket } from "./live-ops-client";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 // Supabase Realtime and refreshes; this server load just seeds it.
 export default async function LiveOpsPage() {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") notFound();
+  if (!canAccess(role, "void")) notFound();
 
   const supabase = await createClient();
   const tz = business.timezone || "America/Toronto";

@@ -8,6 +8,7 @@ import { plateCostByItem } from "../accounting/cost";
 import { isAiConfigured } from "@/lib/services/ai";
 import { WhatIfModeler } from "./whatif-modeler";
 import { AskPanel } from "./ask-panel";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export default async function InsightsPage({
   searchParams: Promise<{ range?: string; mode?: string }>;
 }) {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "access_reports");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const sp = await searchParams;

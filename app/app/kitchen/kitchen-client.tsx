@@ -10,6 +10,7 @@ import { setCatalogItemOutOfStock } from "../catalog/actions";
 import { markOrderFulfilled, markKitchenTicketFulfilled, markKitchenTicketsFulfilled, refireKitchenTicket, setKitchenItemReady, setOrderItemPrepared, recallKitchenTicket, recallOrder, setTicketRush, sendKitchenMessage } from "./actions";
 import { printReceiptHtml } from "../pos/qz-print";
 import { type KitchenTicketConfig, KITCHEN_TICKET_DEFAULTS } from "@/lib/services/kitchen-ticket-config";
+import { STAGE_LABEL } from "@/lib/ui/service-status";
 
 function allergenText(it: { allergens?: string[] | null; allergy?: string | null }): string {
   return [...allergenLabels(it.allergens), it.allergy ? it.allergy.trim() : ""]
@@ -933,7 +934,7 @@ export function KitchenClient({
           {o.kind === "kitchen" && (
             <Button variant="outline" size="touch" onClick={() => handleRefire(o)} disabled={pending}>Re-fire</Button>
           )}
-          <Button variant="primary" size="touch" className={"flex-1" + (allReady ? " ring-2 ring-emerald-400/80 ring-offset-2 ring-offset-card" : "")} onClick={() => handleDone(o)} disabled={pending}>{allReady ? "Done · ready" : "Done"}</Button>
+          <Button variant="primary" size="touch" className={"flex-1" + (allReady ? " ring-2 ring-emerald-400/80 ring-offset-2 ring-offset-card" : "")} onClick={() => handleDone(o)} disabled={pending}>{allReady ? STAGE_LABEL.ready : "Done"}</Button>
         </div>
       </div>
     );

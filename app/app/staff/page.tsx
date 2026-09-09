@@ -1,16 +1,16 @@
-import { redirect } from "next/navigation";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { StaffCard } from "../settings/staff-card";
 import { RolesCard } from "../settings/roles-card";
 import { listRoles } from "../settings/roles-actions";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
 // The sidebar links "Staff" here; staff (and their PINs) are owner/manager-managed.
 export default async function StaffPage() {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "edit_staff");
 
   const supabase = await createClient();
   // Migration-resilient: permission_overrides (0070) may not exist yet.

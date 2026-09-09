@@ -3,12 +3,13 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
 import { RecordsClient, type Writeup } from "./records-client";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function StaffRecordsPage() {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "edit_staff");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const supabase = await createClient();
