@@ -10,6 +10,21 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
+  /* THE ADMIN TYPEFACE. Times New Roman is a system font on macOS, iOS and
+     Windows, so it is set with no request at all — self-hosting it or pulling
+     it from a font CDN would be strictly worse than reading the copy already
+     on the machine. It is absent from most Android and Linux boxes, though,
+     and a bare `serif` fallback there lands on whatever the distro nominated,
+     which on a stock Ubuntu is frequently a sans. Tinos, Liberation Serif and
+     Nimbus Roman are the metric-compatible clones the common Linux font
+     packages ship: same advance widths, so a Linux operator gets the line
+     breaks this was drawn against rather than a re-flow of them. */
+  --font-serif:
+    "Times New Roman", Tinos, "Liberation Serif", "Nimbus Roman", Times, serif;
+  /* THE FIGURES. Hanken Grotesk — the face the rest of the product is set in,
+     so it is already in the page and costs nothing to reach for here. Why the
+     serif can't carry them, and where this is applied, is in `.u-serif` below. */
+  --font-numeric: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -21,11 +36,28 @@
   --color-sidebar: var(--sidebar);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
+  /* 6 and 7 exist because the payment mix has up to seven tenders — cash, card,
+     other, split, gift card, store credit and third-party delivery — and a
+     donut that reuses a hue for two slices is a donut that lies. */
+  --color-chart-7: var(--chart-7);
+  --color-chart-6: var(--chart-6);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  /* The share ramp. --chart-N answers "these series are unrelated, tell them
+     apart"; --ramp-N answers "these are seven shares of one thing, show me
+     their order". Seven saturated hues in a payment donut is the second
+     question answered with the first question's palette, and it reads as a
+     default library palette rather than as a decision. */
+  --color-ramp-7: var(--ramp-7);
+  --color-ramp-6: var(--ramp-6);
+  --color-ramp-5: var(--ramp-5);
+  --color-ramp-4: var(--ramp-4);
+  --color-ramp-3: var(--ramp-3);
+  --color-ramp-2: var(--ramp-2);
+  --color-ramp-1: var(--ramp-1);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -55,10 +87,23 @@
   --color-card: var(--card);
   /* Design-system additions: raised surface, hairline borders, card elevation. */
   --color-surface-2: var(--surface-2);
+  --color-raised: var(--raised);
+  --color-raised-border: var(--raised-border);
   --color-line: var(--line);
+  /* Deliberately weaker than --line. A card's outer edge and the dividers
+     between its own rows are not the same weight of line: if they are, the
+     card stops reading as one object and starts reading as a stack of them. */
+  --color-line-soft: var(--line-soft);
   --color-line-strong: var(--line-strong);
   --shadow-elevation: var(--elevation);
   --shadow-elevation-sm: var(--elevation-sm);
+  --shadow-elevation-hover: var(--elevation-hover);
+  /* The lighting cue with the elevation taken out of it. --elevation carries
+     two unrelated ideas in one value: an inset top hairline (light landing on
+     a surface) and a drop shadow (the surface floating above the page). A card
+     that does not float still catches the light, so this is the half of it
+     that every panel keeps once shadow stops being the default. */
+  --shadow-sheen: var(--sheen);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -69,8 +114,24 @@
 }
 
 :root {
-  /* Daylight — clean light mode, electric blue accent */
-  --background: oklch(0.98 0.004 265);
+  /* Daylight — clean light mode, electric blue accent.
+   *
+   * SURFACE LADDER, light. The dark theme got this treatment first and the
+   * light theme was left behind at canvas 0.98 / card 1.0 — 0.02 apart, against
+   * dark's 0.06 — with hairlines at 10% opacity. White cards on a near-white
+   * page with borders you can't see: the same defect as dark's muddy black,
+   * just inverted, and it made a dense screen read as flat and unfinished.
+   *
+   * Light mode can't lift a card by lightness alone (the card is already pure
+   * white and has nowhere to go), so the canvas drops instead and the shadow
+   * does more of the work than it does in dark.
+   *
+   *   canvas   0.965   the page behind everything
+   *   card     1.000   pure white, sitting clearly on top of it
+   *   raised   0.972   inputs, table headers, chips — inside a card
+   *   overlay  1.000   popovers and sheets, lifted by shadow
+   */
+  --background: oklch(0.965 0.005 265);
   --foreground: oklch(0.21 0.02 265);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.21 0.02 265);
@@ -85,15 +146,68 @@
   --accent: oklch(0.955 0.008 265);
   --accent-foreground: oklch(0.27 0.02 265);
   --destructive: oklch(0.58 0.22 25);
-  --border: oklch(0.9 0.006 265);
-  --input: oklch(0.9 0.006 265);
+  /* A hairline you can actually see against white, without it becoming a box. */
+  --border: oklch(0.885 0.007 265);
+  --input: oklch(0.875 0.008 265);
   --ring: oklch(0.58 0.2 250);
   --chart-1: oklch(0.58 0.2 250);
   --chart-2: oklch(0.6 0.13 200);
   --chart-3: oklch(0.65 0.13 165);
   --chart-4: oklch(0.58 0.16 300);
   --chart-5: oklch(0.65 0.14 90);
+  /* Deliberately spaced away from 1–5 in hue so seven slices stay tellable
+     apart, and held at the same lightness so no one slice reads as "the
+     important one" purely because it is brighter. */
+  --chart-6: oklch(0.62 0.17 25);
+  --chart-7: oklch(0.6 0.15 330);
+
+  /* The share ramp, light. One hue — the brand blue, 250 — walked up in
+     lightness while chroma comes down with it, which is what keeps the pale
+     end from turning chalky. Ordered darkest-first because paymentMix() hands
+     back slices largest-first, so weight on the page tracks weight in the
+     till. The pale rungs are swatch and arc colours only; they are never asked
+     to be text on white. */
+  --ramp-1: oklch(0.5 0.19 250);
+  --ramp-2: oklch(0.58 0.17 250);
+  --ramp-3: oklch(0.65 0.145 250);
+  --ramp-4: oklch(0.71 0.12 250);
+  --ramp-5: oklch(0.77 0.1 250);
+  --ramp-6: oklch(0.82 0.08 250);
+  --ramp-7: oklch(0.87 0.065 250);
   --radius: 0.75rem;
+
+  /* MOTION. One duration and one easing for every hover and focus change on
+     the admin surface. The page had four durations in it (150 default, 200 on
+     Card, none on several links) and the mismatch is legible even when the
+     individual numbers aren't: two adjacent rows that light up at different
+     speeds read as two different pieces of software.
+     120ms is under the ~150ms threshold where a hover starts to feel like an
+     animation rather than a response. The curve is fast-out/slow-in — it leaves
+     immediately and settles, which is what a state change should feel like. */
+  --motion-fast: 120ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  /* The longer steps, and 260ms is the ceiling for every one of them.
+     An earlier draft had entrances at 460ms and the chart draw at 700ms, which
+     is the duration a marketing page uses — it is long enough to WATCH, and
+     anything on this screen that can be watched is something an operator is
+     waiting through. The figures on this page are read by someone deciding
+     whether to walk to the kitchen. 240ms is enough for the eye to register
+     that an object arrived rather than blinked into place, and short enough
+     that by the time it has finished looking, the arrival is over.
+     --motion-move is for something the cursor drives across a distance — a
+     segmented indicator sliding between segments — and is deliberately slower
+     than a hover, because a thing that MOVES at hover speed reads as a jump.
+     The enter curve overshoots nothing; a number that bounces before settling
+     is a number you have to wait for. */
+  --motion-move: 220ms;
+  --motion-enter: 240ms;
+  --motion-draw: 260ms;
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* One stagger step, and the whole page's arrival is built out of multiples
+     of it. Sixteen cards at 40ms is 600ms from first pixel to last, which is
+     the budget — past about 700ms a stagger stops reading as one page landing
+     and starts reading as a page loading slowly. */
+  --motion-stagger: 40ms;
 
   --brand: oklch(0.58 0.2 250);
   --brand-foreground: oklch(0.99 0.002 265);
@@ -125,56 +239,179 @@
   --table-late-border: oklch(0.7 0.18 25);
   --table-late-fg: oklch(0.5 0.18 25);
 
-  /* Elevation + surfaces (Daylight) */
-  --surface-2: oklch(0.97 0.006 265);
-  --line: oklch(0.21 0.02 265 / 0.1);
-  --line-strong: oklch(0.21 0.02 265 / 0.18);
-  --elevation: 0 1px 2px oklch(0 0 0 / 0.06), 0 12px 28px -18px oklch(0 0 0 / 0.18);
-  --elevation-sm: 0 1px 2px oklch(0 0 0 / 0.05), 0 6px 16px -12px oklch(0 0 0 / 0.14);
+  /* Elevation + surfaces (Daylight). Edges and shadows carry more weight here
+     than in dark: a white card has no lightness left to rise by, so the border
+     and the shadow are what separate it from the page. */
+  --surface-2: oklch(0.968 0.006 265);
+  --raised: oklch(0.972 0.005 265);
+  --raised-border: oklch(0.21 0.02 265 / 0.1);
+  /* The card's own edge, at full strength — an object should have a drawn
+     boundary, not a suggestion of one. Internal dividers use --line-soft. */
+  --line: oklch(0.21 0.02 265 / 0.17);
+  --line-soft: oklch(0.21 0.02 265 / 0.07);
+  --line-strong: oklch(0.21 0.02 265 / 0.24);
+  /* A lift, not a glow. The old shadow spread 24px of blur under every card,
+     which at this density reads as haze rather than as depth — the cards had
+     an atmosphere instead of an edge. Short vertical offset, tight blur, and
+     the tint carried in the foreground's hue rather than neutral black, so
+     the shade under a card belongs to the same palette as everything else. */
+  --elevation:
+    0 1px 2px -1px oklch(0.21 0.02 265 / 0.1),
+    0 4px 8px -6px oklch(0.21 0.02 265 / 0.14);
+  --elevation-sm: 0 1px 2px -1px oklch(0.21 0.02 265 / 0.12);
+  /* Nothing, and deliberately so. A white card is already at the top of its
+     lightness range, so a highlight along its top edge has nowhere to go —
+     the light theme separates a card from the page with its hairline and the
+     canvas drop below it, which is exactly what it did before. The token
+     exists in both themes so the component asking for it doesn't have to know
+     which theme it is in. */
+  --sheen: 0 0 0 0 transparent;
+  /* A card that has been picked up. Same geometry as --elevation, one rung
+     further from the page — hover has to be FELT, and a shadow that only
+     changes opacity is a shadow nobody notices moving. */
+  --elevation-hover:
+    0 2px 4px -2px oklch(0.21 0.02 265 / 0.12),
+    0 10px 20px -12px oklch(0.21 0.02 265 / 0.2);
+
+  /* --- MATERIAL ----------------------------------------------------------
+     Everything below is light and depth, not ornament. The rule these obey:
+     if you can name the thing you are looking at, it does not belong here.
+     Each one is a token rather than a literal so the dark theme can carry
+     more of it — an unlit dark surface has nothing but gradient to say
+     "this is a raised object", where a white card already has its own edge. */
+
+  /* D1 · The bloom behind the hero figure. Brand hue, no hard edge, and low
+     enough that it reads as the card being lit rather than as a coloured
+     shape sitting on it. */
+  --bloom: oklch(0.58 0.2 250 / 0.13);
+
+  /* D3 · The gradient-lit top border. A hairline that is brightest where the
+     light lands and gone by the far edge, replacing a uniform rule on the two
+     cards that lead their columns. Used on more than two it stops being light
+     and becomes a pattern. */
+  --lit: oklch(0.58 0.2 250 / 0.55);
+
+  /* D4 · Film grain over the canvas. Light mode gets less: the noise darkens
+     a white page, and white has further to fall than ink has to rise.
+     2.5% is the working ceiling here, not a starting point — above about 3%
+     the texture stops being the reason a surface looks photographed and
+     becomes a thing you can see, and a reader who can see it will read it as
+     a rendering fault on their monitor rather than as an intention. */
+  --grain: 0.025;
+
+  /* D2 · The well a bar sits in. Darker at the lip than at the floor, which is
+     the whole of what an inset shadow says. */
+  --well-top: oklch(0.21 0.02 265 / 0.085);
+  --well-bottom: oklch(0.21 0.02 265 / 0.025);
+
+  /* D0 · The light on the canvas. Two stops of a single warm-neutral wash
+     anchored above the top of the page, so the background is LIT from
+     somewhere rather than painted one flat value edge to edge. Warm on
+     purpose: every surface token in this file is cooled toward 265, and a page
+     whose light is the same temperature as its shadows has no light in it.
+     The chroma is 0.012 — about a fifth of what it takes to name a colour —
+     because the moment a reader can say "the top is beige" this has stopped
+     being light and become a panel. */
+  --canvas-lit: oklch(0.79 0.012 70 / 0.5);
+  --canvas-lit-2: oklch(0.83 0.008 40 / 0.22);
+
+  /* B1 · The lip on a solid button. 1px of the light that is falling on it,
+     along the top edge only — the difference between a filled rectangle and a
+     key you could press. Under it, a shadow tinted in the button's OWN hue
+     rather than in neutral black: a saturated object casts a saturated shade,
+     and a grey shadow under a blue key is the tell that the blue was painted
+     on afterwards. */
+  --btn-lip: oklch(1 0 0 / 0.22);
+  --btn-brand-shadow:
+    inset 0 1px 0 var(--btn-lip),
+    0 1px 2px -1px oklch(0.38 0.15 250 / 0.45),
+    0 6px 14px -8px oklch(0.38 0.15 250 / 0.5);
+  --btn-brand-shadow-hover:
+    inset 0 1px 0 var(--btn-lip),
+    0 2px 5px -2px oklch(0.38 0.15 250 / 0.5),
+    0 12px 22px -10px oklch(0.38 0.15 250 / 0.55);
 }
 
 .dark {
-  /* Midnight — deep ink, lifted cards, electric blue accent */
-  --background: oklch(0.17 0.013 265);
-  --foreground: oklch(0.97 0.004 265);
-  --card: oklch(0.215 0.017 265);
-  --card-foreground: oklch(0.97 0.004 265);
-  --popover: oklch(0.2 0.017 265);
-  --popover-foreground: oklch(0.97 0.004 265);
+  /* Midnight — deep ink, lifted cards, electric blue accent.
+   *
+   * SURFACE LADDER. The canvas and the card used to sit 0.045 apart in
+   * lightness (0.17 vs 0.215) with 9%-opacity borders, so panels dissolved into
+   * the page — everything read as one flat black rectangle with text on it.
+   * Four rungs now, each a clear step, so a card looks like an object and a
+   * table header looks like part of that object:
+   *
+   *   canvas   0.145   the page behind everything
+   *   surface  0.205   cards, panels, the header bar
+   *   raised   0.245   inputs, table headers, chips — inside a card
+   *   overlay  0.275   popovers, dropdowns, sheets — above everything
+   */
+  --background: oklch(0.145 0.012 265);
+  --foreground: oklch(0.98 0.004 265);
+  --card: oklch(0.205 0.016 265);
+  --card-foreground: oklch(0.98 0.004 265);
+  --popover: oklch(0.275 0.019 265);
+  --popover-foreground: oklch(0.98 0.004 265);
   --primary: oklch(0.66 0.19 250);
   --primary-foreground: oklch(0.16 0.02 265);
-  --secondary: oklch(0.255 0.018 265);
-  --secondary-foreground: oklch(0.97 0.004 265);
-  --muted: oklch(0.255 0.016 265);
-  --muted-foreground: oklch(0.7 0.022 265);
-  --accent: oklch(0.28 0.02 265);
-  --accent-foreground: oklch(0.97 0.004 265);
+  --secondary: oklch(0.245 0.017 265);
+  --secondary-foreground: oklch(0.98 0.004 265);
+  --muted: oklch(0.245 0.016 265);
+  /* Was 0.7 — column headers, timestamps and helper text sat too close to the
+     card to scan a report quickly. */
+  --muted-foreground: oklch(0.75 0.022 265);
+  --accent: oklch(0.29 0.02 265);
+  --accent-foreground: oklch(0.98 0.004 265);
   --destructive: oklch(0.62 0.2 22);
-  --border: oklch(1 0 0 / 9%);
-  --input: oklch(1 0 0 / 13%);
+  /* A hairline you can actually see. 9% vanished against the new canvas. */
+  --border: oklch(1 0 0 / 14%);
+  --input: oklch(1 0 0 / 20%);
   --ring: oklch(0.66 0.19 250);
+
+  /* Rung 3 of the ladder, for surfaces nested INSIDE a card: table headers,
+     inputs, inline chips. Referenced as bg-raised / border-raised. */
+  --raised: oklch(0.245 0.017 265);
+  --raised-border: oklch(1 0 0 / 10%);
   --chart-1: oklch(0.66 0.19 250);
   --chart-2: oklch(0.72 0.14 200);
   --chart-3: oklch(0.78 0.13 165);
   --chart-4: oklch(0.7 0.16 300);
   --chart-5: oklch(0.78 0.14 90);
+  --chart-6: oklch(0.72 0.17 25);
+  --chart-7: oklch(0.72 0.15 330);
+
+  /* The share ramp, dark. Same hue, same largest-first order, but the walk
+     runs the other way: on ink the biggest share has to be the *brightest*
+     rung, because a dark slice on a dark card is a slice you can't see. The
+     last rung stops at 0.35 — still clear of the card at 0.205. */
+  --ramp-1: oklch(0.78 0.17 250);
+  --ramp-2: oklch(0.69 0.16 250);
+  --ramp-3: oklch(0.61 0.145 250);
+  --ramp-4: oklch(0.54 0.125 250);
+  --ramp-5: oklch(0.47 0.105 250);
+  --ramp-6: oklch(0.41 0.085 250);
+  --ramp-7: oklch(0.36 0.07 250);
 
   --brand: oklch(0.66 0.19 250);
   --brand-foreground: oklch(0.16 0.02 265);
 
-  --sidebar: oklch(0.135 0.012 265);
-  --sidebar-foreground: oklch(0.97 0.004 265);
-  --sidebar-muted: oklch(0.6 0.02 265);
+  /* Deeper than the canvas (0.145) so the rail reads as a distinct plane
+     rather than merging into the page, which is what happened once the canvas
+     darkened. */
+  --sidebar: oklch(0.115 0.011 265);
+  --sidebar-foreground: oklch(0.98 0.004 265);
+  /* Group headings and inactive items were 0.6 — too dim to scan six sections. */
+  --sidebar-muted: oklch(0.68 0.02 265);
   --sidebar-primary: oklch(0.66 0.19 250);
   --sidebar-primary-foreground: oklch(0.16 0.02 265);
-  --sidebar-accent: oklch(0.66 0.19 250 / 0.16);
-  --sidebar-accent-foreground: oklch(0.92 0.06 250);
-  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-accent: oklch(0.66 0.19 250 / 0.18);
+  --sidebar-accent-foreground: oklch(0.94 0.06 250);
+  --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: oklch(0.66 0.19 250);
 
   /* Floor table status — darker fills, brighter text for dark mode.
      Available is a gray clearly lighter than the floor canvas so empty tables
-     read as solid objects (the canvas uses --background ≈ 0.17). */
+     read as solid objects (the canvas uses --background ≈ 0.145). */
   --table-available-bg: oklch(0.27 0.01 265);
   --table-available-border: oklch(0.42 0.02 265);
   --table-seated-bg: oklch(0.33 0.08 255);
@@ -189,10 +426,62 @@
 
   /* Elevation + surfaces (Midnight) — lifted cards on deep ink */
   --surface-2: oklch(0.265 0.02 265);
-  --line: oklch(1 0 0 / 0.08);
-  --line-strong: oklch(1 0 0 / 0.16);
-  --elevation: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 14px 34px -20px oklch(0 0 0 / 0.75);
-  --elevation-sm: 0 1px 0 oklch(1 0 0 / 0.03) inset, 0 8px 20px -14px oklch(0 0 0 / 0.7);
+  --line: oklch(1 0 0 / 0.15);
+  --line-soft: oklch(1 0 0 / 0.07);
+  --line-strong: oklch(1 0 0 / 0.24);
+  /* The inset top hairline is the whole trick in dark mode: a 1px band of
+     white at 6% along a card's top edge reads as light landing on a raised
+     surface, which is the only cue an unlit dark UI has that a card sits above
+     the page rather than being a hole cut into it. It costs one shadow layer.
+     Under it, a tight directional drop — 34px of blur was fog. */
+  --elevation:
+    inset 0 1px 0 oklch(1 0 0 / 0.06),
+    0 1px 2px -1px oklch(0 0 0 / 0.55),
+    0 6px 14px -10px oklch(0 0 0 / 0.7);
+  --elevation-sm:
+    inset 0 1px 0 oklch(1 0 0 / 0.05),
+    0 1px 2px -1px oklch(0 0 0 / 0.5);
+  /* The half of --elevation that is about light rather than height. On ink a
+     card with no top highlight reads as a hole cut into the page rather than
+     as a surface, and that is true whether or not the card is floating — so
+     when the dashboard stopped giving every panel a drop shadow, this is what
+     every panel kept. */
+  --sheen: inset 0 1px 0 oklch(1 0 0 / 0.06);
+  /* The inset top hairline brightens too. On ink, "lifted" is almost entirely
+     a story about where the light lands, so a hover that didn't move the
+     highlight would be a hover that didn't move. */
+  --elevation-hover:
+    inset 0 1px 0 oklch(1 0 0 / 0.1),
+    0 2px 4px -2px oklch(0 0 0 / 0.6),
+    0 14px 28px -16px oklch(0 0 0 / 0.8);
+
+  /* MATERIAL, dark. Deliberately stronger than light across the board — see
+     D6. A dark surface carries gradient because it has room to be lit; a white
+     card is already at the top of its range and anything you add to it reads
+     as dirt rather than as light. */
+  --bloom: oklch(0.66 0.19 250 / 0.22);
+  --lit: oklch(0.66 0.19 250 / 0.8);
+  --grain: 0.03;
+  --well-top: oklch(0 0 0 / 0.28);
+  --well-bottom: oklch(0 0 0 / 0.08);
+  /* The canvas light inverts its job. On white it is a warm shadow falling
+     across the top of the page; on ink there is nothing to shade, so it
+     becomes an actual light — a lift in lightness, still warm, still under the
+     threshold where a reader could name the hue. */
+  --canvas-lit: oklch(0.62 0.02 70 / 0.16);
+  --canvas-lit-2: oklch(0.55 0.03 40 / 0.09);
+  --btn-lip: oklch(1 0 0 / 0.28);
+  /* On ink the coloured shade has to come almost entirely from the glow, not
+     from a dark drop — there is nothing under a dark card for a dark shadow to
+     land on. */
+  --btn-brand-shadow:
+    inset 0 1px 0 var(--btn-lip),
+    0 1px 2px -1px oklch(0 0 0 / 0.5),
+    0 8px 18px -10px oklch(0.66 0.19 250 / 0.55);
+  --btn-brand-shadow-hover:
+    inset 0 1px 0 var(--btn-lip),
+    0 2px 5px -2px oklch(0 0 0 / 0.55),
+    0 14px 26px -12px oklch(0.66 0.19 250 / 0.7);
 }
 
 @layer base {
@@ -226,4 +515,441 @@ button,
 a,
 [role="button"] {
   touch-action: manipulation;
+}
+
+@layer utilities {
+  /* ======================================================================
+     THE SERIF SCOPE
+     ======================================================================
+
+     Everything the signed-in operator sees is set in Times New Roman: /app,
+     /login, /onboarding, /hq, and the portals those routes open.
+
+     It is a class applied at those roots rather than a change to `html`
+     because the marketing site and the guest-facing screens — kiosk, the
+     customer-facing display, online ordering, booking — are a different
+     product talking to a different reader, and they keep the grotesque.
+     Opting IN also means a route added later inherits the guest face until
+     somebody decides otherwise, which is the safer direction to be wrong in.
+
+     The portals matter as much as the routes. A Dialog or a Sheet renders
+     into document.body, outside this subtree, so a modal would otherwise be
+     the one screen still speaking in the old voice. `u-serif` therefore goes
+     on their content as well — and because every consumer of those two
+     primitives lives under /app, that can't leak the serif onto a guest
+     screen in the other direction. */
+  .u-serif {
+    font-family: var(--font-serif);
+
+    /* THE SMALL END OF THE LADDER MOVES UP ONE STEP.
+       Times has a small x-height — measured against the grotesque it replaces,
+       44.7 vs 52.3 at the same 100px — so 12px of Times reads about as large
+       as 10px of Hanken did. That is under the floor where a table cell is
+       comfortable and well under it on the register and the KDS-adjacent
+       screens, which are read at arm's length rather than at a desk.
+       Matching the x-height outright would mean 1.17x everywhere and no
+       layout on this surface has that much room, so the whole small end
+       shifts by exactly one step instead: the two ladder tokens here, and the
+       arbitrary sizes in the components with them (9→10, 10→11, 11→12, 13→14,
+       15→16, 17→18). Times also sets about 7.5% narrower than the grotesque,
+       which pays back most of the width the bump costs.
+       text-base and up are deliberately untouched: past 16px x-height stops
+       being what gates legibility, and every display size on this surface is
+       a figure, which is not set in the serif at all. */
+    --text-xs: 0.8125rem; /* 12 → 13 */
+    --text-sm: 0.9375rem; /* 14 → 15 */
+
+    /* Serif body wants more leading at the same measure — the smaller
+       x-height puts more white inside the line and proportionally less
+       between them, and dense rows start to look like a block of grey.
+       Only the defaults move: anything that sets leading-* explicitly (the
+       KPI figures at leading-none, the tight list rows) keeps its own. */
+    --text-xs--line-height: 1.45;
+    --text-sm--line-height: 1.5;
+    --text-base--line-height: 1.6;
+
+    /* NEGATIVE TRACKING IS A SANS IDEA. -0.025em was drawn against Hanken's
+       even, closed shapes; on Times it pushes the serifs of adjacent letters
+       into each other and the word reads as crushed rather than as tight.
+       Neutralised here rather than deleted from 35 call sites, so
+       `tracking-tight` keeps meaning what it has always meant wherever the
+       grotesque still runs and simply stops applying on the serif. */
+    --tracking-tight: 0em;
+
+    /* The other direction, for the same reason. The uppercase micro-labels —
+       SALES TODAY, TIME, CHECK, the table column names — are the one place a
+       serif wants MORE air than a grotesque: caps have no descenders to hold
+       them apart and Times' are narrow with heavy bracketed serifs that start
+       to touch at 10 and 11px. */
+    --tracking-wide: 0.045em; /* was 0.025em */
+    --tracking-wider: 0.075em; /* was 0.05em  */
+    --tracking-widest: 0.12em; /* was 0.1em   */
+  }
+
+  /* ----------------------------------------------------------------------
+     THE ONE EXCEPTION: figures.
+
+     Times New Roman ships no tabular figure set, and no amount of
+     `font-variant-numeric` can conjure one. Measured in the browser at 40px:
+     `1111` sets 75.55px against `0000` at 80.00px — a 4.45px drift over four
+     digits — and asking for tabular-nums changes neither number. So a money
+     column in Times walks sideways as the day's totals climb through it, and
+     a live total twitches while you are reading it.
+
+     `tabular-nums` therefore carries the FAMILY as well as the feature inside
+     the serif scope. This codebase already uses that class, in ~390 places,
+     to mean precisely "this figure sits in a column or updates live" — the
+     currency amounts, check totals, counts, chart axis labels, KPI values,
+     the hero figure, the register totals. Hanging the face off it is what
+     makes the rule impossible to forget: a figure is set in the numeric face
+     because somebody marked it columnar, not because somebody remembered to
+     add a second class next to the first one. Numbers inside sentences —
+     "3 items at or below the reorder point" — are prose, carry no such mark,
+     and stay in the serif where they belong.
+
+     The face is Hanken Grotesk. It is already loaded by next/font for the
+     rest of the product, so this adds no request; it is a neutral grotesque
+     rather than a mono, so it sits beside the serif without announcing
+     itself; and it is natively tabular — measured, `1111` and `0000` both set
+     89.61px at 40px, with and without the feature flag.
+
+     `font-mono` still wins where it was asked for. A Finix transfer id or a
+     gift-card code is not a column of arithmetic; it was set in mono on
+     purpose and this has no business overriding that. */
+  .u-serif .tabular-nums:not(.font-mono),
+  .u-serif.tabular-nums:not(.font-mono) {
+    font-family: var(--font-numeric);
+  }
+
+  /* ----------------------------------------------------------------------
+     BUTTONS GET THE BOLD.
+
+     Times New Roman ships two weights: 400 and 500 both render as its Regular,
+     600 and 700 both as its Bold. Every Button carries `font-medium`, which
+     was a real 500 in the grotesque and is plain regular here — and a short
+     serif label at regular weight sitting on a saturated fill reads as a
+     caption somebody dropped onto a button rather than as the control's name.
+     "New sale" in white Times regular on brand blue was the clearest example:
+     the strokes are thin enough that the label goes soft against the fill.
+
+     So the one weight the serif does have gets spent here. This is scoped to
+     the serif rather than changed in buttonVariants because the guest-facing
+     booking screen is the other consumer of that primitive and its buttons are
+     still set in the grotesque, where 500 is a real weight worth keeping. */
+  .u-serif [data-slot="button"] {
+    font-weight: 600;
+  }
+
+  /* The one transition. Applied to anything that changes on hover or focus, so
+     every interactive surface on the page moves at the same speed. Colour and
+     shadow only — nothing here moves geometry, because a row that shifts under
+     the cursor is a row you can't click. */
+  .u-tx {
+    transition-property:
+      color, background-color, border-color, outline-color,
+      text-decoration-color, fill, stroke, box-shadow, opacity;
+    transition-duration: var(--motion-fast);
+    transition-timing-function: var(--motion-ease);
+  }
+
+  /* Keyboard focus, drawn in --ring outside the element. */
+  .u-focus:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Same ring, drawn inside. For rows that sit flush inside a panel with
+     overflow-hidden, where a positive offset is clipped away by the panel's
+     own corner radius and the focused row would look unfocused. */
+  .u-focus-inset:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+
+  /* The geometry counterpart to .u-tx. Kept separate on purpose: .u-tx is
+     allowed on anything, and this is only allowed on things whose movement
+     cannot cost you a click — a button, a card, a chevron INSIDE a row. Never
+     the row itself. */
+  .u-tx-move {
+    transition-property: transform, opacity, box-shadow;
+    transition-duration: var(--motion-fast);
+    transition-timing-function: var(--motion-ease);
+  }
+
+  /* A trailing glyph that leans toward where it is taking you. 2px, which is
+     under the threshold where it reads as the icon relocating and over the one
+     where nothing happened. */
+  .u-arrow {
+    transition: transform var(--motion-fast) var(--motion-ease);
+  }
+  /* :focus-visible as well as :hover, or a keyboard user gets a focus ring
+     around a row whose affordance never wakes up — the mouse would be
+     receiving a nudge that the keyboard is told nothing about. */
+  .group:hover .u-arrow,
+  .group:focus-visible .u-arrow {
+    transform: translateX(2px);
+  }
+
+  /* B2 · The pressed state, for anything with a surface of its own. 0.98 is
+     small enough to read as the button taking the force rather than as a
+     zoom, and it is on transform so it costs no layout. */
+  .u-press:active {
+    transform: scale(0.98);
+  }
+
+  /* C1 · Arrival. Cards fade and rise 8px into place, staggered by --in-delay
+     top-left to bottom-right. Once, when the node is created — a soft
+     navigation between Today and Yesterday reuses these elements, so the page
+     does not replay itself every time the scope changes.
+     `both` matters: the from-state applies during the delay, so a card that
+     has not started yet is invisible rather than briefly correct. */
+  .u-in {
+    animation: u-in var(--motion-enter) var(--motion-ease-out) both;
+    animation-delay: var(--in-delay, 0ms);
+  }
+
+  /* D1 · The bloom. Sized and positioned by the element it is put on; this
+     only decides that it has no edge. */
+  .u-bloom {
+    background: radial-gradient(closest-side, var(--bloom), transparent);
+  }
+
+  /* D3 · The gradient-lit top border. Brightest at the left, gone by two
+     thirds across — a hairline with a light source instead of a uniform rule.
+     Requires a positioned parent, which every Panel that uses it has. */
+  .u-lit::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(90deg, var(--lit), transparent 62%);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* D4 · Film grain over the whole canvas, from an inline feTurbulence — no
+     image file, no request, and it tiles at 160px so the pattern never
+     resolves into anything a reader could recognise as a pattern. It sits over
+     the cards as well as the page, which is the point: grain belongs to the
+     photograph, not to one object in it.
+     Position is deliberately NOT set here. It was `fixed`, which breaks the
+     moment an ancestor carries a transform — and one does: the admin shell
+     wraps every route in a framer-motion page transition that animates `y`,
+     which makes itself the containing block for any fixed descendant for the
+     length of the transition. The layer is placed by the component instead,
+     and this rule owns only the texture. */
+  .u-grain {
+    pointer-events: none;
+    opacity: var(--grain);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+    background-size: 160px 160px;
+  }
+
+  /* D0 · The lit canvas. An ellipse of warm light anchored above the top edge
+     and wider than the page, so what lands on screen is the middle of a
+     falloff rather than a circle somebody placed. `120% 620px` is the whole
+     trick: tall enough to reach past the KPI strip, wide enough that its sides
+     leave the viewport before they curve, so no reader ever sees an arc. */
+  .u-canvas {
+    pointer-events: none;
+    background:
+      radial-gradient(
+        120% 620px at 50% -140px,
+        var(--canvas-lit),
+        transparent 70%
+      ),
+      radial-gradient(
+        70% 380px at 88% -60px,
+        var(--canvas-lit-2),
+        transparent 72%
+      );
+  }
+
+  /* D2 · The well a bar stands in. An inset gradient rather than an inset
+     box-shadow because the track is an SVG <rect> — it takes a fill and
+     nothing else — so the same idea is spent as a two-stop linear gradient in
+     <defs>. This class exists for the DOM-side wells (the donut's unfilled
+     ring backing) that can use a real inset shadow. */
+  .u-well {
+    box-shadow:
+      inset 0 1px 2px var(--well-top),
+      inset 0 -1px 0 var(--well-bottom);
+  }
+
+  /* D6 · The hero figure, filled with a gradient instead of a flat ink.
+     Top-to-bottom, and the range is tiny — full foreground down to 82% of it.
+     At 48px that reads as the number having a top edge that catches the light;
+     at any smaller size it reads as a rendering fault, which is why nothing
+     else on the page is allowed to use it.
+     The fallback matters: `background-clip: text` with a transparent fill
+     paints NOTHING if the gradient fails to resolve, so `color` is set to the
+     real ink first and only overridden inside @supports. */
+  .u-hero-fill {
+    color: var(--foreground);
+  }
+  @supports (background-clip: text) or (-webkit-background-clip: text) {
+    .u-hero-fill {
+      background-image: linear-gradient(
+        180deg,
+        var(--foreground) 12%,
+        color-mix(in oklch, var(--foreground) 82%, transparent) 100%
+      );
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+  }
+
+  /* C2 · A line drawing itself. The path carries pathLength="1", so the dash
+     maths is in normalised units and this works without ever measuring the
+     geometry — which a server-rendered chart cannot do. */
+  .u-draw {
+    stroke-dasharray: 1;
+    animation: u-draw var(--motion-draw) var(--motion-ease-out) both;
+    animation-delay: var(--in-delay, 0ms);
+  }
+
+  /* C2 · A bar growing out of its track. fill-box + bottom origin is what
+     pins it to the baseline instead of the SVG's origin. */
+  .u-rise {
+    transform-box: fill-box;
+    transform-origin: bottom;
+    animation: u-rise var(--motion-enter) var(--motion-ease-out) both;
+    animation-delay: var(--in-delay, 0ms);
+  }
+
+  /* C2 · An arc sweeping in. --arc-len / --arc-gap / --arc-c come from the
+     component, which is the only place the slice's share is known. */
+  .u-sweep {
+    animation: u-sweep var(--motion-draw) var(--motion-ease-out) both;
+    animation-delay: var(--in-delay, 0ms);
+  }
+
+  .u-fade {
+    animation: u-fade var(--motion-draw) var(--motion-ease-out) both;
+    animation-delay: var(--in-delay, 0ms);
+  }
+
+  /* C5 · The attention rail announcing itself, ONCE, on arrival.
+     An earlier draft of this ran `infinite` on blocked rows, on the argument
+     that a blocked signal means somebody is standing at a terminal and is
+     allowed to keep asking. That argument is wrong about the medium. A
+     dashboard is a window an owner leaves open all afternoon, and a mark that
+     never stops moving in the corner of it is not urgency, it is a smoke
+     alarm with a flat battery — within ten minutes it is the thing you have
+     trained yourself not to look at, and it takes the rest of the page's
+     motion budget down with it. So it fires once, while the reader's eye is
+     already arriving, and then it is a red dot: which is a perfectly loud
+     thing to be, permanently, at no cost.
+     Two beats rather than one — a single fade reads as a render glitch, two
+     reads as deliberate — and opacity only, so the dot never drags the row's
+     baseline with it. */
+  .u-pulse {
+    animation: u-pulse 640ms ease-in-out 2 both;
+    animation-delay: var(--in-delay, 0ms);
+  }
+}
+
+/* The heavy material is desktop-only. On a 375px phone the canvas is barely
+   taller than the light falling on it — so the wash has no room to be a
+   falloff and becomes a visible band — and the grain is being asked to sit at
+   3% over a screen a reader is holding 30cm from their face in daylight,
+   where it is either invisible or dirt. Neither is worth the paint cost on
+   the class of device least able to pay it. The page keeps every edge,
+   shadow and hairline; it just isn't lit. */
+@media (max-width: 640px) {
+  .u-canvas {
+    display: none;
+  }
+  .u-grain {
+    opacity: calc(var(--grain) * 0.5);
+  }
+}
+
+@keyframes u-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes u-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes u-rise {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes u-sweep {
+  from {
+    stroke-dasharray: 0 var(--arc-c);
+  }
+  to {
+    stroke-dasharray: var(--arc-len) var(--arc-gap);
+  }
+}
+
+@keyframes u-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes u-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Someone who has asked their OS for less motion has asked for less motion.
+   Transitions collapse to instant rather than being removed, so :hover and
+   :focus-visible states still apply — the feedback survives, the movement
+   doesn't.
+   THE DELAY MATTERS AS MUCH AS THE DURATION. Every entrance on this page uses
+   animation-fill-mode: both, which means the from-state — opacity 0, a bar of
+   zero height, an undrawn line — holds for the whole of the delay. Collapse
+   the duration and leave a 320ms stagger in place and a reduced-motion reader
+   gets a third of a second of blank cards, which is worse than the animation
+   they asked not to see. Zeroing both is what makes "instantly finished" true
+   rather than "instantly started".
+   This is the ONE place reduced motion is wired, and it is deliberately the
+   only one. Every entrance, draw, sweep and hover on the admin surface is a
+   CSS animation or transition, so a single blanket rule catches all of them —
+   there is no JS-driven motion anywhere on this page for it to miss. That is
+   itself a design constraint rather than a happy accident: anything animated
+   from a rAF loop would need its own copy of this check, and a second copy is
+   a copy that eventually disagrees with the first. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
 }

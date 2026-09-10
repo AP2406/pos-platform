@@ -55,11 +55,34 @@ function businessRevenue(trip: TripData): number {
   return parseFloat(trip.price_total ?? "0");
 }
 
-export default async function DashboardPage() {
-  const { business } = await requireBusiness();
+// /app is two different products sharing a URL, and the split is by VERTICAL,
+// not by concern.
+//
+// Everything below this function is the original transportation dashboard —
+// trips, partners, cookies owed — from before the platform grew a point of
+// sale. Every other mode (restaurant, retail, service, mobile seller) gets
+// PosDashboard, which lives in pos-dashboard.tsx and shares none of this file's
+// data model. That is why the two files look like they were written by
+// different people: they were, three years apart, for different businesses.
+//
+// The early return is load-bearing. A restaurant must never execute the trips
+// queries below (there is no trips data and RLS would answer with nothing),
+// and the transportation tenant must never see a KDS. Keeping them in one file
+// under one `if` is not elegant, but merging them would mean teaching one
+// dashboard two vocabularies — and the module registry already decided that
+// verticals get separate screens.
+export default async function DashboardPage({
+  searchParams,
+}: {
+  // The POS dashboard's scope control lives in the URL, the same way the
+  // reports page's range presets do.
+  searchParams: Promise<{ day?: string }>;
+}) {
+  const { business, role } = await requireBusiness();
 
   if (business.industry !== "transportation") {
-    return <PosDashboard business={business} />;
+    const { day } = await searchParams;
+    return <PosDashboard business={business} role={role} day={day} />;
   }
 
   const vocab = getVocab(business.industry);
@@ -580,7 +603,7 @@ function SectionHeader({
 }) {
   return (
     <h2
-      className={`text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-3 ${
+      className={`text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold mb-3 ${
         noMargin ? "" : "mt-8"
       }`}
     >
@@ -610,7 +633,7 @@ function StatCard({
 }) {
   return (
     <div className="group bg-card border border-border rounded-lg p-5 transition-all duration-200 hover:border-foreground/15 hover:shadow-[0_2px_8px_rgb(0_0_0_/_0.04)]">
-      <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold">
+      <div className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">
         {label}
       </div>
       <div

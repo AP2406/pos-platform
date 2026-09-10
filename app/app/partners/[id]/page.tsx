@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { requireModule } from "@/lib/modules/access";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
@@ -29,7 +30,8 @@ export default async function PartnerDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await requireBusiness();
+  const { business } = await requireBusiness();
+  requireModule(business, "/app/partners");
   const supabase = await createClient();
 
   const [partnerResult, tripsResult] = await Promise.all([
@@ -206,7 +208,7 @@ function StatCard({
 }) {
   return (
     <div className="bg-card border border-border rounded-lg p-5 transition-all duration-200 hover:border-foreground/15 hover:shadow-[0_2px_8px_rgb(0_0_0_/_0.04)]">
-      <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold">
+      <div className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">
         {label}
       </div>
       <div

@@ -8,6 +8,7 @@ import { plateCostByItem } from "../accounting/cost";
 import { isAiConfigured } from "@/lib/services/ai";
 import { WhatIfModeler } from "./whatif-modeler";
 import { AskPanel } from "./ask-panel";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export default async function InsightsPage({
   searchParams: Promise<{ range?: string; mode?: string }>;
 }) {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "access_reports");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const sp = await searchParams;
@@ -312,7 +313,7 @@ export default async function InsightsPage({
                   </div>
                 ))}
               </div>
-              <p className="text-[11px] text-muted-foreground mt-2">Use this to plan staffing — pair with Labor → daypart.</p>
+              <p className="text-[12px] text-muted-foreground mt-2">Use this to plan staffing — pair with Labor → daypart.</p>
             </div>
           </div>
         </div>
@@ -396,7 +397,7 @@ export default async function InsightsPage({
                   <tr key={r.name} className="border-b border-border last:border-0">
                     <td className="px-3 py-2 font-medium truncate max-w-[260px]">
                       {r.name}
-                      {mode === "margin" && uncosted && <span className="ml-1.5 text-[10px] text-amber-600" title="No recipe — margin may be overstated">no recipe</span>}
+                      {mode === "margin" && uncosted && <span className="ml-1.5 text-[11px] text-amber-600" title="No recipe — margin may be overstated">no recipe</span>}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{r.units}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{money(r.revenue)}</td>
@@ -410,7 +411,7 @@ export default async function InsightsPage({
           </table>
         )}
         {anyUncosted && (
-          <div className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">
+          <div className="px-3 py-2 text-[12px] text-muted-foreground border-t border-border">
             Items marked &ldquo;no recipe&rdquo; count as $0 food cost, so their margin equals revenue. <Link href="/app/recipes" className="underline hover:text-foreground">Add recipes</Link> for accurate margins.
           </div>
         )}

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { requireModule } from "@/lib/modules/access";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
@@ -25,7 +26,8 @@ export default async function DriverDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await requireBusiness();
+  const { business } = await requireBusiness();
+  requireModule(business, "/app/drivers");
   const supabase = await createClient();
 
   const [driverResult, tripsResult] = await Promise.all([
@@ -73,7 +75,7 @@ export default async function DriverDetailPage({
             <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
               {driver.name}
               {driver.status === "inactive" && (
-                <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
+                <span className="text-[11px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
                   Inactive
                 </span>
               )}
@@ -153,7 +155,7 @@ export default async function DriverDetailPage({
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-card border border-border rounded-lg p-5">
-      <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold">
+      <div className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">
         {label}
       </div>
       <div className="text-2xl font-semibold mt-2 tabular-nums">{value}</div>

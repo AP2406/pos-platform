@@ -6,6 +6,7 @@ import { hasFloorService } from "@/lib/modules/modes";
 import { listTimesheet } from "../clock/time-actions";
 import { TimesheetEditor } from "./timesheet-editor";
 import { parseOvertime, weekKey, splitOtHours } from "@/lib/services/overtime";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export default async function LaborPage({
   searchParams: Promise<{ range?: string }>;
 }) {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "access_reports");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const sp = await searchParams;
@@ -274,7 +275,7 @@ export default async function LaborPage({
                       <tr key={d.key} className="border-b border-border last:border-0">
                         <td className="px-3 py-2 font-medium">
                           {d.label}
-                          <span className="block text-[11px] text-muted-foreground font-normal">{d.note}</span>
+                          <span className="block text-[12px] text-muted-foreground font-normal">{d.note}</span>
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{money(d.sales)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{d.hours > 0 ? d.hours.toFixed(1) : "—"}</td>
@@ -307,7 +308,7 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
     <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className={"text-xl font-semibold tabular-nums mt-0.5 " + (tone === "bad" ? "text-red-600" : "")}>{value}</div>
-      {hint && <div className="text-[11px] text-muted-foreground mt-0.5">{hint}</div>}
+      {hint && <div className="text-[12px] text-muted-foreground mt-0.5">{hint}</div>}
     </div>
   );
 }

@@ -30,6 +30,14 @@ export type ModuleDef = {
   staticLabel?: string;
   vocabKey?: keyof Vocab;
   icon: string;
+  /**
+   * Catalogued, but the route doesn't exist yet. No preset lists these, so
+   * today they're inert — except that a business's stored config JSONB *can*
+   * name them (validateConfig accepts any key in this file), which would have
+   * put a link to a 404 in that tenant's sidebar. enabledModules() skips them
+   * until the pages land; drop the flag when they do.
+   */
+  unbuilt?: boolean;
 };
 
 export const MODULES: Record<ModuleKey, ModuleDef> = {
@@ -40,10 +48,13 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
   drivers: { key: "drivers", href: "/app/drivers", vocabKey: "resource_plural", icon: "badge" },
   vehicles: { key: "vehicles", href: "/app/vehicles", vocabKey: "asset_plural", icon: "car" },
   profit: { key: "profit", href: "/app/profit", staticLabel: "Profit", icon: "chart" },
-  leads: { key: "leads", href: "/app/leads", staticLabel: "Leads", icon: "inbox" },
-  calendar: { key: "calendar", href: "/app/calendar", staticLabel: "Calendar", icon: "calendar" },
-  invoices: { key: "invoices", href: "/app/invoices", staticLabel: "Invoices", icon: "receipt" },
-  proposals: { key: "proposals", href: "/app/proposals", staticLabel: "Proposals", icon: "doc" },
+  // Sketched for the service verticals, never built — there is no app/app/leads,
+  // /calendar, /invoices or /proposals. Kept in the catalog so an existing
+  // config that names one stays valid, but flagged so nav won't link to it.
+  leads: { key: "leads", href: "/app/leads", staticLabel: "Leads", icon: "inbox", unbuilt: true },
+  calendar: { key: "calendar", href: "/app/calendar", staticLabel: "Calendar", icon: "calendar", unbuilt: true },
+  invoices: { key: "invoices", href: "/app/invoices", staticLabel: "Invoices", icon: "receipt", unbuilt: true },
+  proposals: { key: "proposals", href: "/app/proposals", staticLabel: "Proposals", icon: "doc", unbuilt: true },
   pos: { key: "pos", href: "/app/pos", staticLabel: "POS", icon: "cash" },
   // Orders = the fulfillment hub (/app/orders, channel-segmented). Settled-payment
   // history lives at /app/pos/sales, linked from the hub header.

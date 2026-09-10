@@ -46,7 +46,7 @@ export function ChecklistsClient({ tasksBySegment, canManage }: { tasksBySegment
       <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-3 mb-5 flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground">Signing off as:</span>
         <Input value={signerPin} onChange={(e) => setSignerPin(e.target.value.replace(/\D/g, "").slice(0, 6))} type="password" inputMode="numeric" placeholder="your PIN (optional)" className="h-8 w-40" />
-        <span className="text-[11px] text-muted-foreground">Enter your PIN once, then check off your tasks to sign them.</span>
+        <span className="text-[12px] text-muted-foreground">Enter your PIN once, then check off your tasks to sign them.</span>
       </div>
 
       <div className="space-y-5">
@@ -58,7 +58,7 @@ export function ChecklistsClient({ tasksBySegment, canManage }: { tasksBySegment
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-sm font-semibold">{seg.label} <span className="text-xs font-normal text-muted-foreground">{tasks.length > 0 ? `${doneN}/${tasks.length}` : ""}</span></h2>
                 {canManage && (
-                  <button onClick={() => setEditSeg(editSeg === seg.key ? null : seg.key)} className="text-[11px] underline text-muted-foreground hover:text-foreground">
+                  <button onClick={() => setEditSeg(editSeg === seg.key ? null : seg.key)} className="text-[12px] underline text-muted-foreground hover:text-foreground">
                     {editSeg === seg.key ? "done" : "edit"}
                   </button>
                 )}
@@ -72,14 +72,14 @@ export function ChecklistsClient({ tasksBySegment, canManage }: { tasksBySegment
                     <div className="flex-1 min-w-0">
                       <div className={"text-sm " + (t.done ? "line-through text-muted-foreground" : "")}>{t.label}</div>
                       {(t.assignee || (t.done && (t.byName || t.at))) && (
-                        <div className="text-[11px] text-muted-foreground">
+                        <div className="text-[12px] text-muted-foreground">
                           {t.assignee && <span>{t.assignee}</span>}
                           {t.done && (t.byName || t.at) && <span>{t.assignee ? " · " : ""}✓ {t.byName ?? ""}{t.at ? " " + fmt(t.at) : ""}</span>}
                         </div>
                       )}
                     </div>
                     {canManage && editSeg === seg.key && (
-                      <button onClick={() => { if (confirm("Remove this task?")) start(async () => { await deleteTemplate(t.id); }); }} disabled={pending} className="text-[11px] text-red-600 underline shrink-0">remove</button>
+                      <button onClick={() => { if (confirm("Remove this task?")) start(async () => { await deleteTemplate(t.id); }); }} disabled={pending} className="text-[12px] text-red-600 underline shrink-0">remove</button>
                     )}
                   </div>
                 ))}

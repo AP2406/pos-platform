@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { canAccess } from "@/lib/services/route-access";
 import { hasFloorService } from "@/lib/modules/modes";
 import { createClient } from "@/lib/supabase/server";
 import { qrSvg } from "@/lib/qrcodegen";
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
 // CDN. Read-only over floor_elements; no money-path coupling.
 export default async function TableQrCodesPage() {
   const { business, role } = await requireBusiness();
-  if (!hasFloorService(business) || (role !== "owner" && role !== "manager")) {
+  if (!hasFloorService(business) || !canAccess(role, "manage_settings")) {
     notFound();
   }
 

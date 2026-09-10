@@ -17,7 +17,13 @@ export type IndustryType =
   | "service"
   | "mobile_seller";
 
-export type MemberRole = "owner" | "manager" | "staff" | "trainee";
+export type MemberRole =
+  | "owner"
+  | "manager"
+  | "shift_lead"
+  | "bookkeeper"
+  | "staff"
+  | "trainee";
 
 export type BusinessContext = {
   role: MemberRole;

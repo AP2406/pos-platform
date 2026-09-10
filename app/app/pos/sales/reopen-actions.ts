@@ -3,7 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { isOrderPeriodLocked } from "@/lib/services/period-lock";
-import { actorCan, approverByPin } from "@/lib/services/permissions-server";
+import { approverByPin } from "@/lib/services/permissions-server";
+import { posAuthorize } from "@/lib/services/pos-action-guard";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { readActiveStaffId, ACTIVE_STAFF_COOKIE } from "@/lib/services/active-staff-cookie";
@@ -32,10 +33,17 @@ async function getActiveStaffRow(supabase: Awaited<ReturnType<typeof createClien
 async function approve(
   supabase: Awaited<ReturnType<typeof createClient>>,
   businessId: string,
+  memberRole: string,
   approverPin: string | undefined
 ): Promise<{ active: { id: string; name: string; role: string } | null; approver: { id: string; name: string } | null } | { needsApproval: true } | { error: string }> {
+  // Previously `if (active && !actorCan(...))`, which skipped the check when no
+  // cashier was signed in. Both callers happen to gate on owner/manager first,
+  // so this was not reachable — but it will be once those checks move to the
+  // matrix, so resolve the actor properly rather than leaving the shape behind.
+  const auth = await posAuthorize(supabase, businessId, memberRole, "reopen_closed_check");
+  if (!auth.ok) return { error: auth.error };
   const active = await getActiveStaffRow(supabase, businessId);
-  if (active && !(await actorCan(supabase, businessId, active.id, "reopen_closed_check"))) {
+  if (auth.needsApproval) {
     if (!approverPin) return { needsApproval: true };
     const approver = await approverByPin(supabase, businessId, approverPin, "reopen_closed_check");
     if (!approver) return { error: "That PIN can't approve this." };
@@ -78,7 +86,7 @@ export async function reopenOrder(input: {
   if (role !== "owner" && role !== "manager") return { error: "Only an owner or manager can reopen a sale." };
   const supabase = await createClient();
 
-  const gate = await approve(supabase, business.id, input.approver_pin);
+  const gate = await approve(supabase, business.id, role, input.approver_pin);
   if ("needsApproval" in gate) return { needs_approval: true };
   if ("error" in gate) {
     // log the failed attempt
@@ -138,7 +146,7 @@ export async function addOrderAdjustment(input: {
   if (role !== "owner" && role !== "manager") return { error: "Only an owner or manager can adjust a sale." };
   const supabase = await createClient();
 
-  const gate = await approve(supabase, business.id, input.approver_pin);
+  const gate = await approve(supabase, business.id, role, input.approver_pin);
   if ("needsApproval" in gate) return { needs_approval: true };
   if ("error" in gate) return gate;
 

@@ -140,7 +140,7 @@ export function CustomerTags({
             <>
               {availableTags.length > 0 && (
                 <div>
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
                     Existing tags
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -181,7 +181,7 @@ export function CustomerTags({
           ) : (
             <div className="space-y-2">
               <div>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
                   Tag name
                 </label>
                 <input
@@ -195,7 +195,7 @@ export function CustomerTags({
                 />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
                   Color
                 </label>
                 <div className="flex flex-wrap gap-1.5 mt-1">

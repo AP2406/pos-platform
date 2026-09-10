@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { canAccess } from "@/lib/services/route-access";
 import { reasonLabelForAction } from "../pos/reason-codes";
 
 type Event = {
@@ -45,7 +46,7 @@ export default async function AuditPage({
 }) {
   const { business, role } = await requireBusiness();
 
-  if (role !== "owner" && role !== "manager") {
+  if (!canAccess(role, "manage_settings")) {
     return (
       <div>
         <div className="mb-6">
@@ -53,7 +54,8 @@ export default async function AuditPage({
         </div>
         <div className="bg-card border border-border rounded-lg p-6">
           <p className="text-sm text-muted-foreground">
-            Only owners and managers can view the activity log.
+            Your role can&rsquo;t view the activity log. Ask an owner or manager
+            for access.
           </p>
         </div>
       </div>

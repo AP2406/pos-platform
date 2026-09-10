@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { ChevronLeft } from "lucide-react";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ function classify(visits: number, recencyDays: number): Seg {
 
 export default async function CustomerInsightsPage() {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "access_reports");
   if (business.industry === "transportation") redirect("/app/customers");
 
   const supabase = await createClient();
@@ -147,7 +148,7 @@ export default async function CustomerInsightsPage() {
                     <tr key={s} className="border-b border-border last:border-0">
                       <td className="px-3 py-2">
                         <span className={"font-medium " + m.cls}>{m.label}</span>
-                        <span className="block text-[11px] text-muted-foreground">{m.blurb}</span>
+                        <span className="block text-[12px] text-muted-foreground">{m.blurb}</span>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">{a.n}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{Math.round((a.n / total) * 100)}%</td>
@@ -179,11 +180,11 @@ export default async function CustomerInsightsPage() {
                     <tr key={e.id} className="border-b border-border last:border-0">
                       <td className="px-3 py-2">
                         <Link href={"/app/customers/" + e.id} className="font-medium hover:underline">{e.name}</Link>
-                        {!e.consent && <span className="ml-2 text-[10px] text-muted-foreground" title="Not opted in to email">no email consent</span>}
+                        {!e.consent && <span className="ml-2 text-[11px] text-muted-foreground" title="Not opted in to email">no email consent</span>}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">{e.visits}</td>
                       <td className="px-3 py-2 text-right tabular-nums font-medium">{money(e.spend)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtDate(e.lastMs)}<span className="block text-[11px]">{e.recencyDays}d ago</span></td>
+                      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtDate(e.lastMs)}<span className="block text-[12px]">{e.recencyDays}d ago</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -201,7 +202,7 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
     <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className={"text-lg font-semibold tabular-nums mt-0.5 " + (tone === "warn" ? "text-amber-600" : "")}>{value}</div>
-      {hint && <div className="text-[11px] text-muted-foreground mt-0.5">{hint}</div>}
+      {hint && <div className="text-[12px] text-muted-foreground mt-0.5">{hint}</div>}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { hasFloorService } from "@/lib/modules/modes";
 import { ChevronLeft } from "lucide-react";
 import { consolidatedBooks } from "./actions";
 import { IntercompanyForm } from "./intercompany-form";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ function money(n: number, currency: string): string {
 
 export default async function ConsolidatedPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "access_reports");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const sp = await searchParams;

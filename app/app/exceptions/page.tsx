@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
 import { parseThresholds } from "@/lib/services/exception-thresholds";
 import { weekKey } from "@/lib/services/overtime";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export default async function ExceptionsPage({
   searchParams: Promise<{ range?: string }>;
 }) {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "void");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const sp = await searchParams;
@@ -267,7 +268,7 @@ export default async function ExceptionsPage({
                         ) : (
                           <>
                             {money(e.amt)}
-                            <span className="block text-[11px] text-muted-foreground">
+                            <span className="block text-[12px] text-muted-foreground">
                               {e.n}× · {pct(rt)}
                             </span>
                           </>
@@ -283,7 +284,7 @@ export default async function ExceptionsPage({
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {money(r.sales)}
-                        <span className="block text-[11px] text-muted-foreground">{r.orders} sale{r.orders === 1 ? "" : "s"}</span>
+                        <span className="block text-[12px] text-muted-foreground">{r.orders} sale{r.orders === 1 ? "" : "s"}</span>
                       </td>
                       {cell(r.void, TH.voidRate)}
                       {cell(r.comp, TH.compRate)}
@@ -298,7 +299,7 @@ export default async function ExceptionsPage({
               </tbody>
             </table>
           </div>
-          <div className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">
+          <div className="px-3 py-2 text-[12px] text-muted-foreground border-t border-border">
             Flagged when voids/comps &gt; {pct(TH.voidRate)} or discounts/refunds &gt; {pct(TH.discountRate)} of the employee&apos;s sales.
           </div>
         </div>
@@ -324,9 +325,9 @@ export default async function ExceptionsPage({
                   {trendWeeks.map((w) => (
                     <tr key={w.key} className="border-b border-border last:border-0">
                       <td className="px-3 py-2 font-medium">{weekLabel(w.key)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{w.compN ? <>{money(w.comp)}<span className="block text-[11px] text-muted-foreground">{w.compN}×</span></> : <span className="text-muted-foreground">—</span>}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{w.discN ? <>{money(w.discount)}<span className="block text-[11px] text-muted-foreground">{w.discN}×</span></> : <span className="text-muted-foreground">—</span>}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{w.voidN ? <>{money(w.void)}<span className="block text-[11px] text-muted-foreground">{w.voidN}×</span></> : <span className="text-muted-foreground">—</span>}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{w.compN ? <>{money(w.comp)}<span className="block text-[12px] text-muted-foreground">{w.compN}×</span></> : <span className="text-muted-foreground">—</span>}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{w.discN ? <>{money(w.discount)}<span className="block text-[12px] text-muted-foreground">{w.discN}×</span></> : <span className="text-muted-foreground">—</span>}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{w.voidN ? <>{money(w.void)}<span className="block text-[12px] text-muted-foreground">{w.voidN}×</span></> : <span className="text-muted-foreground">—</span>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -340,7 +341,7 @@ export default async function ExceptionsPage({
                 {reasonRows.map((r) => (
                   <div key={r.code} className="flex items-center justify-between text-sm">
                     <span className="truncate">{r.code === "—" ? <span className="text-muted-foreground italic">no reason given</span> : r.code}</span>
-                    <span className="tabular-nums shrink-0 ml-3">{money(r.amt)} <span className="text-[11px] text-muted-foreground">· {r.n}×</span></span>
+                    <span className="tabular-nums shrink-0 ml-3">{money(r.amt)} <span className="text-[12px] text-muted-foreground">· {r.n}×</span></span>
                   </div>
                 ))}
               </div>

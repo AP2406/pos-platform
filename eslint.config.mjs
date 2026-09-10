@@ -24,6 +24,27 @@ const eslintConfig = defineConfig([
       "react-hooks/purity": "warn",
       // Typing strictness at data/SDK boundaries — not a launch-correctness issue.
       "@typescript-eslint/no-explicit-any": "warn",
+
+      // A Supabase query that fails returns { data: null, error } — it does not
+      // throw. Destructuring only `data` therefore turns a broken query into a
+      // silent empty screen, which is how /app/orders rendered zero orders for
+      // a table holding hundreds (it selected a column that didn't exist).
+      //
+      // Warn, not error: ~400 existing call sites predate this and most are
+      // harmless secondary lookups. The point is that NEW ones are visible in
+      // review. Take the error and either check it, or pass the whole result to
+      // must() / soft() / widest() from lib/supabase/query.ts.
+      "no-restricted-syntax": [
+        "warn",
+        {
+          selector:
+            "VariableDeclarator[init.type='AwaitExpression'] > ObjectPattern:matches(" +
+            ":has(Property[key.name='data'])" +
+            "):not(:has(Property[key.name='error']))",
+          message:
+            "Supabase errors don't throw — destructuring only `data` hides a failed query as an empty result. Destructure `error` too, or wrap the call in must()/soft() from @/lib/supabase/query.",
+        },
+      ],
     },
   },
   // Override default ignores of eslint-config-next.

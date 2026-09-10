@@ -32,7 +32,17 @@ export type FloorElement = {
   section_id: string | null;
 };
 
-export type FloorPlan = { id: string; name: string; sort_order: number };
+export type FloorBackground = { type: "color"; value: string } | { type: "image"; value: string } | null;
+export type FloorPlan = { id: string; name: string; sort_order: number; background: FloorBackground };
+
+function parseBackground(raw: unknown): FloorBackground {
+  if (!raw || typeof raw !== "object") return null;
+  const b = raw as { type?: unknown; value?: unknown };
+  if ((b.type === "color" || b.type === "image") && typeof b.value === "string") {
+    return { type: b.type, value: b.value };
+  }
+  return null;
+}
 
 type FloorGate =
   | { ok: false; error: string }
@@ -57,7 +67,7 @@ export async function listFloorPlans(): Promise<FloorPlan[]> {
 
   const { data } = await supabase
     .from("floor_plans")
-    .select("id, name, sort_order")
+    .select("id, name, sort_order, background")
     .eq("business_id", business.id)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
@@ -67,7 +77,7 @@ export async function listFloorPlans(): Promise<FloorPlan[]> {
     const { data: created } = await supabase
       .from("floor_plans")
       .insert({ business_id: business.id, name: "Main floor", sort_order: 0 })
-      .select("id, name, sort_order")
+      .select("id, name, sort_order, background")
       .single();
     if (created) plans = [created];
   }
@@ -75,6 +85,7 @@ export async function listFloorPlans(): Promise<FloorPlan[]> {
     id: p.id as string,
     name: p.name as string,
     sort_order: Number(p.sort_order) || 0,
+    background: parseBackground((p as { background?: unknown }).background),
   }));
 }
 
@@ -97,7 +108,7 @@ export async function createFloorPlan(
   const { data, error } = await supabase
     .from("floor_plans")
     .insert({ business_id: gate.business.id, name: parsed.data, sort_order: count ?? 0 })
-    .select("id, name, sort_order")
+    .select("id, name, sort_order, background")
     .single();
   if (error || !data) {
     console.error("createFloorPlan:", error);
@@ -105,7 +116,37 @@ export async function createFloorPlan(
   }
   revalidatePath("/app/settings");
   revalidatePath("/app/pos");
-  return { ok: true, plan: { id: data.id as string, name: data.name as string, sort_order: Number(data.sort_order) || 0 } };
+  return { ok: true, plan: { id: data.id as string, name: data.name as string, sort_order: Number(data.sort_order) || 0, background: parseBackground((data as { background?: unknown }).background) } };
+}
+
+const bgSchema = z.union([
+  z.object({ type: z.literal("color"), value: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Invalid color.") }),
+  z.object({ type: z.literal("image"), value: z.string().url().max(1000) }),
+  z.null(),
+]);
+
+// Set (or clear, with null) the POS background for a floor plan. Owner/manager
+// only; the image itself is uploaded to Storage separately (client), and its
+// public URL is passed here.
+export async function setFloorBackground(planId: string, background: FloorBackground): Promise<{ ok: true } | { error: string }> {
+  const gate = await requireFloorManager();
+  if (!gate.ok) return { error: gate.error };
+  if (!planId) return { error: "Missing floor." };
+  const parsed = bgSchema.safeParse(background);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid background." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("floor_plans")
+    .update({ background: parsed.data })
+    .eq("id", planId)
+    .eq("business_id", gate.business.id);
+  if (error) {
+    console.error("setFloorBackground:", error);
+    return { error: "Could not save the background." };
+  }
+  revalidatePath("/app/settings");
+  revalidatePath("/app/pos");
+  return { ok: true };
 }
 
 export async function renameFloorPlan(

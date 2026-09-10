@@ -10,11 +10,14 @@ import {
   createFloorPlan,
   renameFloorPlan,
   deleteFloorPlan,
+  setFloorBackground,
   type FloorElement,
   type FloorPlan,
+  type FloorBackground,
   type ElementKind,
 } from "../floor/floor-actions";
 import { setFloorChairMode } from "./floor-chair-actions";
+import { createClient } from "@/lib/supabase/client";
 import { chairPositions, CHAIR_SIZE } from "../pos/floor-style";
 
 const GRID = 20;
@@ -87,10 +90,12 @@ export function FloorCard({
   initialPlans,
   initialElements,
   initialChairMode,
+  businessId,
 }: {
   initialPlans: FloorPlan[];
   initialElements: FloorElement[];
   initialChairMode: "follow" | "editable";
+  businessId: string;
 }) {
   const toEl = (e: FloorElement): El => ({
     id: e.id, kind: e.kind, label: e.label, x: e.x, y: e.y, w: e.w, h: e.h,
@@ -106,6 +111,39 @@ export function FloorCard({
   const [saving, startSave] = useTransition();
   const [busy, startBusy] = useTransition();
   const [chairMode, setChairMode] = useState<"follow" | "editable">(initialChairMode);
+
+  // Per-plan POS background.
+  const [bgByPlan, setBgByPlan] = useState<Record<string, FloorBackground>>(() =>
+    Object.fromEntries(initialPlans.map((p) => [p.id, p.background]))
+  );
+  const [bgBusy, setBgBusy] = useState(false);
+
+  async function applyBackground(bg: FloorBackground) {
+    if (!activePlan) return;
+    setBgByPlan((m) => ({ ...m, [activePlan]: bg }));
+    setError(null);
+    const res = await setFloorBackground(activePlan, bg);
+    if ("error" in res) setError(res.error);
+  }
+
+  async function onUploadBg(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !activePlan) return;
+    setBgBusy(true);
+    setError(null);
+    try {
+      const supabase = createClient();
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const path = businessId + "/" + activePlan + "." + ext;
+      const { error: upErr } = await supabase.storage.from("floor-backgrounds").upload(path, file, { upsert: true, contentType: file.type || "image/jpeg" });
+      if (upErr) { setError("Upload failed: " + upErr.message); return; }
+      const { data } = supabase.storage.from("floor-backgrounds").getPublicUrl(path);
+      await applyBackground({ type: "image", value: data.publicUrl + "?v=" + Date.now() });
+    } finally {
+      setBgBusy(false);
+    }
+  }
 
   const [newPlanOpen, setNewPlanOpen] = useState(false);
   const [planName, setPlanName] = useState("");
@@ -364,6 +402,42 @@ export function FloorCard({
         </div>
       </div>
 
+      {/* Per-floor POS background */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <span className="text-xs text-muted-foreground mr-1">Background</span>
+        {([
+          { label: "Dark", bg: null },
+          { label: "Slate", bg: { type: "color", value: "#131722" } },
+          { label: "Charcoal", bg: { type: "color", value: "#1A1F2E" } },
+          { label: "Warm", bg: { type: "color", value: "#2A2620" } },
+        ] as { label: string; bg: FloorBackground }[]).map((p) => {
+          const cur = bgByPlan[activePlan] ?? null;
+          const active = p.bg === null ? cur === null : cur?.type === "color" && cur.value === p.bg.value;
+          return (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => applyBackground(p.bg)}
+              disabled={bgBusy}
+              className={"rounded-md px-2.5 py-1 border text-xs flex items-center gap-1.5 " + (active ? "border-foreground bg-accent" : "border-border text-muted-foreground hover:bg-accent/50")}
+            >
+              <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: p.bg?.type === "color" ? p.bg.value : "#0B0E14" }} />
+              {p.label}
+            </button>
+          );
+        })}
+        {["Wood", "Marble", "Concrete"].map((name) => (
+          <button key={name} type="button" disabled title="Preset image — coming soon" className="rounded-md px-2.5 py-1 border border-dashed border-border text-xs text-muted-foreground opacity-50">
+            {name}
+          </button>
+        ))}
+        <label className="rounded-md px-2.5 py-1 border border-border text-xs text-muted-foreground hover:bg-accent/50 cursor-pointer">
+          {bgBusy ? "Uploading…" : "Upload image"}
+          <input type="file" accept="image/*" className="hidden" onChange={onUploadBg} disabled={bgBusy} />
+        </label>
+        {bgByPlan[activePlan]?.type === "image" && <span className="text-xs text-emerald-600">Custom image set</span>}
+      </div>
+
       {newPlanOpen && (
         <div className="flex items-end gap-2 mb-3">
           <div className="space-y-1">
@@ -442,7 +516,7 @@ export function FloorCard({
               <div
                 key={el.id}
                 onPointerDown={interactive ? (e) => onElementPointerDown(e, el, "move") : undefined}
-                className={"absolute flex items-center justify-center text-[10px] font-medium select-none overflow-hidden " + (interactive ? "cursor-move " : "pointer-events-none ") + classesFor(el.kind, isSel)}
+                className={"absolute flex items-center justify-center text-[11px] font-medium select-none overflow-hidden " + (interactive ? "cursor-move " : "pointer-events-none ") + classesFor(el.kind, isSel)}
                 style={{
                   left: el.x, top: el.y, width: el.w, height: el.h,
                   borderRadius: el.shape === "round" ? 9999 : el.kind === "wall" ? 2 : el.kind === "seat" ? 6 : 10,

@@ -58,6 +58,13 @@ export function DeviceProfilesCard({ initial, canManage }: { initial: DeviceProf
                   <input type="checkbox" checked={p.default_to_seat} disabled={!canManage || pending} onChange={(e) => patch(p.id, { default_to_seat: e.target.checked })} className="h-4 w-4" />
                   Start new items on Seat 1 (table mode)
                 </label>
+                <label className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Opens (native)</span>
+                  <select value={p.home ?? "pos"} disabled={!canManage || pending} onChange={(e) => patch(p.id, { home: e.target.value as DeviceProfile["home"] })} className="h-8 rounded-md border border-border bg-transparent px-2 text-sm">
+                    <option value="pos">POS</option>
+                    <option value="kds">Kitchen Display</option>
+                  </select>
+                </label>
               </div>
             </div>
           ))}

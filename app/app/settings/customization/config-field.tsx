@@ -37,8 +37,8 @@ function ScopeRow({ def, label, current, onSave, onReset, pending }: {
         <Input value={val} onChange={(e) => setVal(e.target.value)} inputMode={def.type === "number" ? "decimal" : undefined} placeholder="inherited" className="h-8 w-40" />
       )}
       <Button variant="outline" className="h-8" disabled={pending || val === ""} onClick={() => onSave(def.type === "number" ? Number(val) : val)}>Set</Button>
-      {overridden && <button onClick={onReset} disabled={pending} className="text-[11px] underline text-muted-foreground">reset</button>}
-      {overridden && <span className="text-[11px] text-emerald-600">overridden</span>}
+      {overridden && <button onClick={onReset} disabled={pending} className="text-[12px] underline text-muted-foreground">reset</button>}
+      {overridden && <span className="text-[12px] text-emerald-600">overridden</span>}
     </div>
   );
 }
@@ -56,7 +56,7 @@ export function ConfigField({ def, overview, canManage, orgId, locationId }: { d
     <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4">
       <div className="flex items-baseline justify-between gap-3 mb-1">
         <div className="font-medium text-sm">{def.label}</div>
-        <div className="text-[11px] text-muted-foreground">{overview.overridden ? "Overridden" : "Inherited"} · from {SOURCE_LABEL[overview.source] ?? overview.source}</div>
+        <div className="text-[12px] text-muted-foreground">{overview.overridden ? "Overridden" : "Inherited"} · from {SOURCE_LABEL[overview.source] ?? overview.source}</div>
       </div>
       {def.description && <p className="text-xs text-muted-foreground mb-2">{def.description}</p>}
       <div className="text-sm mb-2">Effective: <span className="font-medium">{fmt(overview.resolved)}</span></div>

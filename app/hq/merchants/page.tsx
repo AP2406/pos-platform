@@ -53,7 +53,7 @@ export default async function MerchantsPage({
       <div className="rounded-xl border border-zinc-800 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-zinc-500 border-b border-zinc-800">
+            <tr className="text-left text-[12px] uppercase tracking-wide text-zinc-500 border-b border-zinc-800">
               <th className="px-3 py-2 font-medium">Merchant</th>
               <th className="px-3 py-2 font-medium">Status</th>
               <th className="px-3 py-2 font-medium">Plan</th>
@@ -68,9 +68,9 @@ export default async function MerchantsPage({
               <tr key={r.id} className="border-b border-zinc-800 last:border-0 hover:bg-zinc-900/60">
                 <td className="px-3 py-2">
                   <Link href={"/hq/merchants/" + r.id} className="font-medium hover:text-emerald-400">{r.name}</Link>
-                  <div className="text-[11px] text-zinc-500">{r.orgName}{r.locationCount > 1 ? " · " + r.locationCount + " locations" : ""}{r.isDemo ? " · demo" : ""}</div>
+                  <div className="text-[12px] text-zinc-500">{r.orgName}{r.locationCount > 1 ? " · " + r.locationCount + " locations" : ""}{r.isDemo ? " · demo" : ""}</div>
                 </td>
-                <td className="px-3 py-2"><span className={"text-[11px] rounded-full px-2 py-0.5 capitalize " + STATUS_STYLE[r.status]}>{r.status}</span></td>
+                <td className="px-3 py-2"><span className={"text-[12px] rounded-full px-2 py-0.5 capitalize " + STATUS_STYLE[r.status]}>{r.status}</span></td>
                 <td className="px-3 py-2 text-zinc-300">{r.plan ?? <span className="text-zinc-600">—</span>}</td>
                 <td className="px-3 py-2 text-zinc-400 capitalize">{r.industry}</td>
                 <td className="px-3 py-2 text-zinc-400">{r.finixState ? r.finixState : <span className="text-zinc-600">none</span>}</td>

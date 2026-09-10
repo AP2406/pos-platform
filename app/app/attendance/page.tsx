@@ -4,6 +4,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { hasFloorService } from "@/lib/modules/modes";
 import { getTodayBoundsUTC } from "@/lib/utils/dates";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ const EARLY_LEAVE_MIN = 15;
 
 export default async function AttendancePage() {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "edit_staff");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const supabase = await createClient();
@@ -207,10 +208,10 @@ export default async function AttendancePage() {
                 const m = STATUS_META[r.status];
                 return (
                   <tr key={r.key} className="border-b border-border last:border-0">
-                    <td className="px-3 py-2 font-medium">{r.name}{r.role && <span className="block text-[11px] text-muted-foreground font-normal">{r.role}</span>}</td>
+                    <td className="px-3 py-2 font-medium">{r.name}{r.role && <span className="block text-[12px] text-muted-foreground font-normal">{r.role}</span>}</td>
                     <td className="px-3 py-2 text-muted-foreground tabular-nums">{r.sched}</td>
                     <td className="px-3 py-2 tabular-nums">{r.inAt != null ? fmtT(r.inAt) : "—"}</td>
-                    <td className="px-3 py-2 text-right"><span className={"inline-block rounded-full px-2 py-0.5 text-[11px] font-medium " + m.cls}>{m.label}</span></td>
+                    <td className="px-3 py-2 text-right"><span className={"inline-block rounded-full px-2 py-0.5 text-[12px] font-medium " + m.cls}>{m.label}</span></td>
                   </tr>
                 );
               })}
@@ -241,7 +242,7 @@ export default async function AttendancePage() {
                       <td className="px-3 py-2 font-medium">{r.name}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{r.workedH.toFixed(1)}h</td>
                       <td className="px-3 py-2 text-right tabular-nums">{Math.round(r.breakTaken)}m</td>
-                      <td className="px-3 py-2 text-right"><span className={"inline-block rounded-full px-2 py-0.5 text-[11px] font-medium " + m.cls}>{m.label}</span></td>
+                      <td className="px-3 py-2 text-right"><span className={"inline-block rounded-full px-2 py-0.5 text-[12px] font-medium " + m.cls}>{m.label}</span></td>
                     </tr>
                   );
                 })}

@@ -90,5 +90,5 @@ export function ProvisionForm({
 }
 
 function L({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block"><span className="text-[11px] text-zinc-500">{label}</span><div className="mt-0.5">{children}</div></label>;
+  return <label className="block"><span className="text-[12px] text-zinc-500">{label}</span><div className="mt-0.5">{children}</div></label>;
 }

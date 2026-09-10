@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { canAccess } from "@/lib/services/route-access";
 import { createClient } from "@/lib/supabase/server";
 import { computePayroll } from "../data";
 
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 // feed (provider feed: approved hours + tips). All estimates on deductions.
 export async function GET(request: Request) {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") return new NextResponse("Forbidden", { status: 403 });
+  if (!canAccess(role, "export_data")) return new NextResponse("Forbidden", { status: 403 });
 
   const url = new URL(request.url);
   const type = url.searchParams.get("type") || "t4";

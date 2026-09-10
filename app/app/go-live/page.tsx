@@ -2,6 +2,11 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { setGoLiveFlag } from "./actions";
+import {
+  evaluateReadiness,
+  taxRatePercent,
+  type ReadinessCheckId,
+} from "@/lib/services/launch-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -69,37 +74,39 @@ export default async function GoLivePage() {
   const drawerCount = drawerCountRaw || 0;
 
   // ---- compute each check ----
-  const nameSet = Boolean(biz && biz.name && String(biz.name).trim().length > 0);
+  //
+  // The rules moved to lib/services/launch-readiness.ts when the dashboard
+  // started asking the same question. This page still owns the *rendering* —
+  // the confirm buttons and legal copy have no place on a home screen — but a
+  // second opinion about what "ready" means is exactly the kind of drift that
+  // ends with two screens contradicting each other.
+  const report = evaluateReadiness({
+    name: biz?.name,
+    defaultTaxRate: biz?.default_tax_rate,
+    finixMerchantState: biz?.finix_merchant_state,
+    goLive: biz?.go_live,
+    activeItemCount: itemCount,
+    drawerSessionCount: drawerCount,
+  });
+  const done = (id: ReadinessCheckId) =>
+    report.checks.some((c) => c.id === id && c.done);
 
-  const catalogDone = itemCount > 0;
+  const nameSet = done("basics");
+  const catalogDone = done("catalog");
+  const taxDone = done("tax");
+  const paymentsDone = done("payments");
+  const registerDone = done("register");
+  const legalAccepted = done("legal");
 
-  let taxRate = Number(biz && biz.default_tax_rate);
-  if (isNaN(taxRate)) taxRate = 0;
-  let taxPercent = taxRate;
-  if (taxPercent > 1) {
-    // already a percent
-  } else {
-    taxPercent = taxPercent * 100;
-  }
+  const taxRate = Number(biz && biz.default_tax_rate);
+  const taxPercent = taxRatePercent(biz?.default_tax_rate);
   const taxFreeConfirmed = goLive["tax_free"] === true;
-  const taxDone = taxRate > 0 || taxFreeConfirmed;
-
-  const merchantState = String((biz && biz.finix_merchant_state) || "").toUpperCase();
-  const cardApproved = merchantState === "APPROVED";
+  const cardApproved =
+    String((biz && biz.finix_merchant_state) || "").toUpperCase() === "APPROVED";
   const cashOnlyConfirmed = goLive["cash_only"] === true;
-  const paymentsDone = cardApproved || cashOnlyConfirmed;
 
-  const registerDone = drawerCount > 0;
-
-  const legalAccepted = goLive["legal_accepted"] === true;
-
-  const requiredDone =
-    catalogDone && taxDone && paymentsDone && registerDone && legalAccepted;
-
-  const requiredItems = [catalogDone, taxDone, paymentsDone, registerDone, legalAccepted];
-  const remaining = requiredItems.filter(function (d) {
-    return !d;
-  }).length;
+  const requiredDone = report.ready;
+  const remaining = report.outstanding.length;
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">

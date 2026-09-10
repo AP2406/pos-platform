@@ -6,12 +6,13 @@ import { ChevronLeft } from "lucide-react";
 import { listJournalEntries, listJournalTemplates } from "./actions";
 import { resolveCoa, COA_DEFAULTS, type CoaKey } from "../journal";
 import { JournalClient } from "./journal-client";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function JournalEntriesPage() {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "access_reports");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const [entries, templates] = await Promise.all([listJournalEntries(), listJournalTemplates()]);

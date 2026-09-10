@@ -212,7 +212,7 @@ export default async function PurchasingPage() {
             <tbody>
               {trendTop.map((r, i) => (
                 <tr key={i} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2 font-medium truncate max-w-[200px]">{r.item}<span className="block text-[11px] text-muted-foreground font-normal">{r.n} orders · per {r.unit}</span></td>
+                  <td className="px-3 py-2 font-medium truncate max-w-[200px]">{r.item}<span className="block text-[12px] text-muted-foreground font-normal">{r.n} orders · per {r.unit}</span></td>
                   <td className="px-3 py-2 text-muted-foreground truncate max-w-[140px]">{r.vendor}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{r.prev != null ? fmtMoney(r.prev) : "—"}</td>
                   <td className="px-3 py-2 text-right tabular-nums font-medium">{fmtMoney(r.last)}</td>

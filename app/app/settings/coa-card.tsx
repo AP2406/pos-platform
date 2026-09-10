@@ -33,7 +33,7 @@ export function CoaCard({ rows: initRows }: { rows: Row[] }) {
     <div>
       <p className="text-sm text-muted-foreground mb-3">
         Map each journal line to your accounting software&apos;s account. Used by the
-        <span className="font-medium"> Journal (QBO/Xero)</span> export on the Accounting page.
+        <span className="font-medium"> Journal CSV for QuickBooks / Xero</span> export on the Accounting page.
       </p>
       <div className="space-y-1.5">
         {rows.map((r) => (

@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Dev only: lets a temporary public tunnel (reviewer link) load dev assets.
+  allowedDevOrigins: ["*.trycloudflare.com", "*.loca.lt", "*.lhr.life"],
   async redirects() {
     return [
       // Canonical host: force non-www (apex) → www with a 301, preserving the path.

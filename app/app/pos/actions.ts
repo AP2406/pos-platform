@@ -16,6 +16,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { VOID_REASONS, DISCOUNT_REASONS, TAX_EXEMPT_REASONS, COMP_REASONS, SERVICE_CHARGE_WAIVE_REASONS, isValidReason } from "./reason-codes";
+import { posAuthorize } from "@/lib/services/pos-action-guard";
 
 // A chosen modifier recorded on a line. `price` is the option's MENU LIST price (already
 // inside unit_price — a breakdown, not a second charge). Like unit_price it is
@@ -1056,14 +1057,12 @@ export async function voidOrder(
   // The acting cashier needs the `void` permission; otherwise a staff member who
   // holds it must approve by PIN. With the default role matrix this is identical
   // to the old "staff/trainee need a manager" behavior.
-  if (active) {
-    const actorPerms = await staffPermissionsById(supabase, business.id, active.id);
-    const actorCanVoid = actorPerms?.can("void") ?? false;
-    if (!actorCanVoid) {
-      if (!approverPin) return { needs_approval: true };
-      approver = await getApproverByPin(supabase, business.id, approverPin, "void");
-      if (!approver) return { error: "That PIN can't approve a void." };
-    }
+  const voidAuth = await posAuthorize(supabase, business.id, role, "void");
+  if (!voidAuth.ok) return { error: voidAuth.error };
+  if (voidAuth.needsApproval) {
+    if (!approverPin) return { needs_approval: true };
+    approver = await getApproverByPin(supabase, business.id, approverPin, "void");
+    if (!approver) return { error: "That PIN can't approve a void." };
   }
 
   const {

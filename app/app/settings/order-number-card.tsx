@@ -34,7 +34,13 @@ export function OrderNumberCard({ nextNumber, canManage }: { nextNumber: number;
   return (
     <div>
       <p className="text-sm text-muted-foreground mb-3">
-        The next sale and bill will be <span className="font-medium text-foreground tabular-nums">#{next}</span>. Set a new starting number here — it can only move forward (going backward would risk duplicate numbers).
+        {/* No tabular-nums: this figure is inside a sentence, not in a column
+            and not updating under the reader, so it takes the sentence's face.
+            tabular-nums now selects the numeric face as well as the feature
+            (see globals.css), and a grotesque number dropped into the middle
+            of a serif line reads as a paste. Contrast still carries the
+            emphasis — it is full ink against muted prose. */}
+        The next sale and bill will be <span className="font-medium text-foreground">#{next}</span>. Set a new starting number here — it can only move forward (going backward would risk duplicate numbers).
       </p>
       <div className="flex items-center gap-2">
         <label className="text-sm">Next number</label>

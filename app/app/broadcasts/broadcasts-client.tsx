@@ -60,11 +60,11 @@ export function BroadcastsClient({ broadcasts, staffCount }: { broadcasts: Broad
             <div key={b.id} className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4">
               <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <span className="font-semibold">{b.title}</span>
-                {!b.active && <span className="text-[11px] rounded-full px-2 py-0.5 bg-muted text-muted-foreground">archived</span>}
-                <span className="text-[11px] text-muted-foreground ml-auto">{fmt(b.createdAt)}{b.authorName ? " · " + b.authorName : ""}</span>
+                {!b.active && <span className="text-[12px] rounded-full px-2 py-0.5 bg-muted text-muted-foreground">archived</span>}
+                <span className="text-[12px] text-muted-foreground ml-auto">{fmt(b.createdAt)}{b.authorName ? " · " + b.authorName : ""}</span>
               </div>
               <p className="text-sm whitespace-pre-wrap mb-2">{b.body}</p>
-              <div className="flex items-center gap-3 flex-wrap text-[11px]">
+              <div className="flex items-center gap-3 flex-wrap text-[12px]">
                 <button onClick={() => setOpenId(openId === b.id ? null : b.id)} className="underline text-muted-foreground hover:text-foreground">
                   {b.acks.length} of {staffCount} acknowledged
                 </button>
@@ -80,7 +80,7 @@ export function BroadcastsClient({ broadcasts, staffCount }: { broadcasts: Broad
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
                       {b.acks.map((a, i) => (
-                        <span key={i} className="text-[11px] rounded-full px-2 py-0.5 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">{a.name}</span>
+                        <span key={i} className="text-[12px] rounded-full px-2 py-0.5 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">{a.name}</span>
                       ))}
                     </div>
                   )}

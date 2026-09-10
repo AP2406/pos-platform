@@ -3,70 +3,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
-import { sendEmail, isEmailConfigured } from "@/lib/services/email";
-import { sendSms, isSmsConfigured } from "@/lib/services/sms";
 import { autoFireNextCourseIfReady } from "../pos/ticket-actions";
+import { markOrderFulfilledCore, recallOrderCore, type Sb, type CoreBiz } from "@/lib/services/order-fulfill";
 
 export async function markOrderFulfilled(
   orderId: string
 ): Promise<{ ok: true } | { error: string }> {
   if (!orderId) return { error: "Missing order." };
-
   const { business } = await requireBusiness();
   const supabase = await createClient();
-
-  const { error } = await supabase
-    .from("orders")
-    .update({ fulfilled_at: new Date().toISOString() })
-    .eq("id", orderId)
-    .eq("business_id", business.id);
-
-  if (error) {
-    console.error("markOrderFulfilled:", error);
-    return { error: "Could not update the order." };
-  }
-
-  // B7: ready-for-pickup notification (email + SMS) for takeout/pickup/delivery
-  // orders when the guest has contact info. Best-effort; toggle via
-  // settings.pickup_notify (default on). A configured settings.review_url adds a
-  // "leave a review" link (order-ready → review-generation).
-  const settings = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;
-  if (settings.pickup_notify !== false) {
-    const { data: ord } = await supabase
-      .from("orders")
-      .select("dining_option, customer_id, sale_number")
-      .eq("id", orderId)
-      .eq("business_id", business.id)
-      .maybeSingle();
-    const dopt = (ord?.dining_option as string | null) ?? null;
-    if (ord?.customer_id && (dopt === "takeout" || dopt === "pickup" || dopt === "delivery")) {
-      const { data: cust } = await supabase.from("customers").select("name, email, phone").eq("id", ord.customer_id as string).maybeSingle();
-      const biz = (business as { name?: string }).name || "your order";
-      const label = ord.sale_number ? "Order #" + ord.sale_number : "Your order";
-      const readyWord = dopt === "delivery" ? "on its way" : "ready for pickup";
-      const reviewUrl = typeof settings.review_url === "string" && settings.review_url.trim() ? settings.review_url.trim() : null;
-
-      const email = (cust?.email as string | null) ?? null;
-      if (email && isEmailConfigured()) {
-        await sendEmail({
-          to: email,
-          subject: (dopt === "delivery" ? "Out for delivery" : "Ready for pickup") + " — " + biz,
-          html:
-            `<p>Hi ${(cust?.name as string | null) ?? "there"},</p><p><strong>${label}</strong> at ${biz} is ${readyWord}. See you soon!</p>` +
-            (reviewUrl ? `<p>Enjoyed it? <a href="${reviewUrl}">Leave us a review</a> — it really helps.</p>` : ""),
-        });
-      }
-
-      const phone = (cust?.phone as string | null) ?? null;
-      if (phone && isSmsConfigured()) {
-        const smsBody = `${label} at ${biz} is ${readyWord}.` + (reviewUrl ? ` Loved it? Review us: ${reviewUrl}` : "");
-        await sendSms({ to: phone, body: smsBody });
-      }
-    }
-  }
-
-  revalidatePath("/app/kitchen");
-  return { ok: true };
+  const res = await markOrderFulfilledCore(supabase as unknown as Sb, business as CoreBiz, orderId);
+  if ("ok" in res) revalidatePath("/app/kitchen");
+  return res;
 }
 
 // Re-fire a kitchen ticket: insert a fresh copy so it reappears on the KDS
@@ -167,21 +115,9 @@ export async function recallOrder(
   const { business } = await requireBusiness();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const { error } = await supabase
-    .from("orders")
-    .update({ fulfilled_at: null })
-    .eq("id", orderId)
-    .eq("business_id", business.id);
-  if (error) {
-    console.error("recallOrder:", error);
-    return { error: "Could not recall the order." };
-  }
-  await supabase.from("audit_events").insert({
-    business_id: business.id, actor_id: user ? user.id : null, action: "kds_recall",
-    metadata: { order_id: orderId, kind: "order" },
-  });
-  revalidatePath("/app/kitchen");
-  return { ok: true };
+  const res = await recallOrderCore(supabase as unknown as Sb, business.id, orderId, user ? user.id : null);
+  if ("ok" in res) revalidatePath("/app/kitchen");
+  return res;
 }
 
 // P1-17: mark a single line on a fired ticket ready (or un-ready) as the cook

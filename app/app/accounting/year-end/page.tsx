@@ -8,6 +8,7 @@ import { lockedThrough } from "@/lib/services/period-lock";
 import { trialBalance, fiscalYearBounds } from "./data";
 import { computePayroll } from "../payroll/data";
 import { YearEndControls } from "./year-end-controls";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ function money(n: number, currency: string): string {
 
 export default async function YearEndPage({ searchParams }: { searchParams: Promise<{ fy?: string }> }) {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "access_reports");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const settings = ((business as { settings?: Record<string, unknown> }).settings ?? {}) as Record<string, unknown>;

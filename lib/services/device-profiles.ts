@@ -10,6 +10,7 @@ export type DeviceProfile = {
   name: string;
   default_to_seat: boolean; // start new items on Seat 1 (table mode)
   default_dining_option: "dine_in" | "takeout" | "delivery" | "pickup";
+  home?: "pos" | "kds"; // native app: what this device opens ("kds" = Kitchen Display); default "pos"
 };
 
 export const deviceProfileSchema = z.object({
@@ -17,6 +18,7 @@ export const deviceProfileSchema = z.object({
   name: z.string().trim().min(1).max(60),
   default_to_seat: z.coerce.boolean(),
   default_dining_option: z.enum(["dine_in", "takeout", "delivery", "pickup"]),
+  home: z.enum(["pos", "kds"]).default("pos"),
 });
 export const deviceProfilesSchema = z.array(deviceProfileSchema).max(20);
 

@@ -30,9 +30,9 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
 
   const tile = (label: string, value: string, sub?: string) => (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</div>
+      <div className="text-[12px] uppercase tracking-wide text-zinc-500">{label}</div>
       <div className="text-2xl font-semibold mt-1 tabular-nums">{value}</div>
-      {sub && <div className="text-[11px] text-zinc-500 mt-0.5">{sub}</div>}
+      {sub && <div className="text-[12px] text-zinc-500 mt-0.5">{sub}</div>}
     </div>
   );
 
@@ -59,7 +59,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
       <div className="rounded-xl border border-zinc-800 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-zinc-500 border-b border-zinc-800">
+            <tr className="text-left text-[12px] uppercase tracking-wide text-zinc-500 border-b border-zinc-800">
               <th className="px-3 py-2 font-medium">Merchant</th>
               <th className="px-3 py-2 font-medium text-right">Volume</th>
               <th className="px-3 py-2 font-medium text-right">Txns</th>
@@ -71,14 +71,14 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-zinc-800 last:border-0 hover:bg-zinc-900/60">
-                <td className="px-3 py-2"><Link href={"/hq/merchants/" + r.id} className="font-medium hover:text-emerald-400">{r.name}</Link><div className="text-[11px] text-zinc-500 capitalize">{r.status}{r.plan ? " · " + r.plan : ""}</div></td>
+                <td className="px-3 py-2"><Link href={"/hq/merchants/" + r.id} className="font-medium hover:text-emerald-400">{r.name}</Link><div className="text-[12px] text-zinc-500 capitalize">{r.status}{r.plan ? " · " + r.plan : ""}</div></td>
                 <td className="px-3 py-2 text-right tabular-nums">{r.volume > 0 ? money(r.volume) : <span className="text-zinc-600">—</span>}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-zinc-400">{r.txns || ""}</td>
                 <td className="px-3 py-2 text-right tabular-nums">
                   {r.volume > 0 ? (
                     <>
                       {pct(r.effPct)}
-                      <span className={"ml-1 text-[10px] " + (r.rateSource === "derived" ? "text-emerald-500" : "text-zinc-500")}>{r.rateSource === "derived" ? "derived" : "blended"}</span>
+                      <span className={"ml-1 text-[11px] " + (r.rateSource === "derived" ? "text-emerald-500" : "text-zinc-500")}>{r.rateSource === "derived" ? "derived" : "blended"}</span>
                     </>
                   ) : <span className="text-zinc-600">—</span>}
                 </td>
@@ -91,7 +91,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
         </table>
       </div>
 
-      <p className="text-[11px] text-zinc-600 mt-4">
+      <p className="text-[12px] text-zinc-600 mt-4">
         Volume from recorded card transactions ({"finix_payments"}). Effective rate is <span className="text-emerald-600">derived</span> from each merchant&apos;s Finix settlements when available, else the blended fallback ({pct(BLENDED_TAKE_RATE.pct)} + {money(BLENDED_TAKE_RATE.perTxn)}/txn).
         {!anyDerived && " No settled batches yet — all rows use the blended fallback."} Rep residual lands with HQ-4. Edit pricing in lib/services/hq/economics.ts.
       </p>

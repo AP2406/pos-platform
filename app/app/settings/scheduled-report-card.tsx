@@ -67,13 +67,13 @@ export function ScheduledReportCard({
       <div className="space-y-1 mb-3">
         <Label className="text-xs">Recipients</Label>
         <Input value={recipients} onChange={(e) => setRecipients(e.target.value)} placeholder="owner@restaurant.com, accountant@…" className="h-9 max-w-md" />
-        <p className="text-[11px] text-muted-foreground">Comma-separated. Leave blank to use your Z-report email list.</p>
+        <p className="text-[12px] text-muted-foreground">Comma-separated. Leave blank to use your Z-report email list.</p>
       </div>
 
       <Button onClick={save} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
       {err && <p className="text-sm text-red-600 mt-2">{err}</p>}
       {msg && <p className="text-sm text-green-600 mt-2">{msg}</p>}
-      <p className="text-[11px] text-muted-foreground mt-3">
+      <p className="text-[12px] text-muted-foreground mt-3">
         Sent once a day by a scheduled job (around 9–10am ET). Requires email to be configured for the workspace.
       </p>
     </div>

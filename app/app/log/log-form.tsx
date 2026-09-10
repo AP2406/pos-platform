@@ -65,7 +65,7 @@ export function DeleteLogButton({ id }: { id: string }) {
     <button
       onClick={() => { if (confirm("Delete this entry?")) start(async () => { await deleteShiftLog(id); }); }}
       disabled={pending}
-      className="text-[11px] text-muted-foreground underline hover:text-red-600"
+      className="text-[12px] text-muted-foreground underline hover:text-red-600"
     >
       delete
     </button>

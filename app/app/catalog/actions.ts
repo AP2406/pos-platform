@@ -7,6 +7,7 @@ import { integrationEnabled } from "@/lib/services/integrations";
 import { notifyPlatforms86 } from "@/lib/services/delivery";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { authorizeAction } from "@/lib/services/action-guard";
 
 const itemSchema = z.object({
   name: z.string().min(1, "Name is required").max(120),
@@ -73,8 +74,9 @@ export async function createCatalogItem(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
 
   const code = cleanBarcode(parsed.data.barcode);
@@ -120,8 +122,9 @@ export async function updateCatalogItem(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
 
   const updateData: Record<string, unknown> = {
@@ -159,8 +162,9 @@ export async function setCatalogItemOutOfStock(
   reason?: string
 ): Promise<{ ok: true; at: string | null } | { error: string }> {
   if (!id) return { error: "Missing item." };
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
   const at = outOfStock ? new Date().toISOString() : null;
   const note =
@@ -195,8 +199,9 @@ export async function setCatalogItemPrepMinutes(
   prepMinutes: number | null
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing item." };
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   let v: number | null = null;
   if (prepMinutes != null && Number.isFinite(prepMinutes)) {
     v = Math.max(0, Math.min(240, Math.round(prepMinutes)));
@@ -221,8 +226,9 @@ export async function setCatalogItemAllergens(
   allergens: string[]
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing item." };
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
   const clean = cleanAllergens(allergens);
   const { error } = await supabase
@@ -243,8 +249,9 @@ export async function setCatalogItemActive(
   id: string,
   active: boolean
 ): Promise<{ ok: true } | { error: string }> {
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
   const { error } = await supabase
     .from("catalog_items")
@@ -263,8 +270,9 @@ export async function setCatalogItemTaxable(
   taxable: boolean
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing item." };
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
   const { error } = await supabase
     .from("catalog_items")
@@ -284,8 +292,9 @@ export async function setCatalogItemBarcode(
   barcode: string | null
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing item." };
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
 
   const code = cleanBarcode(barcode);
@@ -320,8 +329,9 @@ export async function setCatalogItemImage(
   imageUrl: string | null
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing item." };
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
 
   let url: string | null = null;
@@ -347,8 +357,9 @@ export async function setCatalogItemImage(
 export async function saveCategoryColors(
   map: Record<string, string>
 ): Promise<{ ok: true } | { error: string }> {
-  const { business, role } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business, role } = auth;
   if (role !== "owner" && role !== "manager") {
     return { error: "Only an owner or manager can change category colors." };
   }
@@ -395,8 +406,9 @@ export async function createVariation(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
 
   const { data: item } = await supabase
@@ -429,8 +441,9 @@ export async function deleteVariation(
   variationId: string
 ): Promise<{ ok: true } | { error: string }> {
   if (!variationId) return { error: "Missing variation." };
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
   const { error } = await supabase
     .from("catalog_item_variations")
@@ -465,8 +478,9 @@ export async function createModifier(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
 
   const { data: item } = await supabase
@@ -514,8 +528,9 @@ export async function setModifierChildGroup(
   childGroupId: string | null
 ): Promise<{ ok: true } | { error: string }> {
   if (!modifierId) return { error: "Missing option." };
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
   if (childGroupId) {
     const { data: grp } = await supabase
@@ -555,8 +570,9 @@ export async function createModifierGroup(
 ): Promise<{ ok: true; id: string } | { error: string }> {
   const parsed = groupSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
   const { data: item } = await supabase
     .from("catalog_items")
@@ -605,8 +621,9 @@ export async function updateModifierGroup(
   input: { name?: string; required?: boolean; min_select?: number; max_select?: number | null; allow_split?: boolean }
 ): Promise<{ ok: true; required: boolean; min_select: number; max_select: number | null } | { error: string }> {
   if (!id) return { error: "Missing group." };
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
   // Read the current group so min/max/required stay mutually coherent even when only
   // one field is edited (each field saves on its own blur). An incoherent range the
@@ -653,8 +670,9 @@ export async function deleteModifierGroup(
   id: string
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing group." };
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
   // Options cascade-delete via the FK.
   const { error } = await supabase
@@ -674,8 +692,9 @@ export async function deleteModifier(
   modifierId: string
 ): Promise<{ ok: true } | { error: string }> {
   if (!modifierId) return { error: "Missing add-on." };
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
   const { error } = await supabase
     .from("catalog_item_modifiers")
@@ -695,8 +714,9 @@ export async function setCatalogItemTaxRate(
   taxRateId: string | null
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing item." };
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
 
   if (taxRateId) {
@@ -730,8 +750,9 @@ export async function setCatalogItemTaxes(
   rateIds: string[]
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing item." };
-  const { business, role } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business, role } = auth;
   if (role !== "owner" && role !== "manager") return { error: "Only an owner or manager can change taxes." };
   const supabase = await createClient();
 
@@ -774,8 +795,9 @@ export async function setCatalogItemDefaultCourse(
   courseId: string | null
 ): Promise<{ ok: true } | { error: string }> {
   if (!id) return { error: "Missing item." };
-  const { business } = await requireBusiness();
-  assertConfigEditable(business);
+  const auth = await authorizeAction("edit_menu", { configWrite: true });
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
 
   if (courseId) {

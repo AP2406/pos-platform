@@ -5,6 +5,7 @@ import { integrationStatuses, integrationEnabled, envEssentials } from "@/lib/se
 import { getCardConfig } from "../pos/finix-pos-actions";
 import { IntegrationCard } from "./integration-card";
 import { DeliveryTestButton } from "./delivery-test-button";
+import { requirePermission } from "@/lib/services/route-access";
 
 const CARD_REASON: Record<string, string> = {
   demo: "Demo business — never processes real money",
@@ -18,7 +19,7 @@ export const dynamic = "force-dynamic";
 
 export default async function IntegrationsPage() {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "manage_settings");
   if (!hasFloorService(business)) redirect("/app/reports");
 
   const settings = (business as { settings?: unknown }).settings;

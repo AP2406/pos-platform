@@ -103,7 +103,7 @@ export function TripControls({
     <div className="space-y-4">
       {/* Status switcher */}
       <div className="space-y-2">
-        <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold">
+        <div className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">
           Status
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -127,7 +127,7 @@ export function TripControls({
 
       {/* Money tracking */}
       <div className="space-y-2 pt-4 border-t border-border">
-        <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2">
+        <div className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold mb-2">
           Money
         </div>
 
@@ -182,7 +182,7 @@ export function TripControls({
           ) : (
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mr-1">
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mr-1">
                   Quick:
                 </span>
                 {[15, 18, 20].map((pct) => (
@@ -272,7 +272,7 @@ export function TripControls({
       {/* Refund */}
       {(canRefund || isRefunded) && (
         <div className="space-y-2 pt-4 border-t border-border">
-          <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2">
+          <div className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold mb-2">
             Refund
           </div>
 

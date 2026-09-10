@@ -50,13 +50,13 @@ export function IntegrationCard({ status }: { status: Status }) {
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium">{status.label}</span>
             {status.configured ? (
-              <span className="text-[10px] rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 font-medium">
+              <span className="text-[11px] rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 font-medium">
                 Configured{status.detail ? " · " + status.detail : ""}
               </span>
             ) : (
-              <span className="text-[10px] rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 font-medium">Not configured</span>
+              <span className="text-[11px] rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 font-medium">Not configured</span>
             )}
-            {enabled && <span className="text-[10px] rounded-full bg-foreground text-background px-2 py-0.5 font-medium">On</span>}
+            {enabled && <span className="text-[11px] rounded-full bg-foreground text-background px-2 py-0.5 font-medium">On</span>}
           </div>
           <p className="text-sm text-muted-foreground mt-1">{status.description}</p>
           {status.liveNote && (
@@ -105,7 +105,7 @@ export function IntegrationCard({ status }: { status: Status }) {
         </div>
       )}
       {enabled && !status.configured && (
-        <p className="text-[11px] text-amber-600 mt-2">Enabled, but credentials aren&apos;t configured yet — it stays inactive until they are.</p>
+        <p className="text-[12px] text-amber-600 mt-2">Enabled, but credentials aren&apos;t configured yet — it stays inactive until they are.</p>
       )}
       {err && <p className="text-sm text-red-600 mt-2">{err}</p>}
     </div>

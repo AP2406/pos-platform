@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
+import { authorizeAction } from "@/lib/services/action-guard";
 
 const ALLOWED_REASONS = ["receive", "adjustment", "damage", "initial", "recount"];
 
@@ -13,7 +14,9 @@ export async function saveInventorySettings(
   barcode: string | null
 ): Promise<{ ok: true } | { error: string }> {
   if (!itemId) return { error: "Missing item." };
-  const { business } = await requireBusiness();
+  const auth = await authorizeAction("edit_menu");
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
 
   const rp = Math.max(0, Math.round((Number(reorderPoint) || 0) * 100) / 100);
@@ -44,7 +47,9 @@ export async function adjustStock(
   if (chg === 0) return { error: "Enter a non-zero amount." };
   const r = ALLOWED_REASONS.includes(reason) ? reason : "adjustment";
 
-  const { business } = await requireBusiness();
+  const auth = await authorizeAction("edit_menu");
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
 
   const { data: item } = await supabase
@@ -82,7 +87,9 @@ export async function recordCount(
   const c = Math.round((Number(counted) || 0) * 100) / 100;
   if (c < 0) return { error: "Counted quantity must be 0 or more." };
 
-  const { business } = await requireBusiness();
+  const auth = await authorizeAction("edit_menu");
+  if (!auth.ok) return { error: auth.error };
+  const { business } = auth;
   const supabase = await createClient();
 
   const { data: item } = await supabase

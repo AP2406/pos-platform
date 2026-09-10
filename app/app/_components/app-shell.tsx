@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { usePathname } from "next/navigation";
-import { SidebarNav } from "./sidebar-nav";
+import { SidebarNav, type NavSection } from "./sidebar-nav";
 import { SignOutButton } from "./sign-out";
 import { ThemeToggle } from "./theme-toggle";
 import { PageTransition } from "./page-transition";
@@ -10,7 +10,6 @@ import { OnboardingNudge } from "./onboarding-nudge";
 import { switchBusiness } from "@/lib/services/switch-business";
 import { modeLabel } from "@/lib/modules/modes";
 
-type NavItem = { href: string; label: string };
 type BizSummary = {
   id: string;
   name: string;
@@ -25,12 +24,14 @@ function WorkspaceSwitcher({
   fallbackName,
   fallbackIndustry,
   role,
+  canViewRollup,
 }: {
   businesses: BizSummary[];
   activeBusinessId: string;
   fallbackName: string;
   fallbackIndustry: string;
   role: string;
+  canViewRollup?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -60,7 +61,7 @@ function WorkspaceSwitcher({
         className="w-full flex items-center gap-2 text-left rounded-md p-1.5 -m-1.5 hover:bg-sidebar-accent transition-colors"
       >
         <span className="min-w-0 flex-1">
-          <span className="block text-[10px] uppercase tracking-[0.08em] text-sidebar-muted font-medium">
+          <span className="block text-[11px] uppercase tracking-[0.1em] text-sidebar-muted font-medium">
             Workspace
           </span>
           <span className="block font-medium text-sm mt-1 truncate">{name}</span>
@@ -107,6 +108,24 @@ function WorkspaceSwitcher({
                 );
               })}
             </div>
+            {/* Multi-location owners need to look at the group, not just hop
+                between locations one at a time. */}
+            {canViewRollup && businesses.length > 1 && (
+              <div className="border-t border-sidebar-border">
+                <a href="/app/locations" className="flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-sidebar-accent transition-colors">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 shrink-0 text-sidebar-muted">
+                    <path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6" />
+                  </svg>
+                  All {businesses.length} locations
+                </a>
+                <a href="/app/accounting/consolidated" className="flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-sidebar-accent transition-colors">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 shrink-0 text-sidebar-muted">
+                    <path d="M4 19V5m0 14h16M8 15V9m4 6V7m4 8v-4" />
+                  </svg>
+                  Consolidated books
+                </a>
+              </div>
+            )}
           <div className="border-t border-sidebar-border">
               <a href="/onboarding?add=1" className="flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-sidebar-accent transition-colors">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 shrink-0 text-sidebar-muted">
@@ -144,6 +163,7 @@ export function AppShell({
   businesses,
   activeBusinessId,
   nav,
+  canViewRollup,
   showOnboarding,
   isDemo,
   children,
@@ -153,7 +173,8 @@ export function AppShell({
   role: string;
   businesses: BizSummary[];
   activeBusinessId: string;
-  nav: NavItem[];
+  nav: NavSection[];
+  canViewRollup?: boolean;
   showOnboarding?: boolean;
   isDemo?: boolean;
   children: React.ReactNode;
@@ -180,7 +201,13 @@ export function AppShell({
   // register's own slim top bar provides the only way out (exit to dashboard).
   if (isTill) {
     return (
-      <main className="h-[100dvh] overflow-hidden bg-background">{children}</main>
+      // u-serif is repeated here rather than hoisted: the till returns early
+      // and shares no wrapper with the shell below, and a register that keeps
+      // the old face while every other screen changed is the single most
+      // visible way this could go wrong.
+      <main className="u-serif h-[100dvh] overflow-hidden bg-background">
+        {children}
+      </main>
     );
   }
 
@@ -198,7 +225,9 @@ export function AppShell({
     "fixed inset-0 z-40 bg-black/60 backdrop-blur-sm " + (isTill ? "" : "md:hidden");
 
   return (
-    <div className="min-h-screen flex bg-background">
+    // The whole admin surface hangs off this one class — sidebar, header,
+    // page content and every route under /app.
+    <div className="u-serif min-h-screen flex bg-background">
       <header className={headerClasses}>
         <button
           type="button"
@@ -256,11 +285,12 @@ export function AppShell({
             fallbackName={businessName}
             fallbackIndustry={industry}
             role={role}
+            canViewRollup={canViewRollup}
           />
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          <SidebarNav items={nav} />
+          <SidebarNav sections={nav} />
         </div>
 
         <div className="p-2 border-t border-sidebar-border space-y-1">
@@ -275,7 +305,14 @@ export function AppShell({
         ) : (
           <div className="max-w-7xl mx-auto px-5 md:px-8 pt-20 md:pt-8 pb-10">
             {isDemo && <DemoBanner />}
-            {showOnboarding && <OnboardingNudge />}
+            {/* Not on /app — the dashboard runs its own launch-readiness panel
+                there, and a new merchant seeing both a checklist and a nudge to
+                go and find a checklist reads as the product arguing with
+                itself. Everywhere else the nudge is the only prompt, so it
+                stays. Note the two run on different signals: this fires on zero
+                orders, readiness on incomplete setup, so a fully-set-up shop
+                that hasn't rung a sale still gets nudged off the dashboard. */}
+            {showOnboarding && pathname !== "/app" && <OnboardingNudge />}
             <PageTransition>{children}</PageTransition>
           </div>
         )}

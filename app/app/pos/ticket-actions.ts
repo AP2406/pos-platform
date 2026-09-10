@@ -5,6 +5,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { getActiveStaff } from "./staff-session";
 import { verifyManagerPin } from "./approval-actions";
 import { z } from "zod";
+import { posAuthorize } from "@/lib/services/pos-action-guard";
 
 // A chosen modifier kept structurally on the line (price already inside unit_price).
 const lineModifierSchema = z.object({
@@ -160,8 +161,13 @@ export async function discardTicket(
 ): Promise<{ ok: true } | { error: string }> {
   if (!ticketId) return { error: "Missing ticket." };
 
-  const { business } = await requireBusiness();
+  const { business, role } = await requireBusiness();
   const supabase = await createClient();
+
+  // Throwing away a held check destroys unsent items, so it needs the same
+  // permission as removing an item before payment.
+  const auth = await posAuthorize(supabase, business.id, role, "delete_item_prepay");
+  if (!auth.ok) return { error: auth.error };
 
   const { error } = await supabase
     .from("open_tickets")
@@ -834,8 +840,13 @@ export async function sendVoidNotice(
   item: { name: string; quantity: number }
 ): Promise<{ ok: true } | { error: string }> {
   if (!ticketId) return { error: "Missing ticket." };
-  const { business } = await requireBusiness();
+  const { business, role } = await requireBusiness();
   const supabase = await createClient();
+
+  // A void notice tells the line to bin food that was already fired.
+  const auth = await posAuthorize(supabase, business.id, role, "void");
+  if (!auth.ok) return { error: auth.error };
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

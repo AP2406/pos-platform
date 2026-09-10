@@ -1,15 +1,15 @@
-import { redirect } from "next/navigation";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { isEmailConfigured } from "@/lib/services/email";
 import { isSmsConfigured } from "@/lib/services/sms";
 import { MarketingClient } from "./marketing-client";
+import { requirePermission } from "@/lib/services/route-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function MarketingPage() {
   const { business, role } = await requireBusiness();
-  if (role !== "owner" && role !== "manager") redirect("/app");
+  requirePermission(role, "manage_settings");
 
   const supabase = await createClient();
   const { data: tagRows } = await supabase

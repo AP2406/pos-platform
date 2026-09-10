@@ -31,7 +31,7 @@ export default async function HqHome() {
         ))}
       </div>
 
-      <p className="text-[11px] text-zinc-600 mt-6">
+      <p className="text-[12px] text-zinc-600 mt-6">
         Raw payments back-office (transactions, disputes, payouts, underwriting) lives in the Finix Dashboard — HQ summarizes and deep-links, never duplicates it.
       </p>
     </div>
