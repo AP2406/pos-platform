@@ -297,7 +297,14 @@ export function AppShell({
         ) : (
           <div className="max-w-7xl mx-auto px-5 md:px-8 pt-20 md:pt-8 pb-10">
             {isDemo && <DemoBanner />}
-            {showOnboarding && <OnboardingNudge />}
+            {/* Not on /app — the dashboard runs its own launch-readiness panel
+                there, and a new merchant seeing both a checklist and a nudge to
+                go and find a checklist reads as the product arguing with
+                itself. Everywhere else the nudge is the only prompt, so it
+                stays. Note the two run on different signals: this fires on zero
+                orders, readiness on incomplete setup, so a fully-set-up shop
+                that hasn't rung a sale still gets nudged off the dashboard. */}
+            {showOnboarding && pathname !== "/app" && <OnboardingNudge />}
             <PageTransition>{children}</PageTransition>
           </div>
         )}
