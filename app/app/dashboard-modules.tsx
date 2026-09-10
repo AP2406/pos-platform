@@ -21,6 +21,14 @@ import {
 } from "lucide-react";
 import { Chip } from "@/components/ui/chip";
 import { EmptyState } from "@/components/ui/empty-state";
+import {
+  ICON_INLINE,
+  PANEL_X,
+  Panel,
+  PanelBody,
+  PanelHeader,
+  enterAt,
+} from "@/components/ui/panel";
 import { niceCeiling } from "@/lib/services/dashboard-signals";
 import type {
   AttentionSignal,
@@ -83,8 +91,15 @@ function moneyParts(n: number, currency: string): { main: string; cents: string 
 function HeroMoney({ amount, currency }: { amount: number; currency: string }) {
   const { main, cents } = moneyParts(amount, currency);
   return (
+    // D6 · The dollars take a gradient fill; the cents deliberately do not.
+    // The gradient runs top-to-bottom across roughly 18% of the foreground's
+    // lightness, which at 48px reads as the number having an edge that catches
+    // the light and at any smaller size reads as a printer running out of ink.
+    // The cents are already stepped back to 45% opacity, so filling them too
+    // would be fading a fade — and they'd fall out of the gradient's box
+    // anyway, since they sit on a different baseline.
     <span className="tabular-nums">
-      {main}
+      <span className="u-hero-fill">{main}</span>
       {cents && (
         <span className="text-[0.58em] font-semibold text-foreground/45 align-baseline">
           {cents}
@@ -202,7 +217,10 @@ function Delta({ delta, size = "sm" }: { delta: KpiDelta; size?: "sm" | "md" }) 
           "inline-flex items-center gap-0.5 font-semibold whitespace-nowrap " + tone
         }
       >
-        <Glyph className={(size === "md" ? "size-4" : "size-3.5") + " shrink-0"} />
+        {/* One inline glyph size across the page. The md/sm split used to move
+            this arrow between 14px and 16px, which made the same mark two
+            different objects depending on which card it landed in. */}
+        <Glyph className={ICON_INLINE + " shrink-0"} />
         <span className="tabular-nums">{delta.text}</span>
       </span>
       <span className="text-muted-foreground">{delta.suffix}</span>
@@ -239,14 +257,30 @@ export type Kpi = {
  * act on, and one that says "$1,284, 8% behind last Tuesday" tells you whether
  * to worry. Everything without a comparison stayed downstairs in the ops blocks.
  */
-export function KpiStrip({ items }: { items: Kpi[] }) {
+export function KpiStrip({
+  items,
+  enterFrom = 0,
+}: {
+  items: Kpi[];
+  /**
+   * Where this strip sits in the page's arrival order. The four tiles stagger
+   * off it left to right — this is the one band whose members arrive
+   * individually rather than together, because four tiles landing at once is a
+   * row appearing and four landing in sequence is a row being dealt.
+   */
+  enterFrom?: number;
+}) {
   if (items.length === 0) return null;
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {items.map((k) => (
+    // gap-4, like every other within-a-group gap on the page. The strip used to
+    // sit on 12 while the columns below sat on 16, which is exactly the kind of
+    // near-miss that reads as "nobody chose this".
+    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {items.map((k, i) => (
         <section
           key={k.id}
-          className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-4 sm:p-5"
+          style={enterAt(enterFrom + i)}
+          className="u-in rounded-xl bg-card ring-1 ring-line shadow-elevation p-5"
         >
           <div className="flex items-start justify-between gap-2">
             {/* Quieter and wider than it was. The gap between the softest and
@@ -262,9 +296,12 @@ export function KpiStrip({ items }: { items: Kpi[] }) {
                 four different hues across one strip is the single loudest
                 un-earned thing on the page. The glyph alone, hairline weight,
                 in the same grey as the label it sits beside. */}
+            {/* 16px, the same as every other card-header glyph. It was 18 —
+                the only 18 on the page — which made four of the page's icons
+                subtly larger than the rest for no reason anyone could name. */}
             <span
               aria-hidden
-              className="shrink-0 text-muted-foreground/70 [&_svg]:size-[18px] [&_svg]:stroke-[1.5]"
+              className="shrink-0 text-muted-foreground/70 [&_svg]:size-4 [&_svg]:stroke-[1.5]"
             >
               {k.icon}
             </span>
@@ -304,37 +341,46 @@ export function ReadinessPanel({ report }: { report: ReadinessReport }) {
   const left = report.outstanding.length;
 
   return (
-    <section className="rounded-xl bg-card ring-1 ring-amber-500/25 shadow-elevation overflow-hidden">
-      <div className="flex items-start gap-3 px-5 pt-5 pb-4">
-        {/* Outlined rather than filled, same reasoning as Chip: the ring says
-            "amber" as clearly as a wash of it and leaves the glyph legible. */}
-        <span className="shrink-0 mt-0.5 flex items-center justify-center w-8 h-8 rounded-lg ring-1 ring-inset ring-amber-500/35 text-amber-600 dark:text-amber-400 [&_svg]:size-4 [&_svg]:stroke-[1.5]">
-          <Rocket />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-[15px] font-semibold tracking-tight">
+    <Panel className="ring-amber-500/25">
+      {/* The same header primitive as every other panel, keeping only what is
+          genuinely different here: the glyph is in a ring rather than bare,
+          because this panel is the one thing on the page allowed to raise its
+          voice. Outlined rather than filled, same reasoning as Chip — the ring
+          says "amber" as clearly as a wash of it and leaves the glyph legible. */}
+      <PanelHeader
+        bordered
+        icon={
+          <span className="flex items-center justify-center w-8 h-8 -my-1 rounded-lg ring-1 ring-inset ring-amber-500/35 text-amber-600 dark:text-amber-400">
+            <Rocket />
+          </span>
+        }
+        title={
+          <>
             {left} thing{left === 1 ? "" : "s"} left before you can take real
             payments
-          </h2>
-          {/* The count is the whole message. "Each one links to where you
-              finish it" described the underline under the reader's cursor. */}
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {report.requiredDone} of {report.requiredTotal} done
-          </p>
-        </div>
-        <Link
-          href="/app/go-live"
-          className="shrink-0 text-xs font-medium rounded-md border border-border px-2.5 py-1.5 hover:bg-accent"
-        >
-          Full checklist
-        </Link>
-      </div>
-      <ul className="divide-y divide-line-soft border-t border-line-soft">
+          </>
+        }
+        /* The count is the whole message. "Each one links to where you finish
+           it" described the underline under the reader's cursor. */
+        subtitle={report.requiredDone + " of " + report.requiredTotal + " done"}
+        trailing={
+          <Link
+            href="/app/go-live"
+            className="u-tx u-focus text-xs font-medium rounded-md border border-border px-2.5 py-1.5 hover:bg-accent"
+          >
+            Full checklist
+          </Link>
+        }
+      />
+      <ul className="divide-y divide-line-soft">
         {report.outstanding.map((c) => (
           <li key={c.id}>
             <Link
               href={c.href}
-              className="flex items-center gap-3 px-5 py-3 hover:bg-surface-2 transition-colors"
+              className={
+                "group u-tx u-focus-inset flex items-center gap-3 py-3 hover:bg-raised " +
+                PANEL_X
+              }
             >
               <span className="shrink-0 size-1.5 rounded-full bg-amber-500" />
               <span className="min-w-0 flex-1">
@@ -345,12 +391,17 @@ export function ReadinessPanel({ report }: { report: ReadinessReport }) {
                   {c.detail}
                 </span>
               </span>
-              <ChevronRight className="shrink-0 size-4 text-muted-foreground" />
+              <ChevronRight
+                className={
+                  "u-arrow u-tx shrink-0 text-muted-foreground group-hover:text-foreground " +
+                  ICON_INLINE
+                }
+              />
             </Link>
           </li>
         ))}
       </ul>
-    </section>
+    </Panel>
   );
 }
 
@@ -462,7 +513,10 @@ function PaceChart({
             word of the legend is read. */}
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="size-2 rounded-[2px] bg-chart-1" />
+            {/* Same swatch geometry as the payment-mix legend. It was 2px
+                against the donut's 3px, which is invisible on its own and
+                exactly the sort of near-miss that adds up. */}
+            <span aria-hidden className="size-2.5 rounded-[3px] bg-chart-1" />
             {scopeWord}
           </span>
           {curve.benchmark.length > 0 && (
@@ -487,6 +541,31 @@ function PaceChart({
             : ". The figures are written out below.")
         }
       >
+        <defs>
+          {/* D2 · The area under the line, as a fall-off rather than a slab.
+              A flat 10% wash has a hard horizontal top edge everywhere the
+              line isn't, which is the tell that a chart was filled rather than
+              lit; a gradient that reaches 14% at the line and nothing at the
+              baseline reads as the line casting light downward.
+              gradientUnits="userSpaceOnUse" with explicit y1/y2 is deliberate:
+              the default objectBoundingBox would rescale the gradient to each
+              path's own bounding box, so a quiet morning (a short path) would
+              get the same full ramp compressed into 20px and read DARKER than
+              a busy day. Pinned to the viewBox, the fall-off is the same
+              physical gradient whatever the data does. */}
+          <linearGradient
+            id="pace-area"
+            gradientUnits="userSpaceOnUse"
+            x1="0"
+            y1="0"
+            x2="0"
+            y2={H}
+          >
+            <stop offset="0%" stopColor="var(--chart-1)" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="var(--chart-1)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
         {/* Gridlines take the soft line, not the card's edge weight: inside a
             card, structure should be quieter than the boundary around it. */}
         <line x1="0" y1="0" x2={W} y2="0" className="stroke-line-soft" strokeWidth="1" vectorEffect="non-scaling-stroke" />
@@ -494,10 +573,16 @@ function PaceChart({
         <line x1="0" y1={H} x2={W} y2={H} className="stroke-line-soft" strokeWidth="1" vectorEffect="non-scaling-stroke" />
 
         {curve.benchmark.length > 0 && (
+          // The reference line draws first and slightly faster, so by the time
+          // today's line has finished arriving there is already something for
+          // it to be measured against. Drawing them in the other order would
+          // show the reader an answer before the question.
           <path
             d={line(curve.benchmark)}
             fill="none"
-            className="stroke-muted-foreground/55"
+            pathLength="1"
+            className="u-draw stroke-muted-foreground/55"
+            style={enterAt(5)}
             strokeWidth="1.25"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
@@ -506,17 +591,32 @@ function PaceChart({
 
         {curve.today.length > 0 && (
           <>
+            {/* The fill fades up rather than being drawn: an area mask that
+                unrolled with the line would need a clip rect animating its
+                width, which is exactly the layout-costing animation the rest
+                of this page avoids. Fading it in behind a line that is drawing
+                itself reads as the same gesture and costs one opacity. */}
             <path
               d={line(curve.today) + " L " + todayEnd.toFixed(2) + " " + H + " L 0 " + H + " Z"}
-              className="fill-chart-1/10"
+              fill="url(#pace-area)"
+              className="u-fade"
+              style={enterAt(6)}
               stroke="none"
             />
+            {/* pathLength="1" normalises the dash maths, which is what lets a
+                server-rendered chart draw itself: nothing here ever has to
+                call getTotalLength(), so there is no measuring pass, no
+                client component, and the line is complete and correct in the
+                HTML before a frame of animation runs. */}
             <path
               d={line(curve.today)}
               fill="none"
-              className="stroke-chart-1"
+              pathLength="1"
+              className="u-draw stroke-chart-1"
+              style={enterAt(6)}
               strokeWidth="2"
               strokeLinejoin="round"
+              strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
             />
           </>
@@ -598,34 +698,56 @@ export function TodayModule({
   const deltaAbs = Math.abs(pace.today - pace.benchmarkSoFar);
 
   return (
-    <section className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-6 sm:p-7">
+    // flex-1 on the card, and min-h-0 inside it: this is one of the two cards
+    // that terminate a column, and whichever column comes up short absorbs the
+    // difference here rather than leaving a ragged foot of canvas. See the
+    // grid note in pos-dashboard.tsx.
+    // `lit` puts a gradient hairline along the top edge — brightest at the
+    // left, gone by two thirds across. Only this card and the rail carry it:
+    // they lead their columns, so the page opens with light in the top-left of
+    // each, and on a third card it would stop being a light source and start
+    // being a stripe.
+    <Panel lit className="h-full">
       {/* Two-line header zone — title, then what the number is net of. Square
           and Lightspeed both carry a subtitle here; we carried none anywhere. */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold tracking-tight">
-            Sales {scope}
-          </h2>
-          {/* The sale count moved to the KPI strip, so this line is down to the
-              one thing the big number can't say for itself: what it is net of. */}
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Net of refunds · training excluded
-          </p>
-        </div>
-        <div className="shrink-0">
-          {failed ? (
+      <PanelHeader
+        title={"Sales " + scope}
+        /* The sale count moved to the KPI strip, so this line is down to the
+           one thing the big number can't say for itself: what it is net of. */
+        subtitle="Net of refunds · training excluded"
+        trailing={
+          failed ? (
             <Chip tone="danger">Comparison unavailable</Chip>
           ) : (
             <PaceChip pace={pace} weekday={weekday} />
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
 
+      <PanelBody className="flex flex-1 flex-col">
       {/* -0.02em rather than the default: at 48px, tracking set for body copy
           leaves lakes of air between digits and the figure stops reading as one
           object. This is the loudest thing on the page and it should look
           drawn, not typed. */}
-      <div className="mt-3.5 text-4xl sm:text-5xl font-bold tracking-[-0.02em] leading-none">
+      {/* `isolate` is required, not stylistic: without a stacking context here
+          the bloom's -z-10 would resolve against the page root and paint
+          BEHIND the card's own white background, which renders it invisible in
+          the one theme it exists for. */}
+      <div className="relative isolate w-fit text-4xl sm:text-5xl font-bold tracking-[-0.02em] leading-none">
+        {/* D1 · The bloom, dark mode only. On ink a big number sits in a lot of
+            empty card and there is nothing to say the card is lit; a brand-hue
+            glow behind it gives the figure somewhere to sit. In light mode the
+            same layer is invisible at any honest opacity and merely dirty at a
+            dishonest one, so it simply isn't rendered — `hidden dark:block`
+            rather than a token that resolves to transparent, because a layer
+            that paints nothing is still a layer the compositor pays for.
+            -z-10 keeps it behind the digits; the parent is `relative`, and
+            `w-fit` is what stops the glow spanning the full card width and
+            becoming a band. */}
+        <span
+          aria-hidden
+          className="u-bloom pointer-events-none absolute -inset-x-10 -inset-y-8 -z-10 hidden dark:block"
+        />
         <HeroMoney amount={pace.today} currency={currency} />
       </div>
 
@@ -723,7 +845,8 @@ export function TodayModule({
           fault, not a flat week.
         </p>
       )}
-    </section>
+      </PanelBody>
+    </Panel>
   );
 }
 
@@ -762,6 +885,7 @@ export function DailySalesCard({
   trend,
   currency,
   failed,
+  className,
 }: {
   bars: DayBar[];
   /** Takings across the whole window. */
@@ -770,6 +894,8 @@ export function DailySalesCard({
   trend: KpiDelta | null;
   currency: string;
   failed: boolean;
+  /** The grid passes flex-1 here — this card terminates the wide column. */
+  className?: string;
 }) {
   const W = 600;
   const H = 132;
@@ -781,45 +907,51 @@ export function DailySalesCard({
   const radius = Math.min(4, barW / 2);
 
   return (
-    <section className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-6 sm:p-7">
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold tracking-tight">Sales by day</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Last 14 days</p>
-        </div>
-        {!failed && (
-          <div className="shrink-0 text-right">
-            <div className="text-[22px] font-bold tabular-nums tracking-[-0.02em] leading-none">
-              {money(total, currency)}
+    <Panel className={"h-full " + (className ?? "")}>
+      <PanelHeader
+        title="Sales by day"
+        subtitle="Last 14 days"
+        trailing={
+          !failed ? (
+            <div className="text-right">
+              <div className="text-[22px] font-bold tabular-nums tracking-[-0.02em] leading-none">
+                {money(total, currency)}
+              </div>
+              <div className="mt-1.5 flex justify-end">
+                {trend ? (
+                  <Delta delta={trend} />
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    Not enough history to trend yet
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="mt-1.5 flex justify-end">
-              {trend ? (
-                <Delta delta={trend} />
-              ) : (
-                <span className="text-xs text-muted-foreground">
-                  Not enough history to trend yet
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+          ) : null
+        }
+      />
 
+      <PanelBody className="flex flex-1 flex-col">
       {failed ? (
-        <p className="mt-4 text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Couldn&apos;t load the last fortnight. The bars are missing because the
           query failed, not because the days were empty.
         </p>
       ) : ceiling <= 0 ? (
         // Fourteen empty tracks is a picture of nothing, and drawing it would
         // imply we measured fourteen zeroes rather than found no sales at all.
-        <p className="mt-4 text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           No sales in the last 14 days. Each day you trade adds a bar here, so
           the shape of your week builds itself.
         </p>
       ) : (
         <>
-          <figure className="mt-4">
+          {/* flex-1, with 132px as a floor rather than a fixed height. This is
+              the card that terminates the wide column, so any slack left over
+              when the two columns don't match exactly is spent on taller bars
+              — which is the one place on the page where extra height is worth
+              something — instead of on a ragged foot of empty canvas. */}
+          <figure className="flex flex-1 flex-col">
             <figcaption className="flex items-baseline justify-between text-[11px] text-muted-foreground">
               <span>Daily takings</span>
               <span className="tabular-nums">{moneyRound(ceiling, currency)}</span>
@@ -827,13 +959,58 @@ export function DailySalesCard({
             <svg
               viewBox={"0 0 " + W + " " + H}
               preserveAspectRatio="none"
-              className="mt-1.5 w-full h-[132px]"
+              className="mt-1.5 w-full flex-1 min-h-[132px]"
               role="img"
               aria-label={
                 "Daily takings for the last 14 days. " +
                 bars.map((b) => b.full + ": " + money(b.amount, currency)).join(", ")
               }
             >
+              <defs>
+                {/* D2 · Two gradients, one for each rung of the single hue.
+                    A bar filled flat is a rectangle; a bar that is a shade
+                    lighter at its head than at its foot is an object standing
+                    in a well. The range is small — about 12% of lightness —
+                    and pinned to the viewBox rather than to each bar's own
+                    box, so a tall bar and a short one are lit by the same
+                    light rather than each carrying a full ramp of its own. */}
+                <linearGradient
+                  id="bar-current"
+                  gradientUnits="userSpaceOnUse"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2={H}
+                >
+                  <stop offset="0%" stopColor="var(--ramp-2)" />
+                  <stop offset="100%" stopColor="var(--ramp-1)" />
+                </linearGradient>
+                <linearGradient
+                  id="bar-rest"
+                  gradientUnits="userSpaceOnUse"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2={H}
+                >
+                  <stop offset="0%" stopColor="var(--ramp-2)" stopOpacity="0.5" />
+                  <stop offset="100%" stopColor="var(--ramp-1)" stopOpacity="0.32" />
+                </linearGradient>
+                {/* The well itself: the track is darker at the lip than at the
+                    floor, which is the whole of what an inset shadow says and
+                    all an SVG <rect> can be given. */}
+                <linearGradient
+                  id="bar-well"
+                  gradientUnits="userSpaceOnUse"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2={H}
+                >
+                  <stop offset="0%" stopColor="var(--well-top)" />
+                  <stop offset="100%" stopColor="var(--well-bottom)" />
+                </linearGradient>
+              </defs>
               {bars.map((b, i) => {
                 const x = i * slot + (slot - barW) / 2;
                 const h = ceiling > 0 ? Math.min(1, b.amount / ceiling) * H : 0;
@@ -848,7 +1025,7 @@ export function DailySalesCard({
                       width={barW}
                       height={H}
                       rx={radius}
-                      className="fill-foreground/[0.045]"
+                      fill="url(#bar-well)"
                     />
                     {/* One hue, two rungs of it. The scoped day — the one the
                         hero figure above is talking about — at full strength;
@@ -857,13 +1034,25 @@ export function DailySalesCard({
                         compete with it. Two thirds of a hue was not enough of a
                         step: the current bar didn't read as the current bar. */}
                     {drawn > 0 && (
+                      // scaleY from a bottom origin, so fourteen bars grow out
+                      // of the baseline for the price of a transform each and
+                      // no layout at all. `transform-box: fill-box` (in
+                      // .u-rise) is what pins the origin to the bar's own foot
+                      // rather than to the SVG's origin, which is the whole
+                      // difference between growing and sliding.
+                      // The stagger runs left to right, oldest day first, at
+                      // half the page's step: fourteen bars at a full 40ms
+                      // would take 560ms to deal out, which is longer than the
+                      // entire rest of the page's arrival.
                       <rect
                         x={x}
                         y={H - drawn}
                         width={barW}
                         height={drawn}
                         rx={radius}
-                        className={b.current ? "fill-ramp-1" : "fill-ramp-1/40"}
+                        className="u-rise"
+                        style={enterAt(7 + i * 0.5)}
+                        fill={b.current ? "url(#bar-current)" : "url(#bar-rest)"}
                       />
                     )}
                   </g>
@@ -886,7 +1075,8 @@ export function DailySalesCard({
           </figure>
         </>
       )}
-    </section>
+      </PanelBody>
+    </Panel>
   );
 }
 
@@ -913,11 +1103,14 @@ export function PaymentMixCard({
   total,
   currency,
   failed,
+  className,
 }: {
   slices: PaymentSlice[];
   total: number;
   currency: string;
   failed: boolean;
+  /** The grid passes flex-1 here — this card terminates the narrow column. */
+  className?: string;
 }) {
   // Arcs are laid end to end from twelve o'clock. A 1.5px gap between them
   // keeps two adjacent slices from reading as one; a slice too small to hold
@@ -934,27 +1127,32 @@ export function PaymentMixCard({
   });
 
   return (
-    <section className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold tracking-tight">Payment mix</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Last 14 days</p>
-        </div>
-      </div>
+    <Panel className={"h-full " + (className ?? "")}>
+      <PanelHeader title="Payment mix" subtitle="Last 14 days" />
 
+      <PanelBody className="flex flex-1 flex-col">
       {failed ? (
-        <p className="mt-4 text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Couldn&apos;t load the payment mix. It is a fault, not an all-cash
           fortnight.
         </p>
       ) : total <= 0 || slices.length === 0 ? (
-        <p className="mt-4 text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Nothing settled in the last 14 days, so there is no mix to split.
           Cash, card and gift cards each get a slice once sales start landing.
         </p>
       ) : (
-        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-4">
-          <div className="relative shrink-0 w-[132px] h-[132px]">
+        // Ring above, legend below, both full-width — not side by side.
+        //
+        // This card lives in the narrow column and terminates it, so it is the
+        // card that absorbs whatever the two columns don't agree on. Stacked,
+        // that slack lands in the ring's own breathing room and the legend gets
+        // the whole column width, so "Delivery app" and its figure stop
+        // fighting for 190px. Side by side, the same slack would have been dead
+        // air under a donut.
+        <div className="flex flex-1 flex-col items-center gap-5">
+          <div className="relative flex w-full flex-1 items-center justify-center py-1">
+          <div className="relative w-[150px] h-[150px]">
             <svg viewBox="0 0 132 132" className="w-full h-full -rotate-90" role="img"
               aria-label={
                 "Payment mix: " +
@@ -971,14 +1169,34 @@ export function PaymentMixCard({
                 className="stroke-foreground/[0.06]"
                 strokeWidth="14"
               />
-              {arcs.map((a) => (
+              {arcs.map((a, i) => (
+                // C2 · Each arc sweeps out from its own start point, in order,
+                // so the ring assembles the way the money arrived rather than
+                // rotating into place as a finished object.
+                //
+                // The animation drives stroke-dasharray, not stroke-dashoffset:
+                // dashoffset would slide the arc around the ring from
+                // somewhere else, and what this needs is for the arc to GROW
+                // from where it belongs. The offset stays a static attribute
+                // pinning the start, and --arc-len / --arc-gap are the only
+                // things the keyframe has to know — which is why they are
+                // handed in as custom properties from here, the only place a
+                // slice's share is known.
                 <circle
                   key={a.slice.key}
                   cx="66"
                   cy="66"
                   r={RING_R}
                   fill="none"
-                  className={RAMP_STROKE[a.slice.hue] ?? RAMP_STROKE[6]}
+                  className={"u-sweep " + (RAMP_STROKE[a.slice.hue] ?? RAMP_STROKE[6])}
+                  style={
+                    {
+                      "--arc-c": RING_C.toFixed(2),
+                      "--arc-len": a.len.toFixed(2),
+                      "--arc-gap": (RING_C - a.len).toFixed(2),
+                      ...enterAt(8 + i * 0.5),
+                    } as React.CSSProperties
+                  }
                   strokeWidth="14"
                   strokeLinecap="butt"
                   strokeDasharray={a.len.toFixed(2) + " " + (RING_C - a.len).toFixed(2)}
@@ -995,11 +1213,12 @@ export function PaymentMixCard({
               </span>
             </div>
           </div>
+          </div>
 
-          {/* 190px is the width at which "Store credit" and its figure both fit
-              unabbreviated. Below that the legend drops under the ring rather
-              than truncating — a legend reading "Deli… 9%" labels nothing. */}
-          <ul className="min-w-[190px] flex-1 space-y-2">
+          {/* The legend now owns the full column width, so nothing truncates
+              and the two numeric columns are fixed-width and right-aligned —
+              percentages line up under percentages, money under money. */}
+          <ul className="w-full space-y-2.5">
             {slices.map((s) => (
               <li key={s.key} className="flex items-center gap-2.5 text-xs">
                 <span
@@ -1015,10 +1234,10 @@ export function PaymentMixCard({
                     4%-chroma blue is a swatch, not a text colour. The swatch
                     two columns left already ties this row to its arc, so the
                     figure gets to be the loud thing in the row instead. */}
-                <span className="shrink-0 tabular-nums font-semibold text-foreground">
+                <span className="shrink-0 w-10 text-right tabular-nums font-semibold text-foreground">
                   {s.pct}%
                 </span>
-                <span className="shrink-0 w-[68px] text-right tabular-nums text-muted-foreground">
+                <span className="shrink-0 w-[76px] text-right tabular-nums text-muted-foreground">
                   {moneyRound(s.amount, currency)}
                 </span>
               </li>
@@ -1026,7 +1245,8 @@ export function PaymentMixCard({
           </ul>
         </div>
       )}
-    </section>
+      </PanelBody>
+    </Panel>
   );
 }
 
@@ -1054,45 +1274,52 @@ export function AttentionRail({
       : "clear";
 
   return (
-    <section
-      className={
-        "relative rounded-xl bg-card shadow-elevation overflow-hidden ring-1 " +
-        (worst === "clear" ? "ring-line" : "ring-line-strong")
-      }
+    <Panel
+      lit
+      className={worst === "clear" ? "ring-line" : "ring-line-strong"}
     >
+      {/* C5 · The accent bar announces itself twice on arrival and then stops.
+          It pulses only when there is actually something in the rail — a
+          bar that breathes over "nothing needs you right now" is the product
+          asking for attention it hasn't earned. */}
       <span
         aria-hidden
         className={
           "absolute inset-y-0 left-0 w-[3px] " +
+          (worst === "clear" ? "" : "u-pulse ") +
           (worst === "blocked"
             ? "bg-red-500"
             : worst === "attention"
               ? "bg-amber-500"
               : "bg-line-strong")
         }
+        style={enterAt(7)}
       />
-      <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-line-soft">
-        {/* No subtitle. "Everything blocking service or costing money, as of
-            right now" restated the heading at four times the length, and the
-            rows underneath already say what each thing is. The empty state
-            below still gets its sentences — that is when explanation earns
-            its place. */}
-        <h2 className="text-[15px] font-semibold tracking-tight">Needs you now</h2>
-        {signals.length > 0 && (
-          <Chip
-            tone={worst === "blocked" ? "danger" : "warning"}
-            className="shrink-0 tabular-nums"
-          >
-            {signals.length} open
-          </Chip>
-        )}
-      </div>
+      {/* No subtitle. "Everything blocking service or costing money, as of
+          right now" restated the heading at four times the length, and the
+          rows underneath already say what each thing is. The empty state
+          below still gets its sentences — that is when explanation earns
+          its place. */}
+      <PanelHeader
+        bordered
+        title="Needs you now"
+        trailing={
+          signals.length > 0 ? (
+            <Chip
+              tone={worst === "blocked" ? "danger" : "warning"}
+              className="tabular-nums"
+            >
+              {signals.length} open
+            </Chip>
+          ) : null
+        }
+      />
 
       {signals.length === 0 ? (
         // "Nothing to do" is a result, not an empty state — it deserves a
         // confident line rather than the dashed placeholder box that means
         // "you haven't set this up yet".
-        <div className="flex items-center gap-3 px-5 py-6">
+        <div className={"flex flex-1 items-center gap-3 py-6 " + PANEL_X}>
           <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg ring-1 ring-inset ring-emerald-500/35 text-emerald-600 dark:text-emerald-400 [&_svg]:size-4 [&_svg]:stroke-[1.5]">
             <CheckCircle2 />
           </span>
@@ -1109,7 +1336,10 @@ export function AttentionRail({
             <li key={s.id}>
               <Link
                 href={s.href}
-                className="flex items-center gap-3 px-5 py-4 hover:bg-surface-2 transition-colors"
+                className={
+                  "group u-tx u-focus-inset flex items-center gap-3 py-4 hover:bg-raised " +
+                  PANEL_X
+                }
               >
                 <span
                   aria-hidden
@@ -1130,11 +1360,24 @@ export function AttentionRail({
                     {s.detail}
                   </span>
                 </span>
-                <span className="shrink-0 hidden sm:flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                {/* The row's affordance, revealed rather than always-on: at
+                    rest the action label is muted and sits still, and on hover
+                    it comes up to full ink while the chevron leans 2px toward
+                    where it is taking you. Two pixels is under the threshold
+                    where it reads as the icon relocating and over the one where
+                    nothing happened. Both changes are on the row's own hover,
+                    so a keyboard user gets them from :focus-visible too — the
+                    focus ring and the lit row arrive together. */}
+                <span className="u-tx shrink-0 hidden sm:flex items-center gap-1 text-xs font-medium text-muted-foreground group-hover:text-foreground">
                   {s.actionLabel}
-                  <ChevronRight className="size-3.5" />
+                  <ChevronRight className={"u-arrow " + ICON_INLINE} />
                 </span>
-                <ChevronRight className="shrink-0 sm:hidden size-4 text-muted-foreground" />
+                <ChevronRight
+                  className={
+                    "u-arrow u-tx shrink-0 sm:hidden text-muted-foreground group-hover:text-foreground " +
+                    ICON_INLINE
+                  }
+                />
               </Link>
             </li>
           ))}
@@ -1144,16 +1387,22 @@ export function AttentionRail({
       {degraded.length > 0 && (
         // The whole point of the rail is that an empty one means "all clear".
         // If a check didn't run, say so here rather than let its silence read
-        // as a pass.
-        <div className="flex items-start gap-2 px-5 py-3 border-t border-line-soft bg-surface-2 text-xs text-muted-foreground">
-          <AlertCircle className="shrink-0 size-3.5 mt-px" />
+        // as a pass. mt-auto pins it to the foot of the card so it reads as a
+        // footnote to the whole list even when the rail has been stretched.
+        <div
+          className={
+            "mt-auto flex items-start gap-2 py-3 border-t border-line-soft bg-raised text-xs text-muted-foreground " +
+            PANEL_X
+          }
+        >
+          <AlertCircle className={"shrink-0 mt-px " + ICON_INLINE} />
           <span>
             Couldn&apos;t check {degraded.join(", ")}. Those may be hiding
             something — this list is incomplete.
           </span>
         </div>
       )}
-    </section>
+    </Panel>
   );
 }
 
@@ -1163,19 +1412,10 @@ export function AttentionRail({
 
 export type OpsStat = { value: string; label: string; muted?: boolean };
 
-/**
- * A number, a state, one action. Deliberately not a KPI tile: the `state` line
- * is the point, and it is a sentence, not a delta.
- */
-export function OpsBlock({
-  title,
-  icon,
-  stats,
-  state,
-  tone = "neutral",
-  action,
-  failed,
-}: {
+/** A number, a state, one action — one column of the operations band. */
+export type OpsSection = {
+  /** Stable key. Also what tells the skeleton how many columns to draw. */
+  id: string;
   title: string;
   icon: React.ReactNode;
   stats: OpsStat[];
@@ -1183,76 +1423,100 @@ export function OpsBlock({
   tone?: "neutral" | "good" | "attention";
   action?: { label: string; href: string } | null;
   failed?: boolean;
-}) {
-  return (
-    <section className="flex flex-col rounded-xl bg-card ring-1 ring-line shadow-elevation p-5">
-      <div className="flex items-center gap-2.5">
-        {/* The well here was already neutral (bg-muted), which is the shape the
-            KPI cards should have had all along — but at this size even a
-            neutral box is one more rectangle in a column of rectangles, and the
-            glyph carries the block on its own. */}
-        <span className="shrink-0 text-muted-foreground/70 [&_svg]:size-4 [&_svg]:stroke-[1.5]">
-          {icon}
-        </span>
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">
-          {title}
-        </h3>
-      </div>
+};
 
-      {failed ? (
-        <p className="mt-3 flex-1 text-xs text-muted-foreground">
-          Couldn&apos;t load this. The figures below would be wrong, so they
-          aren&apos;t shown.
-        </p>
-      ) : (
-        <>
-          <div className="mt-3.5 flex flex-wrap items-baseline gap-x-6 gap-y-1">
-            {stats.map((s) => (
-              <div key={s.label}>
-                <div
+/**
+ * Service, Menu & stock and Team as ONE panel divided by hairlines, not three
+ * cards separated by canvas.
+ *
+ * They were always one system — same structure, same three rungs of type, same
+ * "here is a number, here is what it means, here is where you fix it" — and
+ * three identical objects sitting apart is a layout saying they are unrelated
+ * when they aren't. Inside one panel with a rule between them, the eye reads
+ * the band once instead of three times, and the page loses two card edges and
+ * two shadows it was paying for and getting nothing from.
+ *
+ * Laid across at desktop rather than stacked, which is also what makes the
+ * columns above balance: three sections stacked in the narrow rail is 530px of
+ * height, and the same three across the full width is 176.
+ *
+ * flex-1 rather than a fixed column count, because the gates decide how many
+ * sections exist — a business with no catalog module gets two, a bookkeeper
+ * with neither gets one, and a three-column grid would leave a hole for both.
+ * The vertical rhythm is guaranteed rather than agreed: every section is the
+ * same PanelHeader + PanelBody as every other card on the page, and the action
+ * link is pinned with mt-auto so all three land on one line however long the
+ * state sentences run.
+ */
+export function OpsPanel({ sections }: { sections: OpsSection[] }) {
+  if (sections.length === 0) return null;
+  return (
+    <Panel className="flex-col divide-y divide-line-soft lg:flex-row lg:divide-y-0 lg:divide-x">
+      {sections.map((s) => (
+        <div key={s.id} className="flex min-w-0 flex-1 flex-col">
+          <PanelHeader as="h3" icon={s.icon} title={s.title} />
+          <PanelBody className="flex flex-1 flex-col">
+            {s.failed ? (
+              <p className="text-xs text-muted-foreground">
+                Couldn&apos;t load this. The figures below would be wrong, so
+                they aren&apos;t shown.
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+                  {s.stats.map((st) => (
+                    <div key={st.label}>
+                      <div
+                        className={
+                          "text-[26px] font-bold tabular-nums tracking-[-0.02em] leading-none " +
+                          (st.muted ? "text-muted-foreground" : "text-foreground")
+                        }
+                      >
+                        {st.value}
+                      </div>
+                      {/* 11px sat below every competitor's floor, and 20-against-11
+                          was not a step you could see. 24/12 is Toast's ratio, and
+                          26/12 widens it a little further — the ladder between the
+                          quietest and loudest type is most of what "considered"
+                          means on a screen this dense. */}
+                      <div className="text-xs text-muted-foreground mt-1.5">
+                        {st.label}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p
                   className={
-                    "text-[26px] font-bold tabular-nums tracking-[-0.02em] leading-none " +
-                    (s.muted ? "text-muted-foreground" : "text-foreground")
+                    "mt-3.5 text-xs " +
+                    (s.tone === "attention"
+                      ? "text-amber-600 dark:text-amber-400"
+                      : s.tone === "good"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-muted-foreground")
                   }
                 >
-                  {s.value}
-                </div>
-                {/* 11px sat below every competitor's floor, and 20-against-11
-                    was not a step you could see. 24/12 is Toast's ratio, and
-                    26/12 widens it a little further — the ladder between the
-                    quietest and loudest type is most of what "considered"
-                    means on a screen this dense. */}
-                <div className="text-xs text-muted-foreground mt-1.5">
-                  {s.label}
-                </div>
-              </div>
-            ))}
-          </div>
-          <p
-            className={
-              "mt-3.5 flex-1 text-xs " +
-              (tone === "attention"
-                ? "text-amber-600 dark:text-amber-400"
-                : tone === "good"
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-muted-foreground")
-            }
-          >
-            {state}
-          </p>
-        </>
-      )}
+                  {s.state}
+                </p>
+              </>
+            )}
 
-      {action && (
-        <Link
-          href={action.href}
-          className="mt-3 inline-flex items-center gap-1 text-xs font-medium hover:underline"
-        >
-          {action.label}
-          <ChevronRight className="size-3.5" />
-        </Link>
-      )}
-    </section>
+            {s.action && (
+              // `group` here rather than on the whole section: only the link is
+              // a target, and warming a 400px-wide ops column because the
+              // cursor crossed it would be the panel reacting to being passed
+              // over rather than to being aimed at.
+              <Link
+                href={s.action.href}
+                className="group u-tx u-focus mt-auto pt-3.5 inline-flex items-center gap-1 self-start text-xs font-medium hover:text-primary"
+              >
+                {s.action.label}
+                <ChevronRight className={"u-arrow " + ICON_INLINE} />
+              </Link>
+            )}
+          </PanelBody>
+        </div>
+      ))}
+    </Panel>
   );
 }
 
@@ -1271,7 +1535,21 @@ export type CheckRow = {
   /** Server name, when we have one. */
   who: string | null;
   status: { text: string; tone: "neutral" | "info" | "success" | "warning" | "danger" };
+  /**
+   * Money, or an em dash where there honestly isn't any. Never a line count.
+   *
+   * It used to hold "9 lines" for open checks and "$84.20" for settled ones,
+   * under one right-aligned "Amount" heading. Two different kinds of quantity
+   * stacked in one column is a column that can't be scanned: the eye is trying
+   * to compare figures and keeps landing on a word, the tabular-nums does
+   * nothing for text, and the heading is a lie for half the rows. The line
+   * count is a property of the check, so it moved down to the check's own
+   * line, beside the guest count and the server — which is where a person
+   * would say it out loud.
+   */
   amount: string;
+  /** "9 lines" — sits in the row's detail line, not in the money column. */
+  lines: string | null;
   href: string;
   /** Open checks read as live money; settled ones are history. */
   open: boolean;
@@ -1316,23 +1594,37 @@ export function ChecksTable({
   hrefLabel: string;
 }) {
   return (
-    <section className="rounded-xl bg-card ring-1 ring-line shadow-elevation overflow-hidden">
-      <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-line-soft">
-        <div className="min-w-0 flex flex-wrap items-baseline gap-x-2.5">
-          <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
-          <span className="text-xs text-muted-foreground">{note}</span>
-        </div>
-        <Link
-          href={href}
-          className="shrink-0 text-xs font-medium text-muted-foreground hover:text-foreground"
-        >
-          {hrefLabel} →
-        </Link>
-      </div>
+    <Panel>
+      {/* The note used to sit on the title's baseline as a second phrase, which
+          made this the only header on the page with a one-line shape. It is a
+          subtitle like every other card's subtitle now. */}
+      <PanelHeader
+        bordered
+        title={title}
+        subtitle={note}
+        trailing={
+          // The arrow was a literal "→" in the label text — a character from
+          // the body font, on the text baseline, at whatever weight the font
+          // decided, and a different mark from the ChevronRight that ends
+          // every other row on this page. It is the same glyph as the rest
+          // now, and it leans on hover like the rest.
+          <Link
+            href={href}
+            className="group u-tx u-focus inline-flex items-center gap-0.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            {hrefLabel}
+            <ChevronRight className={"u-arrow " + ICON_INLINE} />
+          </Link>
+        }
+      />
 
       {failed ? (
-        <div className="flex items-start gap-2 px-5 py-6 text-sm text-muted-foreground">
-          <AlertCircle className="shrink-0 size-4 mt-0.5" />
+        <div
+          className={
+            "flex items-start gap-2 py-6 text-sm text-muted-foreground " + PANEL_X
+          }
+        >
+          <AlertCircle className={"shrink-0 mt-0.5 " + ICON_INLINE} />
           <span>
             Couldn&apos;t load this list. It is a fault, not an empty
             register — try again, and check the server log if it persists.
@@ -1341,23 +1633,34 @@ export function ChecksTable({
       ) : rows.length === 0 ? (
         // No column header over an empty register: naming four columns that
         // hold nothing turns a written explanation into a broken-looking grid.
+        //
+        // py-12 rather than py-8 now that this panel runs the full width of the
+        // page: a two-line message centred in a 1232px band needs vertical room
+        // around it or it reads as a caption that lost its picture. The dashed
+        // border and the tinted ground come off because the panel around it is
+        // already a drawn object — a dashed box inside a solid one is two
+        // borders saying the same thing.
         <EmptyState
-          className="border-0 rounded-none bg-transparent py-8"
+          className="flex-1 border-0 rounded-none bg-transparent py-12"
           title="No sales on record yet"
           description="Every check you open and every sale you settle shows up here, newest first."
         />
       ) : (
         <>
-          {/* An explicit header row, on the raised rung of the ladder. Every
-              competitor's table names its columns; ours were a w-16 of times
-              and a w-24 of money with nothing to say which was which. The
-              status cell carries no width because the amount column beside it
-              is fixed — both right edges land in the same place regardless of
-              how long a status reads. */}
-          <div className="flex items-center gap-3 px-5 py-2.5 border-b border-line-soft text-[10px] font-medium uppercase tracking-[0.09em] text-muted-foreground">
+          {/* An explicit header row. Every competitor's table names its
+              columns; ours were a w-16 of times and a w-24 of money with
+              nothing to say which was which. Status now carries a width too,
+              so at full page width the chips form a column instead of drifting
+              wherever the label above them happened to end. */}
+          <div
+            className={
+              "flex items-center gap-3 py-2.5 border-b border-line-soft text-[10px] font-medium uppercase tracking-[0.09em] text-muted-foreground " +
+              PANEL_X
+            }
+          >
             <span className="w-16 shrink-0">Time</span>
             <span className="min-w-0 flex-1">{itemHeading}</span>
-            <span className="shrink-0 hidden sm:block">Status</span>
+            <span className="hidden sm:block w-36 shrink-0">Status</span>
             <span className="w-24 shrink-0 text-right">Amount</span>
           </div>
           <div className="divide-y divide-line-soft">
@@ -1365,7 +1668,10 @@ export function ChecksTable({
               <Link
                 key={r.id}
                 href={r.href}
-                className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-surface-2"
+                className={
+                  "u-tx u-focus-inset flex items-center gap-3 py-3 hover:bg-raised " +
+                  PANEL_X
+                }
               >
                 <span className="w-16 shrink-0 text-xs tabular-nums text-muted-foreground">
                   {r.time}
@@ -1381,10 +1687,10 @@ export function ChecksTable({
                       because it was the better answer either way. */}
                   <span className="block text-xs text-muted-foreground truncate">
                     <span className="sm:hidden">{r.status.text} · </span>
-                    {[r.channel, r.who].filter(Boolean).join(" · ") || "—"}
+                    {[r.channel, r.who, r.lines].filter(Boolean).join(" · ") || "—"}
                   </span>
                 </span>
-                <span className="shrink-0 hidden sm:flex justify-end">
+                <span className="hidden sm:flex w-36 shrink-0">
                   <Chip tone={r.status.tone}>{r.status.text}</Chip>
                 </span>
                 <span
@@ -1400,6 +1706,6 @@ export function ChecksTable({
           </div>
         </>
       )}
-    </section>
+    </Panel>
   );
 }

@@ -22,7 +22,7 @@ import {
   ChecksTable,
   DailySalesCard,
   KpiStrip,
-  OpsBlock,
+  OpsPanel,
   PaymentMixCard,
   ReadinessPanel,
   TodayModule,
@@ -31,10 +31,13 @@ import {
   type DayBar,
   type Kpi,
   type KpiDelta,
+  type OpsSection,
   type OpsStat,
   type PaceCurve,
 } from "./dashboard-modules";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { enterAt } from "@/components/ui/panel";
 import {
   Banknote,
   Calculator,
@@ -997,6 +1000,65 @@ export async function PosDashboard({
     teamState = activeStaff + " " + (activeStaff === 1 ? "person" : "people") + " can ring sales.";
   }
 
+  // The three ops sections, assembled as data rather than as three sibling
+  // elements. Both gates still apply exactly as before — hasCatalog and
+  // hasStaff simply decide whether the section joins the array — and OpsPanel
+  // divides the band by however many survive, so a two-section or one-section
+  // business gets a full band rather than a three-column grid with a hole.
+  const opsSections: OpsSection[] = [
+    {
+      id: "service",
+      title: "Service",
+      icon: <ChefHat />,
+      stats: serviceStats,
+      state: serviceState,
+      tone: serviceTone,
+      action: canCloseDay
+        ? {
+            label: openDrawer ? "Close the day" : "Open the till",
+            href: "/app/pos/drawer",
+          }
+        : { label: "Go to the register", href: "/app/pos" },
+      failed: runsChecks
+        ? ticketsFailed
+        : hasKitchen
+          ? kitchenFailed || todayCountFailed
+          : todayCountFailed,
+    },
+  ];
+
+  if (hasCatalog) {
+    opsSections.push({
+      id: "menu",
+      title: "Menu & stock",
+      icon: <Package />,
+      stats: menuStats,
+      state: menuState,
+      tone: menuTone,
+      // Read-only for everyone (staff have always been able to look at the
+      // menu), but only the people who can change it get the way in.
+      action: canEditMenu ? { label: "Manage menu", href: "/app/catalog" } : null,
+      failed: catalogFailed,
+    });
+  }
+
+  if (hasStaff) {
+    opsSections.push({
+      id: "team",
+      title: "Team",
+      icon: <Users />,
+      stats: teamStats,
+      state: teamState,
+      tone: teamTone,
+      action: canEditStaff
+        ? runsChecks
+          ? { label: "Attendance", href: "/app/attendance" }
+          : { label: "Manage staff", href: "/app/staff" }
+        : null,
+      failed: staffFailed || (runsChecks && clockFailed),
+    });
+  }
+
   // --- 4 · The check register ---------------------------------------------
   //
   // The status chip is the only thing carrying state here now. The row tint
@@ -1031,8 +1093,11 @@ export async function PosDashboard({
         // Deliberately no dollar figure. The running total of an open cart is
         // computed by the register (modifiers, seat splits, comps, service
         // charge) and this page has no business re-deriving money it can't
-        // verify. Line count is the honest number here.
-        amount: lines > 0 ? lines + (lines === 1 ? " line" : " lines") : "—",
+        // verify. The money column says so with an em dash, and the line count
+        // — which is the honest number here — goes on the check's own detail
+        // line rather than pretending to be an amount. See CheckRow.amount.
+        amount: "—",
+        lines: lines > 0 ? lines + (lines === 1 ? " line" : " lines") : null,
         href: "/app/pos",
         open: true,
       });
@@ -1057,6 +1122,7 @@ export async function PosDashboard({
           ? { text: "Partial refund", tone: "warning" }
           : { text: "Paid", tone: "success" },
       amount: money(num(o.total), currency),
+      lines: null,
       href: "/app/pos/sales",
       open: false,
     });
@@ -1080,82 +1146,162 @@ export async function PosDashboard({
   ];
 
   return (
-    <div className="max-w-7xl space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          {/* No "Welcome back". The heading's job is to say which day's numbers
-              these are, because that is the only thing on this page that can
-              be silently stale. */}
-          <h1 className="text-xl font-semibold tracking-tight">{business.name}</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">{dateLabel}</p>
+    // `isolate` is doing real work: it makes this element a stacking context,
+    // which is what lets the lit-canvas layer sit at -z-10 (behind every card's
+    // background, which is unpositioned and therefore paints below positioned
+    // siblings) without escaping behind the app shell's own background. The
+    // grain sits at the other end, above everything, because grain belongs to
+    // the photograph rather than to one object in it.
+    <div className="relative isolate max-w-7xl">
+      {/* D0 · The light. An ellipse anchored above the top edge and wider than
+          the content box, so what reaches the screen is the middle of a
+          falloff and never an arc. It stops after 620px — this is the light
+          on the top of the page, not a gradient background. */}
+      <div
+        aria-hidden
+        className="u-canvas absolute -inset-x-8 -top-24 -z-10 h-[620px]"
+      />
+
+      {/* THE VERTICAL SCALE. Two steps and no others: 28px between major bands
+          (the title block, the KPI summary, the two-column detail region, the
+          operations band, the register) and 16px between cards inside a band.
+          The page used to run 16 / 28 / 12 / 24 depending on which commit added
+          which module, and nothing reads as unfinished faster than gaps that
+          are nearly but not quite the same. */}
+      <div className="space-y-7">
+      {/* The title block and the scope control are one group — the control
+          belongs to the heading it qualifies — so they sit on the 16 step,
+          inside a band that is itself 28 from the next one. */}
+      <div className="u-in space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            {/* No "Welcome back". The heading's job is to say which day's numbers
+                these are, because that is the only thing on this page that can
+                be silently stale. */}
+            <h1 className="text-xl font-semibold tracking-tight">{business.name}</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">{dateLabel}</p>
+          </div>
+          {/* THE ONE PLACE ON THIS PAGE WITH A HIERARCHY OF ACTION.
+              These were two outlined pills of near-identical weight — same
+              border, same height, same type — sitting side by side, which is a
+              header that has declined to say which button matters. "New sale"
+              is the only thing on the admin home that starts work rather than
+              inspecting it, so it gets the page's single solid fill; "Live ops"
+              is a place you go to look, so it gets a surface and a hairline.
+              Both come from the shared Button now rather than from two
+              hand-rolled class strings, which is what stops the next person
+              adding a third weight. */}
+          <div className="shrink-0 flex items-center gap-2">
+            {runsChecks && canApprove && (
+              <Button asChild variant="subtle" size="lg" className="px-3.5">
+                <Link href="/app/live-ops">Live ops</Link>
+              </Button>
+            )}
+            {/* Same height, same radius, same padding as its neighbour. The
+                hierarchy is carried entirely by material — fill against
+                surface — rather than by making one of them bigger, because a
+                pair that differs in two dimensions at once reads as two
+                unrelated controls rather than as a primary and a secondary. */}
+            <Button asChild variant="brand" size="lg" className="px-3.5">
+              <Link href="/app/pos">New sale</Link>
+            </Button>
+          </div>
         </div>
-        <div className="shrink-0 flex items-center gap-2">
-          {runsChecks && canApprove && (
-            <Link
-              href="/app/live-ops"
-              className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-accent"
-            >
-              Live ops
-            </Link>
-          )}
-          <Link
-            href="/app/pos"
-            className="px-3 py-1.5 text-sm rounded-md border border-foreground bg-accent font-medium"
+
+        {/* Every back office in the category puts a scope control right here, and
+            a page without one reads as unfinished even to someone who can't say
+            why. Ours is narrow on purpose — it moves the sales figures and says
+            so, rather than pretending to scope alerts that are only ever live. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          {/* The explanation used to be a paragraph beside this control. It was
+              true — the alerts and the register really are always live — and it
+              was a sentence of prose sitting above the numbers, which is the
+              trade this page keeps losing. It survives as a tooltip.
+
+              RADIUS NESTING: the track is rounded-lg (12px) with 2px of padding,
+              so the pill inside it wants 10px, not the 9.6px that rounded-md
+              happens to be. An inner radius equal to or larger than its outer
+              is the single most legible sloppiness in a component this small. */}
+          <div
+            className="inline-flex items-center rounded-lg bg-raised ring-1 ring-line p-0.5"
+            title="Sets which day the sales figures cover. The alerts and the register below are always live."
           >
-            New sale
-          </Link>
+            {scopes.map((s) => (
+              <Link
+                key={s.key}
+                href={s.href}
+                aria-current={s.key === scope ? "page" : undefined}
+                className={
+                  // u-press on both halves, not just the inactive one: the
+                  // selected segment is still a link you can click, and a
+                  // control where half the targets acknowledge a press and
+                  // half don't feels broken in a way people report as "laggy".
+                  "u-tx u-tx-move u-press u-focus rounded-[10px] px-3 py-1 text-[13px] " +
+                  (s.key === scope
+                    ? "bg-card font-medium text-foreground shadow-elevation-sm"
+                    : "text-muted-foreground hover:bg-card/60 hover:text-foreground")
+                }
+              >
+                {s.label}
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Every back office in the category puts a scope control right here, and
-          a page without one reads as unfinished even to someone who can't say
-          why. Ours is narrow on purpose — it moves the sales figures and says
-          so, rather than pretending to scope alerts that are only ever live. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        {/* The explanation used to be a paragraph beside this control. It was
-            true — the alerts and the register really are always live — and it
-            was a sentence of prose sitting above the numbers, which is the
-            trade this page keeps losing. It survives as a tooltip. */}
-        <div
-          className="inline-flex items-center rounded-lg bg-raised ring-1 ring-line p-0.5"
-          title="Sets which day the sales figures cover. The alerts and the register below are always live."
-        >
-          {scopes.map((s) => (
-            <Link
-              key={s.key}
-              href={s.href}
-              aria-current={s.key === scope ? "page" : undefined}
-              className={
-                "rounded-md px-3 py-1 text-[13px] transition-colors " +
-                (s.key === scope
-                  ? "bg-card font-medium text-foreground shadow-elevation-sm"
-                  : "text-muted-foreground hover:text-foreground")
-              }
-            >
-              {s.label}
-            </Link>
-          ))}
+      {showReadiness && readiness && (
+        <div className="u-in" style={enterAt(1)}>
+          <ReadinessPanel report={readiness} />
         </div>
-      </div>
-
-      {showReadiness && readiness && <ReadinessPanel report={readiness} />}
+      )}
 
       {/* Four numbers where the eye lands. Above the columns rather than inside
           one, because the strip is the summary of the whole page and burying it
           in the left column would make it look like part of the sales module. */}
-      <KpiStrip items={kpis} />
+      <KpiStrip items={kpis} enterFrom={1} />
 
-      {/* Two columns at desktop width, so the page has a silhouette instead of
-          five identical full-width bands. The order utilities matter: collapsed
-          to one column the reading order has to stay sales → alerts → ops →
-          register, which is the priority order this page exists to express.
+      {/* THE DETAIL REGION — two columns, packed by column rather than by row.
+          The page has a silhouette here instead of five identical full-width
+          bands, and the alert rail sits at the top right where it is above the
+          fold on any laptop.
 
-          mt-7 rather than the strip's own space-y-4: the KPI strip is the
-          summary and everything below it is the detail, and that is a different
-          kind of boundary from the one between two detail cards. A wider gap
-          here is the cheapest way to say so — no rule, no heading, just room. */}
-      <div className="mt-7 grid grid-cols-1 gap-4 items-start lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:grid-rows-[auto_auto_1fr]">
-        <div className="order-1 min-w-0 lg:col-start-1 lg:row-start-1">
+          WHY THE COLUMNS NOW END TOGETHER. The old arrangement put the rail,
+          three ops cards and the donut in the narrow column against the hero,
+          the bar chart and the register in the wide one, and the right column
+          finished roughly 240px short of the left — the single most visible
+          unfinished thing about the page. Three changes fix it, and all three
+          are structural rather than a nudge:
+
+            · The register moved out of the columns entirely, to a full-width
+              band at the foot. It was the tallest thing in the taller column,
+              and it is a table — the last thing that wants to live in 739px.
+            · The three ops blocks moved out too, and became one horizontal
+              band. Stacked in the rail they were ~530px; laid across they are
+              ~180, which is most of the imbalance gone in one move.
+            · What is left is hero + bar chart against rail + donut, which
+              measure within about twenty pixels of each other, and the last
+              card in each column carries flex-1 so whichever side comes up
+              short absorbs the remainder. The bar chart spends it on taller
+              bars and the donut on breathing room; neither spends it on canvas.
+
+          The `lg:grid-rows-[auto_1fr]` plus row-span on the right column is
+          what buys column packing: a plain two-column grid aligns ROWS, which
+          would put the mismatch inside each row instead of at the foot of the
+          page and leave the rail stretched beside the hero.
+
+          The order utilities still matter: collapsed to one column the reading
+          order has to stay sales → alerts → the rest, which is the priority
+          order this page exists to express. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr]">
+        {/* THE STAGGER LIVES ON THE WRAPPERS, NOT INSIDE THE CARDS.
+            Every module here is a server component that renders a Panel, and
+            threading an `enter` prop through six of them would put a piece of
+            page-level choreography inside six components that have no other
+            reason to know where they sit. The grid already owns position; it
+            may as well own arrival. `u-in` animates transform and opacity only,
+            so a grid item carrying it costs no layout and cannot shift the
+            cards around it. */}
+        <div className="u-in order-1 min-w-0 lg:col-start-1 lg:row-start-1" style={enterAt(5)}>
           <TodayModule
             pace={pace}
             currency={currency}
@@ -1169,99 +1315,85 @@ export async function PosDashboard({
           />
         </div>
 
-        <div className="order-2 min-w-0 flex flex-col gap-4 lg:col-start-2 lg:row-start-1 lg:row-span-3">
-          <AttentionRail signals={rankedSignals} degraded={degraded} />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
-            <OpsBlock
-              title="Service"
-              icon={<ChefHat />}
-              stats={serviceStats}
-              state={serviceState}
-              tone={serviceTone}
-              action={
-                canCloseDay
-                  ? {
-                      label: openDrawer ? "Close the day" : "Open the till",
-                      href: "/app/pos/drawer",
-                    }
-                  : { label: "Go to the register", href: "/app/pos" }
-              }
-              failed={
-                runsChecks
-                  ? ticketsFailed
-                  : hasKitchen
-                    ? kitchenFailed || todayCountFailed
-                    : todayCountFailed
-              }
-            />
-
-            {hasCatalog && (
-              <OpsBlock
-                title="Menu & stock"
-                icon={<Package />}
-                stats={menuStats}
-                state={menuState}
-                tone={menuTone}
-                // Read-only for everyone (staff have always been able to look at
-                // the menu), but only the people who can change it get the way in.
-                action={canEditMenu ? { label: "Manage menu", href: "/app/catalog" } : null}
-                failed={catalogFailed}
-              />
-            )}
-
-            {hasStaff && (
-              <OpsBlock
-                title="Team"
-                icon={<Users />}
-                stats={teamStats}
-                state={teamState}
-                tone={teamTone}
-                action={
-                  canEditStaff
-                    ? runsChecks
-                      ? { label: "Attendance", href: "/app/attendance" }
-                      : { label: "Manage staff", href: "/app/staff" }
-                    : null
-                }
-                failed={staffFailed || (runsChecks && clockFailed)}
-              />
-            )}
+        <div className="order-2 min-w-0 flex flex-col gap-4 lg:col-start-2 lg:row-start-1 lg:row-span-2">
+          <div className="u-in" style={enterAt(6)}>
+            <AttentionRail signals={rankedSignals} degraded={degraded} />
           </div>
 
-          {/* The donut lands under the ops blocks, in the narrow column: it is
-              a shape you glance at, and the legend beside it is four short
-              rows, so it wants a column rather than a band. */}
-          <PaymentMixCard
-            slices={mix}
-            total={mixTotal}
-            currency={currency}
-            failed={windowFailed}
-          />
+          {/* The donut is a shape you glance at rather than read, so it stays in
+              the narrow column — and stacked over its own legend it is the
+              right height to finish level with the bar chart opposite. flex-1
+              is the safety valve in both directions: if the rail is long (five
+              live signals) this column wins and the bar chart stretches
+              instead. The wrapper has to carry `flex flex-1` as well as the
+              card, or wrapping it for the entrance would quietly cost the
+              column its stretch and hand the ragged foot straight back. */}
+          <div className="u-in flex flex-1" style={enterAt(8)}>
+            <PaymentMixCard
+              slices={mix}
+              total={mixTotal}
+              currency={currency}
+              failed={windowFailed}
+              className="flex-1"
+            />
+          </div>
         </div>
 
-        <div className="order-3 min-w-0 lg:col-start-1 lg:row-start-2">
+        <div className="u-in order-3 min-w-0 flex lg:col-start-1 lg:row-start-2" style={enterAt(7)}>
           <DailySalesCard
             bars={dayBars}
             total={windowTotal}
             trend={windowTrend}
             currency={currency}
             failed={windowFailed}
-          />
-        </div>
-
-        <div className="order-4 min-w-0 lg:col-start-1 lg:row-start-3">
-          <ChecksTable
-            rows={checkRows}
-            failed={recentFailed}
-            title={runsChecks ? "Open & recent checks" : "Recent sales"}
-            note="Live, not scoped"
-            itemHeading={runsChecks ? "Check" : "Sale"}
-            href="/app/orders"
-            hrefLabel="All orders"
+            className="flex-1"
           />
         </div>
       </div>
+
+      {/* The operations band. One panel, hairlines between the sections, laid
+          across the full width — see OpsPanel for why these three were never
+          three things. */}
+      <div className="u-in" style={enterAt(9)}>
+        <OpsPanel sections={opsSections} />
+      </div>
+
+      {/* The register, full width at the foot. A table wants width more than
+          any other module on this page: at 739px the time, the check, the
+          status chip and the amount were crammed against a wall of air in the
+          middle, and the page ended on a ragged edge. Across the bottom it
+          squares the page off and every column gets room.
+
+          It never disappears — in quick-service mode it becomes "Recent sales"
+          and lists settled orders instead of open checks — so there is no case
+          where this band leaves a hole. When a merchant genuinely has no sales
+          on record it renders its written empty state at full width, which is
+          the same treatment every other module gives a quiet day. */}
+      <div className="u-in" style={enterAt(10)}>
+        <ChecksTable
+          rows={checkRows}
+          failed={recentFailed}
+          title={runsChecks ? "Open & recent checks" : "Recent sales"}
+          note="Live, not scoped"
+          itemHeading={runsChecks ? "Check" : "Sale"}
+          href="/app/orders"
+          hrefLabel="All orders"
+        />
+      </div>
+      </div>
+
+      {/* D4 · The grain, last and on top. It covers the cards as well as the
+          canvas on purpose — film grain belongs to the photograph, not to one
+          object in it, and a page where only the background is textured reads
+          as cards pasted onto a texture rather than as one surface. At 3.2%
+          (4.5% on ink) it is under the threshold where a reader can identify
+          it; what they notice is its absence, as everything looking slightly
+          more like a render. pointer-events-none is load-bearing — this layer
+          sits over every link on the page. */}
+      <div
+        aria-hidden
+        className="u-grain absolute -inset-x-8 inset-y-0 z-10"
+      />
     </div>
   );
 }

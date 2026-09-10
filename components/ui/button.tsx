@@ -13,6 +13,26 @@ const buttonVariants = cva(
         // The single most important CTA per screen: blue→cyan gradient, lifted.
         primary:
           "bg-gradient-to-br from-primary to-chart-2 text-primary-foreground shadow-elevation-sm hover:brightness-110 focus-visible:ring-ring/50",
+        // ADDED, not swapped in. `primary` is the register's Charge key and the
+        // KDS's Done key and it is a blue→cyan gradient; changing it to reach
+        // the admin home would have reached two screens where a wrong button is
+        // a wrong sale. So this is a second solid-fill variant, and the two
+        // never appear on the same screen.
+        //
+        // Solid brand rather than a gradient, because a gradient on a 34px
+        // control is a texture nobody can see and a hue nobody can name. What
+        // makes it read as a key instead of a rectangle is the edge treatment:
+        // 1px of light along the top lip, and a drop shadow carried in the
+        // button's own hue. Hover lifts it a pixel and brightens; pressed puts
+        // it back down and takes 2% off it, which is the fastest way to say
+        // "received" without waiting for a round trip.
+        brand:
+          "bg-primary text-primary-foreground shadow-[var(--btn-brand-shadow)] hover:brightness-[1.06] hover:-translate-y-px hover:shadow-[var(--btn-brand-shadow-hover)] active:not-aria-[haspopup]:translate-y-0 active:scale-[0.98] active:brightness-[0.97]",
+        // Its counterpart, and the reason the pair reads as a hierarchy: same
+        // height, same radius, same press — but a card surface with a hairline
+        // instead of a fill, so it is plainly the other one.
+        subtle:
+          "bg-card text-foreground ring-1 ring-line shadow-elevation-sm hover:bg-raised hover:ring-line-strong hover:-translate-y-px hover:shadow-elevation-hover active:not-aria-[haspopup]:translate-y-0 active:scale-[0.98]",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:

@@ -1,0 +1,171 @@
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+// ONE header treatment, for every titled card on the admin home.
+//
+// The page used to run two: sentence-case bold for the big modules (Sales
+// today, Needs you now, Payment mix) and uppercase-tracked-plus-icon for the
+// small ones (SERVICE, MENU & STOCK, TEAM). Two header systems on one screen is
+// the loudest "unfinished" signal a dashboard can send — a reader can't tell
+// whether the difference means anything, so they assume it means nothing was
+// decided.
+//
+// Sentence-case bold won, and the icon survived the merge rather than being
+// dropped: a glyph beside a title is a cheap, quiet way to make a small panel
+// findable in peripheral vision, and it costs nothing once the type stops
+// shouting. The uppercase micro-label deliberately stays alive elsewhere — a
+// KPI tile's "SALES TODAY" and a table's column names are captions ABOVE a
+// value, not titles OF a panel, and they are internally consistent with each
+// other. This primitive is about panel titles.
+//
+// It exists as a component rather than a convention because a convention is
+// something the next person diverges from without noticing.
+
+/**
+ * 20px, and it is the only horizontal inset any dashboard panel uses.
+ *
+ * Every card on the page therefore starts its content on the same two vertical
+ * lines, whichever column it lands in — which is most of what "one designed
+ * surface" means and none of what it costs.
+ */
+export const PANEL_X = "px-5"
+
+/** Card-header glyph: 16px at hairline weight. The only header icon size. */
+export const ICON_HEADER = "[&_svg]:size-4 [&_svg]:stroke-[1.5]"
+
+/** Inline / trailing glyph: 14px at body weight. Chevrons, delta arrows. */
+export const ICON_INLINE = "size-3.5"
+
+/**
+ * A card's place in the page's arrival order.
+ *
+ * `step` is a position, not a duration — the multiplication happens in CSS
+ * against `--motion-stagger`, so the whole page's cadence is retuned by
+ * changing one token rather than by finding sixteen hard-coded millisecond
+ * values. Reading order, top-left to bottom-right; two elements are allowed to
+ * share a step when they arrive side by side.
+ *
+ * The cast is unavoidable: React's CSSProperties has no index signature for
+ * custom properties, and the alternative is a `style` attribute assembled as a
+ * string, which loses every other type guarantee on the way past.
+ */
+export function enterAt(step: number): React.CSSProperties {
+  return {
+    "--in-delay": `calc(${step} * var(--motion-stagger))`,
+  } as React.CSSProperties
+}
+
+/**
+ * The card shell. `overflow-hidden` is not decoration — the rail's accent bar
+ * and every full-bleed row inside a panel rely on the corner clip so an inner
+ * element never has to re-declare the outer radius (and get it wrong).
+ *
+ * `lit` replaces the uniform top hairline with one that has a light source:
+ * brightest at the left, gone by two thirds across. It is a prop rather than
+ * the default because the effect is only legible while it is rare — on every
+ * card it stops being light falling on a surface and becomes a stripe, which
+ * is precisely the kind of nameable decoration this page is not allowed. Two
+ * cards carry it: the hero, and the rail. They are the two that lead their
+ * columns, so the page opens with light in the top-left of each.
+ */
+function Panel({
+  className,
+  lit = false,
+  ...props
+}: React.ComponentProps<"section"> & { lit?: boolean }) {
+  return (
+    <section
+      data-slot="panel"
+      className={cn(
+        "flex flex-col overflow-hidden rounded-xl bg-card ring-1 ring-line shadow-elevation",
+        // relative is what .u-lit's ::before hangs off; overflow-hidden above is
+        // what clips it back inside the corner radius.
+        lit && "relative u-lit",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+/**
+ * Title, optional subtitle, optional icon, optional trailing element.
+ *
+ * `bordered` is for panels whose body is a list or a table: the hairline is
+ * what stops the header reading as the first row. Padded-body panels (the
+ * charts, the hero) don't get one, because inside a card a divider should only
+ * appear where something actually divides.
+ */
+function PanelHeader({
+  icon,
+  title,
+  subtitle,
+  trailing,
+  bordered = false,
+  as: Heading = "h2",
+  className,
+}: {
+  icon?: React.ReactNode
+  title: React.ReactNode
+  subtitle?: React.ReactNode
+  trailing?: React.ReactNode
+  bordered?: boolean
+  as?: "h2" | "h3"
+  className?: string
+}) {
+  return (
+    <div
+      data-slot="panel-header"
+      className={cn(
+        "flex items-start justify-between gap-3",
+        PANEL_X,
+        bordered ? "py-4 border-b border-line-soft" : "pt-5",
+        className
+      )}
+    >
+      <div className="flex min-w-0 items-start gap-2.5">
+        {icon && (
+          <span
+            aria-hidden
+            className={cn(
+              // mt-px, not items-center: the glyph aligns to the title's
+              // cap-height, and centring it against a two-line header would
+              // float it into the gap between the two lines.
+              "mt-px shrink-0 text-muted-foreground/70",
+              ICON_HEADER
+            )}
+          >
+            {icon}
+          </span>
+        )}
+        <div className="min-w-0">
+          <Heading className="text-[15px] font-semibold leading-5 tracking-tight">
+            {title}
+          </Heading>
+          {subtitle && (
+            <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+          )}
+        </div>
+      </div>
+      {trailing && <div className="shrink-0">{trailing}</div>}
+    </div>
+  )
+}
+
+/**
+ * The body under a PanelHeader. `pt-4` is the within-a-group step of the
+ * vertical scale; `pb-5` matches the header's own top inset so a padded card is
+ * optically square.
+ */
+function PanelBody({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="panel-body"
+      className={cn(PANEL_X, "pt-4 pb-5", className)}
+      {...props}
+    />
+  )
+}
+
+export { Panel, PanelHeader, PanelBody }
