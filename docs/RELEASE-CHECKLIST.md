@@ -35,9 +35,18 @@ Options, in order of preference:
 - [ ] `/app`, `/app/staff`, `/app/reports`, `/app/settings` → 307 to `/login`
       when signed out.
 - [ ] `/robots.txt` disallows `/app`, `/api`, `/login`.
-      (Confirms both dormant `OPEN_PREVIEW` switches stayed off. They also carry
-      `NODE_ENV !== "production"`, which is true on Vercel, so they cannot fire
-      there regardless.)
+
+> **On the `OPEN_PREVIEW` guard — read the condition carefully.** Both switches
+> are `OPEN_PREVIEW && process.env.NODE_ENV !== "production"`. `next build` sets
+> `NODE_ENV="production"` for **every** Vercel deployment, previews included
+> (`VERCEL_ENV` is what distinguishes preview from production). So on Vercel the
+> second term is **false**, and the switch cannot fire — on a preview or on
+> production, even if `true` were committed by accident.
+>
+> Two consequences. First, the guard is stronger than "production is safe": open
+> preview only ever works on a local dev server. Second, that means this
+> checkbox is verifying *deployed behaviour*, not the guard's intent — check the
+> actual HTTP responses rather than reasoning from the flag.
 - [ ] `/app/debug` → not reachable.
 - [ ] Signed in as owner: dashboard → orders → register → KDS → reports →
       settings all render.
@@ -51,10 +60,14 @@ Options, in order of preference:
 
 ## Requires a decision first (writes, or needs a test role)
 
-- [ ] Catalog edit, cash movement, export, staff management per role.
+- [ ] Catalog edit, cash movement, staff management per role.
       **Blocked** by the two constraints above.
 - [ ] Dashboard access linking creates the association for the intended business
       and account only. This writes — and it writes to `auth.users`.
+- [ ] **Exports are not an innocuous read.** A CSV export mutates nothing, so it
+      looks safe for a preview, but it hands over real sales, payroll and
+      customer data — and a preview URL is easy to paste somewhere it shouldn't
+      go. Treat it as a privileged data-access test, not a smoke test.
 
 ## Merge only when
 
@@ -79,6 +92,27 @@ State these in the merge commit rather than leaving them implied:
 3. **512 sites still trip the silent-query lint rule.** Each can turn a failed
    query into a convincing empty screen, which is exactly how `/app/orders`
    broke. Follow-on PR: migrate primary page loaders to `must()`.
+
+## Language for the merge commit
+
+Say what was and wasn't validated, so the record doesn't imply more than was done:
+
+> Merged after a clean integration and a read-only Vercel PR-preview check. The
+> preview is treated as potentially production-data-connected; no state-changing
+> validation was run there.
+>
+> Runtime role-boundary testing is deferred. No manager, staff, trainee, shift
+> lead or bookkeeper web account exists in the tenant — all 11 accounts are
+> owners — so an end-to-end session test of middleware, server actions, role
+> resolution, RLS and rendered navigation could not be performed.
+> `tests/unit/route-access.test.ts` is the automated evidence for the permission
+> matrix and route mapping; it is not equivalent to that end-to-end test.
+>
+> Accepted residual risks: ~52 register/KDS actions have no matching per-action
+> permission key (tenancy enforcement remains); `staff_members.user_id` is
+> unlinked on every row, so PIN-to-login attribution is incomplete; 512
+> silent-query lint findings remain, primary page loaders prioritised for
+> migration to `must()`.
 
 ## Merge method
 
