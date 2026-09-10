@@ -17,9 +17,26 @@ jobs:
         with:
           node-version: 24.x
           cache: npm
+          # Two lockfiles, one npm cache. Without this the cache key is derived
+          # from the root package-lock.json alone, so a mobile-only dependency
+          # bump would restore a stale ~/.npm and silently re-download.
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
 
       - name: Install
         run: npm ci
+
+      # tests/unit/{barcode,printing,cart-discount,service-stage,modifiers}.test.ts
+      # import from mobile/src, which Vitest resolves at run time — so the mobile
+      # workspace needs its own node_modules or `npm run test:unit` fails to
+      # collect those five files. mobile/ is a separate npm project (its own
+      # package.json + package-lock.json), not a workspace of the root, so the
+      # root `npm ci` above does not install it. Shares the setup-node npm cache
+      # restored above; keyed on both lockfiles.
+      - name: Install (mobile)
+        run: npm ci
+        working-directory: mobile
 
       - name: Typecheck
         run: npm run typecheck
