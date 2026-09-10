@@ -31,6 +31,18 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  /* The share ramp. --chart-N answers "these series are unrelated, tell them
+     apart"; --ramp-N answers "these are seven shares of one thing, show me
+     their order". Seven saturated hues in a payment donut is the second
+     question answered with the first question's palette, and it reads as a
+     default library palette rather than as a decision. */
+  --color-ramp-7: var(--ramp-7);
+  --color-ramp-6: var(--ramp-6);
+  --color-ramp-5: var(--ramp-5);
+  --color-ramp-4: var(--ramp-4);
+  --color-ramp-3: var(--ramp-3);
+  --color-ramp-2: var(--ramp-2);
+  --color-ramp-1: var(--ramp-1);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -63,6 +75,10 @@
   --color-raised: var(--raised);
   --color-raised-border: var(--raised-border);
   --color-line: var(--line);
+  /* Deliberately weaker than --line. A card's outer edge and the dividers
+     between its own rows are not the same weight of line: if they are, the
+     card stops reading as one object and starts reading as a stack of them. */
+  --color-line-soft: var(--line-soft);
   --color-line-strong: var(--line-strong);
   --shadow-elevation: var(--elevation);
   --shadow-elevation-sm: var(--elevation-sm);
@@ -122,6 +138,20 @@
      important one" purely because it is brighter. */
   --chart-6: oklch(0.62 0.17 25);
   --chart-7: oklch(0.6 0.15 330);
+
+  /* The share ramp, light. One hue — the brand blue, 250 — walked up in
+     lightness while chroma comes down with it, which is what keeps the pale
+     end from turning chalky. Ordered darkest-first because paymentMix() hands
+     back slices largest-first, so weight on the page tracks weight in the
+     till. The pale rungs are swatch and arc colours only; they are never asked
+     to be text on white. */
+  --ramp-1: oklch(0.5 0.19 250);
+  --ramp-2: oklch(0.58 0.17 250);
+  --ramp-3: oklch(0.65 0.145 250);
+  --ramp-4: oklch(0.71 0.12 250);
+  --ramp-5: oklch(0.77 0.1 250);
+  --ramp-6: oklch(0.82 0.08 250);
+  --ramp-7: oklch(0.87 0.065 250);
   --radius: 0.75rem;
 
   --brand: oklch(0.58 0.2 250);
@@ -160,10 +190,20 @@
   --surface-2: oklch(0.968 0.006 265);
   --raised: oklch(0.972 0.005 265);
   --raised-border: oklch(0.21 0.02 265 / 0.1);
-  --line: oklch(0.21 0.02 265 / 0.14);
-  --line-strong: oklch(0.21 0.02 265 / 0.22);
-  --elevation: 0 1px 2px oklch(0 0 0 / 0.07), 0 10px 24px -14px oklch(0 0 0 / 0.16);
-  --elevation-sm: 0 1px 2px oklch(0 0 0 / 0.06), 0 5px 14px -10px oklch(0 0 0 / 0.12);
+  /* The card's own edge, at full strength — an object should have a drawn
+     boundary, not a suggestion of one. Internal dividers use --line-soft. */
+  --line: oklch(0.21 0.02 265 / 0.17);
+  --line-soft: oklch(0.21 0.02 265 / 0.07);
+  --line-strong: oklch(0.21 0.02 265 / 0.24);
+  /* A lift, not a glow. The old shadow spread 24px of blur under every card,
+     which at this density reads as haze rather than as depth — the cards had
+     an atmosphere instead of an edge. Short vertical offset, tight blur, and
+     the tint carried in the foreground's hue rather than neutral black, so
+     the shade under a card belongs to the same palette as everything else. */
+  --elevation:
+    0 1px 2px -1px oklch(0.21 0.02 265 / 0.1),
+    0 4px 8px -6px oklch(0.21 0.02 265 / 0.14);
+  --elevation-sm: 0 1px 2px -1px oklch(0.21 0.02 265 / 0.12);
 }
 
 .dark {
@@ -214,6 +254,18 @@
   --chart-6: oklch(0.72 0.17 25);
   --chart-7: oklch(0.72 0.15 330);
 
+  /* The share ramp, dark. Same hue, same largest-first order, but the walk
+     runs the other way: on ink the biggest share has to be the *brightest*
+     rung, because a dark slice on a dark card is a slice you can't see. The
+     last rung stops at 0.35 — still clear of the card at 0.205. */
+  --ramp-1: oklch(0.78 0.17 250);
+  --ramp-2: oklch(0.69 0.16 250);
+  --ramp-3: oklch(0.61 0.145 250);
+  --ramp-4: oklch(0.54 0.125 250);
+  --ramp-5: oklch(0.47 0.105 250);
+  --ramp-6: oklch(0.41 0.085 250);
+  --ramp-7: oklch(0.36 0.07 250);
+
   --brand: oklch(0.66 0.19 250);
   --brand-foreground: oklch(0.16 0.02 265);
 
@@ -248,10 +300,21 @@
 
   /* Elevation + surfaces (Midnight) — lifted cards on deep ink */
   --surface-2: oklch(0.265 0.02 265);
-  --line: oklch(1 0 0 / 0.12);
-  --line-strong: oklch(1 0 0 / 0.22);
-  --elevation: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 14px 34px -20px oklch(0 0 0 / 0.75);
-  --elevation-sm: 0 1px 0 oklch(1 0 0 / 0.03) inset, 0 8px 20px -14px oklch(0 0 0 / 0.7);
+  --line: oklch(1 0 0 / 0.15);
+  --line-soft: oklch(1 0 0 / 0.07);
+  --line-strong: oklch(1 0 0 / 0.24);
+  /* The inset top hairline is the whole trick in dark mode: a 1px band of
+     white at 6% along a card's top edge reads as light landing on a raised
+     surface, which is the only cue an unlit dark UI has that a card sits above
+     the page rather than being a hole cut into it. It costs one shadow layer.
+     Under it, a tight directional drop — 34px of blur was fog. */
+  --elevation:
+    inset 0 1px 0 oklch(1 0 0 / 0.06),
+    0 1px 2px -1px oklch(0 0 0 / 0.55),
+    0 6px 14px -10px oklch(0 0 0 / 0.7);
+  --elevation-sm:
+    inset 0 1px 0 oklch(1 0 0 / 0.05),
+    0 1px 2px -1px oklch(0 0 0 / 0.5);
 }
 
 @layer base {

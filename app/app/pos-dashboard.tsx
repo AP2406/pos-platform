@@ -33,7 +33,6 @@ import {
   type KpiDelta,
   type OpsStat,
   type PaceCurve,
-  type RowTint,
 } from "./dashboard-modules";
 import Link from "next/link";
 import {
@@ -534,7 +533,6 @@ export async function PosDashboard({
       label: "Sales " + scopeWordLower,
       value: money(dayGross, currency),
       icon: <Banknote />,
-      hue: 1,
       delta: benchFailed ? null : paceDelta(pace, weekday),
       note: noBenchNote,
     },
@@ -543,7 +541,6 @@ export async function PosDashboard({
       label: "Transactions",
       value: String(dayCount),
       icon: <Receipt />,
-      hue: 2,
       delta: benchFailed ? null : paceDelta(txPace, weekday),
       note: noBenchNote,
     },
@@ -554,7 +551,6 @@ export async function PosDashboard({
       // would read as a day where everything was comped.
       value: dayCount > 0 ? money(avgToday, currency) : "—",
       icon: <Calculator />,
-      hue: 3,
       delta: dayCount === 0 || benchFailed ? null : paceDelta(avgPace, weekday),
       note: dayCount === 0 ? "No sales " + scopeWordLower + " to average." : noBenchNote,
     },
@@ -563,7 +559,6 @@ export async function PosDashboard({
       label: "Refunds",
       value: String(dayRefunds),
       icon: <Undo2 />,
-      hue: 6,
       delta: refundDelta,
       note: noBenchNote,
     },
@@ -1004,11 +999,10 @@ export async function PosDashboard({
 
   // --- 4 · The check register ---------------------------------------------
   //
-  // Three tints, one meaning each: amber is still moving, green is finished and
-  // right, red is money that went backwards. Deliberately coarser than the
-  // status chip beside it — the chip already distinguishes "open 12m" from
-  // "open 2h", and a register with five shades of amber in it is a register you
-  // have to decode rather than scan.
+  // The status chip is the only thing carrying state here now. The row tint
+  // that used to sit behind it — amber still moving, green finished, red money
+  // gone backwards — is gone; see the note on CheckRow for why a full-width
+  // wash was the wrong instrument for the right idea.
   const checkRows: CheckRow[] = [];
 
   // Open checks first — they're live money, and unlike a settled sale they can
@@ -1041,7 +1035,6 @@ export async function PosDashboard({
         amount: lines > 0 ? lines + (lines === 1 ? " line" : " lines") : "—",
         href: "/app/pos",
         open: true,
-        tint: "amber" as RowTint,
       });
     }
   }
@@ -1066,7 +1059,6 @@ export async function PosDashboard({
       amount: money(num(o.total), currency),
       href: "/app/pos/sales",
       open: false,
-      tint: (refunded || partial ? "red" : "green") as RowTint,
     });
   }
 
@@ -1156,8 +1148,13 @@ export async function PosDashboard({
       {/* Two columns at desktop width, so the page has a silhouette instead of
           five identical full-width bands. The order utilities matter: collapsed
           to one column the reading order has to stay sales → alerts → ops →
-          register, which is the priority order this page exists to express. */}
-      <div className="grid grid-cols-1 gap-4 items-start lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:grid-rows-[auto_auto_1fr]">
+          register, which is the priority order this page exists to express.
+
+          mt-7 rather than the strip's own space-y-4: the KPI strip is the
+          summary and everything below it is the detail, and that is a different
+          kind of boundary from the one between two detail cards. A wider gap
+          here is the cheapest way to say so — no rule, no heading, just room. */}
+      <div className="mt-7 grid grid-cols-1 gap-4 items-start lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:grid-rows-[auto_auto_1fr]">
         <div className="order-1 min-w-0 lg:col-start-1 lg:row-start-1">
           <TodayModule
             pace={pace}

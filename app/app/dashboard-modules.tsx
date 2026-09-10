@@ -45,54 +45,95 @@ function moneyRound(n: number, currency: string): string {
   }).format(Number.isFinite(n) ? n : 0);
 }
 
+/**
+ * The same figure, split at the decimal point.
+ *
+ * Only the hero number uses this. At 48px the cents are two thirds of a
+ * character's worth of information taking up a fifth of the width of the
+ * loudest thing on the page, and setting them smaller and quieter lets the
+ * dollars read as a single shape — which is how a person actually reads
+ * "forty-eight twenty". Everywhere else the cents stay full size, because at
+ * 28px and below the difference is fussiness rather than typography.
+ *
+ * Built from formatToParts rather than by splitting on ".", so it survives a
+ * currency with no minor unit (JPY returns no fraction part, and `cents` comes
+ * back null) and a locale that groups with the character it decimalises with.
+ */
+function moneyParts(n: number, currency: string): { main: string; cents: string | null } {
+  const parts = new Intl.NumberFormat("en-CA", {
+    style: "currency",
+    currency: currency || "CAD",
+  }).formatToParts(Number.isFinite(n) ? n : 0);
+
+  const at = parts.findIndex((p) => p.type === "decimal");
+  if (at === -1) return { main: parts.map((p) => p.value).join(""), cents: null };
+  return {
+    main: parts.slice(0, at).map((p) => p.value).join(""),
+    cents: parts.slice(at).map((p) => p.value).join(""),
+  };
+}
+
+/**
+ * The hero figure: dollars at full weight, cents stepped down and back.
+ *
+ * tabular-nums on the wrapper rather than the pieces so both halves are lining
+ * figures — this number changes on every reload, and proportional digits make
+ * it jitter sideways as the totals climb through the day.
+ */
+function HeroMoney({ amount, currency }: { amount: number; currency: string }) {
+  const { main, cents } = moneyParts(amount, currency);
+  return (
+    <span className="tabular-nums">
+      {main}
+      {cents && (
+        <span className="text-[0.58em] font-semibold text-foreground/45 align-baseline">
+          {cents}
+        </span>
+      )}
+    </span>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // 0 · Chart palette
 // ---------------------------------------------------------------------------
 //
 // Tailwind reads class names as literal text, so a hue can't be interpolated
-// (`"text-chart-" + n` compiles to nothing). These tables are the price of that,
+// (`"text-ramp-" + n` compiles to nothing). These tables are the price of that,
 // and keeping them in one place is what stops a slice's swatch in the legend
 // drifting away from the arc it labels.
+//
+// These index --ramp-N, not --chart-N. The donut used to spend seven fully
+// saturated hues — blue, teal, green, purple, olive, red, magenta — on seven
+// shares of one quantity, and a rainbow is what a chart library gives you when
+// nobody has decided anything. Money arriving by card and money arriving by
+// gift card are not two unrelated series; they are two sizes of the same thing,
+// so they get two rungs of one hue. --chart-1..7 stay exactly as they were:
+// /app/reports draws series that genuinely are unrelated.
+//
+// The index is still PAYMENT_HUE's fixed per-tender number, not the slice's
+// rank, so cash is the same rung on Friday that it was on Monday. Ranking the
+// ramp would read marginally cleaner on any single day and would make the
+// legend a different picture every day, which is the more expensive mistake.
 
-const HUE_TEXT: Record<number, string> = {
-  1: "text-chart-1",
-  2: "text-chart-2",
-  3: "text-chart-3",
-  4: "text-chart-4",
-  5: "text-chart-5",
-  6: "text-chart-6",
-  7: "text-chart-7",
+const RAMP_BG: Record<number, string> = {
+  1: "bg-ramp-1",
+  2: "bg-ramp-2",
+  3: "bg-ramp-3",
+  4: "bg-ramp-4",
+  5: "bg-ramp-5",
+  6: "bg-ramp-6",
+  7: "bg-ramp-7",
 };
 
-const HUE_BG: Record<number, string> = {
-  1: "bg-chart-1",
-  2: "bg-chart-2",
-  3: "bg-chart-3",
-  4: "bg-chart-4",
-  5: "bg-chart-5",
-  6: "bg-chart-6",
-  7: "bg-chart-7",
-};
-
-/** The soft square an icon sits in: a tint of its own hue, outlined in it. */
-const HUE_WELL: Record<number, string> = {
-  1: "bg-chart-1/10 ring-chart-1/30 text-chart-1",
-  2: "bg-chart-2/10 ring-chart-2/30 text-chart-2",
-  3: "bg-chart-3/10 ring-chart-3/30 text-chart-3",
-  4: "bg-chart-4/10 ring-chart-4/30 text-chart-4",
-  5: "bg-chart-5/10 ring-chart-5/30 text-chart-5",
-  6: "bg-chart-6/10 ring-chart-6/30 text-chart-6",
-  7: "bg-chart-7/10 ring-chart-7/30 text-chart-7",
-};
-
-const HUE_STROKE: Record<number, string> = {
-  1: "stroke-chart-1",
-  2: "stroke-chart-2",
-  3: "stroke-chart-3",
-  4: "stroke-chart-4",
-  5: "stroke-chart-5",
-  6: "stroke-chart-6",
-  7: "stroke-chart-7",
+const RAMP_STROKE: Record<number, string> = {
+  1: "stroke-ramp-1",
+  2: "stroke-ramp-2",
+  3: "stroke-ramp-3",
+  4: "stroke-ramp-4",
+  5: "stroke-ramp-5",
+  6: "stroke-ramp-6",
+  7: "stroke-ramp-7",
 };
 
 // ---------------------------------------------------------------------------
@@ -133,11 +174,15 @@ function Delta({ delta, size = "sm" }: { delta: KpiDelta; size?: "sm" | "md" }) 
       : delta.direction === delta.good
         ? "good"
         : "bad";
+  // 600/400 rather than a flat 500: emerald-500 on a white card is a pale
+  // green that reads as decorative, and red-500 on ink is a shout. This is the
+  // one place on a KPI card that is allowed to be coloured at all, so it had
+  // better be legible in both themes.
   const tone =
     verdict === "good"
-      ? "text-emerald-500"
+      ? "text-emerald-600 dark:text-emerald-400"
       : verdict === "bad"
-        ? "text-red-500"
+        ? "text-red-600 dark:text-red-400"
         : "text-muted-foreground";
   const Glyph =
     delta.direction === "up" ? ArrowUpRight : delta.direction === "down" ? ArrowDownRight : Minus;
@@ -175,8 +220,6 @@ export type Kpi = {
   label: string;
   value: string;
   icon: React.ReactNode;
-  /** 1–7 — which --chart-N tints the icon well. */
-  hue: number;
   /** Null when there is no honest comparison. Never a fabricated 0%. */
   delta: KpiDelta | null;
   /**
@@ -203,26 +246,33 @@ export function KpiStrip({ items }: { items: Kpi[] }) {
       {items.map((k) => (
         <section
           key={k.id}
-          className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-4 sm:p-[18px]"
+          className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-4 sm:p-5"
         >
           <div className="flex items-start justify-between gap-2">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {/* Quieter and wider than it was. The gap between the softest and
+                loudest type on a screen is most of what reads as "considered",
+                and this label is the floor of that ladder — its job is to be
+                found when looked for and ignored otherwise. */}
+            <span className="text-[10px] font-medium uppercase tracking-[0.09em] text-muted-foreground">
               {k.label}
             </span>
+            {/* No tinted well. A blue rounded square behind a banknote glyph is
+                furniture from a template: it spends a saturated block of colour
+                on an icon that is already only decorative, and four of them in
+                four different hues across one strip is the single loudest
+                un-earned thing on the page. The glyph alone, hairline weight,
+                in the same grey as the label it sits beside. */}
             <span
               aria-hidden
-              className={
-                "shrink-0 flex items-center justify-center w-8 h-8 rounded-[10px] ring-1 ring-inset [&_svg]:size-4 " +
-                (HUE_WELL[k.hue] ?? HUE_WELL[1])
-              }
+              className="shrink-0 text-muted-foreground/70 [&_svg]:size-[18px] [&_svg]:stroke-[1.5]"
             >
               {k.icon}
             </span>
           </div>
-          <div className="mt-2.5 text-2xl sm:text-[28px] font-bold tabular-nums tracking-tight leading-none">
+          <div className="mt-3 text-[26px] sm:text-[32px] font-bold tabular-nums tracking-[-0.02em] leading-none">
             {k.value}
           </div>
-          <div className="mt-2 min-w-0">
+          <div className="mt-2.5 min-w-0">
             {k.delta ? (
               <Delta delta={k.delta} />
             ) : (
@@ -256,7 +306,9 @@ export function ReadinessPanel({ report }: { report: ReadinessReport }) {
   return (
     <section className="rounded-xl bg-card ring-1 ring-amber-500/25 shadow-elevation overflow-hidden">
       <div className="flex items-start gap-3 px-5 pt-5 pb-4">
-        <span className="shrink-0 mt-0.5 flex items-center justify-center w-8 h-8 rounded-lg bg-amber-500/15 text-amber-500 [&_svg]:size-4">
+        {/* Outlined rather than filled, same reasoning as Chip: the ring says
+            "amber" as clearly as a wash of it and leaves the glyph legible. */}
+        <span className="shrink-0 mt-0.5 flex items-center justify-center w-8 h-8 rounded-lg ring-1 ring-inset ring-amber-500/35 text-amber-600 dark:text-amber-400 [&_svg]:size-4 [&_svg]:stroke-[1.5]">
           <Rocket />
         </span>
         <div className="min-w-0 flex-1">
@@ -277,7 +329,7 @@ export function ReadinessPanel({ report }: { report: ReadinessReport }) {
           Full checklist
         </Link>
       </div>
-      <ul className="divide-y divide-line border-t border-line">
+      <ul className="divide-y divide-line-soft border-t border-line-soft">
         {report.outstanding.map((c) => (
           <li key={c.id}>
             <Link
@@ -313,25 +365,27 @@ function PaceChip({ pace, weekday }: { pace: Pace; weekday: string }) {
     );
   }
   const pct = Math.abs(Math.round(pace.deltaPct ?? 0));
+  // dot={false} throughout: the arrow is already this chip's coloured mark, and
+  // it says more than a dot can — a dot has a hue, an arrow has a direction.
   if (pace.status === "level") {
     return (
-      <Chip tone="neutral">
-        <Minus className="size-3" />
+      <Chip tone="neutral" dot={false}>
+        <Minus className="size-3 stroke-[2.5]" />
         Even with last {weekday}
       </Chip>
     );
   }
   if (pace.status === "ahead") {
     return (
-      <Chip tone="success">
-        <ArrowUpRight className="size-3" />
+      <Chip tone="success" dot={false}>
+        <ArrowUpRight className="size-3 stroke-[2.5]" />
         {pct}% ahead of last {weekday}
       </Chip>
     );
   }
   return (
-    <Chip tone="warning">
-      <ArrowDownRight className="size-3" />
+    <Chip tone="warning" dot={false}>
+      <ArrowDownRight className="size-3 stroke-[2.5]" />
       {pct}% behind last {weekday}
     </Chip>
   );
@@ -399,7 +453,13 @@ function PaceChart({
   return (
     <figure className="mt-5">
       <figcaption className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-        {/* The swatches are decoration; the words beside them are the legend. */}
+        {/* The swatches are decoration; the words beside them are the legend.
+            Only one of them is coloured. The benchmark used to be teal, which
+            gave a two-series chart two equal claims on the eye — but these
+            series are not equals: one is the number the whole page is about and
+            the other is a reference line behind it. Brand hue for today, a grey
+            hairline for last week, and the chart says which is which before a
+            word of the legend is read. */}
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="inline-flex items-center gap-1.5">
             <span aria-hidden className="size-2 rounded-[2px] bg-chart-1" />
@@ -407,7 +467,7 @@ function PaceChart({
           </span>
           {curve.benchmark.length > 0 && (
             <span className="inline-flex items-center gap-1.5">
-              <span aria-hidden className="size-2 rounded-[2px] bg-chart-2" />
+              <span aria-hidden className="w-2 h-px bg-muted-foreground/70" />
               Last {weekday}
             </span>
           )}
@@ -427,16 +487,18 @@ function PaceChart({
             : ". The figures are written out below.")
         }
       >
-        <line x1="0" y1="0" x2={W} y2="0" className="stroke-line" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-        <line x1="0" y1={H / 2} x2={W} y2={H / 2} className="stroke-line" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-        <line x1="0" y1={H} x2={W} y2={H} className="stroke-line" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        {/* Gridlines take the soft line, not the card's edge weight: inside a
+            card, structure should be quieter than the boundary around it. */}
+        <line x1="0" y1="0" x2={W} y2="0" className="stroke-line-soft" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        <line x1="0" y1={H / 2} x2={W} y2={H / 2} className="stroke-line-soft" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        <line x1="0" y1={H} x2={W} y2={H} className="stroke-line-soft" strokeWidth="1" vectorEffect="non-scaling-stroke" />
 
         {curve.benchmark.length > 0 && (
           <path
             d={line(curve.benchmark)}
             fill="none"
-            className="stroke-chart-2"
-            strokeWidth="1.5"
+            className="stroke-muted-foreground/55"
+            strokeWidth="1.25"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
           />
@@ -536,7 +598,7 @@ export function TodayModule({
   const deltaAbs = Math.abs(pace.today - pace.benchmarkSoFar);
 
   return (
-    <section className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-5 sm:p-6">
+    <section className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-6 sm:p-7">
       {/* Two-line header zone — title, then what the number is net of. Square
           and Lightspeed both carry a subtitle here; we carried none anywhere. */}
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -559,8 +621,12 @@ export function TodayModule({
         </div>
       </div>
 
-      <div className="mt-3 text-4xl sm:text-5xl font-bold tabular-nums tracking-tight leading-none">
-        {money(pace.today, currency)}
+      {/* -0.02em rather than the default: at 48px, tracking set for body copy
+          leaves lakes of air between digits and the figure stops reading as one
+          object. This is the loudest thing on the page and it should look
+          drawn, not typed. */}
+      <div className="mt-3.5 text-4xl sm:text-5xl font-bold tracking-[-0.02em] leading-none">
+        <HeroMoney amount={pace.today} currency={currency} />
       </div>
 
       {/* The percentage is for comparing; the dollar figure is what an owner
@@ -715,7 +781,7 @@ export function DailySalesCard({
   const radius = Math.min(4, barW / 2);
 
   return (
-    <section className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-5 sm:p-6">
+    <section className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-6 sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
         <div className="min-w-0">
           <h2 className="text-[15px] font-semibold tracking-tight">Sales by day</h2>
@@ -723,7 +789,7 @@ export function DailySalesCard({
         </div>
         {!failed && (
           <div className="shrink-0 text-right">
-            <div className="text-xl font-bold tabular-nums tracking-tight leading-none">
+            <div className="text-[22px] font-bold tabular-nums tracking-[-0.02em] leading-none">
               {money(total, currency)}
             </div>
             <div className="mt-1.5 flex justify-end">
@@ -782,8 +848,14 @@ export function DailySalesCard({
                       width={barW}
                       height={H}
                       rx={radius}
-                      className="fill-raised"
+                      className="fill-foreground/[0.045]"
                     />
+                    {/* One hue, two rungs of it. The scoped day — the one the
+                        hero figure above is talking about — at full strength;
+                        the other thirteen stepped well down, because their job
+                        is to be the shape this day sits in rather than to
+                        compete with it. Two thirds of a hue was not enough of a
+                        step: the current bar didn't read as the current bar. */}
                     {drawn > 0 && (
                       <rect
                         x={x}
@@ -791,7 +863,7 @@ export function DailySalesCard({
                         width={barW}
                         height={drawn}
                         rx={radius}
-                        className={b.current ? "fill-chart-1" : "fill-chart-1/45"}
+                        className={b.current ? "fill-ramp-1" : "fill-ramp-1/40"}
                       />
                     )}
                   </g>
@@ -862,7 +934,7 @@ export function PaymentMixCard({
   });
 
   return (
-    <section className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-5">
+    <section className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-6">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-[15px] font-semibold tracking-tight">Payment mix</h2>
@@ -896,8 +968,8 @@ export function PaymentMixCard({
                 cy="66"
                 r={RING_R}
                 fill="none"
-                className="stroke-raised"
-                strokeWidth="15"
+                className="stroke-foreground/[0.06]"
+                strokeWidth="14"
               />
               {arcs.map((a) => (
                 <circle
@@ -906,8 +978,8 @@ export function PaymentMixCard({
                   cy="66"
                   r={RING_R}
                   fill="none"
-                  className={HUE_STROKE[a.slice.hue] ?? HUE_STROKE[6]}
-                  strokeWidth="15"
+                  className={RAMP_STROKE[a.slice.hue] ?? RAMP_STROKE[6]}
+                  strokeWidth="14"
                   strokeLinecap="butt"
                   strokeDasharray={a.len.toFixed(2) + " " + (RING_C - a.len).toFixed(2)}
                   strokeDashoffset={(-a.offset).toFixed(2)}
@@ -915,10 +987,12 @@ export function PaymentMixCard({
               ))}
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-[17px] font-bold tabular-nums tracking-tight leading-none">
+              <span className="text-[19px] font-bold tabular-nums tracking-[-0.02em] leading-none">
                 {moneyRound(total, currency)}
               </span>
-              <span className="text-[10px] text-muted-foreground mt-1">taken</span>
+              <span className="text-[9px] font-medium uppercase tracking-[0.09em] text-muted-foreground mt-1.5">
+                taken
+              </span>
             </div>
           </div>
 
@@ -927,19 +1001,21 @@ export function PaymentMixCard({
               than truncating — a legend reading "Deli… 9%" labels nothing. */}
           <ul className="min-w-[190px] flex-1 space-y-2">
             {slices.map((s) => (
-              <li key={s.key} className="flex items-center gap-2 text-xs">
+              <li key={s.key} className="flex items-center gap-2.5 text-xs">
                 <span
                   aria-hidden
-                  className={"shrink-0 size-2.5 rounded-[3px] " + (HUE_BG[s.hue] ?? HUE_BG[6])}
+                  className={"shrink-0 size-2.5 rounded-[3px] " + (RAMP_BG[s.hue] ?? RAMP_BG[6])}
                 />
                 <span className="min-w-0 flex-1 truncate text-muted-foreground">
                   {s.label}
                 </span>
-                <span
-                  className={
-                    "shrink-0 tabular-nums font-semibold " + (HUE_TEXT[s.hue] ?? HUE_TEXT[6])
-                  }
-                >
+                {/* The percentage used to be painted in the slice's own hue,
+                    which was fine when every slice was a saturated mid-tone and
+                    is unreadable now that the pale end of the ramp exists — a
+                    4%-chroma blue is a swatch, not a text colour. The swatch
+                    two columns left already ties this row to its arc, so the
+                    figure gets to be the loud thing in the row instead. */}
+                <span className="shrink-0 tabular-nums font-semibold text-foreground">
                   {s.pct}%
                 </span>
                 <span className="shrink-0 w-[68px] text-right tabular-nums text-muted-foreground">
@@ -995,7 +1071,7 @@ export function AttentionRail({
               : "bg-line-strong")
         }
       />
-      <div className="flex items-start justify-between gap-3 px-5 py-3.5 border-b border-line">
+      <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-line-soft">
         {/* No subtitle. "Everything blocking service or costing money, as of
             right now" restated the heading at four times the length, and the
             rows underneath already say what each thing is. The empty state
@@ -1017,7 +1093,7 @@ export function AttentionRail({
         // confident line rather than the dashed placeholder box that means
         // "you haven't set this up yet".
         <div className="flex items-center gap-3 px-5 py-6">
-          <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-500 [&_svg]:size-4">
+          <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg ring-1 ring-inset ring-emerald-500/35 text-emerald-600 dark:text-emerald-400 [&_svg]:size-4 [&_svg]:stroke-[1.5]">
             <CheckCircle2 />
           </span>
           <div className="min-w-0">
@@ -1028,12 +1104,12 @@ export function AttentionRail({
           </div>
         </div>
       ) : (
-        <ul className="divide-y divide-line">
+        <ul className="divide-y divide-line-soft">
           {signals.map((s) => (
             <li key={s.id}>
               <Link
                 href={s.href}
-                className="flex items-center gap-3 px-5 py-3.5 hover:bg-surface-2 transition-colors"
+                className="flex items-center gap-3 px-5 py-4 hover:bg-surface-2 transition-colors"
               >
                 <span
                   aria-hidden
@@ -1069,7 +1145,7 @@ export function AttentionRail({
         // The whole point of the rail is that an empty one means "all clear".
         // If a check didn't run, say so here rather than let its silence read
         // as a pass.
-        <div className="flex items-start gap-2 px-5 py-3 border-t border-line bg-surface-2 text-xs text-muted-foreground">
+        <div className="flex items-start gap-2 px-5 py-3 border-t border-line-soft bg-surface-2 text-xs text-muted-foreground">
           <AlertCircle className="shrink-0 size-3.5 mt-px" />
           <span>
             Couldn&apos;t check {degraded.join(", ")}. Those may be hiding
@@ -1109,12 +1185,18 @@ export function OpsBlock({
   failed?: boolean;
 }) {
   return (
-    <section className="flex flex-col rounded-xl bg-card ring-1 ring-line shadow-elevation p-4">
-      <div className="flex items-center gap-2">
-        <span className="shrink-0 flex items-center justify-center w-7 h-7 rounded-lg bg-muted text-muted-foreground [&_svg]:size-3.5">
+    <section className="flex flex-col rounded-xl bg-card ring-1 ring-line shadow-elevation p-5">
+      <div className="flex items-center gap-2.5">
+        {/* The well here was already neutral (bg-muted), which is the shape the
+            KPI cards should have had all along — but at this size even a
+            neutral box is one more rectangle in a column of rectangles, and the
+            glyph carries the block on its own. */}
+        <span className="shrink-0 text-muted-foreground/70 [&_svg]:size-4 [&_svg]:stroke-[1.5]">
           {icon}
         </span>
-        <h3 className="text-[13px] font-semibold tracking-tight">{title}</h3>
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">
+          {title}
+        </h3>
       </div>
 
       {failed ? (
@@ -1124,20 +1206,23 @@ export function OpsBlock({
         </p>
       ) : (
         <>
-          <div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1">
+          <div className="mt-3.5 flex flex-wrap items-baseline gap-x-6 gap-y-1">
             {stats.map((s) => (
               <div key={s.label}>
                 <div
                   className={
-                    "text-2xl font-bold tabular-nums tracking-tight leading-none " +
+                    "text-[26px] font-bold tabular-nums tracking-[-0.02em] leading-none " +
                     (s.muted ? "text-muted-foreground" : "text-foreground")
                   }
                 >
                   {s.value}
                 </div>
                 {/* 11px sat below every competitor's floor, and 20-against-11
-                    was not a step you could see. 24/12 is Toast's ratio. */}
-                <div className="text-xs text-muted-foreground mt-1">
+                    was not a step you could see. 24/12 is Toast's ratio, and
+                    26/12 widens it a little further — the ladder between the
+                    quietest and loudest type is most of what "considered"
+                    means on a screen this dense. */}
+                <div className="text-xs text-muted-foreground mt-1.5">
                   {s.label}
                 </div>
               </div>
@@ -1145,11 +1230,11 @@ export function OpsBlock({
           </div>
           <p
             className={
-              "mt-3 flex-1 text-xs " +
+              "mt-3.5 flex-1 text-xs " +
               (tone === "attention"
-                ? "text-amber-500"
+                ? "text-amber-600 dark:text-amber-400"
                 : tone === "good"
-                  ? "text-emerald-500"
+                  ? "text-emerald-600 dark:text-emerald-400"
                   : "text-muted-foreground")
             }
           >
@@ -1190,26 +1275,22 @@ export type CheckRow = {
   href: string;
   /** Open checks read as live money; settled ones are history. */
   open: boolean;
-  /**
-   * The wash behind the row. Redundant with the status chip on purpose — the
-   * chip is what a screen reader and a colour-blind owner get, the tint is what
-   * lets a sighted one find the three refunds in a list of twenty without
-   * reading any of it.
-   */
-  tint: RowTint;
 };
 
-export type RowTint = "amber" | "green" | "red" | null;
-
-// Kept very low — a wash, not a fill. At 7% these read as a warm or cool cast
-// over the card rather than as coloured stripes, which is the difference
-// between a register you can scan and a register that looks like a spreadsheet
-// somebody conditional-formatted to death.
-const ROW_TINT: Record<"amber" | "green" | "red", string> = {
-  amber: "bg-amber-500/[0.07] hover:bg-amber-500/[0.13]",
-  green: "bg-emerald-500/[0.05] hover:bg-emerald-500/[0.11]",
-  red: "bg-red-500/[0.07] hover:bg-red-500/[0.13]",
-};
+// The row tint is gone.
+//
+// It was three full-width washes — amber still moving, green finished, red
+// money gone backwards — and the argument for it was that a sighted owner could
+// find the refunds without reading. That argument was right about the goal and
+// wrong about the material. Eight rows of alternating pastel is the single
+// cheapest-looking thing a table can do: the colour stops being a signal and
+// becomes upholstery, the card stops reading as one white object, and the
+// figures in the amount column end up sitting on four different backgrounds.
+//
+// The status chip beside each row already carries the state, in a hue, in
+// words, with a saturated dot — which is a smaller and more precise instrument
+// pointed at exactly the same job. So the rows go back to the card surface,
+// separated by hairlines, and the chip does the work alone.
 
 export function ChecksTable({
   rows,
@@ -1236,7 +1317,7 @@ export function ChecksTable({
 }) {
   return (
     <section className="rounded-xl bg-card ring-1 ring-line shadow-elevation overflow-hidden">
-      <div className="flex items-start justify-between gap-3 px-5 py-3.5 border-b border-line">
+      <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-line-soft">
         <div className="min-w-0 flex flex-wrap items-baseline gap-x-2.5">
           <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
           <span className="text-xs text-muted-foreground">{note}</span>
@@ -1273,21 +1354,18 @@ export function ChecksTable({
               status cell carries no width because the amount column beside it
               is fixed — both right edges land in the same place regardless of
               how long a status reads. */}
-          <div className="flex items-center gap-3 px-5 py-2 bg-raised border-b border-line text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="flex items-center gap-3 px-5 py-2.5 border-b border-line-soft text-[10px] font-medium uppercase tracking-[0.09em] text-muted-foreground">
             <span className="w-16 shrink-0">Time</span>
             <span className="min-w-0 flex-1">{itemHeading}</span>
             <span className="shrink-0 hidden sm:block">Status</span>
             <span className="w-24 shrink-0 text-right">Amount</span>
           </div>
-          <div className="divide-y divide-line">
+          <div className="divide-y divide-line-soft">
             {rows.map((r) => (
               <Link
                 key={r.id}
                 href={r.href}
-                className={
-                  "flex items-center gap-3 px-5 py-2.5 transition-colors " +
-                  (r.tint ? ROW_TINT[r.tint] : "hover:bg-surface-2")
-                }
+                className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-surface-2"
               >
                 <span className="w-16 shrink-0 text-xs tabular-nums text-muted-foreground">
                   {r.time}
@@ -1296,11 +1374,11 @@ export function ChecksTable({
                   <span className="block text-sm font-medium truncate">
                     {r.label}
                   </span>
-                  {/* Below sm the status chip is dropped for width, which used
-                      to be harmless and stopped being so the moment the row
-                      gained a colour wash: the tint would have been the only
-                      thing saying "refunded". So on a phone the status leads
-                      this line, in words. */}
+                  {/* Below sm the status chip is dropped for width, so on a
+                      phone the status leads this line in words instead. That
+                      was introduced to stop the row tint being the only thing
+                      saying "refunded"; the tint is gone and the line stays,
+                      because it was the better answer either way. */}
                   <span className="block text-xs text-muted-foreground truncate">
                     <span className="sm:hidden">{r.status.text} · </span>
                     {[r.channel, r.who].filter(Boolean).join(" · ") || "—"}

@@ -157,22 +157,36 @@ const PAYMENT_LABELS: Record<string, string> = {
   other: "Other",
 };
 
-/** Colour token index per tender, 1-based against --chart-N. */
+/**
+ * Colour token index per tender, 1-based against --ramp-N.
+ *
+ * The donut is drawn in one hue stepped by lightness now, not in seven
+ * different hues, so this index is no longer an arbitrary label — it is a
+ * position on a ramp, and a reader will take rung 2 to mean "bigger than rung
+ * 5". The order below is therefore the order these tenders almost always come
+ * in at a real merchant: card, then cash, then the delivery apps, then the
+ * stored-value oddments.
+ *
+ * Still fixed per tender rather than assigned by each day's actual ranking. A
+ * legend that reshuffles its colours whenever cash overtakes delivery for an
+ * afternoon is a legend nobody can learn, and being one rung out of order on
+ * an unusual day costs far less than that.
+ */
 const PAYMENT_HUE: Record<string, number> = {
   card: 1,
-  cash: 3,
-  delivery: 5,
+  cash: 2,
+  delivery: 3,
   gift_card: 4,
-  store_credit: 7,
-  split: 2,
+  split: 5,
   other: 6,
+  store_credit: 7,
 };
 
 export type PaymentSlice = {
   /** Normalised method key — always one of PAYMENT_LABELS' keys. */
   key: string;
   label: string;
-  /** 1–7, the --chart-N token this slice is drawn in. */
+  /** 1–7, the --ramp-N rung this slice is drawn in. */
   hue: number;
   amount: number;
   count: number;
