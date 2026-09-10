@@ -71,8 +71,24 @@
 }
 
 :root {
-  /* Daylight — clean light mode, electric blue accent */
-  --background: oklch(0.98 0.004 265);
+  /* Daylight — clean light mode, electric blue accent.
+   *
+   * SURFACE LADDER, light. The dark theme got this treatment first and the
+   * light theme was left behind at canvas 0.98 / card 1.0 — 0.02 apart, against
+   * dark's 0.06 — with hairlines at 10% opacity. White cards on a near-white
+   * page with borders you can't see: the same defect as dark's muddy black,
+   * just inverted, and it made a dense screen read as flat and unfinished.
+   *
+   * Light mode can't lift a card by lightness alone (the card is already pure
+   * white and has nowhere to go), so the canvas drops instead and the shadow
+   * does more of the work than it does in dark.
+   *
+   *   canvas   0.965   the page behind everything
+   *   card     1.000   pure white, sitting clearly on top of it
+   *   raised   0.972   inputs, table headers, chips — inside a card
+   *   overlay  1.000   popovers and sheets, lifted by shadow
+   */
+  --background: oklch(0.965 0.005 265);
   --foreground: oklch(0.21 0.02 265);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.21 0.02 265);
@@ -87,8 +103,9 @@
   --accent: oklch(0.955 0.008 265);
   --accent-foreground: oklch(0.27 0.02 265);
   --destructive: oklch(0.58 0.22 25);
-  --border: oklch(0.9 0.006 265);
-  --input: oklch(0.9 0.006 265);
+  /* A hairline you can actually see against white, without it becoming a box. */
+  --border: oklch(0.885 0.007 265);
+  --input: oklch(0.875 0.008 265);
   --ring: oklch(0.58 0.2 250);
   --chart-1: oklch(0.58 0.2 250);
   --chart-2: oklch(0.6 0.13 200);
@@ -127,14 +144,16 @@
   --table-late-border: oklch(0.7 0.18 25);
   --table-late-fg: oklch(0.5 0.18 25);
 
-  /* Elevation + surfaces (Daylight) */
-  --surface-2: oklch(0.97 0.006 265);
-  --raised: oklch(0.975 0.004 265);
-  --raised-border: oklch(0.21 0.02 265 / 0.08);
-  --line: oklch(0.21 0.02 265 / 0.1);
-  --line-strong: oklch(0.21 0.02 265 / 0.18);
-  --elevation: 0 1px 2px oklch(0 0 0 / 0.06), 0 12px 28px -18px oklch(0 0 0 / 0.18);
-  --elevation-sm: 0 1px 2px oklch(0 0 0 / 0.05), 0 6px 16px -12px oklch(0 0 0 / 0.14);
+  /* Elevation + surfaces (Daylight). Edges and shadows carry more weight here
+     than in dark: a white card has no lightness left to rise by, so the border
+     and the shadow are what separate it from the page. */
+  --surface-2: oklch(0.968 0.006 265);
+  --raised: oklch(0.972 0.005 265);
+  --raised-border: oklch(0.21 0.02 265 / 0.1);
+  --line: oklch(0.21 0.02 265 / 0.14);
+  --line-strong: oklch(0.21 0.02 265 / 0.22);
+  --elevation: 0 1px 2px oklch(0 0 0 / 0.07), 0 10px 24px -14px oklch(0 0 0 / 0.16);
+  --elevation-sm: 0 1px 2px oklch(0 0 0 / 0.06), 0 5px 14px -10px oklch(0 0 0 / 0.12);
 }
 
 .dark {
