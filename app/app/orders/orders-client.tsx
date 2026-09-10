@@ -1,7 +1,10 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
+import { CircleCheck, Inbox, ListFilter, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { markOrderFulfilled, recallOrder } from "../kitchen/actions";
 
 export type OrderRow = {
@@ -50,6 +53,11 @@ export function OrdersClient({ initialOrders, timezone }: { initialOrders: Order
   const [view, setView] = useState<"active" | "completed">("active");
   const [pending, start] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Mark-ready used to fail as quietly as the list used to render empty: the
+  // action answers { error }, this component only ever checked for success, and
+  // the button simply sprang back as though the click had never happened. Hold
+  // the failure on screen and keep the exact click that failed retryable.
+  const [failure, setFailure] = useState<{ message: string; retry: () => void } | null>(null);
 
   const timeFmt = useMemo(
     () => new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", minute: "2-digit" }),
@@ -78,7 +86,10 @@ export function OrdersClient({ initialOrders, timezone }: { initialOrders: Order
     setBusyId(id);
     start(async () => {
       const res = await markOrderFulfilled(id);
-      if (!("error" in res)) {
+      if ("error" in res) {
+        setFailure({ message: res.error, retry: () => complete(id) });
+      } else {
+        setFailure(null);
         setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, fulfilledAt: new Date().toISOString() } : o)));
       }
       setBusyId(null);
@@ -88,11 +99,91 @@ export function OrdersClient({ initialOrders, timezone }: { initialOrders: Order
     setBusyId(id);
     start(async () => {
       const res = await recallOrder(id);
-      if (!("error" in res)) {
+      if ("error" in res) {
+        setFailure({ message: res.error, retry: () => reopen(id) });
+      } else {
+        setFailure(null);
         setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, fulfilledAt: null } : o)));
       }
       setBusyId(null);
     });
+  }
+
+  // Nothing here and something broke are opposite facts, and this screen used
+  // to render both as the same grey sentence. A broken *load* now throws in the
+  // server component (must(), see page.tsx) and surfaces through
+  // app/app/error.tsx, so all that's left for the list is to say which kind of
+  // nothing this is: none ever, or none under the filter the user just picked.
+  function emptyState() {
+    if (orders.length === 0) {
+      return (
+        <EmptyState
+          icon={<Inbox />}
+          title="No orders yet"
+          description="Every sale rung up on the register lands here, along with anything that arrives from online, kiosk, QR or delivery."
+          action={
+            <Button variant="outline" asChild>
+              <Link href="/app/pos">Open the register</Link>
+            </Button>
+          }
+        />
+      );
+    }
+
+    // Past this point the hub does hold orders, so the filter is what's empty.
+    // Say how many are sitting just outside it, or the user is left wondering
+    // whether the tab is broken.
+    if (tab !== "all") {
+      const elsewhere = orders.filter((o) => (view === "active" ? !o.fulfilledAt : !!o.fulfilledAt)).length;
+      return (
+        <EmptyState
+          icon={<ListFilter />}
+          title={"No " + view + " " + CHANNEL_LABEL[tab as ChannelKey] + " orders"}
+          description={
+            elsewhere > 0
+              ? elsewhere + " " + view + " " + (elsewhere === 1 ? "order is" : "orders are") + " on other channels."
+              : "No channel has " + (view === "active" ? "anything waiting" : "anything completed") + " right now."
+          }
+          action={
+            <Button variant="outline" onClick={() => setTab("all")}>
+              Show all channels
+            </Button>
+          }
+        />
+      );
+    }
+
+    if (view === "active") {
+      return (
+        <EmptyState
+          icon={<CircleCheck />}
+          title="Nothing waiting"
+          description={
+            "All " + orders.length + " recent " + (orders.length === 1 ? "order has" : "orders have") + " been marked ready."
+          }
+          action={
+            <Button variant="outline" onClick={() => setView("completed")}>
+              See completed
+            </Button>
+          }
+        />
+      );
+    }
+
+    return (
+      <EmptyState
+        icon={<Inbox />}
+        title="Nothing completed yet"
+        description={
+          "All " + orders.length + " recent " + (orders.length === 1 ? "order is" : "orders are") + " still open."
+        }
+        action={
+          <Button variant="outline" onClick={() => setView("active")}>
+            See active
+          </Button>
+        }
+      />
+    );
   }
 
   return (
@@ -115,8 +206,34 @@ export function OrdersClient({ initialOrders, timezone }: { initialOrders: Order
         <button type="button" onClick={() => setView("completed")} className={"px-4 py-1.5 border-l border-border " + (view === "completed" ? "bg-foreground text-background" : "hover:bg-accent")}>Completed</button>
       </div>
 
+      {failure && (
+        <div role="alert" className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-lg bg-raised ring-1 ring-destructive/30 px-3 py-2.5">
+          <div className="flex min-w-0 gap-2.5">
+            <TriangleAlert className="size-4 shrink-0 mt-0.5 text-destructive" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">That didn&rsquo;t go through</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{failure.message} The order is unchanged.</p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const again = failure.retry;
+                setFailure(null);
+                again();
+              }}
+            >
+              Try again
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setFailure(null)}>Dismiss</Button>
+          </div>
+        </div>
+      )}
+
       {filtered.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">No {view} orders{tab !== "all" ? " in " + CHANNEL_LABEL[tab as ChannelKey] : ""}.</p>
+        emptyState()
       ) : (
         <div className="divide-y divide-border rounded-lg border border-border">
           {filtered.map((o) => {
