@@ -85,6 +85,19 @@ Revisit this the moment either becomes true:
 - [ ] The role-boundary runtime test is either done or **explicitly recorded as
       deferred**, with the unit suite named as the standing evidence.
 
+## Still unverified after the gate passes — with closure criteria
+
+Passing the read-only gate does not close these. Don't describe any of them as
+done without the evidence in the right-hand column.
+
+| Item | Evidence today | What would actually close it |
+| --- | --- | --- |
+| Low-privilege role enforcement | Unit coverage of the route-access matrix | A seeded staging tenant with real manager / staff / trainee / shift-lead / bookkeeper sessions |
+| Protected write actions | Code review plus selected test coverage | Write-path testing against a non-production database |
+| PIN → login attribution | The schema and linking path exist | Backfilling or deliberately linking existing `staff_members.user_id` rows |
+| Register/KDS action authorization | Tenancy enforced; 52 actions ungated by design | New permission keys, then an action-guard migration |
+| Silent query failures | New lint rule; ~512 known warnings | `must()` migration for the primary page and data loaders |
+
 ## Residual risk being accepted at merge
 
 State these in the merge commit rather than leaving them implied:
