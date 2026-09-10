@@ -55,11 +55,27 @@ function businessRevenue(trip: TripData): number {
   return parseFloat(trip.price_total ?? "0");
 }
 
+// /app is two different products sharing a URL, and the split is by VERTICAL,
+// not by concern.
+//
+// Everything below this function is the original transportation dashboard —
+// trips, partners, cookies owed — from before the platform grew a point of
+// sale. Every other mode (restaurant, retail, service, mobile seller) gets
+// PosDashboard, which lives in pos-dashboard.tsx and shares none of this file's
+// data model. That is why the two files look like they were written by
+// different people: they were, three years apart, for different businesses.
+//
+// The early return is load-bearing. A restaurant must never execute the trips
+// queries below (there is no trips data and RLS would answer with nothing),
+// and the transportation tenant must never see a KDS. Keeping them in one file
+// under one `if` is not elegant, but merging them would mean teaching one
+// dashboard two vocabularies — and the module registry already decided that
+// verticals get separate screens.
 export default async function DashboardPage() {
-  const { business } = await requireBusiness();
+  const { business, role } = await requireBusiness();
 
   if (business.industry !== "transportation") {
-    return <PosDashboard business={business} />;
+    return <PosDashboard business={business} role={role} />;
   }
 
   const vocab = getVocab(business.industry);
