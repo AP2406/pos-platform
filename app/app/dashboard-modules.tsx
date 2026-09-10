@@ -22,7 +22,11 @@ import {
 import { Chip } from "@/components/ui/chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { niceCeiling } from "@/lib/services/dashboard-signals";
-import type { AttentionSignal, Pace } from "@/lib/services/dashboard-signals";
+import type {
+  AttentionSignal,
+  Pace,
+  PaymentSlice,
+} from "@/lib/services/dashboard-signals";
 import type { ReadinessReport } from "@/lib/services/launch-readiness";
 
 export function money(n: number, currency: string): string {
@@ -39,6 +43,196 @@ function moneyRound(n: number, currency: string): string {
     currency: currency || "CAD",
     maximumFractionDigits: 0,
   }).format(Number.isFinite(n) ? n : 0);
+}
+
+// ---------------------------------------------------------------------------
+// 0 · Chart palette
+// ---------------------------------------------------------------------------
+//
+// Tailwind reads class names as literal text, so a hue can't be interpolated
+// (`"text-chart-" + n` compiles to nothing). These tables are the price of that,
+// and keeping them in one place is what stops a slice's swatch in the legend
+// drifting away from the arc it labels.
+
+const HUE_TEXT: Record<number, string> = {
+  1: "text-chart-1",
+  2: "text-chart-2",
+  3: "text-chart-3",
+  4: "text-chart-4",
+  5: "text-chart-5",
+  6: "text-chart-6",
+  7: "text-chart-7",
+};
+
+const HUE_BG: Record<number, string> = {
+  1: "bg-chart-1",
+  2: "bg-chart-2",
+  3: "bg-chart-3",
+  4: "bg-chart-4",
+  5: "bg-chart-5",
+  6: "bg-chart-6",
+  7: "bg-chart-7",
+};
+
+/** The soft square an icon sits in: a tint of its own hue, outlined in it. */
+const HUE_WELL: Record<number, string> = {
+  1: "bg-chart-1/10 ring-chart-1/30 text-chart-1",
+  2: "bg-chart-2/10 ring-chart-2/30 text-chart-2",
+  3: "bg-chart-3/10 ring-chart-3/30 text-chart-3",
+  4: "bg-chart-4/10 ring-chart-4/30 text-chart-4",
+  5: "bg-chart-5/10 ring-chart-5/30 text-chart-5",
+  6: "bg-chart-6/10 ring-chart-6/30 text-chart-6",
+  7: "bg-chart-7/10 ring-chart-7/30 text-chart-7",
+};
+
+const HUE_STROKE: Record<number, string> = {
+  1: "stroke-chart-1",
+  2: "stroke-chart-2",
+  3: "stroke-chart-3",
+  4: "stroke-chart-4",
+  5: "stroke-chart-5",
+  6: "stroke-chart-6",
+  7: "stroke-chart-7",
+};
+
+// ---------------------------------------------------------------------------
+// 0b · The coloured delta
+// ---------------------------------------------------------------------------
+
+export type DeltaDirection = "up" | "down" | "flat";
+
+export type KpiDelta = {
+  direction: DeltaDirection;
+  /** The magnitude, pre-formatted: "8.2%", "3 more", "$41.20". */
+  text: string;
+  /** What it is measured against: "vs last Tuesday". Stays muted. */
+  suffix: string;
+  /**
+   * Which direction counts as good. Sales climbing is a win; refunds climbing
+   * is not, and painting both green would make the colour decorative.
+   */
+  good: "up" | "down";
+  /**
+   * Withhold the verdict: the arrow points but the line stays grey. For gaps
+   * inside the noise band, where a direction exists and a judgement doesn't.
+   */
+  neutral?: boolean;
+};
+
+/**
+ * An arrow, a number, and what it's against.
+ *
+ * The arrow carries the direction and the colour carries the judgement, but the
+ * words after it carry both — so this still reads correctly in greyscale, which
+ * is the rule every other coloured thing on this page obeys.
+ */
+function Delta({ delta, size = "sm" }: { delta: KpiDelta; size?: "sm" | "md" }) {
+  const verdict =
+    delta.neutral || delta.direction === "flat"
+      ? "flat"
+      : delta.direction === delta.good
+        ? "good"
+        : "bad";
+  const tone =
+    verdict === "good"
+      ? "text-emerald-500"
+      : verdict === "bad"
+        ? "text-red-500"
+        : "text-muted-foreground";
+  const Glyph =
+    delta.direction === "up" ? ArrowUpRight : delta.direction === "down" ? ArrowDownRight : Minus;
+
+  return (
+    // Wraps rather than truncates: in a two-up KPI strip on a phone there is
+    // room for "2 more" and "than last Thursday" on separate lines, and there
+    // is never room for "than last Thurs…", which reads as broken.
+    <span
+      className={
+        "inline-flex flex-wrap items-center gap-x-1 " +
+        (size === "md" ? "text-[13px]" : "text-xs")
+      }
+    >
+      <span
+        className={
+          "inline-flex items-center gap-0.5 font-semibold whitespace-nowrap " + tone
+        }
+      >
+        <Glyph className={(size === "md" ? "size-4" : "size-3.5") + " shrink-0"} />
+        <span className="tabular-nums">{delta.text}</span>
+      </span>
+      <span className="text-muted-foreground">{delta.suffix}</span>
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 0c · The KPI strip
+// ---------------------------------------------------------------------------
+
+export type Kpi = {
+  id: string;
+  /** Two or three words. The number below is what gets read. */
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  /** 1–7 — which --chart-N tints the icon well. */
+  hue: number;
+  /** Null when there is no honest comparison. Never a fabricated 0%. */
+  delta: KpiDelta | null;
+  /**
+   * What stands in for the delta when there isn't one. This is the line that
+   * has to distinguish "last Tuesday was closed" from "the query broke", so it
+   * is a sentence and it is required.
+   */
+  note: string;
+};
+
+/**
+ * Four small cards above the fold: the figures an owner would recite from
+ * memory, each against the same weekday last week.
+ *
+ * This is not the seven-tile grid the page was rebuilt to get rid of. The
+ * difference is the delta: a tile that says "$1,284" tells you nothing you can
+ * act on, and one that says "$1,284, 8% behind last Tuesday" tells you whether
+ * to worry. Everything without a comparison stayed downstairs in the ops blocks.
+ */
+export function KpiStrip({ items }: { items: Kpi[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {items.map((k) => (
+        <section
+          key={k.id}
+          className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-4 sm:p-[18px]"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {k.label}
+            </span>
+            <span
+              aria-hidden
+              className={
+                "shrink-0 flex items-center justify-center w-8 h-8 rounded-[10px] ring-1 ring-inset [&_svg]:size-4 " +
+                (HUE_WELL[k.hue] ?? HUE_WELL[1])
+              }
+            >
+              {k.icon}
+            </span>
+          </div>
+          <div className="mt-2.5 text-2xl sm:text-[28px] font-bold tabular-nums tracking-tight leading-none">
+            {k.value}
+          </div>
+          <div className="mt-2 min-w-0">
+            {k.delta ? (
+              <Delta delta={k.delta} />
+            ) : (
+              <span className="block text-xs text-muted-foreground">{k.note}</span>
+            )}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -70,9 +264,10 @@ export function ReadinessPanel({ report }: { report: ReadinessReport }) {
             {left} thing{left === 1 ? "" : "s"} left before you can take real
             payments
           </h2>
+          {/* The count is the whole message. "Each one links to where you
+              finish it" described the underline under the reader's cursor. */}
           <p className="text-xs text-muted-foreground mt-0.5">
-            {report.requiredDone} of {report.requiredTotal} done. Each one links
-            to where you finish it.
+            {report.requiredDone} of {report.requiredTotal} done
           </p>
         </div>
         <Link
@@ -298,7 +493,6 @@ function PaceChart({
 
 export function TodayModule({
   pace,
-  saleCount,
   currency,
   weekday,
   scope,
@@ -309,7 +503,6 @@ export function TodayModule({
   curve,
 }: {
   pace: Pace;
-  saleCount: number;
   currency: string;
   /** "Wednesday" — the weekday being compared against. */
   weekday: string;
@@ -351,9 +544,10 @@ export function TodayModule({
           <h2 className="text-[15px] font-semibold tracking-tight">
             Sales {scope}
           </h2>
+          {/* The sale count moved to the KPI strip, so this line is down to the
+              one thing the big number can't say for itself: what it is net of. */}
           <p className="text-xs text-muted-foreground mt-0.5">
-            {saleCount} sale{saleCount === 1 ? "" : "s"} · net of refunds,
-            training excluded
+            Net of refunds · training excluded
           </p>
         </div>
         <div className="shrink-0">
@@ -370,21 +564,26 @@ export function TodayModule({
       </div>
 
       {/* The percentage is for comparing; the dollar figure is what an owner
-          feels. They convert one into the other in their head anyway. */}
+          feels. The chip above already carries the percent, so this carries the
+          money — as an arrow and a figure rather than the sentence it used to
+          be, because "$412.80 ahead of last Wednesday at 2:15 p.m." is a
+          caption an owner reads once and never again. */}
       {!failed && hasBenchmark && (
-        <p className="mt-2 text-[13px] text-muted-foreground">
-          {pace.status === "level" ? "Within " : null}
-          <span className="font-medium tabular-nums text-foreground">
-            {money(deltaAbs, currency)}
-          </span>
-          {pace.status === "level"
-            ? " of last "
-            : pace.status === "ahead"
-              ? " ahead of last "
-              : " behind last "}
-          {weekday}
-          {benchmarkTimeLabel ? " at " + benchmarkTimeLabel : ""}.
-        </p>
+        <div className="mt-2">
+          <Delta
+            size="md"
+            delta={{
+              direction:
+                pace.status === "ahead" ? "up" : pace.status === "behind" ? "down" : "flat",
+              text: money(deltaAbs, currency),
+              suffix:
+                (pace.status === "level" ? "of last " : "vs last ") +
+                weekday +
+                (benchmarkTimeLabel ? " at " + benchmarkTimeLabel : ""),
+              good: "up",
+            }}
+          />
+        </div>
       )}
 
       {showChart && curve && (
@@ -463,6 +662,299 @@ export function TodayModule({
 }
 
 // ---------------------------------------------------------------------------
+// 2b · Sales by day — the fortnight behind the hero number
+// ---------------------------------------------------------------------------
+
+export type DayBar = {
+  /** Local date key, e.g. "2026-09-10". Stable across renders, so it's the key. */
+  key: string;
+  /** One or two letters under the bar: "M", "Tu". */
+  tick: string;
+  /** Spoken date, for the accessible summary: "Tue, Sep 9". */
+  full: string;
+  amount: number;
+  /** The scoped day — the one the hero number above is talking about. */
+  current: boolean;
+};
+
+/**
+ * Fourteen days of takings, each bar standing in its own full-height track.
+ *
+ * The track is the point. Bars alone answer "which day was biggest"; bars in
+ * tracks also answer "how big could a day be here", because every column is the
+ * same height and the empty part of it is the headroom. A Monday at a third of
+ * the track reads as a third of a good day, which is the sentence an owner
+ * would say out loud, and no axis is needed to say it.
+ *
+ * SVG, stretched with preserveAspectRatio="none", the same trick the pace chart
+ * uses — the box has to survive a 760px desktop column and a 335px phone, and
+ * the only thing that distorts is a 4px corner radius.
+ */
+export function DailySalesCard({
+  bars,
+  total,
+  trend,
+  currency,
+  failed,
+}: {
+  bars: DayBar[];
+  /** Takings across the whole window. */
+  total: number;
+  /** Last seven days against the seven before them. Null when either is empty. */
+  trend: KpiDelta | null;
+  currency: string;
+  failed: boolean;
+}) {
+  const W = 600;
+  const H = 132;
+  const slot = bars.length > 0 ? W / bars.length : W;
+  // 60% bar, 40% air. Wider and the tracks merge into one grey block; narrower
+  // and fourteen bars start to look like a barcode.
+  const barW = slot * 0.6;
+  const ceiling = niceCeiling(Math.max(...bars.map((b) => b.amount), 0));
+  const radius = Math.min(4, barW / 2);
+
+  return (
+    <section className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-semibold tracking-tight">Sales by day</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Last 14 days</p>
+        </div>
+        {!failed && (
+          <div className="shrink-0 text-right">
+            <div className="text-xl font-bold tabular-nums tracking-tight leading-none">
+              {money(total, currency)}
+            </div>
+            <div className="mt-1.5 flex justify-end">
+              {trend ? (
+                <Delta delta={trend} />
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  Not enough history to trend yet
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {failed ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          Couldn&apos;t load the last fortnight. The bars are missing because the
+          query failed, not because the days were empty.
+        </p>
+      ) : ceiling <= 0 ? (
+        // Fourteen empty tracks is a picture of nothing, and drawing it would
+        // imply we measured fourteen zeroes rather than found no sales at all.
+        <p className="mt-4 text-sm text-muted-foreground">
+          No sales in the last 14 days. Each day you trade adds a bar here, so
+          the shape of your week builds itself.
+        </p>
+      ) : (
+        <>
+          <figure className="mt-4">
+            <figcaption className="flex items-baseline justify-between text-[11px] text-muted-foreground">
+              <span>Daily takings</span>
+              <span className="tabular-nums">{moneyRound(ceiling, currency)}</span>
+            </figcaption>
+            <svg
+              viewBox={"0 0 " + W + " " + H}
+              preserveAspectRatio="none"
+              className="mt-1.5 w-full h-[132px]"
+              role="img"
+              aria-label={
+                "Daily takings for the last 14 days. " +
+                bars.map((b) => b.full + ": " + money(b.amount, currency)).join(", ")
+              }
+            >
+              {bars.map((b, i) => {
+                const x = i * slot + (slot - barW) / 2;
+                const h = ceiling > 0 ? Math.min(1, b.amount / ceiling) * H : 0;
+                // A day that traded but barely has to stay visible, or the chart
+                // says "closed" about a day that wasn't.
+                const drawn = b.amount > 0 ? Math.max(h, 3) : 0;
+                return (
+                  <g key={b.key}>
+                    <rect
+                      x={x}
+                      y={0}
+                      width={barW}
+                      height={H}
+                      rx={radius}
+                      className="fill-raised"
+                    />
+                    {drawn > 0 && (
+                      <rect
+                        x={x}
+                        y={H - drawn}
+                        width={barW}
+                        height={drawn}
+                        rx={radius}
+                        className={b.current ? "fill-chart-1" : "fill-chart-1/45"}
+                      />
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+            <div className="mt-1.5 flex text-[10px] sm:text-[11px] text-muted-foreground">
+              {bars.map((b) => (
+                <span
+                  key={b.key}
+                  className={
+                    "flex-1 text-center tabular-nums " +
+                    (b.current ? "font-semibold text-foreground" : "")
+                  }
+                >
+                  {b.tick}
+                </span>
+              ))}
+            </div>
+          </figure>
+        </>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 2c · Payment mix
+// ---------------------------------------------------------------------------
+
+const RING_R = 52;
+const RING_C = 2 * Math.PI * RING_R;
+
+/**
+ * How the money arrived, as a ring with the percentages written beside it.
+ *
+ * The legend is the chart here — nobody eyeballs "is that arc 26% or 31%" — so
+ * the arcs are really a colour key for a list of numbers, and the numbers are
+ * rounded together so they sum to 100 (see paymentMix()).
+ *
+ * It matters operationally, not decoratively: a cash share that jumps is a
+ * till that needs counting more often, and a delivery-app share that climbs is
+ * commission quietly eating a margin nobody re-checked.
+ */
+export function PaymentMixCard({
+  slices,
+  total,
+  currency,
+  failed,
+}: {
+  slices: PaymentSlice[];
+  total: number;
+  currency: string;
+  failed: boolean;
+}) {
+  // Arcs are laid end to end from twelve o'clock. A 1.5px gap between them
+  // keeps two adjacent slices from reading as one; a slice too small to hold
+  // the gap simply doesn't get one rather than being drawn inside-out.
+  const arcLen = (pct: number) => (pct / 100) * RING_C;
+  const arcs = slices.map((s, i) => {
+    const len = arcLen(s.pct);
+    // Prefix sum rather than a running counter: seven slices at most, and a
+    // mutable accumulator inside a render is the kind of thing that quietly
+    // stops being reset when this component is eventually memoised.
+    const offset = slices.slice(0, i).reduce((sum, x) => sum + arcLen(x.pct), 0);
+    const gap = len > 6 ? 1.5 : 0;
+    return { slice: s, len: Math.max(0, len - gap), offset };
+  });
+
+  return (
+    <section className="rounded-xl bg-card ring-1 ring-line shadow-elevation p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-semibold tracking-tight">Payment mix</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Last 14 days</p>
+        </div>
+      </div>
+
+      {failed ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          Couldn&apos;t load the payment mix. It is a fault, not an all-cash
+          fortnight.
+        </p>
+      ) : total <= 0 || slices.length === 0 ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          Nothing settled in the last 14 days, so there is no mix to split.
+          Cash, card and gift cards each get a slice once sales start landing.
+        </p>
+      ) : (
+        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-4">
+          <div className="relative shrink-0 w-[132px] h-[132px]">
+            <svg viewBox="0 0 132 132" className="w-full h-full -rotate-90" role="img"
+              aria-label={
+                "Payment mix: " +
+                slices.map((s) => s.pct + " percent " + s.label).join(", ")
+              }
+            >
+              {/* The unfilled ring underneath, so a mix that somehow doesn't
+                  reach 100 shows as a gap rather than as a smaller donut. */}
+              <circle
+                cx="66"
+                cy="66"
+                r={RING_R}
+                fill="none"
+                className="stroke-raised"
+                strokeWidth="15"
+              />
+              {arcs.map((a) => (
+                <circle
+                  key={a.slice.key}
+                  cx="66"
+                  cy="66"
+                  r={RING_R}
+                  fill="none"
+                  className={HUE_STROKE[a.slice.hue] ?? HUE_STROKE[6]}
+                  strokeWidth="15"
+                  strokeLinecap="butt"
+                  strokeDasharray={a.len.toFixed(2) + " " + (RING_C - a.len).toFixed(2)}
+                  strokeDashoffset={(-a.offset).toFixed(2)}
+                />
+              ))}
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-[17px] font-bold tabular-nums tracking-tight leading-none">
+                {moneyRound(total, currency)}
+              </span>
+              <span className="text-[10px] text-muted-foreground mt-1">taken</span>
+            </div>
+          </div>
+
+          {/* 190px is the width at which "Store credit" and its figure both fit
+              unabbreviated. Below that the legend drops under the ring rather
+              than truncating — a legend reading "Deli… 9%" labels nothing. */}
+          <ul className="min-w-[190px] flex-1 space-y-2">
+            {slices.map((s) => (
+              <li key={s.key} className="flex items-center gap-2 text-xs">
+                <span
+                  aria-hidden
+                  className={"shrink-0 size-2.5 rounded-[3px] " + (HUE_BG[s.hue] ?? HUE_BG[6])}
+                />
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                  {s.label}
+                </span>
+                <span
+                  className={
+                    "shrink-0 tabular-nums font-semibold " + (HUE_TEXT[s.hue] ?? HUE_TEXT[6])
+                  }
+                >
+                  {s.pct}%
+                </span>
+                <span className="shrink-0 w-[68px] text-right tabular-nums text-muted-foreground">
+                  {moneyRound(s.amount, currency)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // 3 · The attention rail
 // ---------------------------------------------------------------------------
 
@@ -504,12 +996,12 @@ export function AttentionRail({
         }
       />
       <div className="flex items-start justify-between gap-3 px-5 py-3.5 border-b border-line">
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold tracking-tight">Needs you now</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Everything blocking service or costing money, as of right now.
-          </p>
-        </div>
+        {/* No subtitle. "Everything blocking service or costing money, as of
+            right now" restated the heading at four times the length, and the
+            rows underneath already say what each thing is. The empty state
+            below still gets its sentences — that is when explanation earns
+            its place. */}
+        <h2 className="text-[15px] font-semibold tracking-tight">Needs you now</h2>
         {signals.length > 0 && (
           <Chip
             tone={worst === "blocked" ? "danger" : "warning"}
@@ -698,13 +1190,32 @@ export type CheckRow = {
   href: string;
   /** Open checks read as live money; settled ones are history. */
   open: boolean;
+  /**
+   * The wash behind the row. Redundant with the status chip on purpose — the
+   * chip is what a screen reader and a colour-blind owner get, the tint is what
+   * lets a sighted one find the three refunds in a list of twenty without
+   * reading any of it.
+   */
+  tint: RowTint;
+};
+
+export type RowTint = "amber" | "green" | "red" | null;
+
+// Kept very low — a wash, not a fill. At 7% these read as a warm or cool cast
+// over the card rather than as coloured stripes, which is the difference
+// between a register you can scan and a register that looks like a spreadsheet
+// somebody conditional-formatted to death.
+const ROW_TINT: Record<"amber" | "green" | "red", string> = {
+  amber: "bg-amber-500/[0.07] hover:bg-amber-500/[0.13]",
+  green: "bg-emerald-500/[0.05] hover:bg-emerald-500/[0.11]",
+  red: "bg-red-500/[0.07] hover:bg-red-500/[0.13]",
 };
 
 export function ChecksTable({
   rows,
   failed,
   title,
-  subtitle,
+  note,
   itemHeading,
   href,
   hrefLabel,
@@ -712,8 +1223,12 @@ export function ChecksTable({
   rows: CheckRow[];
   failed: boolean;
   title: string;
-  /** The second line of the header zone — what this list is and isn't. */
-  subtitle: string;
+  /**
+   * Three words at most. This used to carry a sentence explaining that the list
+   * is live rather than scoped to the day above — true, and nobody was reading
+   * a second line of prose to learn it.
+   */
+  note: string;
   /** What the wide middle column holds, in the merchant's own word. */
   itemHeading: string;
   href: string;
@@ -722,9 +1237,9 @@ export function ChecksTable({
   return (
     <section className="rounded-xl bg-card ring-1 ring-line shadow-elevation overflow-hidden">
       <div className="flex items-start justify-between gap-3 px-5 py-3.5 border-b border-line">
-        <div className="min-w-0">
+        <div className="min-w-0 flex flex-wrap items-baseline gap-x-2.5">
           <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+          <span className="text-xs text-muted-foreground">{note}</span>
         </div>
         <Link
           href={href}
@@ -769,7 +1284,10 @@ export function ChecksTable({
               <Link
                 key={r.id}
                 href={r.href}
-                className="flex items-center gap-3 px-5 py-2.5 hover:bg-surface-2 transition-colors"
+                className={
+                  "flex items-center gap-3 px-5 py-2.5 transition-colors " +
+                  (r.tint ? ROW_TINT[r.tint] : "hover:bg-surface-2")
+                }
               >
                 <span className="w-16 shrink-0 text-xs tabular-nums text-muted-foreground">
                   {r.time}
@@ -778,7 +1296,13 @@ export function ChecksTable({
                   <span className="block text-sm font-medium truncate">
                     {r.label}
                   </span>
+                  {/* Below sm the status chip is dropped for width, which used
+                      to be harmless and stopped being so the moment the row
+                      gained a colour wash: the tint would have been the only
+                      thing saying "refunded". So on a phone the status leads
+                      this line, in words. */}
                   <span className="block text-xs text-muted-foreground truncate">
+                    <span className="sm:hidden">{r.status.text} · </span>
                     {[r.channel, r.who].filter(Boolean).join(" · ") || "—"}
                   </span>
                 </span>

@@ -5,6 +5,7 @@ import {
   cumulativeCurve,
   minutesSince,
   niceCeiling,
+  paymentMix,
   rankSignals,
   type AttentionSignal,
 } from "@/lib/services/dashboard-signals";
@@ -228,5 +229,98 @@ describe("minutesSince", () => {
 
   it("never goes negative on a clock that ran backwards", () => {
     expect(minutesSince("2026-09-10T19:00:00Z", now)).toBe(0);
+  });
+});
+
+describe("paymentMix", () => {
+  // The legend is the chart. Percentages that don't add to 100 make an owner
+  // distrust every other figure on the page, so the arithmetic is the test.
+
+  it("sums to exactly 100 where naive rounding would give 101", () => {
+    const mix = paymentMix([
+      { method: "cash", amount: 100 },
+      { method: "card", amount: 100 },
+      { method: "other", amount: 100 },
+    ]);
+    expect(mix.reduce((s, x) => s + x.pct, 0)).toBe(100);
+    expect(mix.map((x) => x.pct).sort()).toEqual([33, 33, 34]);
+  });
+
+  it("sums to exactly 100 across seven uneven tenders", () => {
+    const mix = paymentMix([
+      { method: "card", amount: 913.4 },
+      { method: "cash", amount: 271.15 },
+      { method: "gift_card", amount: 44.9 },
+      { method: "store_credit", amount: 12.05 },
+      { method: "delivery", amount: 188.7 },
+      { method: "split", amount: 61.3 },
+      { method: "other", amount: 7.75 },
+    ]);
+    expect(mix).toHaveLength(7);
+    expect(mix.reduce((s, x) => s + x.pct, 0)).toBe(100);
+  });
+
+  it("ranks by money taken, biggest first", () => {
+    const mix = paymentMix([
+      { method: "cash", amount: 10 },
+      { method: "card", amount: 90 },
+    ]);
+    expect(mix.map((x) => x.key)).toEqual(["card", "cash"]);
+    expect(mix[0].pct).toBe(90);
+  });
+
+  it("folds unknown and missing methods into Other rather than dropping them", () => {
+    // A slice that silently vanished would leave the remaining percentages
+    // describing a smaller day than the hero number just claimed.
+    const mix = paymentMix([
+      { method: "card", amount: 50 },
+      { method: null, amount: 25 },
+      { method: "crypto", amount: 25 },
+    ]);
+    expect(mix.reduce((s, x) => s + x.amount, 0)).toBe(100);
+    const other = mix.find((x) => x.key === "other");
+    expect(other?.pct).toBe(50);
+    expect(other?.count).toBe(2);
+  });
+
+  it("gives every tender its own hue, so no two slices share a colour", () => {
+    const mix = paymentMix([
+      { method: "card", amount: 5 },
+      { method: "cash", amount: 5 },
+      { method: "gift_card", amount: 5 },
+      { method: "store_credit", amount: 5 },
+      { method: "delivery", amount: 5 },
+      { method: "split", amount: 5 },
+      { method: "other", amount: 5 },
+    ]);
+    expect(new Set(mix.map((x) => x.hue)).size).toBe(mix.length);
+  });
+
+  it("returns nothing at all when no money was taken", () => {
+    // Not a set of zero-percent slices — a donut of nothing is a picture of
+    // nothing, and the caller writes a sentence instead.
+    expect(paymentMix([])).toEqual([]);
+    expect(paymentMix([{ method: "cash", amount: 0 }])).toEqual([]);
+  });
+
+  it("keeps a comped sale out of the ring but still counts it", () => {
+    const mix = paymentMix([
+      { method: "card", amount: 100 },
+      { method: "cash", amount: 0 },
+    ]);
+    expect(mix.map((x) => x.key)).toEqual(["card"]);
+    expect(mix[0].pct).toBe(100);
+  });
+
+  it("orders ties by key so slices don't swap places between renders", () => {
+    const a = paymentMix([
+      { method: "cash", amount: 50 },
+      { method: "card", amount: 50 },
+    ]);
+    const b = paymentMix([
+      { method: "card", amount: 50 },
+      { method: "cash", amount: 50 },
+    ]);
+    expect(a.map((x) => x.key)).toEqual(b.map((x) => x.key));
   });
 });

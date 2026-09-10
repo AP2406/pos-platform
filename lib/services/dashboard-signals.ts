@@ -133,6 +133,122 @@ export function niceCeiling(value: number): number {
 }
 
 // ---------------------------------------------------------------------------
+// Payment mix
+// ---------------------------------------------------------------------------
+
+/**
+ * The tenders `orders.payment_method` is allowed to hold, in the order the
+ * donut assigns colours. Fixed rather than discovered from the data so a
+ * restaurant's cash slice is the same colour on Monday as it is on Friday —
+ * a legend that reshuffles its hues between page loads is unreadable.
+ *
+ * `split` is a real order-level value (0027): a sale settled across two or more
+ * tenders. It stays its own slice rather than being spread across the others,
+ * because this page reads `orders`, and the per-tender breakdown of a split
+ * lives in `payments`. Guessing it would be inventing money.
+ */
+const PAYMENT_LABELS: Record<string, string> = {
+  cash: "Cash",
+  card: "Card",
+  split: "Split",
+  gift_card: "Gift card",
+  store_credit: "Store credit",
+  delivery: "Delivery app",
+  other: "Other",
+};
+
+/** Colour token index per tender, 1-based against --chart-N. */
+const PAYMENT_HUE: Record<string, number> = {
+  card: 1,
+  cash: 3,
+  delivery: 5,
+  gift_card: 4,
+  store_credit: 7,
+  split: 2,
+  other: 6,
+};
+
+export type PaymentSlice = {
+  /** Normalised method key — always one of PAYMENT_LABELS' keys. */
+  key: string;
+  label: string;
+  /** 1–7, the --chart-N token this slice is drawn in. */
+  hue: number;
+  amount: number;
+  count: number;
+  /** Whole percent of the total. The returned set always sums to exactly 100. */
+  pct: number;
+};
+
+/**
+ * Money taken, split by tender, largest first.
+ *
+ * The percentages are the point — this is the one chart on the page whose
+ * legend is read instead of the picture — so they are rounded by largest
+ * remainder rather than independently. Rounding each slice on its own gives
+ * legends that read "34% · 33% · 34%" and sum to 101, which makes an owner
+ * distrust every other number on the screen.
+ *
+ * Unknown or missing methods fold into "Other" instead of being dropped: a
+ * slice that silently vanishes would make the remaining percentages describe a
+ * smaller day than the one the hero number just claimed.
+ */
+export function paymentMix(
+  rows: { method: unknown; amount: number }[]
+): PaymentSlice[] {
+  const byKey = new Map<string, { amount: number; count: number }>();
+  let total = 0;
+
+  for (const r of rows) {
+    const raw = typeof r.method === "string" ? r.method.toLowerCase().trim() : "";
+    const key = PAYMENT_LABELS[raw] ? raw : "other";
+    const amount = Number.isFinite(r.amount) ? r.amount : 0;
+    // A refunded-to-zero or comped sale has no arc to draw and no share to
+    // claim, but it did happen, so it still counts toward `count`.
+    const slot = byKey.get(key) ?? { amount: 0, count: 0 };
+    slot.amount += amount;
+    slot.count += 1;
+    byKey.set(key, slot);
+    total += amount;
+  }
+
+  if (total <= 0) return [];
+
+  const slices = [...byKey.entries()]
+    .filter(([, v]) => v.amount > 0)
+    .map(([key, v]) => ({
+      key,
+      label: PAYMENT_LABELS[key],
+      hue: PAYMENT_HUE[key] ?? 6,
+      amount: v.amount,
+      count: v.count,
+      exact: (v.amount / total) * 100,
+      pct: Math.floor((v.amount / total) * 100),
+    }))
+    // Biggest share first, then key, so two tenders that tie don't swap places
+    // between renders.
+    .sort((a, b) => (b.amount !== a.amount ? b.amount - a.amount : a.key < b.key ? -1 : 1));
+
+  // Hand the floored-away points back to whoever lost the most to rounding.
+  let remaining = 100 - slices.reduce((s, x) => s + x.pct, 0);
+  const byRemainder = [...slices].sort(
+    (a, b) => b.exact - Math.floor(b.exact) - (a.exact - Math.floor(a.exact))
+  );
+  for (let i = 0; remaining > 0 && i < byRemainder.length; i++, remaining--) {
+    byRemainder[i].pct += 1;
+  }
+
+  return slices.map(({ key, label, hue, amount, count, pct }) => ({
+    key,
+    label,
+    hue,
+    amount,
+    count,
+    pct,
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // The attention rail
 // ---------------------------------------------------------------------------
 

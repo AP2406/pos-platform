@@ -21,6 +21,11 @@
   --color-sidebar: var(--sidebar);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
+  /* 6 and 7 exist because the payment mix has up to seven tenders — cash, card,
+     other, split, gift card, store credit and third-party delivery — and a
+     donut that reuses a hue for two slices is a donut that lies. */
+  --color-chart-7: var(--chart-7);
+  --color-chart-6: var(--chart-6);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -112,6 +117,11 @@
   --chart-3: oklch(0.65 0.13 165);
   --chart-4: oklch(0.58 0.16 300);
   --chart-5: oklch(0.65 0.14 90);
+  /* Deliberately spaced away from 1–5 in hue so seven slices stay tellable
+     apart, and held at the same lightness so no one slice reads as "the
+     important one" purely because it is brighter. */
+  --chart-6: oklch(0.62 0.17 25);
+  --chart-7: oklch(0.6 0.15 330);
   --radius: 0.75rem;
 
   --brand: oklch(0.58 0.2 250);
@@ -201,6 +211,8 @@
   --chart-3: oklch(0.78 0.13 165);
   --chart-4: oklch(0.7 0.16 300);
   --chart-5: oklch(0.78 0.14 90);
+  --chart-6: oklch(0.72 0.17 25);
+  --chart-7: oklch(0.72 0.15 330);
 
   --brand: oklch(0.66 0.19 250);
   --brand-foreground: oklch(0.16 0.02 265);

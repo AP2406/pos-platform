@@ -11,23 +11,40 @@ import {
   computePace,
   cumulativeCurve,
   minutesSince,
+  paymentMix,
   rankSignals,
   type AttentionSignal,
   type CurvePoint,
+  type Pace,
 } from "@/lib/services/dashboard-signals";
 import {
   AttentionRail,
   ChecksTable,
+  DailySalesCard,
+  KpiStrip,
   OpsBlock,
+  PaymentMixCard,
   ReadinessPanel,
   TodayModule,
   money,
   type CheckRow,
+  type DayBar,
+  type Kpi,
+  type KpiDelta,
   type OpsStat,
   type PaceCurve,
+  type RowTint,
 } from "./dashboard-modules";
 import Link from "next/link";
-import { ChefHat, Package, Users } from "lucide-react";
+import {
+  Banknote,
+  Calculator,
+  ChefHat,
+  Package,
+  Receipt,
+  Undo2,
+  Users,
+} from "lucide-react";
 
 // The admin home page for every non-transportation business.
 //
@@ -103,6 +120,36 @@ function channelLabel(channel: unknown, snapshot: unknown): string | null {
 
 /** Half-hourly: fine enough to show a rush, coarse enough to stay a line. */
 const CHART_STEPS = 48;
+
+/**
+ * Two weeks of bars. Long enough that both of last week's Fridays are on
+ * screen — a weekly rhythm needs two cycles before it looks like a rhythm —
+ * and short enough that fourteen bars still fit legibly across a phone.
+ */
+const WINDOW_DAYS = 14;
+
+/**
+ * A `Pace` turned into the arrow-and-figure line under a KPI.
+ *
+ * The arrow follows the raw sign but the colour follows `computePace`'s level
+ * band, which is why `neutral` exists: a restaurant that is 4% up on last
+ * Tuesday is not up, it is having the same Tuesday, and painting that green
+ * teaches an owner to ignore green. The arrow still points, because the number
+ * beside it has a sign and they must not disagree.
+ */
+function paceDelta(pace: Pace, weekday: string): KpiDelta | null {
+  if (pace.status === "no-benchmark" || pace.deltaPct == null) return null;
+  const pct = Math.abs(pace.deltaPct);
+  return {
+    direction: pace.deltaPct > 0.05 ? "up" : pace.deltaPct < -0.05 ? "down" : "flat",
+    // One decimal while the gap is small enough for one to matter; whole
+    // percents once it is large, where ".3" is just noise on the end.
+    text: (pct < 10 ? pct.toFixed(1) : String(Math.round(pct))) + "%",
+    suffix: "vs last " + weekday,
+    good: "up",
+    neutral: pace.status === "level",
+  };
+}
 
 export async function PosDashboard({
   business,
@@ -200,12 +247,25 @@ export async function PosDashboard({
   const benchLengthMs = benchEnd.getTime() - benchStart.getTime();
   const benchCutoff = benchStart.getTime() + elapsedMs;
 
+  // The fortnight the bar chart and the payment donut both read. It ends where
+  // the scoped day ends rather than at the wall clock, so the last bar is
+  // always the day the hero number is talking about — a trend block whose last
+  // column disagreed with the headline above it would be worse than no trend.
+  //
+  // Probed from noon, like every other date here, so a DST changeover can't
+  // shift the window a day.
+  const windowStart = getDayBoundsUTC(
+    new Date(dayNoonMs - (WINDOW_DAYS - 1) * 24 * 60 * 60 * 1000),
+    tz
+  ).start;
+
   const orderSel =
     "id, sale_number, total, created_at, status, payment_method, is_training, channel, snapshot, staff_id";
 
   const [
     dayRes,
     benchRes,
+    windowRes,
     todayCountRes,
     recentRes,
     catalogRes,
@@ -221,9 +281,11 @@ export async function PosDashboard({
     // never mean "the select was wrong" — must() throws so the error boundary
     // shows the failure instead of a convincing $0.00. created_at rides along
     // because the chart needs to know when in the day each sale landed.
+    // `status` rides along for the refunds KPI: the rows are already here, and
+    // a second query to count three refunds would be a second chance to fail.
     supabase
       .from("orders")
-      .select("total, created_at, is_training")
+      .select("total, created_at, is_training, status")
       .eq("business_id", business.id)
       .neq("status", "voided")
       .gte("created_at", dayStart.toISOString())
@@ -231,11 +293,29 @@ export async function PosDashboard({
 
     supabase
       .from("orders")
-      .select("total, created_at, is_training")
+      .select("total, created_at, is_training, status")
       .eq("business_id", business.id)
       .neq("status", "voided")
       .gte("created_at", benchStart.toISOString())
       .lt("created_at", benchEnd.toISOString()),
+
+    // One query, two charts. The daily bars need amount-by-day and the payment
+    // donut needs amount-by-tender over the same fortnight, and asking twice
+    // would double the rows read to answer two halves of one question.
+    //
+    // COST: this reads every order in the window — four columns, but a busy
+    // restaurant is a few thousand rows on every dashboard load. The right
+    // answer is a daily-totals rollup in the database, which is a migration and
+    // therefore not this change. There is deliberately no LIMIT: a truncated
+    // window would quietly understate the totals, and a chart that is wrong is
+    // worse than a chart that is slow.
+    supabase
+      .from("orders")
+      .select("total, created_at, is_training, payment_method")
+      .eq("business_id", business.id)
+      .neq("status", "voided")
+      .gte("created_at", windowStart.toISOString())
+      .lt("created_at", dayEnd.toISOString()),
 
     // The Service block says "N sales today" and means it, so when the scope
     // control is pointed at yesterday it needs its own count rather than
@@ -327,6 +407,7 @@ export async function PosDashboard({
   // "no rows" — so we keep the error flag alongside every list. That flag is
   // what lets a module say "couldn't load" instead of quietly showing a zero.
   const benchFailed = benchRes.error != null;
+  const windowFailed = windowRes.error != null;
   const todayCountFailed = todayCountRes.error != null;
   const recentFailed = recentRes.error != null;
   const catalogFailed = catalogRes.error != null;
@@ -342,6 +423,7 @@ export async function PosDashboard({
     dayRes
   ) as Row[];
   const benchRows = soft("dashboard → same weekday last week", benchRes, [] as Row[]);
+  const windowRows = soft("dashboard → last 14 days", windowRes, [] as Row[]);
   const todayCountRows = soft("dashboard → today's sale count", todayCountRes, [] as Row[]);
   const recentRows = soft("dashboard → recent sales", recentRes, [] as Row[]);
   const items = soft("dashboard → menu & stock", catalogRes, [] as Row[]);
@@ -354,28 +436,208 @@ export async function PosDashboard({
   const staff = soft("dashboard → staff", staffRes, [] as Row[]);
 
   // --- 1 · Today, with pace ------------------------------------------------
+  //
+  // A sale counts as refunded when the *order* carries that status, which means
+  // it is attributed to the day the sale was rung, not the day the money went
+  // back. That is the right attribution for "how much of today did we give
+  // back", and the wrong one for a cash-flow report — which is why this stays a
+  // dashboard signal and /app/reports keeps its own refund figures.
+  const isRefunded = (o: Row) =>
+    o.status === "refunded" || o.status === "partially_refunded";
+
   let dayGross = 0;
   let dayCount = 0;
+  let dayRefunds = 0;
   const dayPoints: CurvePoint[] = [];
   for (const o of dayRows) {
     if (o.is_training) continue;
     const t = num(o.total);
     dayGross += t;
     dayCount += 1;
+    if (isRefunded(o)) dayRefunds += 1;
     dayPoints.push({ at: o.created_at, amount: t });
   }
 
   let benchSoFar = 0;
   let benchFull = 0;
+  let benchCountSoFar = 0;
+  let benchCountFull = 0;
+  let benchRefundsSoFar = 0;
   const benchPoints: CurvePoint[] = [];
   for (const o of benchRows) {
     if (o.is_training) continue;
     const t = num(o.total);
     benchFull += t;
-    if (new Date(o.created_at).getTime() < benchCutoff) benchSoFar += t;
+    benchCountFull += 1;
+    if (new Date(o.created_at).getTime() < benchCutoff) {
+      benchSoFar += t;
+      benchCountSoFar += 1;
+      if (isRefunded(o)) benchRefundsSoFar += 1;
+    }
     benchPoints.push({ at: o.created_at, amount: t });
   }
   const pace = computePace(dayGross, benchSoFar, benchFull);
+
+  // Named up here because every delta on the page ends "…vs last Wednesday".
+  const weekday = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    weekday: "long",
+  }).format(new Date(benchStart.getTime() + benchLengthMs / 2));
+
+  // --- 1b · The KPI strip --------------------------------------------------
+  //
+  // Every figure here comes out of the two queries above. The strip exists to
+  // put four numbers where an owner's eye lands first; it does not get to cost
+  // four more round trips to do it.
+  const txPace = computePace(dayCount, benchCountSoFar, benchCountFull);
+  const avgToday = dayCount > 0 ? dayGross / dayCount : 0;
+  const avgPace = computePace(
+    avgToday,
+    benchCountSoFar > 0 ? benchSoFar / benchCountSoFar : 0,
+    benchCountFull > 0 ? benchFull / benchCountFull : 0
+  );
+
+  // The one sentence that has to survive: a benchmark that failed to load and a
+  // benchmark that was a closed Monday are different facts, and neither of them
+  // is "0%".
+  const noBenchNote = benchFailed
+    ? "Last " + weekday + " couldn't be loaded."
+    : "No trading last " + weekday + " to compare.";
+
+  // Counts, not money, so a percentage is the wrong shape: "↑ 200%" off a base
+  // of one refund is technically true and operationally meaningless. And the
+  // good direction inverts — this is the only card on the strip where the
+  // arrow going up is painted red.
+  const refundDelta: KpiDelta | null =
+    benchFailed || benchCountSoFar === 0
+      ? null
+      : dayRefunds === benchRefundsSoFar
+        ? {
+            direction: "flat",
+            text: "Level",
+            suffix: "with last " + weekday,
+            good: "down",
+          }
+        : {
+            direction: dayRefunds > benchRefundsSoFar ? "up" : "down",
+            text:
+              Math.abs(dayRefunds - benchRefundsSoFar) +
+              (dayRefunds > benchRefundsSoFar ? " more" : " fewer"),
+            suffix: "than last " + weekday,
+            good: "down",
+          };
+
+  const scopeWordLower = scope === "today" ? "today" : "yesterday";
+  const kpis: Kpi[] = [
+    {
+      id: "sales",
+      label: "Sales " + scopeWordLower,
+      value: money(dayGross, currency),
+      icon: <Banknote />,
+      hue: 1,
+      delta: benchFailed ? null : paceDelta(pace, weekday),
+      note: noBenchNote,
+    },
+    {
+      id: "transactions",
+      label: "Transactions",
+      value: String(dayCount),
+      icon: <Receipt />,
+      hue: 2,
+      delta: benchFailed ? null : paceDelta(txPace, weekday),
+      note: noBenchNote,
+    },
+    {
+      id: "average-check",
+      label: "Average check",
+      // The average of no sales is not zero, it is undefined, and "$0.00"
+      // would read as a day where everything was comped.
+      value: dayCount > 0 ? money(avgToday, currency) : "—",
+      icon: <Calculator />,
+      hue: 3,
+      delta: dayCount === 0 || benchFailed ? null : paceDelta(avgPace, weekday),
+      note: dayCount === 0 ? "No sales " + scopeWordLower + " to average." : noBenchNote,
+    },
+    {
+      id: "refunds",
+      label: "Refunds",
+      value: String(dayRefunds),
+      icon: <Undo2 />,
+      hue: 6,
+      delta: refundDelta,
+      note: noBenchNote,
+    },
+  ];
+
+  // --- 1c · The fortnight: daily bars and the payment mix ------------------
+  //
+  // Bucketed by the business's own local date rather than by UTC arithmetic:
+  // a 9pm sale in Vancouver is the same calendar day as an 11am one, and only
+  // the timezone formatter reliably knows that across a DST boundary.
+  const dayKey = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const tickOf = new Intl.DateTimeFormat("en-CA", { timeZone: tz, weekday: "narrow" });
+  const fullOf = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+
+  const windowByDay = new Map<string, number>();
+  const mixInput: { method: unknown; amount: number }[] = [];
+  for (const o of windowRows) {
+    if (o.is_training) continue;
+    const t = num(o.total);
+    const k = dayKey.format(new Date(o.created_at));
+    windowByDay.set(k, (windowByDay.get(k) ?? 0) + t);
+    mixInput.push({ method: o.payment_method, amount: t });
+  }
+
+  // Built from the calendar, not from the rows, so a closed Monday is a bar of
+  // zero rather than a day that silently isn't there. A gap in a bar chart
+  // reads as "we lost the data"; an empty track reads as "we were shut".
+  const dayBars: DayBar[] = [];
+  for (let i = WINDOW_DAYS - 1; i >= 0; i--) {
+    const at = new Date(dayNoonMs - i * 24 * 60 * 60 * 1000);
+    const k = dayKey.format(at);
+    dayBars.push({
+      key: k,
+      tick: tickOf.format(at),
+      full: fullOf.format(at),
+      amount: windowByDay.get(k) ?? 0,
+      current: i === 0,
+    });
+  }
+
+  const windowTotal = dayBars.reduce((s, b) => s + b.amount, 0);
+  const lastSeven = dayBars.slice(7).reduce((s, b) => s + b.amount, 0);
+  const priorSeven = dayBars.slice(0, 7).reduce((s, b) => s + b.amount, 0);
+  // Week against week out of the fortnight already in hand — no third query,
+  // and a comparison that survives one dead Tuesday in a way a day-on-day
+  // figure never does.
+  const windowTrend: KpiDelta | null =
+    priorSeven <= 0
+      ? null
+      : (() => {
+          const pct = ((lastSeven - priorSeven) / priorSeven) * 100;
+          return {
+            direction: pct > 0.05 ? "up" : pct < -0.05 ? "down" : "flat",
+            text:
+              (Math.abs(pct) < 10
+                ? Math.abs(pct).toFixed(1)
+                : String(Math.round(Math.abs(pct)))) + "%",
+            suffix: "vs the 7 days before",
+            good: "up",
+          } as KpiDelta;
+        })();
+
+  const mix = paymentMix(mixInput);
+  const mixTotal = mixInput.reduce((s, m) => s + m.amount, 0);
 
   // Sales today, whichever day the sales figures are pointed at.
   const salesTodayCount =
@@ -383,10 +645,6 @@ export async function PosDashboard({
       ? todayCountRows.filter((o: Row) => !o.is_training).length
       : dayCount;
 
-  const weekday = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    weekday: "long",
-  }).format(new Date(benchStart.getTime() + benchLengthMs / 2));
   // Null once the day being shown is over: "at 2:15 p.m." would be describing
   // a truncation that no longer happens.
   const benchTimeLabel =
@@ -455,6 +713,14 @@ export async function PosDashboard({
     (canEditMenu || canAccess(role, "manage_settings"));
 
   // --- 2 · The attention rail ---------------------------------------------
+  //
+  // Every `detail` below is a fragment, not a sentence. The rule the whole
+  // page now follows: when there is a number, the number speaks. "Oldest fired
+  // 31 min ago, past your 18-minute mark. Someone is waiting on food." said
+  // three things — one of them a number, one of them the threshold, one of them
+  // a feeling — and the row's own title had already said the first. The empty
+  // states keep their sentences, because a blank screen is exactly when a
+  // person needs telling what they are looking at.
   const signals: AttentionSignal[] = [];
   const degraded: string[] = [];
 
@@ -476,11 +742,7 @@ export async function PosDashboard({
           severity: "blocked",
           title: late + " kitchen ticket" + (late === 1 ? "" : "s") + " late",
           detail:
-            "Oldest fired " +
-            formatDuration(oldest) +
-            " ago, past your " +
-            aging.kdsLateMin +
-            "-minute mark. Someone is waiting on food.",
+            "oldest " + formatDuration(oldest) + " · past " + aging.kdsLateMin + " min mark",
           href: "/app/kitchen",
           actionLabel: "Open the KDS",
           weight: oldest,
@@ -491,9 +753,7 @@ export async function PosDashboard({
           severity: "attention",
           title: warn + " kitchen ticket" + (warn === 1 ? "" : "s") + " running long",
           detail:
-            "Oldest fired " +
-            formatDuration(oldest) +
-            " ago. Not late yet — worth a look before it is.",
+            "oldest " + formatDuration(oldest) + " · late at " + aging.kdsLateMin + " min",
           href: "/app/kitchen",
           actionLabel: "Open the KDS",
           weight: oldest,
@@ -522,10 +782,10 @@ export async function PosDashboard({
           severity: "attention",
           title: stale.length + " check" + (stale.length === 1 ? "" : "s") + " open past " + aging.checkLateMin + " min",
           detail:
-            (worst.t.label ? worst.t.label + " has" : "The oldest has") +
-            " been open " +
+            (worst.t.label ? worst.t.label : "oldest") +
+            " · open " +
             formatDuration(worst.mins) +
-            " with no check dropped. That's a table you can't turn.",
+            ", no check dropped",
           href: canAccess(role, "void") ? "/app/live-ops" : "/app/pos",
           actionLabel: "See the floor",
           weight: worst.mins,
@@ -549,10 +809,7 @@ export async function PosDashboard({
           " approval" +
           (approvals.length === 1 ? "" : "s") +
           " waiting on you",
-        detail:
-          "Oldest has been pending " +
-          formatDuration(waited) +
-          ". The check it belongs to can't close until someone decides.",
+        detail: "oldest pending " + formatDuration(waited),
         href: "/app/approvals",
         actionLabel: "Review",
         weight: waited + 1000, // outranks other blocked rows: a person is waiting
@@ -579,8 +836,7 @@ export async function PosDashboard({
             eightySixed.length + " item" + (eightySixed.length === 1 ? "" : "s") + " 86'd",
           detail:
             names +
-            (eightySixed.length > 3 ? " and " + (eightySixed.length - 3) + " more" : "") +
-            ". Still hidden from every register until you put them back.",
+            (eightySixed.length > 3 ? " and " + (eightySixed.length - 3) + " more" : ""),
           href: "/app/catalog",
           actionLabel: "Manage menu",
           weight: eightySixed.length,
@@ -597,9 +853,9 @@ export async function PosDashboard({
           title: low.length + " item" + (low.length === 1 ? "" : "s") + " at or below reorder point",
           detail:
             displayItemName(low[0].name) +
-            " is down to " +
+            " down to " +
             num(low[0].stock_qty) +
-            ". Order before they 86 themselves mid-service.",
+            (low.length > 1 ? " · " + (low.length - 1) + " more" : ""),
           href: "/app/inventory",
           actionLabel: "Reorder",
           weight: low.length,
@@ -621,10 +877,7 @@ export async function PosDashboard({
         id: "drawer-unreconciled",
         severity: "blocked",
         title: "A till from " + dayOf(openDrawer.opened_at) + " was never closed",
-        detail:
-          "It has been open " +
-          formatDuration(minutesSince(openDrawer.opened_at, now)) +
-          ". Count it and file the Z-report so the day's cash reconciles.",
+        detail: "open " + formatDuration(minutesSince(openDrawer.opened_at, now)) + " · cash uncounted",
         href: "/app/pos/drawer",
         actionLabel: "Close the day",
         weight: minutesSince(openDrawer.opened_at, now),
@@ -650,7 +903,10 @@ export async function PosDashboard({
           " missed clock-out" +
           (missedPunches.length === 1 ? "" : "s"),
         detail:
-          "Someone has been on the clock over 16 hours. Payroll will be wrong until it's corrected.",
+          "on the clock " +
+          formatDuration(
+            Math.max(...missedPunches.map((e: Row) => minutesSince(e.clock_in, now)))
+          ),
         href: "/app/attendance",
         actionLabel: "Fix punches",
         weight: missedPunches.length,
@@ -747,6 +1003,12 @@ export async function PosDashboard({
   }
 
   // --- 4 · The check register ---------------------------------------------
+  //
+  // Three tints, one meaning each: amber is still moving, green is finished and
+  // right, red is money that went backwards. Deliberately coarser than the
+  // status chip beside it — the chip already distinguishes "open 12m" from
+  // "open 2h", and a register with five shades of amber in it is a register you
+  // have to decode rather than scan.
   const checkRows: CheckRow[] = [];
 
   // Open checks first — they're live money, and unlike a settled sale they can
@@ -779,6 +1041,7 @@ export async function PosDashboard({
         amount: lines > 0 ? lines + (lines === 1 ? " line" : " lines") : "—",
         href: "/app/pos",
         open: true,
+        tint: "amber" as RowTint,
       });
     }
   }
@@ -803,6 +1066,7 @@ export async function PosDashboard({
       amount: money(num(o.total), currency),
       href: "/app/pos/sales",
       open: false,
+      tint: (refunded || partial ? "red" : "green") as RowTint,
     });
   }
 
@@ -856,7 +1120,14 @@ export async function PosDashboard({
           why. Ours is narrow on purpose — it moves the sales figures and says
           so, rather than pretending to scope alerts that are only ever live. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="inline-flex items-center rounded-lg bg-raised ring-1 ring-line p-0.5">
+        {/* The explanation used to be a paragraph beside this control. It was
+            true — the alerts and the register really are always live — and it
+            was a sentence of prose sitting above the numbers, which is the
+            trade this page keeps losing. It survives as a tooltip. */}
+        <div
+          className="inline-flex items-center rounded-lg bg-raised ring-1 ring-line p-0.5"
+          title="Sets which day the sales figures cover. The alerts and the register below are always live."
+        >
           {scopes.map((s) => (
             <Link
               key={s.key}
@@ -873,23 +1144,23 @@ export async function PosDashboard({
             </Link>
           ))}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Sets which day the sales figures cover. The alerts and the register
-          below are always live.
-        </p>
       </div>
 
       {showReadiness && readiness && <ReadinessPanel report={readiness} />}
+
+      {/* Four numbers where the eye lands. Above the columns rather than inside
+          one, because the strip is the summary of the whole page and burying it
+          in the left column would make it look like part of the sales module. */}
+      <KpiStrip items={kpis} />
 
       {/* Two columns at desktop width, so the page has a silhouette instead of
           five identical full-width bands. The order utilities matter: collapsed
           to one column the reading order has to stay sales → alerts → ops →
           register, which is the priority order this page exists to express. */}
-      <div className="grid grid-cols-1 gap-4 items-start lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr]">
+      <div className="grid grid-cols-1 gap-4 items-start lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:grid-rows-[auto_auto_1fr]">
         <div className="order-1 min-w-0 lg:col-start-1 lg:row-start-1">
           <TodayModule
             pace={pace}
-            saleCount={dayCount}
             currency={currency}
             weekday={weekday}
             scope={scope}
@@ -901,7 +1172,7 @@ export async function PosDashboard({
           />
         </div>
 
-        <div className="order-2 min-w-0 flex flex-col gap-4 lg:col-start-2 lg:row-start-1 lg:row-span-2">
+        <div className="order-2 min-w-0 flex flex-col gap-4 lg:col-start-2 lg:row-start-1 lg:row-span-3">
           <AttentionRail signals={rankedSignals} degraded={degraded} />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
@@ -960,18 +1231,34 @@ export async function PosDashboard({
               />
             )}
           </div>
+
+          {/* The donut lands under the ops blocks, in the narrow column: it is
+              a shape you glance at, and the legend beside it is four short
+              rows, so it wants a column rather than a band. */}
+          <PaymentMixCard
+            slices={mix}
+            total={mixTotal}
+            currency={currency}
+            failed={windowFailed}
+          />
         </div>
 
         <div className="order-3 min-w-0 lg:col-start-1 lg:row-start-2">
+          <DailySalesCard
+            bars={dayBars}
+            total={windowTotal}
+            trend={windowTrend}
+            currency={currency}
+            failed={windowFailed}
+          />
+        </div>
+
+        <div className="order-4 min-w-0 lg:col-start-1 lg:row-start-3">
           <ChecksTable
             rows={checkRows}
             failed={recentFailed}
             title={runsChecks ? "Open & recent checks" : "Recent sales"}
-            subtitle={
-              runsChecks
-                ? "Open checks first, then the last few settled sales — live, not scoped to the day above."
-                : "The last few settled sales, newest first — live, not scoped to the day above."
-            }
+            note="Live, not scoped"
             itemHeading={runsChecks ? "Check" : "Sale"}
             href="/app/orders"
             hrefLabel="All orders"
