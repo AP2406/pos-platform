@@ -20,14 +20,21 @@ project is an `owner` (11 of 11). No manager, staff, trainee, shift_lead or
 bookkeeper web login exists, so any step of the form "sign in as X and confirm
 they cannot…" cannot be run today.
 
-Options, in order of preference:
-- Point Preview at a seeded staging Supabase project and create test accounts there.
-- Accept `tests/unit/route-access.test.ts` as the evidence for the permission
-  matrix (it asserts the full per-role surface, including that a bookkeeper is
-  refused the menu and a server the books) and record the runtime check as
-  deferred.
-- Create one throwaway low-privilege account on production, test, delete. Least
-  good: it is a real account in a real tenant.
+**There is no staging Supabase project.** The account holds two: production
+(`zbymwnfhbpdgfrykwrpd`) and "Trillium Event Rentals", an unrelated product. So
+"point Preview at staging" is not a switch to flip — it is ~100 migrations plus
+seed data to build first.
+
+**Decision taken: defer the runtime role test, and gate it on the first
+non-owner account instead of on this merge.** The reasoning is that the roles it
+would exercise do not exist in production. Every account is an owner; no shift
+lead or bookkeeper has ever been created, so the role boundary has no live
+exposure today. The risk appears the moment someone creates the first non-owner
+— and that is the moment to build staging and run the test, not now.
+
+Revisit this the moment either becomes true:
+- a non-owner account is about to be created on production, or
+- a merchant other than you starts using the dashboard.
 
 ## Safe to run against the preview (read-only)
 
