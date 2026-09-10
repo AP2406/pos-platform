@@ -57,9 +57,65 @@ export function enterAt(step: number): React.CSSProperties {
 }
 
 /**
+ * THE THREE TIERS.
+ *
+ * Every panel on the admin home used to be set in one size of title, one body
+ * inset and one shadow, which is a page that has declined to say what matters.
+ * `size` is the type-and-space half of the answer (position and the figures
+ * themselves are the other half, and those live in the modules):
+ *
+ *   lg — primary. Exactly one card on the page: the one that answers "how is
+ *        today going". Larger title, more room around it.
+ *   md — secondary. The attention rail, the KPI band, the fortnight chart.
+ *        Legible and structured, clearly under the primary.
+ *   sm — tertiary. The ops band, the payment mix, the register. A quieter,
+ *        lighter, lower-contrast title and a tighter body, because these are
+ *        reference: you come to them on purpose, they do not hail you.
+ *
+ * The step has to survive a squint, so it is carried by three things at once —
+ * size, weight and contrast — rather than by size alone. 15 → 13 is a step you
+ * can measure and not one you can see; 15/semibold/ink → 13/medium/muted is.
+ */
+type PanelSize = "lg" | "md" | "sm"
+
+const TITLE_TYPE: Record<PanelSize, string> = {
+  lg: "text-[17px] font-semibold leading-6 tracking-tight",
+  md: "text-[15px] font-semibold leading-5 tracking-tight",
+  sm: "text-[13px] font-medium leading-5 tracking-tight text-muted-foreground",
+}
+
+const HEADER_PAD: Record<PanelSize, string> = {
+  lg: "pt-6",
+  md: "pt-5",
+  sm: "pt-4",
+}
+
+const HEADER_PAD_BORDERED: Record<PanelSize, string> = {
+  lg: "py-5",
+  md: "py-4",
+  sm: "py-3",
+}
+
+const BODY_PAD: Record<PanelSize, string> = {
+  lg: "pt-5 pb-7",
+  md: "pt-4 pb-5",
+  sm: "pt-3 pb-4",
+}
+
+/**
  * The card shell. `overflow-hidden` is not decoration — the rail's accent bar
  * and every full-bleed row inside a panel rely on the corner clip so an inner
  * element never has to re-declare the outer radius (and get it wrong).
+ *
+ * NO SHADOW BY DEFAULT. Every panel used to carry --elevation, which is a page
+ * where everything floats — and if everything floats, nothing does. A card is
+ * defined by its hairline against the canvas now; --line is strong enough in
+ * both themes to do that on its own. What survives is `shadow-sheen`, which is
+ * the inset top highlight with the drop shadow taken out of it: on ink that
+ * highlight is the only cue that a card is a surface rather than a hole, and
+ * that is a fact about light, not about height. Exactly one card on this page
+ * passes `shadow-elevation` back in through className — the primary one — and
+ * it does so because being lifted is part of how it says it is primary.
  *
  * `lit` replaces the uniform top hairline with one that has a light source:
  * brightest at the left, gone by two thirds across. It is a prop rather than
@@ -78,7 +134,7 @@ function Panel({
     <section
       data-slot="panel"
       className={cn(
-        "flex flex-col overflow-hidden rounded-xl bg-card ring-1 ring-line shadow-elevation",
+        "flex flex-col overflow-hidden rounded-xl bg-card ring-1 ring-line shadow-sheen",
         // relative is what .u-lit's ::before hangs off; overflow-hidden above is
         // what clips it back inside the corner radius.
         lit && "relative u-lit",
@@ -103,6 +159,7 @@ function PanelHeader({
   subtitle,
   trailing,
   bordered = false,
+  size = "md",
   as: Heading = "h2",
   className,
 }: {
@@ -111,6 +168,8 @@ function PanelHeader({
   subtitle?: React.ReactNode
   trailing?: React.ReactNode
   bordered?: boolean
+  /** Which tier this panel sits in. See PanelSize. */
+  size?: PanelSize
   as?: "h2" | "h3"
   className?: string
 }) {
@@ -120,7 +179,9 @@ function PanelHeader({
       className={cn(
         "flex items-start justify-between gap-3",
         PANEL_X,
-        bordered ? "py-4 border-b border-line-soft" : "pt-5",
+        bordered
+          ? cn(HEADER_PAD_BORDERED[size], "border-b border-line-soft")
+          : HEADER_PAD[size],
         className
       )}
     >
@@ -140,9 +201,7 @@ function PanelHeader({
           </span>
         )}
         <div className="min-w-0">
-          <Heading className="text-[15px] font-semibold leading-5 tracking-tight">
-            {title}
-          </Heading>
+          <Heading className={TITLE_TYPE[size]}>{title}</Heading>
           {subtitle && (
             <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
           )}
@@ -154,18 +213,26 @@ function PanelHeader({
 }
 
 /**
- * The body under a PanelHeader. `pt-4` is the within-a-group step of the
- * vertical scale; `pb-5` matches the header's own top inset so a padded card is
- * optically square.
+ * The body under a PanelHeader. At `md` the `pt-4` is the within-a-group step
+ * of the vertical scale and `pb-5` matches the header's own top inset, so a
+ * padded card is optically square.
+ *
+ * `size` moves with the header's: spatial generosity is one of the four tools
+ * the tiers are built out of, and a tertiary card that keeps a primary card's
+ * padding is a tertiary card taking up a primary card's room.
  */
-function PanelBody({ className, ...props }: React.ComponentProps<"div">) {
+function PanelBody({
+  className,
+  size = "md",
+  ...props
+}: React.ComponentProps<"div"> & { size?: PanelSize }) {
   return (
     <div
       data-slot="panel-body"
-      className={cn(PANEL_X, "pt-4 pb-5", className)}
+      className={cn(PANEL_X, BODY_PAD[size], className)}
       {...props}
     />
   )
 }
 
-export { Panel, PanelHeader, PanelBody }
+export { Panel, PanelHeader, PanelBody, type PanelSize }

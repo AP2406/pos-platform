@@ -133,11 +133,13 @@ const WINDOW_DAYS = 14;
 /**
  * A `Pace` turned into the arrow-and-figure line under a KPI.
  *
- * The arrow follows the raw sign but the colour follows `computePace`'s level
- * band, which is why `neutral` exists: a restaurant that is 4% up on last
- * Tuesday is not up, it is having the same Tuesday, and painting that green
- * teaches an owner to ignore green. The arrow still points, because the number
- * beside it has a sign and they must not disagree.
+ * The arrow follows the raw sign, and nothing follows `computePace`'s level
+ * band any more — this used to hand Delta a `good` direction and a `neutral`
+ * override so the line could be painted green, red or grey, and no delta on
+ * this page is painted at all now. See Delta: the arrow already encodes the
+ * direction and the words already encode the comparison, so the hue was a third
+ * statement of the same fact and it was spending the page's alert colour on a
+ * figure nobody gets up and acts on.
  */
 function paceDelta(pace: Pace, weekday: string): KpiDelta | null {
   if (pace.status === "no-benchmark" || pace.deltaPct == null) return null;
@@ -148,8 +150,6 @@ function paceDelta(pace: Pace, weekday: string): KpiDelta | null {
     // percents once it is large, where ".3" is just noise on the end.
     text: (pct < 10 ? pct.toFixed(1) : String(Math.round(pct))) + "%",
     suffix: "vs last " + weekday,
-    good: "up",
-    neutral: pace.status === "level",
   };
 }
 
@@ -507,9 +507,14 @@ export async function PosDashboard({
     : "No trading last " + weekday + " to compare.";
 
   // Counts, not money, so a percentage is the wrong shape: "↑ 200%" off a base
-  // of one refund is technically true and operationally meaningless. And the
-  // good direction inverts — this is the only card on the strip where the
-  // arrow going up is painted red.
+  // of one refund is technically true and operationally meaningless.
+  //
+  // This is the card where the good direction inverts — up is bad — and it used
+  // to be the reason `good` existed on KpiDelta, so the arrow could be painted
+  // red here and green on the three cards beside it. The words carry it instead
+  // now: "2 more than last Thursday" is unambiguous about which way is which
+  // whether or not anything is coloured, and a strip with one red arrow in it
+  // trains an owner to read the strip for colour rather than for figures.
   const refundDelta: KpiDelta | null =
     benchFailed || benchCountSoFar === 0
       ? null
@@ -518,7 +523,6 @@ export async function PosDashboard({
             direction: "flat",
             text: "Level",
             suffix: "with last " + weekday,
-            good: "down",
           }
         : {
             direction: dayRefunds > benchRefundsSoFar ? "up" : "down",
@@ -526,7 +530,6 @@ export async function PosDashboard({
               Math.abs(dayRefunds - benchRefundsSoFar) +
               (dayRefunds > benchRefundsSoFar ? " more" : " fewer"),
             suffix: "than last " + weekday,
-            good: "down",
           };
 
   const scopeWordLower = scope === "today" ? "today" : "yesterday";
@@ -630,7 +633,6 @@ export async function PosDashboard({
                 ? Math.abs(pct).toFixed(1)
                 : String(Math.round(Math.abs(pct)))) + "%",
             suffix: "vs the 7 days before",
-            good: "up",
           } as KpiDelta;
         })();
 
@@ -920,7 +922,10 @@ export async function PosDashboard({
 
   const serviceStats: OpsStat[] = [];
   let serviceState: string;
-  let serviceTone: "neutral" | "good" | "attention" = "neutral";
+  // Two tones, not three. "Till open since 10:02 a.m." used to be `good` and
+  // was painted emerald; it is a routine fact about a normal Thursday and it is
+  // neutral now. See OpsSection.tone.
+  let serviceTone: "neutral" | "attention" = "neutral";
 
   if (runsChecks) {
     const covers = openChecks.reduce((sum: number, t: Row) => sum + num(t.guest_count), 0);
@@ -946,7 +951,6 @@ export async function PosDashboard({
     serviceTone = "attention";
   } else if (openDrawer) {
     serviceState = "Till open since " + timeOf(openDrawer.opened_at) + ".";
-    serviceTone = "good";
   } else {
     // Not an error and not a warning. Before opening, "no till open" is simply
     // where every restaurant starts its day.
@@ -955,7 +959,7 @@ export async function PosDashboard({
 
   const menuStats: OpsStat[] = [];
   let menuState: string;
-  let menuTone: "neutral" | "good" | "attention" = "neutral";
+  let menuTone: "neutral" | "attention" = "neutral";
   const eightySixedCount = items.filter((i: Row) => i.out_of_stock === true).length;
   const lowCount = items.filter(
     (i: Row) => i.track_inventory === true && num(i.stock_qty) <= num(i.reorder_point)
@@ -970,12 +974,11 @@ export async function PosDashboard({
     menuTone = "attention";
   } else {
     menuState = "Everything available and above its reorder point.";
-    menuTone = "good";
   }
 
   const teamStats: OpsStat[] = [];
   let teamState: string;
-  let teamTone: "neutral" | "good" | "attention" = "neutral";
+  let teamTone: "neutral" | "attention" = "neutral";
   const activeStaff = staff.filter((s: Row) => s.is_active !== false).length;
   if (runsChecks) {
     teamStats.push({ value: String(onClock.length), label: "on the clock", muted: onClock.length === 0 });
@@ -995,7 +998,6 @@ export async function PosDashboard({
     teamState = "Nobody is clocked in right now.";
   } else if (runsChecks) {
     teamState = "Everyone on shift is clocked in cleanly.";
-    teamTone = "good";
   } else {
     teamState = activeStaff + " " + (activeStaff === 1 ? "person" : "people") + " can ring sales.";
   }
@@ -1061,10 +1063,10 @@ export async function PosDashboard({
 
   // --- 4 · The check register ---------------------------------------------
   //
-  // The status chip is the only thing carrying state here now. The row tint
-  // that used to sit behind it — amber still moving, green finished, red money
-  // gone backwards — is gone; see the note on CheckRow for why a full-width
-  // wash was the wrong instrument for the right idea.
+  // Two states, and neither is a colour: `quiet` for the boring majority and
+  // `notable` for the handful a person opens this table to find. The row tint
+  // went, then the status chip went; see the note above CheckRow for why the
+  // pill was a smaller version of the same mistake.
   const checkRows: CheckRow[] = [];
 
   // Open checks first — they're live money, and unlike a settled sale they can
@@ -1074,12 +1076,13 @@ export async function PosDashboard({
       const mins = minutesSince(t.opened_at, now);
       const cart = (t.cart ?? {}) as { items?: unknown[] };
       const lines = Array.isArray(cart.items) ? cart.items.length : 0;
-      const tone =
-        mins >= aging.checkLateMin
-          ? "danger"
-          : mins >= aging.checkWarnMin
-            ? "warning"
-            : "info";
+      // Three aging bands collapse to two. A check at 26 minutes and a check at
+      // 70 are both simply open — the row already prints the elapsed time, and
+      // an owner reading "Open 26m" does not need to be told separately that 26
+      // minutes is fine. Only past the late mark does the row become one of the
+      // few worth finding, and even then the rail above has already named it
+      // and given somewhere to go.
+      const late = mins >= aging.checkLateMin;
       checkRows.push({
         id: "check-" + t.id,
         label: (t.label as string) || "Open check",
@@ -1088,7 +1091,9 @@ export async function PosDashboard({
         who: t.staff_id ? staffById[t.staff_id as string] ?? null : null,
         status: {
           text: t.check_dropped_at ? "Check dropped" : "Open " + formatDuration(mins),
-          tone: t.check_dropped_at ? "success" : tone,
+          // A dropped check is waiting on the guest, not on the restaurant —
+          // the quietest thing in the column, whatever the clock says.
+          tone: !t.check_dropped_at && late ? "notable" : "quiet",
         },
         // Deliberately no dollar figure. The running total of an open cart is
         // computed by the register (modifiers, seat splits, comps, service
@@ -1116,11 +1121,13 @@ export async function PosDashboard({
       who:
         snap?.staff?.name ??
         (o.staff_id ? staffById[o.staff_id as string] ?? null : null),
+      // "Paid" is three quarters of this table and it is the least interesting
+      // thing in it; the two kinds of refund are what an owner scans for.
       status: refunded
-        ? { text: "Refunded", tone: "danger" }
+        ? { text: "Refunded", tone: "notable" }
         : partial
-          ? { text: "Partial refund", tone: "warning" }
-          : { text: "Paid", tone: "success" },
+          ? { text: "Partial refund", tone: "notable" }
+          : { text: "Paid", tone: "quiet" },
       amount: money(num(o.total), currency),
       lines: null,
       href: "/app/pos/sales",
@@ -1237,8 +1244,14 @@ export async function PosDashboard({
                   // control where half the targets acknowledge a press and
                   // half don't feels broken in a way people report as "laggy".
                   "u-tx u-tx-move u-press u-focus rounded-[10px] px-3 py-1 text-[13px] " +
+                  // No shadow on the selected segment. It is 2px inside a ringed
+                  // track and it is the only thing in there with the card
+                  // colour and a medium weight, which says "selected" without
+                  // asking to look like it is floating — and a page that has
+                  // taken elevation away from every card cannot leave it on a
+                  // 26px pill and still claim elevation means anything.
                   (s.key === scope
-                    ? "bg-card font-medium text-foreground shadow-elevation-sm"
+                    ? "bg-card font-medium text-foreground"
                     : "text-muted-foreground hover:bg-card/60 hover:text-foreground")
                 }
               >
@@ -1255,9 +1268,17 @@ export async function PosDashboard({
         </div>
       )}
 
-      {/* Four numbers where the eye lands. Above the columns rather than inside
-          one, because the strip is the summary of the whole page and burying it
-          in the left column would make it look like part of the sales module. */}
+      {/* Four numbers, above the columns rather than inside one, because the
+          strip is the summary of the whole page and burying it in the left
+          column would make it look like part of the sales module.
+
+          IT IS SECOND, NOT FIRST. It sits above the hero on the page and below
+          it in the hierarchy, which is a thing layout can do and a thing this
+          page was getting wrong: four ringed, shadowed tiles carrying 32px
+          figures beat a 48px figure underneath them, so the eye landed on a row
+          of four equals and learned nothing. It is one hairline-divided band at
+          26px now, against a hero at 64 — the largest object still wins, and it
+          wins by enough to see with your eyes half shut. */}
       <KpiStrip items={kpis} enterFrom={1} />
 
       {/* THE DETAIL REGION — two columns, packed by column rather than by row.

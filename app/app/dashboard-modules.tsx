@@ -5,9 +5,26 @@
 // that the layout was hiding inside it. Every export here is a server component
 // with no data access of its own: hand it numbers, it renders them.
 //
-// The one rule these all obey: colour never carries meaning alone. Every amber
-// bar, red chip and green dot sits beside words that say the same thing, so the
-// page still works for a colour-blind owner and in a sunlit dining room.
+// THE COLOUR BUDGET. Neutral is the default. Beyond it the whole page is
+// allowed exactly two hues, and they mean strictly different things:
+//
+//   brand blue  — identity, interactive affordance, and data. The chart line,
+//                 the share ramp, the one solid button, link hover.
+//   red         — one human, one action, right now. It appears on the
+//                 attention rail's accent bar and severity dot when something
+//                 is BLOCKED, and nowhere else on this screen.
+//
+// Green, amber and sky are gone. Green was the expensive one: "Till open since
+// 10:02 a.m." and "Everyone on shift is clocked in cleanly" are good news, and
+// painting good news makes it compete with the one thing that isn't. Amber went
+// with it — a page with an amber tier has to spend amber on every heads-up, and
+// then red has to shout over amber to be heard. Both are now expressed the way
+// print has always expressed them: contrast. Something you should notice is set
+// in ink; everything routine is set in the muted grey the timestamps use.
+//
+// The rule that survives unchanged: colour never carries meaning alone. The two
+// red marks on this page sit beside words that say the same thing, so the page
+// still works for a colour-blind owner and in a sunlit dining room.
 
 import Link from "next/link";
 import {
@@ -19,7 +36,6 @@ import {
   Minus,
   Rocket,
 } from "lucide-react";
-import { Chip } from "@/components/ui/chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   ICON_INLINE,
@@ -163,42 +179,26 @@ export type KpiDelta = {
   text: string;
   /** What it is measured against: "vs last Tuesday". Stays muted. */
   suffix: string;
-  /**
-   * Which direction counts as good. Sales climbing is a win; refunds climbing
-   * is not, and painting both green would make the colour decorative.
-   */
-  good: "up" | "down";
-  /**
-   * Withhold the verdict: the arrow points but the line stays grey. For gaps
-   * inside the noise band, where a direction exists and a judgement doesn't.
-   */
-  neutral?: boolean;
 };
 
 /**
- * An arrow, a number, and what it's against.
+ * An arrow, a number, and what it's against — in ink, never in a hue.
  *
- * The arrow carries the direction and the colour carries the judgement, but the
- * words after it carry both — so this still reads correctly in greyscale, which
- * is the rule every other coloured thing on this page obeys.
+ * There used to be a `good` field here, and the arrow was painted green when
+ * the delta pointed the way the field said it should and red when it didn't.
+ * Four of those across the KPI strip is most of the rainbow the page was
+ * accused of being, and it was buying nothing: the ARROW already encodes the
+ * direction and the words already encode the comparison, so the colour was a
+ * third statement of a fact stated twice. It also spent the page's alert hue on
+ * a figure nobody can act on — an average check 8% down is not a thing you get
+ * up and fix, and once red means "8% down" it cannot also mean "the kitchen is
+ * blocked".
+ *
+ * What is left is a contrast step: the magnitude sits in full ink beside a
+ * muted comparison, which is enough to make it the thing you read first in a
+ * two-line block and costs the page no colour at all.
  */
 function Delta({ delta, size = "sm" }: { delta: KpiDelta; size?: "sm" | "md" }) {
-  const verdict =
-    delta.neutral || delta.direction === "flat"
-      ? "flat"
-      : delta.direction === delta.good
-        ? "good"
-        : "bad";
-  // 600/400 rather than a flat 500: emerald-500 on a white card is a pale
-  // green that reads as decorative, and red-500 on ink is a shout. This is the
-  // one place on a KPI card that is allowed to be coloured at all, so it had
-  // better be legible in both themes.
-  const tone =
-    verdict === "good"
-      ? "text-emerald-600 dark:text-emerald-400"
-      : verdict === "bad"
-        ? "text-red-600 dark:text-red-400"
-        : "text-muted-foreground";
   const Glyph =
     delta.direction === "up" ? ArrowUpRight : delta.direction === "down" ? ArrowDownRight : Minus;
 
@@ -212,11 +212,7 @@ function Delta({ delta, size = "sm" }: { delta: KpiDelta; size?: "sm" | "md" }) 
         (size === "md" ? "text-[13px]" : "text-xs")
       }
     >
-      <span
-        className={
-          "inline-flex items-center gap-0.5 font-semibold whitespace-nowrap " + tone
-        }
-      >
+      <span className="inline-flex items-center gap-0.5 font-semibold whitespace-nowrap text-foreground">
         {/* One inline glyph size across the page. The md/sm split used to move
             this arrow between 14px and 16px, which made the same mark two
             different objects depending on which card it landed in. */}
@@ -249,13 +245,28 @@ export type Kpi = {
 };
 
 /**
- * Four small cards above the fold: the figures an owner would recite from
- * memory, each against the same weekday last week.
+ * Four figures an owner would recite from memory, each against the same
+ * weekday last week — as ONE band divided by hairlines, not four cards.
  *
  * This is not the seven-tile grid the page was rebuilt to get rid of. The
  * difference is the delta: a tile that says "$1,284" tells you nothing you can
  * act on, and one that says "$1,284, 8% behind last Tuesday" tells you whether
  * to worry. Everything without a comparison stayed downstairs in the ops blocks.
+ *
+ * WHY IT STOPPED BEING FOUR CARDS. They were four ringed, shadowed rectangles
+ * carrying 32px figures, sitting ABOVE the one number the page exists to
+ * answer — so at a squint the strip out-weighed the hero, and the first thing
+ * the eye found was a row of four things of equal importance, which is another
+ * way of saying it found nothing. Merged into a single band the strip reads as
+ * one object at one weight, the page loses four edges and four shadows, and the
+ * figures step back to 26px, which is comfortably under the hero and comfortably
+ * over the ops band. It is the same move that turned three ops cards into one
+ * panel, for the same reason: things that are one system should look like one.
+ *
+ * The `Sales today` cell deliberately still duplicates the hero figure. It is
+ * the anchor of the row — you read across from it — and deleting it to avoid a
+ * repeat would leave a three-cell band whose first column is a comparison
+ * against a number that isn't there.
  */
 export function KpiStrip({
   items,
@@ -263,62 +274,75 @@ export function KpiStrip({
 }: {
   items: Kpi[];
   /**
-   * Where this strip sits in the page's arrival order. The four tiles stagger
+   * Where this strip sits in the page's arrival order. The four cells stagger
    * off it left to right — this is the one band whose members arrive
-   * individually rather than together, because four tiles landing at once is a
-   * row appearing and four landing in sequence is a row being dealt.
+   * individually rather than together, because four landing at once is a row
+   * appearing and four landing in sequence is a row being dealt.
    */
   enterFrom?: number;
 }) {
   if (items.length === 0) return null;
   return (
-    // gap-4, like every other within-a-group gap on the page. The strip used to
-    // sit on 12 while the columns below sat on 16, which is exactly the kind of
-    // near-miss that reads as "nobody chose this".
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      {items.map((k, i) => (
-        <section
-          key={k.id}
-          style={enterAt(enterFrom + i)}
-          className="u-in rounded-xl bg-card ring-1 ring-line shadow-elevation p-5"
-        >
-          <div className="flex items-start justify-between gap-2">
-            {/* Quieter and wider than it was. The gap between the softest and
-                loudest type on a screen is most of what reads as "considered",
-                and this label is the floor of that ladder — its job is to be
-                found when looked for and ignored otherwise. */}
-            <span className="text-[10px] font-medium uppercase tracking-[0.09em] text-muted-foreground">
-              {k.label}
-            </span>
-            {/* No tinted well. A blue rounded square behind a banknote glyph is
-                furniture from a template: it spends a saturated block of colour
-                on an icon that is already only decorative, and four of them in
-                four different hues across one strip is the single loudest
-                un-earned thing on the page. The glyph alone, hairline weight,
-                in the same grey as the label it sits beside. */}
-            {/* 16px, the same as every other card-header glyph. It was 18 —
-                the only 18 on the page — which made four of the page's icons
-                subtly larger than the rest for no reason anyone could name. */}
-            <span
-              aria-hidden
-              className="shrink-0 text-muted-foreground/70 [&_svg]:size-4 [&_svg]:stroke-[1.5]"
-            >
-              {k.icon}
-            </span>
-          </div>
-          <div className="mt-3 text-[26px] sm:text-[32px] font-bold tabular-nums tracking-[-0.02em] leading-none">
-            {k.value}
-          </div>
-          <div className="mt-2.5 min-w-0">
-            {k.delta ? (
-              <Delta delta={k.delta} />
-            ) : (
-              <span className="block text-xs text-muted-foreground">{k.note}</span>
-            )}
-          </div>
-        </section>
-      ))}
-    </div>
+    <Panel>
+      {/* `divide-*` can't do this: it draws between flex/grid children in
+          source order, which on a 2×2 phone layout would put a rule down the
+          middle AND one between cells 2 and 3 that are not beside each other.
+          So the cells own their own left and top hairline and the ones at the
+          start of a row switch theirs off — two rules, one for each breakpoint,
+          and the grid stays a grid. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4">
+        {items.map((k, i) => (
+          <section
+            key={k.id}
+            style={enterAt(enterFrom + i)}
+            className={
+              "u-in px-5 py-4 border-line-soft " +
+              // Phone: two columns, so a rule left of every odd cell is wrong
+              // and a rule above the second row is right.
+              "border-l [&:nth-child(2n+1)]:border-l-0 [&:nth-child(n+3)]:border-t " +
+              // Desktop: one row of four, so the top rules go and only the
+              // first cell loses its left one.
+              "lg:[&:nth-child(2n+1)]:border-l lg:[&:nth-child(4n+1)]:border-l-0 lg:[&:nth-child(n+3)]:border-t-0"
+            }
+          >
+            <div className="flex items-start justify-between gap-2">
+              {/* Quieter and wider than it was. The gap between the softest and
+                  loudest type on a screen is most of what reads as "considered",
+                  and this label is the floor of that ladder — its job is to be
+                  found when looked for and ignored otherwise. */}
+              <span className="text-[10px] font-medium uppercase tracking-[0.09em] text-muted-foreground">
+                {k.label}
+              </span>
+              {/* No tinted well. A blue rounded square behind a banknote glyph is
+                  furniture from a template: it spends a saturated block of colour
+                  on an icon that is already only decorative, and four of them in
+                  four different hues across one strip is the single loudest
+                  un-earned thing on the page. The glyph alone, hairline weight,
+                  in the same grey as the label it sits beside. */}
+              {/* 16px, the same as every other card-header glyph. It was 18 —
+                  the only 18 on the page — which made four of the page's icons
+                  subtly larger than the rest for no reason anyone could name. */}
+              <span
+                aria-hidden
+                className="shrink-0 text-muted-foreground/70 [&_svg]:size-4 [&_svg]:stroke-[1.5]"
+              >
+                {k.icon}
+              </span>
+            </div>
+            <div className="mt-3 text-[22px] sm:text-[26px] font-bold tabular-nums tracking-[-0.02em] leading-none">
+              {k.value}
+            </div>
+            <div className="mt-2.5 min-w-0">
+              {k.delta ? (
+                <Delta delta={k.delta} />
+              ) : (
+                <span className="block text-xs text-muted-foreground">{k.note}</span>
+              )}
+            </div>
+          </section>
+        ))}
+      </div>
+    </Panel>
   );
 }
 
@@ -341,16 +365,25 @@ export function ReadinessPanel({ report }: { report: ReadinessReport }) {
   const left = report.outstanding.length;
 
   return (
-    <Panel className="ring-amber-500/25">
+    // Brand, not amber, and not the alert hue either. This panel is a task
+    // list — "here are the three things standing between you and taking a
+    // payment" — and every one of its rows is a link to the screen that
+    // finishes one. That is an affordance, which is what brand blue means on
+    // this page. Amber would have reopened a third colour story for a panel
+    // most tenants see once; red would have spent the page's one alarm on
+    // something that is not an alarm, it is a to-do list. The panel is loud
+    // enough by being first, being wide, and saying what it says.
+    <Panel className="ring-primary/30">
       {/* The same header primitive as every other panel, keeping only what is
           genuinely different here: the glyph is in a ring rather than bare,
           because this panel is the one thing on the page allowed to raise its
-          voice. Outlined rather than filled, same reasoning as Chip — the ring
-          says "amber" as clearly as a wash of it and leaves the glyph legible. */}
+          voice. Outlined rather than filled — the ring says it as clearly as a
+          wash of it would and leaves the glyph legible. */}
       <PanelHeader
         bordered
+        size="lg"
         icon={
-          <span className="flex items-center justify-center w-8 h-8 -my-1 rounded-lg ring-1 ring-inset ring-amber-500/35 text-amber-600 dark:text-amber-400">
+          <span className="flex items-center justify-center w-8 h-8 -my-1 rounded-lg ring-1 ring-inset ring-primary/35 text-primary">
             <Rocket />
           </span>
         }
@@ -382,7 +415,9 @@ export function ReadinessPanel({ report }: { report: ReadinessReport }) {
                 PANEL_X
               }
             >
-              <span className="shrink-0 size-1.5 rounded-full bg-amber-500" />
+              {/* A bullet, not a warning light. It marks where a row starts;
+                  the row's own words say what it is. */}
+              <span className="shrink-0 size-1.5 rounded-full bg-line-strong" />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium truncate">
                   {c.title}
@@ -409,38 +444,17 @@ export function ReadinessPanel({ report }: { report: ReadinessReport }) {
 // 2 · Today, with pace
 // ---------------------------------------------------------------------------
 
-function PaceChip({ pace, weekday }: { pace: Pace; weekday: string }) {
-  if (pace.status === "no-benchmark") {
-    return (
-      <Chip tone="neutral">No {weekday} to compare</Chip>
-    );
-  }
-  const pct = Math.abs(Math.round(pace.deltaPct ?? 0));
-  // dot={false} throughout: the arrow is already this chip's coloured mark, and
-  // it says more than a dot can — a dot has a hue, an arrow has a direction.
-  if (pace.status === "level") {
-    return (
-      <Chip tone="neutral" dot={false}>
-        <Minus className="size-3 stroke-[2.5]" />
-        Even with last {weekday}
-      </Chip>
-    );
-  }
-  if (pace.status === "ahead") {
-    return (
-      <Chip tone="success" dot={false}>
-        <ArrowUpRight className="size-3 stroke-[2.5]" />
-        {pct}% ahead of last {weekday}
-      </Chip>
-    );
-  }
-  return (
-    <Chip tone="warning" dot={false}>
-      <ArrowDownRight className="size-3 stroke-[2.5]" />
-      {pct}% behind last {weekday}
-    </Chip>
-  );
-}
+// THE PACE CHIP IS GONE, AND IT WAS NOT RESTYLED.
+//
+// It sat in the hero's header and read "↗ 8% ahead of last Thursday", in green,
+// in a pill. Directly beneath it — same card, two lines down — the delta line
+// read "↗ $361.70 vs last Thursday at 4:12 p.m.". Two marks, two hues, one
+// fact, and the one that was deleted is the one that carried the WEAKER figure:
+// a percentage is for comparing and a dollar amount is what an owner feels. The
+// no-benchmark and failed variants went with it, because the card's body
+// already writes both of those out as a sentence — a pill saying "Comparison
+// unavailable" above a paragraph explaining that the comparison is unavailable
+// is the same duplication wearing a different hat.
 
 /** The two cumulative curves, pre-sampled by the page. */
 export type PaceCurve = {
@@ -707,24 +721,26 @@ export function TodayModule({
     // they lead their columns, so the page opens with light in the top-left of
     // each, and on a third card it would stop being a light source and start
     // being a stripe.
-    <Panel lit className="h-full">
+    //
+    // THE ONLY CARD ON THE PAGE WITH A SHADOW. Elevation means "this floats
+    // above the page", and it can only mean that while it is rare — every panel
+    // used to carry it, which made it wallpaper. This is the primary tier: the
+    // one object that answers "how is today going", and being lifted is part of
+    // how it says so. Everything else is defined by its hairline. The other
+    // exception on the screen is the `New sale` button, which is a key you press
+    // rather than a surface you read.
+    <Panel lit className="h-full shadow-elevation">
       {/* Two-line header zone — title, then what the number is net of. Square
           and Lightspeed both carry a subtitle here; we carried none anywhere. */}
       <PanelHeader
+        size="lg"
         title={"Sales " + scope}
         /* The sale count moved to the KPI strip, so this line is down to the
            one thing the big number can't say for itself: what it is net of. */
         subtitle="Net of refunds · training excluded"
-        trailing={
-          failed ? (
-            <Chip tone="danger">Comparison unavailable</Chip>
-          ) : (
-            <PaceChip pace={pace} weekday={weekday} />
-          )
-        }
       />
 
-      <PanelBody className="flex flex-1 flex-col">
+      <PanelBody size="lg" className="flex flex-1 flex-col">
       {/* -0.02em rather than the default: at 48px, tracking set for body copy
           leaves lakes of air between digits and the figure stops reading as one
           object. This is the loudest thing on the page and it should look
@@ -733,7 +749,12 @@ export function TodayModule({
           the bloom's -z-10 would resolve against the page root and paint
           BEHIND the card's own white background, which renders it invisible in
           the one theme it exists for. */}
-      <div className="relative isolate w-fit text-4xl sm:text-5xl font-bold tracking-[-0.02em] leading-none">
+      {/* 44/64, up from 36/48. The KPI band below now tops out at 26 and the
+          ops band at 22, which makes this figure roughly 2.5× the next loudest
+          number on the page — a ratio you read at a squint rather than one you
+          have to measure. It was 48 against the strip's 32, which is 1.5×, and
+          1.5× is what two things of the same importance look like. */}
+      <div className="relative isolate w-fit text-[44px] sm:text-[64px] font-bold tracking-[-0.02em] leading-none">
         {/* D1 · The bloom, dark mode only. On ink a big number sits in a lot of
             empty card and there is nothing to say the card is lit; a brand-hue
             glow behind it gives the figure somewhere to sit. In light mode the
@@ -757,7 +778,7 @@ export function TodayModule({
           be, because "$412.80 ahead of last Wednesday at 2:15 p.m." is a
           caption an owner reads once and never again. */}
       {!failed && hasBenchmark && (
-        <div className="mt-2">
+        <div className="mt-3">
           <Delta
             size="md"
             delta={{
@@ -768,7 +789,6 @@ export function TodayModule({
                 (pace.status === "level" ? "of last " : "vs last ") +
                 weekday +
                 (benchmarkTimeLabel ? " at " + benchmarkTimeLabel : ""),
-              good: "up",
             }}
           />
         </div>
@@ -1128,9 +1148,12 @@ export function PaymentMixCard({
 
   return (
     <Panel className={"h-full " + (className ?? "")}>
-      <PanelHeader title="Payment mix" subtitle="Last 14 days" />
+      {/* Tertiary. This is reference — a shape you check against last month,
+          not a thing that hails you — so its title is a rung quieter than the
+          rail's beside it and its body is tighter. */}
+      <PanelHeader size="sm" title="Payment mix" subtitle="Last 14 days" />
 
-      <PanelBody className="flex flex-1 flex-col">
+      <PanelBody size="sm" className="flex flex-1 flex-col">
       {failed ? (
         <p className="text-sm text-muted-foreground">
           Couldn&apos;t load the payment mix. It is a fault, not an all-cash
@@ -1281,17 +1304,22 @@ export function AttentionRail({
       {/* C5 · The accent bar announces itself twice on arrival and then stops.
           It pulses only when there is actually something in the rail — a
           bar that breathes over "nothing needs you right now" is the product
-          asking for attention it hasn't earned. */}
+          asking for attention it hasn't earned.
+
+          RED, OR NOTHING. This bar is one of the two places on the whole page
+          that is allowed a hue other than brand, and it takes it only when
+          something is BLOCKED — a server standing at a terminal, food going
+          cold, a till of yesterday's cash uncounted. A rail whose worst signal
+          is `attention` gets the strong neutral instead, which is still a
+          drawn edge and is still visibly not the "clear" state. That is the
+          whole of why red works here: on a normal afternoon this bar is grey,
+          so the day it turns red you look. */}
       <span
         aria-hidden
         className={
           "absolute inset-y-0 left-0 w-[3px] " +
           (worst === "clear" ? "" : "u-pulse ") +
-          (worst === "blocked"
-            ? "bg-red-500"
-            : worst === "attention"
-              ? "bg-amber-500"
-              : "bg-line-strong")
+          (worst === "blocked" ? "bg-red-500" : "bg-line-strong")
         }
         style={enterAt(7)}
       />
@@ -1304,13 +1332,15 @@ export function AttentionRail({
         bordered
         title="Needs you now"
         trailing={
+          // A count, not a badge. It was a coloured pill, which made it the
+          // fourth thing in the header competing to be read and the third
+          // encoding of a severity the bar and the row dots already carry.
+          // A number in the same muted grey as every other subtitle on the
+          // page says "three" perfectly well.
           signals.length > 0 ? (
-            <Chip
-              tone={worst === "blocked" ? "danger" : "warning"}
-              className="tabular-nums"
-            >
+            <span className="text-xs text-muted-foreground tabular-nums">
               {signals.length} open
-            </Chip>
+            </span>
           ) : null
         }
       />
@@ -1320,7 +1350,11 @@ export function AttentionRail({
         // confident line rather than the dashed placeholder box that means
         // "you haven't set this up yet".
         <div className={"flex flex-1 items-center gap-3 py-6 " + PANEL_X}>
-          <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg ring-1 ring-inset ring-emerald-500/35 text-emerald-600 dark:text-emerald-400 [&_svg]:size-4 [&_svg]:stroke-[1.5]">
+          {/* Not green. "Nothing needs you right now" is good news, and good
+              news does not need to shout — painting it emerald is exactly what
+              forces the red on the row above it to compete for the same eye.
+              A neutral tick reads as calm, which is what it is. */}
+          <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg ring-1 ring-inset ring-line-strong text-muted-foreground [&_svg]:size-4 [&_svg]:stroke-[1.5]">
             <CheckCircle2 />
           </span>
           <div className="min-w-0">
@@ -1341,20 +1375,38 @@ export function AttentionRail({
                   PANEL_X
                 }
               >
+                {/* THE ROW'S ONE SEVERITY MARK. There used to be three of them
+                    per row — this dot, an accent bar in the same hue up the
+                    left edge of the card, and a `Blocked` / `Attention` pill
+                    beside the title — all encoding the identical fact. The
+                    pills were deleted outright rather than restyled: a row
+                    reading "4 kitchen tickets late" beside a pill reading
+                    "Blocked" is a label captioning a sentence that already
+                    said it. Red for blocked, muted neutral for attention; the
+                    ORDER of the rows carries the rest, because rankSignals
+                    puts every blocked row above every attention one. */}
                 <span
                   aria-hidden
                   className={
                     "shrink-0 size-2 rounded-full " +
-                    (s.severity === "blocked" ? "bg-red-500" : "bg-amber-500")
+                    (s.severity === "blocked" ? "bg-red-500" : "bg-muted-foreground/70")
                   }
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">{s.title}</span>
-                    {/* The dot above is decoration; this word is the signal. */}
-                    <Chip tone={s.severity === "blocked" ? "danger" : "warning"}>
-                      {s.severity === "blocked" ? "Blocked" : "Attention"}
-                    </Chip>
+                  <span
+                    className={
+                      "block text-sm " +
+                      // The contrast step that replaced the pill. A blocked row
+                      // is set in full ink at semibold; an attention row is
+                      // medium, like every other row title on the page. It is a
+                      // smaller instrument than a hue and it is pointed at the
+                      // same job.
+                      (s.severity === "blocked"
+                        ? "font-semibold text-foreground"
+                        : "font-medium")
+                    }
+                  >
+                    {s.title}
                   </span>
                   <span className="block text-xs text-muted-foreground mt-0.5">
                     {s.detail}
@@ -1420,7 +1472,17 @@ export type OpsSection = {
   icon: React.ReactNode;
   stats: OpsStat[];
   state: string;
-  tone?: "neutral" | "good" | "attention";
+  /**
+   * Two values, not three. There used to be a `good` tone, painted emerald,
+   * and it carried lines like "Till open since 10:02 a.m." and "Everyone on
+   * shift is clocked in cleanly" — which is good news, and good news is not
+   * something you act on. It was a third of the page's colour spent saying
+   * "nothing to see here" in the loudest available way, and it is what made
+   * the genuinely amber and genuinely red things on the page look like more of
+   * the same. Good news is neutral news now, and the only step left is between
+   * routine and worth-noticing.
+   */
+  tone?: "neutral" | "attention";
   action?: { label: string; href: string } | null;
   failed?: boolean;
 };
@@ -1454,8 +1516,13 @@ export function OpsPanel({ sections }: { sections: OpsSection[] }) {
     <Panel className="flex-col divide-y divide-line-soft lg:flex-row lg:divide-y-0 lg:divide-x">
       {sections.map((s) => (
         <div key={s.id} className="flex min-w-0 flex-1 flex-col">
-          <PanelHeader as="h3" icon={s.icon} title={s.title} />
-          <PanelBody className="flex flex-1 flex-col">
+          {/* Tertiary throughout. These three used to carry the same 15px
+              semibold title as the hero and the rail, which is a band saying
+              it is as important as the number the page is about. It isn't:
+              it is the state of the room, and you read it after you have read
+              how the day is going. */}
+          <PanelHeader as="h3" size="sm" icon={s.icon} title={s.title} />
+          <PanelBody size="sm" className="flex flex-1 flex-col">
             {s.failed ? (
               <p className="text-xs text-muted-foreground">
                 Couldn&apos;t load this. The figures below would be wrong, so
@@ -1466,9 +1533,14 @@ export function OpsPanel({ sections }: { sections: OpsSection[] }) {
                 <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
                   {s.stats.map((st) => (
                     <div key={st.label}>
+                      {/* 22, down from 26. It is the third rung of the page's
+                          numeric ladder — 64 hero, 26 KPI band, 22 here — and
+                          it used to be the joint-second, which is a tertiary
+                          band shouting at the same volume as the summary
+                          above it. */}
                       <div
                         className={
-                          "text-[26px] font-bold tabular-nums tracking-[-0.02em] leading-none " +
+                          "text-[22px] font-bold tabular-nums tracking-[-0.02em] leading-none " +
                           (st.muted ? "text-muted-foreground" : "text-foreground")
                         }
                       >
@@ -1485,14 +1557,19 @@ export function OpsPanel({ sections }: { sections: OpsSection[] }) {
                     </div>
                   ))}
                 </div>
+                {/* Contrast, not hue. A state worth noticing is set in ink at
+                    medium weight; a routine one sits in the same muted grey as
+                    the stat labels above it. Against a card of muted 12px type
+                    that step is perfectly loud — and it leaves the page's one
+                    alert hue where it belongs, on the rail, which is also
+                    where every one of these attention states is already
+                    listed with somewhere to go and fix it. */}
                 <p
                   className={
                     "mt-3.5 text-xs " +
                     (s.tone === "attention"
-                      ? "text-amber-600 dark:text-amber-400"
-                      : s.tone === "good"
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-muted-foreground")
+                      ? "font-medium text-foreground"
+                      : "text-muted-foreground")
                   }
                 >
                   {s.state}
@@ -1534,7 +1611,16 @@ export type CheckRow = {
   channel: string | null;
   /** Server name, when we have one. */
   who: string | null;
-  status: { text: string; tone: "neutral" | "info" | "success" | "warning" | "danger" };
+  /**
+   * The state, and how loudly to say it.
+   *
+   * `quiet` is the boring majority — settled, paid, waiting on the guest — and
+   * it is set in the same muted grey as the timestamp two columns left, which
+   * is as close to invisible as a legible thing gets. `notable` is the handful
+   * a person actually scans this table for: a refund, a partial refund, a check
+   * that has been open past the late mark. Neither carries a hue.
+   */
+  status: { text: string; tone: "quiet" | "notable" };
   /**
    * Money, or an em dash where there honestly isn't any. Never a line count.
    *
@@ -1555,20 +1641,30 @@ export type CheckRow = {
   open: boolean;
 };
 
-// The row tint is gone.
+// The row tint went first. The status chip went second.
 //
-// It was three full-width washes — amber still moving, green finished, red
-// money gone backwards — and the argument for it was that a sighted owner could
-// find the refunds without reading. That argument was right about the goal and
-// wrong about the material. Eight rows of alternating pastel is the single
-// cheapest-looking thing a table can do: the colour stops being a signal and
-// becomes upholstery, the card stops reading as one white object, and the
-// figures in the amount column end up sitting on four different backgrounds.
+// The tint was three full-width washes — amber still moving, green finished,
+// red money gone backwards — and the argument for it was that a sighted owner
+// could find the refunds without reading. That argument was right about the
+// goal and wrong about the material: eight rows of alternating pastel is the
+// single cheapest-looking thing a table can do. It was replaced by a chip per
+// row, on the reasoning that a chip is a smaller instrument pointed at the same
+// job.
 //
-// The status chip beside each row already carries the state, in a hue, in
-// words, with a saturated dot — which is a smaller and more precise instrument
-// pointed at exactly the same job. So the rows go back to the card surface,
-// separated by hairlines, and the chip does the work alone.
+// It is smaller and it was still the wrong instrument. Eight rows produced
+// eight outlined pills in four hues — green, green, green, red, amber, sky,
+// red, green — and six of those eight said "Paid", which is the least
+// interesting fact this table contains. A pill is a thing you draw around a
+// word to say the word is important; drawn around the word that appears on
+// three quarters of the rows, it says nothing at all, and it makes the tertiary
+// band at the foot of the page the most colourful object on it.
+//
+// So the status column is text. The routine states sit in the muted grey the
+// timestamps use and the eye skates over them, which is exactly what they
+// deserve. The two or three rows an owner is actually looking for — a refund, a
+// check open past the late mark — sit in ink at medium weight and are the only
+// things in the column with any weight, so they are findable from a metre away
+// without a single drop of colour being spent.
 
 export function ChecksTable({
   rows,
@@ -1598,8 +1694,12 @@ export function ChecksTable({
       {/* The note used to sit on the title's baseline as a second phrase, which
           made this the only header on the page with a one-line shape. It is a
           subtitle like every other card's subtitle now. */}
+      {/* Tertiary. A register is a log — you look things up in it, it does not
+          hail you — so it takes the quiet title and the tight body, and the
+          full page width it was already given does the rest. */}
       <PanelHeader
         bordered
+        size="sm"
         title={title}
         subtitle={note}
         trailing={
@@ -1660,7 +1760,10 @@ export function ChecksTable({
           >
             <span className="w-16 shrink-0">Time</span>
             <span className="min-w-0 flex-1">{itemHeading}</span>
-            <span className="hidden sm:block w-36 shrink-0">Status</span>
+            {/* 28 rather than 36. The column held a pill with its own padding
+                and ring; it now holds a word, and the width it was given for
+                the pill would leave the words floating in a lane of their own. */}
+            <span className="hidden sm:block w-28 shrink-0">Status</span>
             <span className="w-24 shrink-0 text-right">Amount</span>
           </div>
           <div className="divide-y divide-line-soft">
@@ -1690,8 +1793,15 @@ export function ChecksTable({
                     {[r.channel, r.who, r.lines].filter(Boolean).join(" · ") || "—"}
                   </span>
                 </span>
-                <span className="hidden sm:flex w-36 shrink-0">
-                  <Chip tone={r.status.tone}>{r.status.text}</Chip>
+                <span
+                  className={
+                    "hidden sm:block w-28 shrink-0 text-xs " +
+                    (r.status.tone === "notable"
+                      ? "font-medium text-foreground"
+                      : "text-muted-foreground")
+                  }
+                >
+                  {r.status.text}
                 </span>
                 <span
                   className={
