@@ -7,11 +7,12 @@ const PREVIEW_COOKIE = "surge_preview";
  * Runs on every request that matches the middleware matcher.
  * - Refreshes the Supabase session cookie if needed
  * - Redirects unauthenticated users away from /app routes
- * - Reviewer link: when PREVIEW_LOGIN_TOKEN is configured and the request
- *   carries ?key=<token>, signs the dedicated reviewer account in (a normal
- *   Supabase session — RLS and role checks apply as for any manager) so an
- *   outside reviewer can open the dashboard without a password. Preview
- *   sessions are kept out of /app/debug and /hq. Remove the env vars to revoke.
+ * - Reviewer link: OUTSIDE PRODUCTION ONLY, when PREVIEW_LOGIN_TOKEN is
+ *   configured and the request carries ?key=<token>, signs the dedicated
+ *   reviewer account in (a normal Supabase session — RLS and role checks apply
+ *   as for any manager) so an outside reviewer can open the dashboard without a
+ *   password. Preview sessions are kept out of /app/debug and /hq. Remove the
+ *   env vars to revoke; see the previewAllowed block below for the prod gate.
  */
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -39,35 +40,50 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
-  // Open-preview switch — OFF. Flip to `true` only to share a local dev server
-  // (behind a tunnel) with an outside reviewer whose fetcher can't carry a
-  // `?key=` query string; set it back when they're done. Pair it with the twin
-  // flag in app/robots.ts, which otherwise tells well-behaved crawlers to skip
-  // /app and makes the link look broken.
+  // ---------------------------------------------------------------------------
+  // Reviewer preview. There are TWO ways in, and BOTH are gated on
+  // `previewAllowed` (NODE_ENV !== "production"):
   //
-  // While on, a request to /app is signed in as the dedicated reviewer account
-  // with no sign-in page. That is not a hole punched through auth: the request
-  // still carries a real Supabase session, so RLS confines it to that account's
-  // one business and every permission check still runs; /app/debug and /hq stay
-  // blocked either way.
+  //   1. `?key=<PREVIEW_LOGIN_TOKEN>` on any request — the link you hand to a
+  //      reviewer.
+  //   2. `OPEN_PREVIEW = true` below — no query string needed, for a reviewer
+  //      whose fetcher can't carry one. Flip it only to share a local dev
+  //      server behind a tunnel, and flip it back when they're done. Pair it
+  //      with the twin flag in app/robots.ts, which otherwise tells well-behaved
+  //      crawlers to skip /app and makes the link look broken.
   //
-  // The NODE_ENV term is load-bearing and must stay. This file deploys to
-  // Vercel and the database behind it holds other tenants' businesses, so even
-  // a committed `true` cannot open production.
+  // Either way, a request to /app is signed in as the dedicated reviewer
+  // account with no sign-in page. That is not a hole punched through auth: the
+  // request still carries a real Supabase session, so RLS confines it to that
+  // account's one business and every permission check still runs; /app/debug
+  // and /hq stay blocked either way.
+  //
+  // `previewAllowed` is the load-bearing term and must stay on BOTH paths. This
+  // file deploys to Vercel and the database behind it holds other tenants'
+  // businesses. Because the whole mechanism is short-circuited off in
+  // production, neither a committed `OPEN_PREVIEW = true` NOR a
+  // PREVIEW_LOGIN_TOKEN / PREVIEW_REVIEWER_EMAIL / PREVIEW_REVIEWER_PASSWORD
+  // trio set in the Vercel Production environment can sign anyone in there.
+  // Previously only path 2 carried the NODE_ENV term, so production env vars
+  // would have made `?key=` live against real tenants; do not un-gate either.
+  // ---------------------------------------------------------------------------
+  const previewAllowed = process.env.NODE_ENV !== "production";
   const OPEN_PREVIEW = false;
 
   let previewSignIn = false;
   const previewToken = process.env.PREVIEW_LOGIN_TOKEN;
   const key = request.nextUrl.searchParams.get("key");
-  const openPreview = OPEN_PREVIEW && process.env.NODE_ENV !== "production";
-  const keyMatches = !!previewToken && !!key && key === previewToken;
+  const openPreview = OPEN_PREVIEW && previewAllowed;
+  const keyMatches =
+    previewAllowed && !!previewToken && !!key && key === previewToken;
   // An existing Supabase session means we don't need to sign in again — without
   // this, open mode would do a password sign-in on every request and trip the
   // auth rate limit within a page load or two.
   const hasSession = request.cookies
     .getAll()
     .some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"));
-  const needsPreviewSignIn = keyMatches || (openPreview && !hasSession);
+  const needsPreviewSignIn =
+    previewAllowed && (keyMatches || (openPreview && !hasSession));
   if (needsPreviewSignIn && process.env.PREVIEW_REVIEWER_EMAIL && process.env.PREVIEW_REVIEWER_PASSWORD) {
     const { error } = await supabase.auth.signInWithPassword({
       email: process.env.PREVIEW_REVIEWER_EMAIL,
