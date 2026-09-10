@@ -172,7 +172,7 @@ export function ClockClient({ initialOnShift, broadcasts = [] }: { initialOnShif
                 <span className="font-medium text-sm flex items-center gap-2">
                   <span className={"inline-block w-1.5 h-1.5 rounded-full " + (s.onBreakSince ? "bg-amber-500" : "bg-emerald-500")} />
                   {s.name}
-                  {s.onBreakSince && <span className="text-[10px] text-amber-600 font-semibold">ON BREAK</span>}
+                  {s.onBreakSince && <span className="text-[11px] text-amber-600 font-semibold">ON BREAK</span>}
                 </span>
                 <span className="text-xs text-muted-foreground tabular-nums">{sinceLabel(s.since)}</span>
               </div>

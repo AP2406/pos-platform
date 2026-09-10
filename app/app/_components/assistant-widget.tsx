@@ -115,7 +115,10 @@ export function AssistantWidget() {
       </button>
 
       {open && (
-        <div className="fixed bottom-24 right-5 z-40 w-[calc(100vw-2.5rem)] max-w-sm h-[70vh] max-h-[560px] bg-card border border-border rounded-2xl shadow-xl flex flex-col overflow-hidden">
+        // The widget is mounted beside AppShell rather than inside it, so it
+        // is outside the shell's serif scope and has to declare its own. The
+        // launcher button above is a bare glyph and needs nothing.
+        <div className="u-serif fixed bottom-24 right-5 z-40 w-[calc(100vw-2.5rem)] max-w-sm h-[70vh] max-h-[560px] bg-card border border-border rounded-2xl shadow-xl flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
             <div className="font-semibold text-sm">Assistant</div>
             <button

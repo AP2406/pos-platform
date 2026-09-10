@@ -623,7 +623,7 @@ export default async function ReportsPage({
           </div>
         ) : (
           <div className="bg-card border border-border rounded-lg overflow-hidden">
-            <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-4 py-2.5 bg-raised border-b border-border text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-4 py-2.5 bg-raised border-b border-border text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
               <div>Channel</div>
               <div className="text-right">Orders</div>
               <div className="text-right">Net sales</div>
@@ -740,7 +740,7 @@ export default async function ReportsPage({
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1.5">Menu value is the option&rsquo;s list price at sale time; it isn&rsquo;t adjusted for check-level discounts, comps, or happy-hour pricing. Split-tendered checks aren&rsquo;t yet included, so totals here can run low where checks are split.</p>
+          <p className="text-[12px] text-muted-foreground mt-1.5">Menu value is the option&rsquo;s list price at sale time; it isn&rsquo;t adjusted for check-level discounts, comps, or happy-hour pricing. Split-tendered checks aren&rsquo;t yet included, so totals here can run low where checks are split.</p>
         </div>
       )}
 
@@ -810,7 +810,7 @@ export default async function ReportsPage({
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1.5">From the sensitive-action log. Training-mode actions aren&rsquo;t recorded here.</p>
+          <p className="text-[12px] text-muted-foreground mt-1.5">From the sensitive-action log. Training-mode actions aren&rsquo;t recorded here.</p>
         </div>
       )}
     </div>

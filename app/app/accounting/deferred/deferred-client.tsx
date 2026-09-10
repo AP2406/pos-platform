@@ -81,12 +81,12 @@ export function DeferredClient({ rows, breakage, currency, today }: { rows: Defe
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2 font-medium">{r.description}<span className="block text-[11px] text-muted-foreground font-normal">{r.customerName ? r.customerName + " · " : ""}rec {fmtDate(r.receivedDate)}</span></td>
+                  <td className="px-3 py-2 font-medium">{r.description}<span className="block text-[12px] text-muted-foreground font-normal">{r.customerName ? r.customerName + " · " : ""}rec {fmtDate(r.receivedDate)}</span></td>
                   <td className="px-3 py-2 text-right tabular-nums">{money(r.amount)}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtDate(r.eventDate)}</td>
                   <td className="px-3 py-2 text-right">
-                    <span className={"inline-block rounded-full px-2 py-0.5 text-[11px] font-medium " + (r.status === "released" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : r.status === "deferred" ? "bg-sky-500/15 text-sky-700 dark:text-sky-400" : "bg-muted text-muted-foreground")}>{r.status}</span>
-                    <div className="mt-1 flex justify-end gap-1.5 text-[11px]">
+                    <span className={"inline-block rounded-full px-2 py-0.5 text-[12px] font-medium " + (r.status === "released" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : r.status === "deferred" ? "bg-sky-500/15 text-sky-700 dark:text-sky-400" : "bg-muted text-muted-foreground")}>{r.status}</span>
+                    <div className="mt-1 flex justify-end gap-1.5 text-[12px]">
                       {r.status === "deferred" && <button onClick={() => start(async () => { await releaseDeferred(r.id); })} disabled={pending} className="underline text-emerald-600">release to revenue</button>}
                       <button onClick={() => { if (confirm("Delete this record? (journal entries stay)")) start(async () => { await deleteDeferred(r.id); }); }} disabled={pending} className="underline text-red-600">delete</button>
                     </div>
@@ -113,7 +113,7 @@ export function DeferredClient({ rows, breakage, currency, today }: { rows: Defe
           <Button onClick={() => { setBrkMsg(null); start(async () => { const res = await recognizeBreakage(Number(brkAmt) || 0); setBrkMsg("error" in res ? res.error : "Posted breakage income entry."); }); }} disabled={pending || !(Number(brkAmt) > 0)} className="h-9">Recognize (post entry)</Button>
           {brkMsg && <span className="text-sm text-emerald-600">{brkMsg}</span>}
         </div>
-        <p className="text-[11px] text-muted-foreground mt-2">Posts Dr Gift card liability / Cr Breakage income. An estimate — if a recognized card is later redeemed, reverse it with a journal entry.</p>
+        <p className="text-[12px] text-muted-foreground mt-2">Posts Dr Gift card liability / Cr Breakage income. An estimate — if a recognized card is later redeemed, reverse it with a journal entry.</p>
       </div>
     </div>
   );
@@ -124,7 +124,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
     <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="text-lg font-semibold tabular-nums mt-0.5">{value}</div>
-      {hint && <div className="text-[11px] text-muted-foreground mt-0.5">{hint}</div>}
+      {hint && <div className="text-[12px] text-muted-foreground mt-0.5">{hint}</div>}
     </div>
   );
 }

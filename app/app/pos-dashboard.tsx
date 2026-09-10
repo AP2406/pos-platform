@@ -1243,7 +1243,7 @@ export async function PosDashboard({
                   // selected segment is still a link you can click, and a
                   // control where half the targets acknowledge a press and
                   // half don't feels broken in a way people report as "laggy".
-                  "u-tx u-tx-move u-press u-focus rounded-[10px] px-3 py-1 text-[13px] " +
+                  "u-tx u-tx-move u-press u-focus rounded-[10px] px-3 py-1 text-[14px] " +
                   // No shadow on the selected segment. It is 2px inside a ringed
                   // track and it is the only thing in there with the card
                   // colour and a medium weight, which says "selected" without

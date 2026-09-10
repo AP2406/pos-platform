@@ -377,7 +377,7 @@ function FlagBadge({ flag }: { flag: string }) {
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-3 mt-8">
+    <h2 className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold mb-3 mt-8">
       {children}
     </h2>
   );
@@ -406,7 +406,7 @@ function StatCard({
   else if (tone === "bad") valueClass = "text-red-600";
   return (
     <div className="bg-card border border-border rounded-lg p-4">
-      <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold">
+      <div className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">
         {label}
       </div>
       <div className={"text-2xl font-semibold mt-2 tabular-nums tracking-tight " + valueClass}>

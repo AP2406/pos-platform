@@ -56,7 +56,7 @@ function Chip({
         // small, wide and firm reads as a label, where large and soft reads as
         // a button somebody forgot to wire up.
         "inline-flex items-center gap-1.5 rounded-full px-2 py-[3px]",
-        "text-[11px] leading-none font-semibold tracking-[0.02em]",
+        "text-[12px] leading-none font-semibold tracking-[0.02em]",
         "ring-1 ring-inset whitespace-nowrap",
         toneClasses[tone],
         className

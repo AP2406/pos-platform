@@ -73,7 +73,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.staffId} className="border-b border-border last:border-0">
-                    <td className="px-3 py-2 font-medium">{r.name}{r.rate == null && <span className="block text-[11px] text-amber-600 font-normal">no pay rate</span>}</td>
+                    <td className="px-3 py-2 font-medium">{r.name}{r.rate == null && <span className="block text-[12px] text-amber-600 font-normal">no pay rate</span>}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{r.regHours.toFixed(1)}{r.otHours > 0 && <span className="text-amber-600"> +{r.otHours.toFixed(1)} OT</span>}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{money(r.grossWages, currency)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{money(r.controlledTips, currency)}</td>
@@ -94,7 +94,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
               </tbody>
             </table>
           </div>
-          <p className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">
+          <p className="px-3 py-2 text-[12px] text-muted-foreground border-t border-border">
             CPP/EI are estimates (a guide), not a filing calculation — your payroll provider computes exact deductions, max insurable/pensionable caps and basic exemptions.
           </p>
         </div>

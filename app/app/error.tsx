@@ -37,13 +37,13 @@ export default function AppError({
         </p>
 
         {isDev && (
-          <pre className="mt-4 max-h-48 overflow-auto rounded-lg bg-raised border border-border p-3 text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap">
+          <pre className="mt-4 max-h-48 overflow-auto rounded-lg bg-raised border border-border p-3 text-[12px] leading-relaxed text-muted-foreground whitespace-pre-wrap">
             {error.message}
           </pre>
         )}
 
         {error.digest && (
-          <p className="mt-3 text-[11px] text-muted-foreground">
+          <p className="mt-3 text-[12px] text-muted-foreground">
             Reference: <span className="font-mono">{error.digest}</span>
           </p>
         )}

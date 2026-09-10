@@ -43,7 +43,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
       <div className="rounded-xl border border-zinc-800 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-zinc-500 border-b border-zinc-800">
+            <tr className="text-left text-[12px] uppercase tracking-wide text-zinc-500 border-b border-zinc-800">
               <th className="px-3 py-2 font-medium">Business</th>
               <th className="px-3 py-2 font-medium">Contact</th>
               <th className="px-3 py-2 font-medium">Industry</th>
@@ -61,7 +61,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
                 <td className="px-3 py-2 text-zinc-400 capitalize">{r.industry ?? "—"}</td>
                 <td className="px-3 py-2 text-zinc-400">{r.plan ?? "—"}</td>
                 <td className="px-3 py-2 text-zinc-400">{r.referredByRep ?? <span className="text-zinc-600">—</span>}</td>
-                <td className="px-3 py-2"><span className={"text-[11px] rounded-full px-2 py-0.5 capitalize " + (STATUS_STYLE[r.status] ?? "bg-zinc-800 text-zinc-400")}>{r.status}</span></td>
+                <td className="px-3 py-2"><span className={"text-[12px] rounded-full px-2 py-0.5 capitalize " + (STATUS_STYLE[r.status] ?? "bg-zinc-800 text-zinc-400")}>{r.status}</span></td>
                 <td className="px-3 py-2 text-zinc-500">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}</td>
               </tr>
             ))}

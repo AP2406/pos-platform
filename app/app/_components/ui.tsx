@@ -70,7 +70,7 @@ export function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className={
-        "inline-flex items-center text-[10px] uppercase tracking-[0.08em] px-2 py-0.5 rounded-md font-semibold " +
+        "inline-flex items-center text-[11px] uppercase tracking-[0.1em] px-2 py-0.5 rounded-md font-semibold " +
         style
       }
     >

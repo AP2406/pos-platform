@@ -42,7 +42,7 @@ export function BasisCard({ basis: init = "accrual", legalEntity: initEntity = "
           <Input value={entity} onChange={(e) => setEntity(e.target.value)} placeholder="e.g. 123456 Ontario Inc." className="h-9 max-w-xs" />
           <Button variant="outline" onClick={saveEntity} disabled={pending} className="h-9">Save</Button>
         </div>
-        <p className="text-[11px] text-muted-foreground">Locations sharing a legal-entity name roll up together in Accounting → Consolidated.</p>
+        <p className="text-[12px] text-muted-foreground">Locations sharing a legal-entity name roll up together in Accounting → Consolidated.</p>
       </div>
       {msg && <p className="text-sm text-green-600 mt-2">{msg}</p>}
     </div>

@@ -251,7 +251,7 @@ export default async function TripDetailPage({
 
       {/* Invoice preview — THE HERO CARD */}
       <div className="bg-card border border-border rounded-lg p-6 mb-4">
-        <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2">
+        <div className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold mb-2">
           Invoice preview
         </div>
 
@@ -374,7 +374,7 @@ export default async function TripDetailPage({
 
         <div className="space-y-5">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2">
+            <div className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold mb-2">
               Invoice
             </div>
             <SendInvoiceButton
@@ -386,7 +386,7 @@ export default async function TripDetailPage({
           </div>
 
           <div className="pt-5 border-t border-border">
-            <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2">
+            <div className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold mb-2">
               Receipt
             </div>
             <SendReceiptButton
@@ -405,7 +405,7 @@ export default async function TripDetailPage({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 mb-2">
-                <h2 className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold">
+                <h2 className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">
                   Square invoice
                 </h2>
                 <span
@@ -437,7 +437,7 @@ export default async function TripDetailPage({
         <div className="bg-card border border-border rounded-lg p-6 mb-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
-              <h2 className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2">
+              <h2 className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold mb-2">
                 Square invoice
               </h2>
               {trip.square_error ? (

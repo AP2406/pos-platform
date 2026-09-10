@@ -27,7 +27,7 @@ export default async function RepsPage() {
       <div className="rounded-xl border border-zinc-800 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-zinc-500 border-b border-zinc-800">
+            <tr className="text-left text-[12px] uppercase tracking-wide text-zinc-500 border-b border-zinc-800">
               <th className="px-3 py-2 font-medium">Rep</th>
               <th className="px-3 py-2 font-medium">Code</th>
               <th className="px-3 py-2 font-medium text-right">Residual %</th>
@@ -39,7 +39,7 @@ export default async function RepsPage() {
           <tbody>
             {reps.map((r) => (
               <tr key={r.id} className="border-b border-zinc-800 last:border-0 hover:bg-zinc-900/60">
-                <td className="px-3 py-2"><Link href={"/hq/reps/" + r.id} className="font-medium hover:text-emerald-400">{r.name}</Link><div className="text-[11px] text-zinc-500 capitalize">{r.status}{r.email ? " · " + r.email : ""}</div></td>
+                <td className="px-3 py-2"><Link href={"/hq/reps/" + r.id} className="font-medium hover:text-emerald-400">{r.name}</Link><div className="text-[12px] text-zinc-500 capitalize">{r.status}{r.email ? " · " + r.email : ""}</div></td>
                 <td className="px-3 py-2 font-mono text-xs text-zinc-400">{r.code}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{(r.residualPct * 100).toFixed(0)}%</td>
                 <td className="px-3 py-2 text-right tabular-nums text-zinc-400">{r.merchantCount} <span className="text-zinc-600">({r.liveCount} live)</span></td>
@@ -51,7 +51,7 @@ export default async function RepsPage() {
           </tbody>
         </table>
       </div>
-      <p className="text-[11px] text-zinc-600 mt-3">Residual = each merchant&apos;s net processing revenue (30d) × the rep&apos;s residual %. Bounty accrues per live referred merchant; clawback within the window is flagged on the rep page.</p>
+      <p className="text-[12px] text-zinc-600 mt-3">Residual = each merchant&apos;s net processing revenue (30d) × the rep&apos;s residual %. Bounty accrues per live referred merchant; clawback within the window is flagged on the rep page.</p>
     </div>
   );
 }

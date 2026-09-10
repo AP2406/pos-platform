@@ -101,9 +101,9 @@ export function RecordsClient({ staff, writeups, today }: { staff: Staff[]; writ
               <div key={w.id} className="p-3">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="font-medium text-sm">{w.staffName}</span>
-                  <span className={"inline-block rounded-full px-2 py-0.5 text-[11px] font-medium " + m.cls}>{m.label}</span>
-                  <span className="text-[11px] text-muted-foreground">{fmtDate(w.occurredOn)}{w.authorName ? " · by " + w.authorName : ""}</span>
-                  <button onClick={() => { if (confirm("Delete this record?")) start(async () => { await deleteWriteup(w.id); }); }} disabled={pending} className="ml-auto text-[11px] text-muted-foreground underline hover:text-red-600">delete</button>
+                  <span className={"inline-block rounded-full px-2 py-0.5 text-[12px] font-medium " + m.cls}>{m.label}</span>
+                  <span className="text-[12px] text-muted-foreground">{fmtDate(w.occurredOn)}{w.authorName ? " · by " + w.authorName : ""}</span>
+                  <button onClick={() => { if (confirm("Delete this record?")) start(async () => { await deleteWriteup(w.id); }); }} disabled={pending} className="ml-auto text-[12px] text-muted-foreground underline hover:text-red-600">delete</button>
                 </div>
                 <p className="text-sm whitespace-pre-wrap">{w.body}</p>
               </div>

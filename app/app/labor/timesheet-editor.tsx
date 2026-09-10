@@ -89,8 +89,8 @@ export function TimesheetEditor({ entries }: { entries: TimeEntry[] }) {
                 <tr className="border-b border-border last:border-0">
                   <td className="px-3 py-2 font-medium">
                     {e.name}
-                    {e.missedPunch && <span className="ml-2 text-[10px] text-red-600 font-semibold">MISSED PUNCH</span>}
-                    {e.edited && <span className="ml-2 text-[10px] text-muted-foreground">edited</span>}
+                    {e.missedPunch && <span className="ml-2 text-[11px] text-red-600 font-semibold">MISSED PUNCH</span>}
+                    {e.edited && <span className="ml-2 text-[11px] text-muted-foreground">edited</span>}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{dayLabel(e.clockIn)}</td>
                   <td className="px-3 py-2 tabular-nums">{timeLabel(e.clockIn)}</td>

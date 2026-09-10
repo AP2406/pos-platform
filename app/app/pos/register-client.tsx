@@ -958,7 +958,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       <div key={g.id} className={"space-y-2 mb-3 " + (depth > 0 ? "ml-2 pl-3 border-l border-border" : "")}>
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">{g.name}</span>
-          <span className={"text-[10px] " + (unmet ? "text-red-600" : "text-muted-foreground")}>{(g.required ? "Required · " : "") + hint}</span>
+          <span className={"text-[11px] " + (unmet ? "text-red-600" : "text-muted-foreground")}>{(g.required ? "Required · " : "") + hint}</span>
         </div>
         {g.options.map((m) => {
           const checked = pickerMods.includes(m.id);
@@ -967,7 +967,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
             <div key={m.id} className="space-y-2">
               <button type="button" onClick={() => togglePickerMod(m.id)} disabled={disabled} className={"w-full flex items-center justify-between p-3 rounded-md border text-left transition-colors disabled:opacity-40 " + (checked ? "border-foreground bg-accent" : "border-border hover:border-foreground/40 hover:bg-accent/50")}>
                 <span className="flex items-center gap-2">
-                  <span className={"w-4 h-4 border flex items-center justify-center text-[10px] " + (single ? "rounded-full" : "rounded") + " " + (checked ? "bg-foreground text-background border-foreground" : "border-muted-foreground")}>{checked ? "✓" : ""}</span>
+                  <span className={"w-4 h-4 border flex items-center justify-center text-[11px] " + (single ? "rounded-full" : "rounded") + " " + (checked ? "bg-foreground text-background border-foreground" : "border-muted-foreground")}>{checked ? "✓" : ""}</span>
                   <span className="text-sm font-medium">{m.name}</span>
                 </span>
                 {m.price > 0 && <span className="text-sm tabular-nums text-muted-foreground">{"+$" + m.price.toFixed(2)}</span>}
@@ -977,7 +977,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                   {(["whole", "left", "right"] as const).map((p) => {
                     const active = (pickerPos[m.id] ?? "whole") === p;
                     return (
-                      <button key={p} type="button" onClick={() => setPickerPos((prev) => ({ ...prev, [m.id]: p }))} className={"px-2 py-0.5 text-[11px] rounded border transition-colors " + (active ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:border-foreground/40")}>
+                      <button key={p} type="button" onClick={() => setPickerPos((prev) => ({ ...prev, [m.id]: p }))} className={"px-2 py-0.5 text-[12px] rounded border transition-colors " + (active ? "border-foreground bg-accent font-medium" : "border-border text-muted-foreground hover:border-foreground/40")}>
                         {p === "whole" ? "Whole" : p === "left" ? "½ Left" : "½ Right"}
                       </button>
                     );
@@ -1293,14 +1293,14 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       <div key={index} className="flex items-center gap-2">
         <button type="button" onClick={() => { setEditLineIndex(index); setMoveOpen(false); setVoidOpen(false); }} className="min-w-0 flex-1 text-left">
           <div className={"text-sm font-medium truncate flex items-center gap-1.5 " + (line.void ? "line-through text-muted-foreground" : "")}>
-            {line.guest && !line.void && <span className="shrink-0 text-[9px] font-semibold uppercase rounded bg-indigo-500/15 text-indigo-500 px-1 py-0.5">Guest</span>}
+            {line.guest && !line.void && <span className="shrink-0 text-[10px] font-semibold uppercase rounded bg-indigo-500/15 text-indigo-500 px-1 py-0.5">Guest</span>}
             <span className="truncate">{line.name}{line.void ? "  · Void" : ""}</span>
           </div>
           <div className="text-xs text-muted-foreground">
             {"$" + line.unit_price.toFixed(2) + " each" + (line.taxable ? "" : "  " + "·" + "  Tax-free") + (line.note ? "  " + "·" + "  " + line.note : "")}
           </div>
           {coursingOn && (
-            <div className="text-[10px] mt-0.5 flex items-center gap-1.5">
+            <div className="text-[11px] mt-0.5 flex items-center gap-1.5">
               <span className="text-muted-foreground">{line.seat ? "Seat " + line.seat : "Shared"}</span>
               {line.quantity > 0 && (line.sent_qty ?? 0) >= line.quantity
                 ? <span className="text-emerald-600">Fired</span>
@@ -2889,7 +2889,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                     <span className="text-sm font-medium">{s.label}</span>
                     <span className="text-sm tabular-nums shrink-0">
                       ${price.toFixed(2)}
-                      {s.discount > 0 && <span className="ml-1 text-[11px] text-emerald-600">combo</span>}
+                      {s.discount > 0 && <span className="ml-1 text-[12px] text-emerald-600">combo</span>}
                     </span>
                   </button>
                 );
@@ -3313,9 +3313,9 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                               <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative min-h-[110px] rounded-xl border border-line shadow-elevation-sm overflow-hidden active:scale-[0.97] transition-transform " + (oos ? "opacity-50" : "")}>
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={item.image_url} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
-                                {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">{lowN} left</span>}
-                                {hhWin && !oos && <span className="absolute top-1 left-1 text-[10px] rounded-full bg-emerald-600 text-white px-1.5 py-0.5 font-medium">HH</span>}
-                                {item.off_hours && !oos && !hhWin && <span className="absolute top-1 left-1 text-[10px] rounded-full bg-zinc-600 text-white px-1.5 py-0.5 font-medium">Off hrs</span>}
+                                {low && <span className="absolute top-1 right-1 text-[11px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">{lowN} left</span>}
+                                {hhWin && !oos && <span className="absolute top-1 left-1 text-[11px] rounded-full bg-emerald-600 text-white px-1.5 py-0.5 font-medium">HH</span>}
+                                {item.off_hours && !oos && !hhWin && <span className="absolute top-1 left-1 text-[11px] rounded-full bg-zinc-600 text-white px-1.5 py-0.5 font-medium">Off hrs</span>}
                                 <div className="absolute inset-x-0 bottom-0 bg-black/55 text-white text-left px-2 py-1.5">
                                   <div className="font-semibold text-sm leading-snug line-clamp-2">{item.name}</div>
                                   <div className="text-xs text-white/90">{oos ? "86'd" : priceLabel}</div>
@@ -3325,9 +3325,9 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                           }
                           return (
                             <button key={item.id} type="button" onClick={() => tileClick(item)} onPointerDown={() => tileDown(item)} onPointerUp={tileUp} onPointerLeave={tileUp} className={"relative text-left p-3 min-h-[110px] rounded-xl border shadow-elevation-sm active:scale-[0.97] transition-all flex flex-col justify-between " + tileClassesFor(item.category, categoryColors) + (oos ? " opacity-50" : "")}>
-                              {low && <span className="absolute top-1 right-1 text-[10px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">{lowN} left</span>}
-                              {hhWin && !oos && <span className="absolute top-1 left-1 text-[10px] rounded-full bg-emerald-600 text-white px-1.5 py-0.5 font-medium">HH</span>}
-                              {item.off_hours && !oos && !hhWin && <span className="absolute top-1 left-1 text-[10px] rounded-full bg-zinc-600 text-white px-1.5 py-0.5 font-medium">Off hrs</span>}
+                              {low && <span className="absolute top-1 right-1 text-[11px] rounded-full bg-amber-500 text-white px-1.5 py-0.5 font-medium">{lowN} left</span>}
+                              {hhWin && !oos && <span className="absolute top-1 left-1 text-[11px] rounded-full bg-emerald-600 text-white px-1.5 py-0.5 font-medium">HH</span>}
+                              {item.off_hours && !oos && !hhWin && <span className="absolute top-1 left-1 text-[11px] rounded-full bg-zinc-600 text-white px-1.5 py-0.5 font-medium">Off hrs</span>}
                               <div className="font-semibold text-sm leading-snug line-clamp-3">{item.name}</div>
                               <div className="text-sm opacity-80 mt-1 tabular-nums">{oos ? "86'd" : priceLabel}{hhPrice != null && <span className="ml-1 text-xs line-through opacity-50">${item.price.toFixed(2)}</span>}</div>
                             </button>
@@ -3406,9 +3406,9 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-xs font-semibold text-muted-foreground">{course.name}</span>
                             {unsent > 0 ? (
-                              <button type="button" onClick={() => fireCourseClient(course)} disabled={sending || pending} className="text-[11px] rounded-md border border-foreground px-2 py-0.5 hover:bg-accent disabled:opacity-50">{"Fire " + unsent}</button>
+                              <button type="button" onClick={() => fireCourseClient(course)} disabled={sending || pending} className="text-[12px] rounded-md border border-foreground px-2 py-0.5 hover:bg-accent disabled:opacity-50">{"Fire " + unsent}</button>
                             ) : (
-                              <span className="text-[11px] text-emerald-600">Fired</span>
+                              <span className="text-[12px] text-emerald-600">Fired</span>
                             )}
                           </div>
                           {entries.map((e) => renderLine(e.l, e.i))}
@@ -3517,27 +3517,27 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                 {cart.length > 0 && (
                   <div className="flex gap-1 p-2 border-b border-border overflow-x-auto">
                     <button type="button" onClick={() => setSheet("discount")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (discount > 0 ? "border-foreground" : "border-border")}>
-                      <div className="text-[10px] text-muted-foreground">Discount</div>
+                      <div className="text-[11px] text-muted-foreground">Discount</div>
                       <div className="text-xs font-medium truncate">{discount > 0 ? "-$" + discount.toFixed(2) : "Add"}</div>
                     </button>
                     <button type="button" onClick={() => { setCompValue(""); setSheet("comp"); }} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (comp > 0 ? "border-foreground" : "border-border")}>
-                      <div className="text-[10px] text-muted-foreground">Comp</div>
+                      <div className="text-[11px] text-muted-foreground">Comp</div>
                       <div className="text-xs font-medium truncate">{comp > 0 ? "-$" + comp.toFixed(2) : "Add"}</div>
                     </button>
                     <button type="button" onClick={() => setSheet("tip")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (tipNum > 0 ? "border-foreground" : "border-border")}>
-                      <div className="text-[10px] text-muted-foreground">Tip</div>
+                      <div className="text-[11px] text-muted-foreground">Tip</div>
                       <div className="text-xs font-medium truncate">{tipNum > 0 ? "$" + tipNum.toFixed(2) : "Add"}</div>
                     </button>
                     <button type="button" onClick={() => setSheet("tax")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (effectiveExempt ? "border-emerald-600" : "border-border")}>
-                      <div className="text-[10px] text-muted-foreground">Tax</div>
+                      <div className="text-[11px] text-muted-foreground">Tax</div>
                       <div className={"text-xs font-medium truncate " + (effectiveExempt ? "text-emerald-600" : "")}>{effectiveExempt ? "Exempt" : "Applied"}</div>
                     </button>
                     <button type="button" onClick={() => setSheet("customer")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (customer ? "border-foreground" : "border-border")}>
-                      <div className="text-[10px] text-muted-foreground">Customer</div>
+                      <div className="text-[11px] text-muted-foreground">Customer</div>
                       <div className="text-xs font-medium truncate">{customer ? customer.name : "Add"}</div>
                     </button>
                     <button type="button" onClick={() => setSheet("note")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (checkNote.trim() ? "border-foreground" : "border-border")}>
-                      <div className="text-[10px] text-muted-foreground">Note</div>
+                      <div className="text-[11px] text-muted-foreground">Note</div>
                       <div className="text-xs font-medium truncate">{checkNote.trim() ? checkNote.trim() : "Add"}</div>
                     </button>
                   </div>
@@ -3554,7 +3554,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                         <button type="button" onClick={() => setCfdTipRequest(false)} className="underline text-muted-foreground">cancel</button>
                       </div>
                     )}
-                    {cfdGuestMsg && <p className="text-[11px] text-emerald-600 mt-1">{cfdGuestMsg}</p>}
+                    {cfdGuestMsg && <p className="text-[12px] text-emerald-600 mt-1">{cfdGuestMsg}</p>}
                   </div>
                 )}
 
@@ -3651,7 +3651,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                   <span className="text-base font-semibold tabular-nums">{"$" + (cart[editLineIndex].unit_price * cart[editLineIndex].quantity).toFixed(2)}</span>
                 </div>
                 {(cart[editLineIndex].sent_qty ?? 0) > 0 && (
-                  <p className="text-[11px] text-amber-600 mt-1.5">
+                  <p className="text-[12px] text-amber-600 mt-1.5">
                     🔒 Already sent to the kitchen — you can add more or change the note, but not reduce or remove it. To take it off, use Void.
                   </p>
                 )}
@@ -3664,7 +3664,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                   <Label className="text-xs">Kitchen note</Label>
                   <Input value={cart[editLineIndex].note ?? ""} onChange={(e) => setLineNote(editLineIndex, e.target.value)} placeholder="e.g. no onions, well done" className="h-10" />
                   {(cart[editLineIndex].sent_qty ?? 0) > 0 && (cart[editLineIndex].note ?? "").trim() !== "" && (
-                    <p className="text-[11px] font-medium text-amber-700 dark:text-amber-500">
+                    <p className="text-[12px] font-medium text-amber-700 dark:text-amber-500">
                       ⚠ This item is already in the kitchen — walk over and tell them about this note in case they don&apos;t see it on the screen.
                     </p>
                   )}
@@ -3698,7 +3698,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                         <button type="button" onClick={() => setCart((prev) => prev.map((l, i) => (i === editLineIndex ? { ...l, shared_seats: null } : l)))} className="text-xs text-muted-foreground underline ml-1">clear</button>
                       )}
                     </div>
-                    {(cart[editLineIndex].shared_seats ?? []).length === 1 && <p className="text-[11px] text-muted-foreground">Pick at least two seats to share.</p>}
+                    {(cart[editLineIndex].shared_seats ?? []).length === 1 && <p className="text-[12px] text-muted-foreground">Pick at least two seats to share.</p>}
                   </div>
                 )}
                 {coursingOn && (
@@ -3710,7 +3710,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                       ))}
                     </div>
                     {(cart[editLineIndex].sent_qty ?? 0) >= cart[editLineIndex].quantity && cart[editLineIndex].quantity > 0 && (
-                      <p className="text-[11px] text-amber-600">Moving an already-fired item won&apos;t un-fire it in the kitchen.</p>
+                      <p className="text-[12px] text-amber-600">Moving an already-fired item won&apos;t un-fire it in the kitchen.</p>
                     )}
                   </div>
                 )}
@@ -3750,7 +3750,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                       <option value="">Select a reason…</option>
                       {VOID_REASONS.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
                     </select>
-                    <p className="text-[11px] text-muted-foreground">{(cart[editLineIndex].sent_qty ?? 0) > 0 ? "This was fired — the kitchen will be told to stop." : "Recorded but not charged."} Needs a manager at checkout.</p>
+                    <p className="text-[12px] text-muted-foreground">{(cart[editLineIndex].sent_qty ?? 0) > 0 ? "This was fired — the kitchen will be told to stop." : "Recorded but not charged."} Needs a manager at checkout.</p>
                     <div className="flex gap-2">
                       <Button variant="outline" className="flex-1 h-9" onClick={() => setVoidOpen(false)}>Cancel</Button>
                       <Button className="flex-1 h-9" disabled={!voidReason} onClick={() => voidLine(editLineIndex, voidReason)}>Void</Button>
@@ -3785,7 +3785,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                   <div className="space-y-1 mt-3">
                     <Label className="text-xs">Manager PIN</Label>
                     <Input type="password" inputMode="numeric" value={serverPin} onChange={(e) => setServerPin(e.target.value)} placeholder="4–6 digits" className="h-10" />
-                    <p className="text-[11px] text-muted-foreground">Then tap the server again to confirm.</p>
+                    <p className="text-[12px] text-muted-foreground">Then tap the server again to confirm.</p>
                   </div>
                 )}
                 {serverErr && <p className="text-sm text-red-600 mt-2">{serverErr}</p>}
@@ -3809,7 +3809,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                     moveTableTargets.map((t) => (
                       <button key={t.elementId} type="button" onClick={() => doMoveTable(t.elementId)} disabled={pending} className="w-full flex items-center justify-between px-3 py-2 rounded-md text-sm border border-border hover:bg-accent">
                         <span>{t.label}</span>
-                        {t.occupied && <span className="text-[10px] text-amber-600">occupied · merge</span>}
+                        {t.occupied && <span className="text-[11px] text-amber-600">occupied · merge</span>}
                       </button>
                     ))
                   )}
@@ -3940,7 +3940,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                     {serviceWaiveReason === "other" && (
                       <Input value={serviceWaiveNote} onChange={(e) => setServiceWaiveNote(e.target.value)} placeholder="Reason note" className="h-10" />
                     )}
-                    <p className="text-[11px] text-muted-foreground">Waiving an automatic {scCfg.label.toLowerCase()} may require a manager.</p>
+                    <p className="text-[12px] text-muted-foreground">Waiving an automatic {scCfg.label.toLowerCase()} may require a manager.</p>
                   </div>
                 )}
               </div>
@@ -4002,7 +4002,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                   rows={3}
                   className="w-full rounded-md border border-border bg-transparent text-foreground px-2 py-2 text-sm resize-none"
                 />
-                <p className="text-[11px] text-muted-foreground mt-1">Prints on the bill and receipt. Not a kitchen note — use a line note for the kitchen.</p>
+                <p className="text-[12px] text-muted-foreground mt-1">Prints on the bill and receipt. Not a kitchen note — use a line note for the kitchen.</p>
               </div>
             </div>
           )}
@@ -4017,7 +4017,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                 </div>
                 {customerExempt ? (
                   <div className="flex items-center gap-2 text-sm text-emerald-600">
-                    <span className="w-4 h-4 rounded border border-emerald-600 flex items-center justify-center text-[10px]">{"\u2713"}</span>
+                    <span className="w-4 h-4 rounded border border-emerald-600 flex items-center justify-center text-[11px]">{"\u2713"}</span>
                     Tax exempt (customer)
                   </div>
                 ) : (

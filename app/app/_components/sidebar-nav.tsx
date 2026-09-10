@@ -117,7 +117,7 @@ export function SidebarNav({ sections }: { sections: NavSection[] }) {
             // Was text-sidebar-muted/70 — the extra 30% transparency on an
             // already-dim token left the six group headings barely legible,
             // which defeats the point of grouping.
-            <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.09em] text-sidebar-muted">
+            <p className="px-3 pb-1.5 text-[12px] font-semibold uppercase tracking-[0.11em] text-sidebar-muted">
               {section.label}
             </p>
           )}

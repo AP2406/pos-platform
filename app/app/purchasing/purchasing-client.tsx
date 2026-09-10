@@ -305,7 +305,7 @@ function StatusBadge({ status }: { status: string }) {
     cancelled: "bg-muted text-muted-foreground line-through",
   };
   return (
-    <span className={"ml-2 align-middle text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full " + (map[status] ?? map.draft)}>
+    <span className={"ml-2 align-middle text-[11px] uppercase tracking-wide px-1.5 py-0.5 rounded-full " + (map[status] ?? map.draft)}>
       {status}
     </span>
   );

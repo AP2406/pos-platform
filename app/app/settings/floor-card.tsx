@@ -516,7 +516,7 @@ export function FloorCard({
               <div
                 key={el.id}
                 onPointerDown={interactive ? (e) => onElementPointerDown(e, el, "move") : undefined}
-                className={"absolute flex items-center justify-center text-[10px] font-medium select-none overflow-hidden " + (interactive ? "cursor-move " : "pointer-events-none ") + classesFor(el.kind, isSel)}
+                className={"absolute flex items-center justify-center text-[11px] font-medium select-none overflow-hidden " + (interactive ? "cursor-move " : "pointer-events-none ") + classesFor(el.kind, isSel)}
                 style={{
                   left: el.x, top: el.y, width: el.w, height: el.h,
                   borderRadius: el.shape === "round" ? 9999 : el.kind === "wall" ? 2 : el.kind === "seat" ? 6 : 10,

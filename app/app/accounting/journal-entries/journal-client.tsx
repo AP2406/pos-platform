@@ -103,10 +103,10 @@ export function JournalClient({ entries, templates, accounts, currency, today }:
             {templates.map((t) => (
               <div key={t.id} className="p-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="font-medium text-sm">{t.name}{t.autoReverse && <span className="ml-2 text-[11px] text-sky-600">auto-reverse</span>}</div>
-                  <div className="text-[11px] text-muted-foreground">{t.lines.length} lines · {money(t.lines.reduce((s, l) => s + l.debit, 0))}</div>
+                  <div className="font-medium text-sm">{t.name}{t.autoReverse && <span className="ml-2 text-[12px] text-sky-600">auto-reverse</span>}</div>
+                  <div className="text-[12px] text-muted-foreground">{t.lines.length} lines · {money(t.lines.reduce((s, l) => s + l.debit, 0))}</div>
                 </div>
-                <div className="flex gap-2 text-[11px] shrink-0">
+                <div className="flex gap-2 text-[12px] shrink-0">
                   <button onClick={() => handlePostTemplate(t)} disabled={pending} className="underline">post</button>
                   <button onClick={() => { if (confirm("Delete template?")) start(async () => { await deleteJournalTemplate(t.id); }); }} disabled={pending} className="underline text-red-600">delete</button>
                 </div>
@@ -128,9 +128,9 @@ export function JournalClient({ entries, templates, accounts, currency, today }:
                 <div className="flex items-center justify-between gap-3">
                   <button onClick={() => setExpand(expand === e.id ? null : e.id)} className="min-w-0 text-left">
                     <div className="font-medium text-sm">{fmtDate(e.entryDate)} <span className="text-muted-foreground font-normal">{e.memo ?? ""}</span></div>
-                    <div className="text-[11px] text-muted-foreground">{money(e.debit)} · {e.source}{e.entity ? " · " + e.entity : ""}{e.reversesId ? " · reversal" : ""}{Math.abs(e.debit - e.credit) >= 0.005 ? " · ⚠ unbalanced" : ""}</div>
+                    <div className="text-[12px] text-muted-foreground">{money(e.debit)} · {e.source}{e.entity ? " · " + e.entity : ""}{e.reversesId ? " · reversal" : ""}{Math.abs(e.debit - e.credit) >= 0.005 ? " · ⚠ unbalanced" : ""}</div>
                   </button>
-                  <button onClick={() => { if (confirm("Delete this entry?")) start(async () => { await deleteJournalEntry(e.id); }); }} disabled={pending} className="text-[11px] text-red-600 underline shrink-0">delete</button>
+                  <button onClick={() => { if (confirm("Delete this entry?")) start(async () => { await deleteJournalEntry(e.id); }); }} disabled={pending} className="text-[12px] text-red-600 underline shrink-0">delete</button>
                 </div>
                 {expand === e.id && (
                   <table className="w-full text-xs mt-2 border-t border-border pt-2">

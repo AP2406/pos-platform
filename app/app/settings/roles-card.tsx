@@ -229,13 +229,13 @@ export function RolesCard({ initialRoles }: { initialRoles: RoleRow[] }) {
                       <Input type="number" min="0" value={draftVoidWindow} onChange={(e) => setDraftVoidWindow(e.target.value)} placeholder="Any time" className="h-9 w-28" />
                     </div>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[12px] text-muted-foreground">
                     A comp/discount/refund over its cap (or a void past the window) requires approval. Blank = no limit. Approval routing is configured in Customization → Access &amp; roles.
                   </p>
 
                   <div className="pt-1">
                     <Label className="text-xs">Visible modules</Label>
-                    <p className="text-[11px] text-muted-foreground mb-1">Uncheck a module to hide it from this role&apos;s navigation. Core screens always stay visible.</p>
+                    <p className="text-[12px] text-muted-foreground mb-1">Uncheck a module to hide it from this role&apos;s navigation. Core screens always stay visible.</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-0.5">
                       {NAV_MODULES.map((m) => (
                         <label key={m.href} className="flex items-center gap-2 text-xs py-0.5 cursor-pointer select-none">

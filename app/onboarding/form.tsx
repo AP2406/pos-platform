@@ -142,7 +142,7 @@ export function OnboardingForm() {
                       {m.label}
                     </span>
                     {soon && (
-                      <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
                         Soon
                       </span>
                     )}

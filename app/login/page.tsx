@@ -79,7 +79,7 @@ export default function LoginPage() {
   const busy = loading || googleLoading;
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="u-serif min-h-screen flex bg-background">
       <style
         dangerouslySetInnerHTML={{
           __html:

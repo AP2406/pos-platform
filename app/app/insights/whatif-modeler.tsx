@@ -134,7 +134,7 @@ export function WhatIfModeler({
                     <Row label="Net change" value={(sim.delta >= 0 ? "+" : "−") + money(Math.abs(sim.delta))} tone={sim.delta >= 0 ? "good" : "bad"} />
                   </div>
                 )}
-                <p className="text-[11px] text-muted-foreground mt-2">
+                <p className="text-[12px] text-muted-foreground mt-2">
                   Estimate only — real demand response varies. Units move by elasticity × price change.
                 </p>
               </>
@@ -152,7 +152,7 @@ function Row({ label, value, hint, tone }: { label: string; value: string; hint?
       <span className="text-muted-foreground text-xs">{label}</span>
       <span className={"tabular-nums font-medium " + (tone === "good" ? "text-emerald-600" : tone === "bad" ? "text-red-600" : "")}>
         {value}
-        {hint && <span className="ml-1 text-[11px] text-muted-foreground font-normal">{hint}</span>}
+        {hint && <span className="ml-1 text-[12px] text-muted-foreground font-normal">{hint}</span>}
       </span>
     </div>
   );

@@ -209,7 +209,7 @@ function Delta({ delta, size = "sm" }: { delta: KpiDelta; size?: "sm" | "md" }) 
     <span
       className={
         "inline-flex flex-wrap items-center gap-x-1 " +
-        (size === "md" ? "text-[13px]" : "text-xs")
+        (size === "md" ? "text-[14px]" : "text-xs")
       }
     >
       <span className="inline-flex items-center gap-0.5 font-semibold whitespace-nowrap text-foreground">
@@ -310,7 +310,7 @@ export function KpiStrip({
                   loudest type on a screen is most of what reads as "considered",
                   and this label is the floor of that ladder — its job is to be
                   found when looked for and ignored otherwise. */}
-              <span className="text-[10px] font-medium uppercase tracking-[0.09em] text-muted-foreground">
+              <span className="text-[11px] font-medium uppercase tracking-[0.11em] text-muted-foreground">
                 {k.label}
               </span>
               {/* No tinted well. A blue rounded square behind a banknote glyph is
@@ -517,7 +517,7 @@ function PaceChart({
 
   return (
     <figure className="mt-5">
-      <figcaption className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+      <figcaption className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-[12px] text-muted-foreground">
         {/* The swatches are decoration; the words beside them are the legend.
             Only one of them is coloured. The benchmark used to be teal, which
             gave a two-series chart two equal claims on the eye — but these
@@ -652,7 +652,7 @@ function PaceChart({
         )}
       </svg>
 
-      <div className="relative mt-1.5 h-4 text-[11px] text-muted-foreground">
+      <div className="relative mt-1.5 h-4 text-[12px] text-muted-foreground">
         {curve.xLabels.map((l) => (
           <span
             key={l.at}
@@ -972,7 +972,7 @@ export function DailySalesCard({
               — which is the one place on the page where extra height is worth
               something — instead of on a ragged foot of empty canvas. */}
           <figure className="flex flex-1 flex-col">
-            <figcaption className="flex items-baseline justify-between text-[11px] text-muted-foreground">
+            <figcaption className="flex items-baseline justify-between text-[12px] text-muted-foreground">
               <span>Daily takings</span>
               <span className="tabular-nums">{moneyRound(ceiling, currency)}</span>
             </figcaption>
@@ -1079,7 +1079,7 @@ export function DailySalesCard({
                 );
               })}
             </svg>
-            <div className="mt-1.5 flex text-[10px] sm:text-[11px] text-muted-foreground">
+            <div className="mt-1.5 flex text-[11px] sm:text-[12px] text-muted-foreground">
               {bars.map((b) => (
                 <span
                   key={b.key}
@@ -1231,7 +1231,7 @@ export function PaymentMixCard({
               <span className="text-[19px] font-bold tabular-nums tracking-[-0.02em] leading-none">
                 {moneyRound(total, currency)}
               </span>
-              <span className="text-[9px] font-medium uppercase tracking-[0.09em] text-muted-foreground mt-1.5">
+              <span className="text-[10px] font-medium uppercase tracking-[0.11em] text-muted-foreground mt-1.5">
                 taken
               </span>
             </div>
@@ -1754,7 +1754,7 @@ export function ChecksTable({
               wherever the label above them happened to end. */}
           <div
             className={
-              "flex items-center gap-3 py-2.5 border-b border-line-soft text-[10px] font-medium uppercase tracking-[0.09em] text-muted-foreground " +
+              "flex items-center gap-3 py-2.5 border-b border-line-soft text-[11px] font-medium uppercase tracking-[0.11em] text-muted-foreground " +
               PANEL_X
             }
           >

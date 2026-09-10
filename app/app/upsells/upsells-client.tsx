@@ -107,13 +107,13 @@ export function UpsellsClient({ prompts, items, categories }: { prompts: Row[]; 
                   {p.triggerScope === "item" ? itemName(p.triggerItemId) : "Any " + p.triggerCategory}
                   <span className="text-muted-foreground font-normal"> → suggest </span>
                   {itemName(p.suggestItemId)}
-                  {!p.active && <span className="ml-2 text-[11px] rounded-full px-2 py-0.5 bg-muted text-muted-foreground">off</span>}
+                  {!p.active && <span className="ml-2 text-[12px] rounded-full px-2 py-0.5 bg-muted text-muted-foreground">off</span>}
                 </div>
-                <div className="text-[11px] text-muted-foreground">
+                <div className="text-[12px] text-muted-foreground">
                   {p.label ? "“" + p.label + "”" : "no custom text"}{p.comboDiscount > 0 ? " · $" + p.comboDiscount.toFixed(2) + " combo off" : ""}
                 </div>
               </div>
-              <div className="flex gap-2 text-[11px] shrink-0">
+              <div className="flex gap-2 text-[12px] shrink-0">
                 <button onClick={() => start(async () => { await setUpsellActive(p.id, !p.active); })} disabled={pending} className="underline text-muted-foreground">{p.active ? "disable" : "enable"}</button>
                 <button onClick={() => { if (confirm("Delete this prompt?")) start(async () => { await deleteUpsellPrompt(p.id); }); }} disabled={pending} className="underline text-red-600">delete</button>
               </div>

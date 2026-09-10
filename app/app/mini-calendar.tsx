@@ -165,7 +165,7 @@ export function MiniCalendar({ timezone }: { timezone: string }) {
           {WEEKDAYS.map((w, i) => (
             <div
               key={i}
-              className="text-[10px] uppercase text-muted-foreground font-semibold py-1"
+              className="text-[11px] uppercase text-muted-foreground font-semibold py-1"
             >
               {w}
             </div>
@@ -220,7 +220,7 @@ export function MiniCalendar({ timezone }: { timezone: string }) {
           </div>
         ) : (
           <div className="space-y-2">
-            <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-1">
+            <div className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold mb-1">
               {selectedTrips.length} trip{selectedTrips.length === 1 ? "" : "s"}
             </div>
             {selectedTrips.map((t) => (

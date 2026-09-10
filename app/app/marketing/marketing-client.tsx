@@ -111,7 +111,7 @@ export function MarketingClient({
             maxLength={channel === "sms" ? 900 : undefined}
             className="w-full rounded-md border border-border bg-transparent text-foreground px-3 py-2 text-sm"
           />
-          {channel === "sms" && <p className="text-[11px] text-muted-foreground">{body.length} chars · keep it short to avoid multi-part messages.</p>}
+          {channel === "sms" && <p className="text-[12px] text-muted-foreground">{body.length} chars · keep it short to avoid multi-part messages.</p>}
         </div>
 
         {!confirm ? (

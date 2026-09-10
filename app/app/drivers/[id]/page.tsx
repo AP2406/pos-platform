@@ -75,7 +75,7 @@ export default async function DriverDetailPage({
             <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
               {driver.name}
               {driver.status === "inactive" && (
-                <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
+                <span className="text-[11px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
                   Inactive
                 </span>
               )}
@@ -155,7 +155,7 @@ export default async function DriverDetailPage({
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-card border border-border rounded-lg p-5">
-      <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold">
+      <div className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">
         {label}
       </div>
       <div className="text-2xl font-semibold mt-2 tabular-nums">{value}</div>

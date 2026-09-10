@@ -628,12 +628,12 @@ export function FloorClient({
                         <span className="font-semibold text-base truncate">{el.label ?? "Table"}</span>
                         {open && <span className="tabular-nums text-sm font-medium">{"$" + open.subtotal.toFixed(2)}</span>}
                       </div>
-                      <div className="text-[11px] mt-0.5 truncate opacity-80">
+                      <div className="text-[12px] mt-0.5 truncate opacity-80">
                         {open
                           ? formatDuration(minutesOpen(open.opened_at)) + (open.server_name ? " · " + open.server_name : "") + (open.child_count && open.child_count > 0 ? " · split" : "")
                           : "Available"}
                       </div>
-                      {open && (() => { const ls = lifecycleState(open); return ls ? <div className={"text-[10px] font-semibold mt-0.5 " + ls.cls}>{ls.label}</div> : null; })()}
+                      {open && (() => { const ls = lifecycleState(open); return ls ? <div className={"text-[11px] font-semibold mt-0.5 " + ls.cls}>{ls.label}</div> : null; })()}
                     </button>
                   );
                 })}
@@ -673,7 +673,7 @@ export function FloorClient({
 
                 if (!ring) {
                   return (
-                    <div key={el.id} className={"absolute flex items-center justify-center text-[10px] overflow-hidden " + decorClass(el.kind)} style={baseStyle}>
+                    <div key={el.id} className={"absolute flex items-center justify-center text-[11px] overflow-hidden " + decorClass(el.kind)} style={baseStyle}>
                       {el.label ? <span className="px-1 truncate">{el.label}</span> : null}
                     </div>
                   );
@@ -710,23 +710,23 @@ export function FloorClient({
                         Auto-expire the badge after a few minutes so it can't go stale
                         (there's no per-order timestamp; use the check's open time). */}
                     {open && open.new_guest_items && minutesOpen(open.opened_at) < 15 && (
-                      <span className="absolute top-1 right-1 flex items-center gap-0.5 rounded-full bg-indigo-500 text-white text-[9px] font-semibold px-1.5 py-0.5 leading-none">
+                      <span className="absolute top-1 right-1 flex items-center gap-0.5 rounded-full bg-indigo-500 text-white text-[10px] font-semibold px-1.5 py-0.5 leading-none">
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                         New
                       </span>
                     )}
-                    {secColor && !open && sec?.server && <span className="text-[10px] truncate max-w-full" style={{ color: secColor }}>{sec.server}</span>}
+                    {secColor && !open && sec?.server && <span className="text-[11px] truncate max-w-full" style={{ color: secColor }}>{sec.server}</span>}
                     <span className="text-sm font-medium truncate max-w-full">{displayLabel}</span>
                     {open ? (
                       <>
                         <span className="text-sm tabular-nums font-medium">{"$" + open.subtotal.toFixed(2)}</span>
-                        {!short && <span className="text-[11px] opacity-80 truncate max-w-full">{formatDuration(minutesOpen(open.opened_at)) + (open.server_name ? " · " + open.server_name : "")}</span>}
+                        {!short && <span className="text-[12px] opacity-80 truncate max-w-full">{formatDuration(minutesOpen(open.opened_at)) + (open.server_name ? " · " + open.server_name : "")}</span>}
                       </>
                     ) : (
                       !short && (
                         <>
-                          {isTable && <span className="text-[11px] rounded-full bg-background/60 border border-border px-2 py-0.5 text-muted-foreground">{(seats > 0 ? seats : 2) + " seats"}</span>}
-                          <span className="text-[11px] text-muted-foreground">Available</span>
+                          {isTable && <span className="text-[12px] rounded-full bg-background/60 border border-border px-2 py-0.5 text-muted-foreground">{(seats > 0 ? seats : 2) + " seats"}</span>}
+                          <span className="text-[12px] text-muted-foreground">Available</span>
                         </>
                       )
                     )}
@@ -737,7 +737,7 @@ export function FloorClient({
           )}
           {error && <p className="text-sm text-red-600 absolute bottom-2 left-3 z-10">{error}</p>}
           {/* Status-color legend key — one unambiguous mapping; section is a dot. */}
-          <div className="absolute bottom-2 right-2 z-10 hidden sm:flex items-center gap-3 rounded-lg border border-border bg-card/90 backdrop-blur px-3 py-1.5 text-[10px] text-muted-foreground shadow-elevation-sm">
+          <div className="absolute bottom-2 right-2 z-10 hidden sm:flex items-center gap-3 rounded-lg border border-border bg-card/90 backdrop-blur px-3 py-1.5 text-[11px] text-muted-foreground shadow-elevation-sm">
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm border bg-table-available-bg border-table-available-border" />Available</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm border bg-table-seated-bg border-table-seated-border" />Occupied</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm border bg-table-warn-bg border-table-warn-border" />Warning</span>
@@ -752,24 +752,24 @@ export function FloorClient({
           <aside className="shrink-0 w-52 border-l border-border bg-card overflow-y-auto p-2 space-y-2">
             {visibleTabs.length > 0 && (
               <>
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground px-1 pt-1">Bar tabs</div>
+                <div className="text-[12px] uppercase tracking-wide text-muted-foreground px-1 pt-1">Bar tabs</div>
                 {visibleTabs.map((t) => (
                   <button key={t.id} type="button" disabled={pending} onClick={() => resumeTab(t)} className="w-full text-left rounded-lg border border-border bg-accent/40 p-2.5 active:scale-[0.98] transition-transform">
                     <div className="font-medium text-sm truncate">{t.name ?? "Tab"}</div>
                     <div className="text-sm tabular-nums font-medium">{"$" + t.subtotal.toFixed(2)}</div>
-                    <div className="text-[11px] text-muted-foreground truncate">{(t.server_name ? t.server_name + "  ·  " : "") + formatDuration(minutesOpen(t.opened_at))}</div>
+                    <div className="text-[12px] text-muted-foreground truncate">{(t.server_name ? t.server_name + "  ·  " : "") + formatDuration(minutesOpen(t.opened_at))}</div>
                   </button>
                 ))}
               </>
             )}
             {visibleTogo.length > 0 && (
               <>
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground px-1 pt-1">Takeout</div>
+                <div className="text-[12px] uppercase tracking-wide text-muted-foreground px-1 pt-1">Takeout</div>
                 {visibleTogo.map((t) => (
                   <button key={t.id} type="button" disabled={pending} onClick={() => resumeTogo(t)} className="w-full text-left rounded-lg border border-table-warn-border bg-table-warn-bg p-2.5 active:scale-[0.98] transition-transform">
                     <div className="font-medium text-sm truncate text-table-warn-fg">{t.name ?? "Takeout"}</div>
                     <div className="text-sm tabular-nums font-medium">{"$" + t.subtotal.toFixed(2)}</div>
-                    <div className="text-[11px] text-muted-foreground truncate">{(t.phone ? t.phone + "  ·  " : "") + formatDuration(minutesOpen(t.opened_at))}</div>
+                    <div className="text-[12px] text-muted-foreground truncate">{(t.phone ? t.phone + "  ·  " : "") + formatDuration(minutesOpen(t.opened_at))}</div>
                   </button>
                 ))}
               </>

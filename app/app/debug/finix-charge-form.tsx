@@ -44,7 +44,7 @@ export function FinixChargeForm() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mr-1 self-center">
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mr-1 self-center">
           Test cards:
         </span>
         {TEST_CARDS.map((c) => (
@@ -159,7 +159,7 @@ export function FinixChargeForm() {
           <div className="text-sm font-medium text-red-900">✗ Failed</div>
           <div className="text-xs text-red-800">{result.error}</div>
           {result.details ? (
-            <pre className="text-[11px] bg-white border border-red-200 rounded p-2 overflow-x-auto text-gray-700 mt-2">
+            <pre className="text-[12px] bg-white border border-red-200 rounded p-2 overflow-x-auto text-gray-700 mt-2">
               {JSON.stringify(result.details, null, 2)}
             </pre>
           ) : null}

@@ -81,8 +81,8 @@ export default async function ShiftLogPage({ searchParams }: { searchParams: Pro
                   return (
                     <div key={l.id as string} className="p-3">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className={"inline-block rounded-full px-2 py-0.5 text-[11px] font-medium " + m.cls}>{m.label}</span>
-                        <span className="text-[11px] text-muted-foreground">{fmtTime(l.created_at as string)}{l.author_name ? " · " + l.author_name : ""}</span>
+                        <span className={"inline-block rounded-full px-2 py-0.5 text-[12px] font-medium " + m.cls}>{m.label}</span>
+                        <span className="text-[12px] text-muted-foreground">{fmtTime(l.created_at as string)}{l.author_name ? " · " + l.author_name : ""}</span>
                         <span className="ml-auto"><DeleteLogButton id={l.id as string} /></span>
                       </div>
                       <p className="text-sm whitespace-pre-wrap">{l.body as string}</p>
