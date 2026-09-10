@@ -71,11 +71,18 @@ function businessRevenue(trip: TripData): number {
 // under one `if` is not elegant, but merging them would mean teaching one
 // dashboard two vocabularies — and the module registry already decided that
 // verticals get separate screens.
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  // The POS dashboard's scope control lives in the URL, the same way the
+  // reports page's range presets do.
+  searchParams: Promise<{ day?: string }>;
+}) {
   const { business, role } = await requireBusiness();
 
   if (business.industry !== "transportation") {
-    return <PosDashboard business={business} role={role} />;
+    const { day } = await searchParams;
+    return <PosDashboard business={business} role={role} day={day} />;
   }
 
   const vocab = getVocab(business.industry);

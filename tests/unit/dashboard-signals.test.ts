@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   agingThresholds,
   computePace,
+  cumulativeCurve,
   minutesSince,
+  niceCeiling,
   rankSignals,
   type AttentionSignal,
 } from "@/lib/services/dashboard-signals";
@@ -49,6 +51,82 @@ describe("pace against the same weekday last week", () => {
     expect(p.deltaPct).toBe(-100);
     // The full-day figure survives so the page can still draw the finish line.
     expect(p.benchmarkFull).toBe(2400);
+  });
+});
+
+describe("the cumulative sales curve", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const start = 1_000_000_000_000;
+
+  it("accumulates rather than reporting each interval on its own", () => {
+    const curve = cumulativeCurve(
+      [
+        { at: start + DAY * 0.1, amount: 100 },
+        { at: start + DAY * 0.6, amount: 50 },
+      ],
+      start,
+      DAY,
+      4
+    );
+    expect(curve).toEqual([100, 100, 150, 150]);
+  });
+
+  it("drops timestamps outside the day instead of clamping them", () => {
+    // A clamped stray row lands on the first or last sample and reads as a
+    // rush that never happened.
+    const curve = cumulativeCurve(
+      [
+        { at: start - 60_000, amount: 900 },
+        { at: start + DAY + 60_000, amount: 900 },
+        { at: start + DAY * 0.5, amount: 10 },
+      ],
+      start,
+      DAY,
+      4
+    );
+    expect(curve).toEqual([0, 0, 10, 10]);
+  });
+
+  it("survives the rows a real table hands back", () => {
+    const curve = cumulativeCurve(
+      [
+        { at: null, amount: 500 },
+        { at: "not a date", amount: 500 },
+        { at: new Date(start + DAY * 0.3).toISOString(), amount: 25 },
+      ],
+      start,
+      DAY,
+      2
+    );
+    expect(curve).toEqual([25, 25]);
+  });
+
+  it("returns a flat zero day rather than nothing, so the caller decides", () => {
+    // "No sales" and "no curve" are different answers; only the page knows
+    // whether a zero day is worth drawing.
+    expect(cumulativeCurve([], start, DAY, 3)).toEqual([0, 0, 0]);
+  });
+});
+
+describe("chart ticks a person would say out loud", () => {
+  it("snaps up to a round number", () => {
+    expect(niceCeiling(1)).toBe(1);
+    expect(niceCeiling(1640)).toBe(2000);
+    expect(niceCeiling(2100)).toBe(2500);
+    expect(niceCeiling(64_124)).toBe(80_000);
+    expect(niceCeiling(4_800)).toBe(5000);
+  });
+
+  it("stays close enough that a real day fills its chart", () => {
+    // A $14,570 day on a $20,000 axis spends a third of the box on nothing.
+    expect(niceCeiling(14_570)).toBe(15_000);
+    expect(niceCeiling(310)).toBe(400);
+  });
+
+  it("has no tick to offer for an empty day", () => {
+    expect(niceCeiling(0)).toBe(0);
+    expect(niceCeiling(-5)).toBe(0);
+    expect(niceCeiling(Number.NaN)).toBe(0);
   });
 });
 

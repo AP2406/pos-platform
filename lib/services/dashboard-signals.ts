@@ -72,6 +72,67 @@ export function computePace(
 }
 
 // ---------------------------------------------------------------------------
+// The cumulative sales curve
+// ---------------------------------------------------------------------------
+
+/** One settled sale, reduced to the two things a curve needs. */
+export type CurvePoint = { at: string | number | null | undefined; amount: number };
+
+/**
+ * Takings accumulated across a day, sampled at `steps` even intervals.
+ *
+ * Cumulative rather than per-interval on purpose: half-hourly bars at a single
+ * restaurant's volume are mostly noise, while the running total is the shape an
+ * owner already carries in their head — "we were at four grand by eight". Two
+ * of these on one axis *is* the pace comparison, drawn.
+ *
+ * Timestamps outside the day are dropped rather than clamped. Clamping would
+ * pile a stray row onto the first or last sample and invent a spike, and this
+ * function has no way to tell a timezone bug from a real late-night sale.
+ */
+export function cumulativeCurve(
+  sales: CurvePoint[],
+  startMs: number,
+  lengthMs: number,
+  steps: number
+): number[] {
+  const n = Math.max(1, Math.floor(steps));
+  const buckets = new Array<number>(n).fill(0);
+  if (!(lengthMs > 0)) return buckets;
+
+  for (const s of sales) {
+    const t =
+      typeof s.at === "number" ? s.at : s.at ? new Date(s.at).getTime() : Number.NaN;
+    if (!Number.isFinite(t)) continue;
+    const frac = (t - startMs) / lengthMs;
+    if (frac < 0 || frac >= 1) continue;
+    buckets[Math.floor(frac * n)] += Number.isFinite(s.amount) ? s.amount : 0;
+  }
+
+  let running = 0;
+  return buckets.map((b) => (running += b));
+}
+
+/**
+ * The next round number at or above `value`, for a chart's top gridline.
+ *
+ * Lightspeed's axis reads $64,124 / $54,963 / $45,803 — computed from the
+ * series max and legible to nobody. A tick is a reference point, so it has to
+ * be a number a person would say out loud.
+ */
+export function niceCeiling(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  // Fine enough that a $14,570 day doesn't get a $20,000 axis and spend a
+  // third of the chart drawing empty space, coarse enough that every rung is
+  // still a round figure.
+  const ladder = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+  const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
+  const normalised = value / magnitude;
+  const step = ladder.find((s) => normalised <= s) ?? 10;
+  return step * magnitude;
+}
+
+// ---------------------------------------------------------------------------
 // The attention rail
 // ---------------------------------------------------------------------------
 

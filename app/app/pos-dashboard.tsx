@@ -9,9 +9,11 @@ import { evaluateReadiness } from "@/lib/services/launch-readiness";
 import {
   agingThresholds,
   computePace,
+  cumulativeCurve,
   minutesSince,
   rankSignals,
   type AttentionSignal,
+  type CurvePoint,
 } from "@/lib/services/dashboard-signals";
 import {
   AttentionRail,
@@ -22,6 +24,7 @@ import {
   money,
   type CheckRow,
   type OpsStat,
+  type PaceCurve,
 } from "./dashboard-modules";
 import Link from "next/link";
 import { ChefHat, Package, Users } from "lucide-react";
@@ -98,12 +101,18 @@ function channelLabel(channel: unknown, snapshot: unknown): string | null {
   return dining[d] ?? null;
 }
 
+/** Half-hourly: fine enough to show a rush, coarse enough to stay a line. */
+const CHART_STEPS = 48;
+
 export async function PosDashboard({
   business,
   role,
+  day,
 }: {
   business: Biz;
   role: string | null | undefined;
+  /** The scope control's only value. Anything but "yesterday" means today. */
+  day?: string;
 }) {
   const supabase = await createClient();
   const tz = business.timezone || "America/Toronto";
@@ -156,24 +165,48 @@ export async function PosDashboard({
   const aging = agingThresholds(settings);
 
   // --- Time windows --------------------------------------------------------
+  //
+  // The scope control moves the sales figures and nothing else. An exception
+  // rail scoped to yesterday would list tickets nobody can still act on, which
+  // is the opposite of what a rail is for — so the alerts, the ops blocks and
+  // the register stay live whatever the control says, and the strip says so.
+  const scope: "today" | "yesterday" = day === "yesterday" ? "yesterday" : "today";
+
+  // todayStart keeps its literal meaning: it is what "a till from a previous
+  // day" is measured against, and that question is never about the scoped day.
   const { start: todayStart, end: todayEnd } = getTodayBoundsUTC(tz);
-  const dayLengthMs = todayEnd.getTime() - todayStart.getTime();
-  const elapsedMs = Math.max(0, Math.min(now - todayStart.getTime(), dayLengthMs));
+  const { start: dayStart, end: dayEnd } =
+    scope === "yesterday"
+      ? getDayBoundsUTC(new Date(now - 24 * 60 * 60 * 1000), tz)
+      : { start: todayStart, end: todayEnd };
+
+  const dayLengthMs = dayEnd.getTime() - dayStart.getTime();
+  // A finished day is measured whole; a running one is measured up to this
+  // minute. That difference is the whole reason the comparison is honest.
+  const elapsedMs =
+    scope === "yesterday"
+      ? dayLengthMs
+      : Math.max(0, Math.min(now - dayStart.getTime(), dayLengthMs));
 
   // Same weekday last week, not yesterday: a Tuesday compared to a Monday is a
   // comparison that reads as a crisis every Monday. See computePace().
+  // Probed from the middle of the scoped day so a DST shift can't land the
+  // arithmetic on the wrong local date.
+  const dayNoonMs = dayStart.getTime() + dayLengthMs / 2;
   const { start: benchStart, end: benchEnd } = getDayBoundsUTC(
-    new Date(now - 7 * 24 * 60 * 60 * 1000),
+    new Date(dayNoonMs - 7 * 24 * 60 * 60 * 1000),
     tz
   );
+  const benchLengthMs = benchEnd.getTime() - benchStart.getTime();
   const benchCutoff = benchStart.getTime() + elapsedMs;
 
   const orderSel =
     "id, sale_number, total, created_at, status, payment_method, is_training, channel, snapshot, staff_id";
 
   const [
-    todayRes,
+    dayRes,
     benchRes,
+    todayCountRes,
     recentRes,
     catalogRes,
     ticketsRes,
@@ -186,14 +219,15 @@ export async function PosDashboard({
   ] = await Promise.all([
     // THE page query. An empty dashboard has to mean "no sales today" and can
     // never mean "the select was wrong" — must() throws so the error boundary
-    // shows the failure instead of a convincing $0.00.
+    // shows the failure instead of a convincing $0.00. created_at rides along
+    // because the chart needs to know when in the day each sale landed.
     supabase
       .from("orders")
-      .select("total, is_training")
+      .select("total, created_at, is_training")
       .eq("business_id", business.id)
       .neq("status", "voided")
-      .gte("created_at", todayStart.toISOString())
-      .lt("created_at", todayEnd.toISOString()),
+      .gte("created_at", dayStart.toISOString())
+      .lt("created_at", dayEnd.toISOString()),
 
     supabase
       .from("orders")
@@ -202,6 +236,19 @@ export async function PosDashboard({
       .neq("status", "voided")
       .gte("created_at", benchStart.toISOString())
       .lt("created_at", benchEnd.toISOString()),
+
+    // The Service block says "N sales today" and means it, so when the scope
+    // control is pointed at yesterday it needs its own count rather than
+    // relabelling the one above.
+    scope === "yesterday"
+      ? supabase
+          .from("orders")
+          .select("id, is_training")
+          .eq("business_id", business.id)
+          .neq("status", "voided")
+          .gte("created_at", todayStart.toISOString())
+          .lt("created_at", todayEnd.toISOString())
+      : NOT_ASKED,
 
     supabase
       .from("orders")
@@ -280,6 +327,7 @@ export async function PosDashboard({
   // "no rows" — so we keep the error flag alongside every list. That flag is
   // what lets a module say "couldn't load" instead of quietly showing a zero.
   const benchFailed = benchRes.error != null;
+  const todayCountFailed = todayCountRes.error != null;
   const recentFailed = recentRes.error != null;
   const catalogFailed = catalogRes.error != null;
   const ticketsFailed = ticketsRes.error != null;
@@ -289,8 +337,12 @@ export async function PosDashboard({
   const clockFailed = clockRes.error != null;
   const staffFailed = staffRes.error != null;
 
-  const todayRows = must("today's sales", todayRes) as Row[];
+  const dayRows = must(
+    scope === "today" ? "today's sales" : "yesterday's sales",
+    dayRes
+  ) as Row[];
   const benchRows = soft("dashboard → same weekday last week", benchRes, [] as Row[]);
+  const todayCountRows = soft("dashboard → today's sale count", todayCountRes, [] as Row[]);
   const recentRows = soft("dashboard → recent sales", recentRes, [] as Row[]);
   const items = soft("dashboard → menu & stock", catalogRes, [] as Row[]);
   const openChecks = soft("dashboard → open checks", ticketsRes, [] as Row[]);
@@ -302,33 +354,74 @@ export async function PosDashboard({
   const staff = soft("dashboard → staff", staffRes, [] as Row[]);
 
   // --- 1 · Today, with pace ------------------------------------------------
-  let todayGross = 0;
-  let todayCount = 0;
-  for (const o of todayRows) {
+  let dayGross = 0;
+  let dayCount = 0;
+  const dayPoints: CurvePoint[] = [];
+  for (const o of dayRows) {
     if (o.is_training) continue;
-    todayGross += num(o.total);
-    todayCount += 1;
+    const t = num(o.total);
+    dayGross += t;
+    dayCount += 1;
+    dayPoints.push({ at: o.created_at, amount: t });
   }
 
   let benchSoFar = 0;
   let benchFull = 0;
+  const benchPoints: CurvePoint[] = [];
   for (const o of benchRows) {
     if (o.is_training) continue;
     const t = num(o.total);
     benchFull += t;
     if (new Date(o.created_at).getTime() < benchCutoff) benchSoFar += t;
+    benchPoints.push({ at: o.created_at, amount: t });
   }
-  const pace = computePace(todayGross, benchSoFar, benchFull);
+  const pace = computePace(dayGross, benchSoFar, benchFull);
+
+  // Sales today, whichever day the sales figures are pointed at.
+  const salesTodayCount =
+    scope === "yesterday"
+      ? todayCountRows.filter((o: Row) => !o.is_training).length
+      : dayCount;
 
   const weekday = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz,
     weekday: "long",
-  }).format(new Date(benchStart.getTime() + dayLengthMs / 2));
-  const benchTimeLabel = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(now));
+  }).format(new Date(benchStart.getTime() + benchLengthMs / 2));
+  // Null once the day being shown is over: "at 2:15 p.m." would be describing
+  // a truncation that no longer happens.
+  const benchTimeLabel =
+    scope === "today"
+      ? new Intl.DateTimeFormat("en-CA", {
+          timeZone: tz,
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(new Date(now))
+      : null;
+
+  // The chart is the pace comparison drawn, so it is built from exactly the
+  // same rows. The benchmark series is withheld — not zeroed — when the query
+  // failed or the day genuinely took nothing, because a line pinned to the
+  // floor looks like a reading and a missing line does not.
+  const elapsedFrac = dayLengthMs > 0 ? elapsedMs / dayLengthMs : 1;
+  const curve: PaceCurve = {
+    today: cumulativeCurve(dayPoints, dayStart.getTime(), dayLengthMs, CHART_STEPS).slice(
+      0,
+      Math.max(1, Math.min(CHART_STEPS, Math.ceil(elapsedFrac * CHART_STEPS)))
+    ),
+    benchmark:
+      benchFailed || benchFull <= 0
+        ? []
+        : cumulativeCurve(benchPoints, benchStart.getTime(), benchLengthMs, CHART_STEPS),
+    steps: CHART_STEPS,
+    nowFrac: scope === "today" ? elapsedFrac : null,
+    xLabels: [0.25, 0.5, 0.75].map((at) => ({
+      at,
+      text: new Intl.DateTimeFormat("en-CA", {
+        timeZone: tz,
+        hour: "numeric",
+      }).format(new Date(dayStart.getTime() + dayLengthMs * at)),
+    })),
+  };
 
   const liveRecent = recentRows.filter((o: Row) => !o.is_training);
   const lastSale = liveRecent[0];
@@ -581,9 +674,17 @@ export async function PosDashboard({
     serviceStats.push({ value: String(covers), label: "covers seated", muted: covers === 0 });
   } else if (hasKitchen) {
     serviceStats.push({ value: String(kitchenTickets.length), label: "tickets in the kitchen" });
-    serviceStats.push({ value: String(todayCount), label: "sales today", muted: todayCount === 0 });
+    serviceStats.push({
+      value: String(salesTodayCount),
+      label: "sales today",
+      muted: salesTodayCount === 0,
+    });
   } else {
-    serviceStats.push({ value: String(todayCount), label: "sales today", muted: todayCount === 0 });
+    serviceStats.push({
+      value: String(salesTodayCount),
+      label: "sales today",
+      muted: salesTodayCount === 0,
+    });
   }
 
   if (drawerStale && openDrawer) {
@@ -705,15 +806,25 @@ export async function PosDashboard({
     });
   }
 
+  // The heading names the day the sales figures cover, so it follows the scope
+  // control rather than the wall clock.
   const dateLabel = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz,
     weekday: "long",
     month: "long",
     day: "numeric",
-  }).format(new Date());
+  }).format(new Date(dayNoonMs));
+
+  // A server-rendered link pair, the same shape as /app/reports' range presets.
+  // Client state buys nothing here: there are two destinations and both are
+  // real URLs an owner can bookmark or hand to a manager.
+  const scopes: { key: "today" | "yesterday"; label: string; href: string }[] = [
+    { key: "today", label: "Today", href: "/app" },
+    { key: "yesterday", label: "Yesterday", href: "/app?day=yesterday" },
+  ];
 
   return (
-    <div className="max-w-5xl space-y-4">
+    <div className="max-w-7xl space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           {/* No "Welcome back". The heading's job is to say which day's numbers
@@ -740,79 +851,133 @@ export async function PosDashboard({
         </div>
       </div>
 
-      {showReadiness && readiness && <ReadinessPanel report={readiness} />}
-
-      <TodayModule
-        pace={pace}
-        saleCount={todayCount}
-        currency={currency}
-        weekday={weekday}
-        benchmarkTimeLabel={benchTimeLabel}
-        lastSaleLabel={lastSaleLabel}
-        everSold={everSold}
-        failed={benchFailed}
-      />
-
-      <AttentionRail signals={rankedSignals} degraded={degraded} />
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <OpsBlock
-          title="Service"
-          icon={<ChefHat />}
-          stats={serviceStats}
-          state={serviceState}
-          tone={serviceTone}
-          action={
-            canCloseDay
-              ? {
-                  label: openDrawer ? "Close the day" : "Open the till",
-                  href: "/app/pos/drawer",
-                }
-              : { label: "Go to the register", href: "/app/pos" }
-          }
-          failed={runsChecks ? ticketsFailed : hasKitchen ? kitchenFailed : false}
-        />
-
-        {hasCatalog && (
-          <OpsBlock
-            title="Menu & stock"
-            icon={<Package />}
-            stats={menuStats}
-            state={menuState}
-            tone={menuTone}
-            // Read-only for everyone (staff have always been able to look at the
-            // menu), but only the people who can change it get the way in.
-            action={canEditMenu ? { label: "Manage menu", href: "/app/catalog" } : null}
-            failed={catalogFailed}
-          />
-        )}
-
-        {hasStaff && (
-          <OpsBlock
-            title="Team"
-            icon={<Users />}
-            stats={teamStats}
-            state={teamState}
-            tone={teamTone}
-            action={
-              canEditStaff
-                ? runsChecks
-                  ? { label: "Attendance", href: "/app/attendance" }
-                  : { label: "Manage staff", href: "/app/staff" }
-                : null
-            }
-            failed={staffFailed || (runsChecks && clockFailed)}
-          />
-        )}
+      {/* Every back office in the category puts a scope control right here, and
+          a page without one reads as unfinished even to someone who can't say
+          why. Ours is narrow on purpose — it moves the sales figures and says
+          so, rather than pretending to scope alerts that are only ever live. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="inline-flex items-center rounded-lg bg-raised ring-1 ring-line p-0.5">
+          {scopes.map((s) => (
+            <Link
+              key={s.key}
+              href={s.href}
+              aria-current={s.key === scope ? "page" : undefined}
+              className={
+                "rounded-md px-3 py-1 text-[13px] transition-colors " +
+                (s.key === scope
+                  ? "bg-card font-medium text-foreground shadow-elevation-sm"
+                  : "text-muted-foreground hover:text-foreground")
+              }
+            >
+              {s.label}
+            </Link>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Sets which day the sales figures cover. The alerts and the register
+          below are always live.
+        </p>
       </div>
 
-      <ChecksTable
-        rows={checkRows}
-        failed={recentFailed}
-        title={runsChecks ? "Open & recent checks" : "Recent sales"}
-        href="/app/orders"
-        hrefLabel="All orders"
-      />
+      {showReadiness && readiness && <ReadinessPanel report={readiness} />}
+
+      {/* Two columns at desktop width, so the page has a silhouette instead of
+          five identical full-width bands. The order utilities matter: collapsed
+          to one column the reading order has to stay sales → alerts → ops →
+          register, which is the priority order this page exists to express. */}
+      <div className="grid grid-cols-1 gap-4 items-start lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr]">
+        <div className="order-1 min-w-0 lg:col-start-1 lg:row-start-1">
+          <TodayModule
+            pace={pace}
+            saleCount={dayCount}
+            currency={currency}
+            weekday={weekday}
+            scope={scope}
+            benchmarkTimeLabel={benchTimeLabel}
+            lastSaleLabel={lastSaleLabel}
+            everSold={everSold}
+            failed={benchFailed}
+            curve={curve}
+          />
+        </div>
+
+        <div className="order-2 min-w-0 flex flex-col gap-4 lg:col-start-2 lg:row-start-1 lg:row-span-2">
+          <AttentionRail signals={rankedSignals} degraded={degraded} />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
+            <OpsBlock
+              title="Service"
+              icon={<ChefHat />}
+              stats={serviceStats}
+              state={serviceState}
+              tone={serviceTone}
+              action={
+                canCloseDay
+                  ? {
+                      label: openDrawer ? "Close the day" : "Open the till",
+                      href: "/app/pos/drawer",
+                    }
+                  : { label: "Go to the register", href: "/app/pos" }
+              }
+              failed={
+                runsChecks
+                  ? ticketsFailed
+                  : hasKitchen
+                    ? kitchenFailed || todayCountFailed
+                    : todayCountFailed
+              }
+            />
+
+            {hasCatalog && (
+              <OpsBlock
+                title="Menu & stock"
+                icon={<Package />}
+                stats={menuStats}
+                state={menuState}
+                tone={menuTone}
+                // Read-only for everyone (staff have always been able to look at
+                // the menu), but only the people who can change it get the way in.
+                action={canEditMenu ? { label: "Manage menu", href: "/app/catalog" } : null}
+                failed={catalogFailed}
+              />
+            )}
+
+            {hasStaff && (
+              <OpsBlock
+                title="Team"
+                icon={<Users />}
+                stats={teamStats}
+                state={teamState}
+                tone={teamTone}
+                action={
+                  canEditStaff
+                    ? runsChecks
+                      ? { label: "Attendance", href: "/app/attendance" }
+                      : { label: "Manage staff", href: "/app/staff" }
+                    : null
+                }
+                failed={staffFailed || (runsChecks && clockFailed)}
+              />
+            )}
+          </div>
+        </div>
+
+        <div className="order-3 min-w-0 lg:col-start-1 lg:row-start-2">
+          <ChecksTable
+            rows={checkRows}
+            failed={recentFailed}
+            title={runsChecks ? "Open & recent checks" : "Recent sales"}
+            subtitle={
+              runsChecks
+                ? "Open checks first, then the last few settled sales — live, not scoped to the day above."
+                : "The last few settled sales, newest first — live, not scoped to the day above."
+            }
+            itemHeading={runsChecks ? "Check" : "Sale"}
+            href="/app/orders"
+            hrefLabel="All orders"
+          />
+        </div>
+      </div>
     </div>
   );
 }
