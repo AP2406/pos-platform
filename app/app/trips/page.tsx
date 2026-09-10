@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { requireModule } from "@/lib/modules/access";
 import { getVocab } from "@/lib/modules/resolve";
 import { BookTripSheet } from "./book-trip-sheet";
 import { TripRowActions } from "./trip-row-actions";
@@ -28,6 +29,7 @@ export default async function TripsPage({
   searchParams: Promise<{ handled?: string; view?: string }>;
 }) {
   const { business } = await requireBusiness();
+  requireModule(business, "/app/trips");
   const vocab = getVocab(business.industry);
   const { handled, view } = await searchParams;
   const supabase = await createClient();

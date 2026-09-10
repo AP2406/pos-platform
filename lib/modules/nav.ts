@@ -15,7 +15,7 @@
 
 import type { PermissionKey } from "@/lib/services/permissions";
 import { canOpenRoute } from "@/lib/services/route-access";
-import { getPreset } from "./resolve";
+import { enabledModules, getPreset } from "./resolve";
 import { MODULES, type ModuleKey } from "./registry";
 import { resolveLabel } from "./resolve";
 
@@ -134,11 +134,12 @@ export function buildNav(ctx: NavBuildContext): NavSection[] {
     config: [],
   };
 
-  // 1. Core modules for this mode, in preset order. Permission-filtered like
-  //    everything else — /app/staff is a core module but its page redirects
-  //    anyone without edit_staff, so showing it to a server was a dead link.
-  for (const key of preset.modules) {
-    if (key === "drivers" && ctx.driversEnabled === false) continue;
+  // 1. Core modules for this mode, in preset order. enabledModules() is the
+  //    same list lib/modules/access.ts guards the pages with, so a mode's menu
+  //    and its live URLs describe the same product. Permission-filtered on top
+  //    of that — /app/staff is a core module but its page redirects anyone
+  //    without edit_staff, so showing it to a server was a dead link.
+  for (const key of enabledModules(ctx)) {
     const def = MODULES[key];
     if (!def) continue;
     if (!canOpenRoute(ctx.role, def.href)) continue;

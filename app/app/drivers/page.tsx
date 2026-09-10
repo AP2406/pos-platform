@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { requireModule } from "@/lib/modules/access";
 import { DriverDialog } from "./driver-dialog";
 import { PageHeader, EmptyState } from "../_components/ui";
 import { getVocab } from "@/lib/modules/resolve";
@@ -10,6 +11,7 @@ type DriverRow = any;
 
 export default async function DriversPage() {
   const { business } = await requireBusiness();
+  requireModule(business, "/app/drivers");
   const vocab = getVocab(business.industry);
   const supabase = await createClient();
   const { data: drivers } = await supabase

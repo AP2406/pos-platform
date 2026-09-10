@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { requireModule } from "@/lib/modules/access";
 import { AddPartnerSheet } from "./add-partner-sheet";
 import { PageHeader, EmptyState } from "../_components/ui";
 
@@ -8,7 +9,8 @@ import { PageHeader, EmptyState } from "../_components/ui";
 type PartnerRow = any;
 
 export default async function PartnersPage() {
-  await requireBusiness();
+  const { business } = await requireBusiness();
+  requireModule(business, "/app/partners");
   const supabase = await createClient();
 
   const { data: partners } = await supabase

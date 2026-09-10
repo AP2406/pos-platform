@@ -1,5 +1,5 @@
 // lib/modules/resolve.ts
-import { MODULES, ModuleDef, Vocab } from "./registry";
+import { MODULES, ModuleDef, ModuleKey, Vocab } from "./registry";
 import { PRESETS, Preset, FieldDef } from "./presets";
 import { validateConfig } from "./config";
 
@@ -10,11 +10,14 @@ export type BusinessConfigInput = {
 
 type ResolveArg = string | null | undefined | BusinessConfigInput;
 
-export type NavContext = {
+export type ModuleContext = {
   industry?: string | null;
   config?: unknown;
-  driversEnabled?: boolean;
+  /** Mirrors businesses.drivers_enabled — the driver roster's opt-out. */
+  driversEnabled?: boolean | null;
 };
+
+export type NavContext = ModuleContext;
 
 export type NavItem = { key: string; href: string; label: string; icon: string };
 
@@ -40,6 +43,26 @@ export function getFields(arg: ResolveArg): FieldDef[] {
   return getPreset(arg).fields ?? [];
 }
 
+/**
+ * The modules this business actually runs, in preset order.
+ *
+ * One list with three consumers — resolveNav(), buildNav() and the page guards
+ * in lib/modules/access.ts — so the sidebar can't offer a route the guard would
+ * bounce, or hide one it would allow. Two things drop out of the raw preset:
+ *
+ *   - drivers, when the business switched the roster off in settings.
+ *   - anything flagged `unbuilt` in the registry, so a stored config can never
+ *     point a tenant's sidebar at a route that doesn't exist.
+ */
+export function enabledModules(ctx: ModuleContext): ModuleKey[] {
+  const preset = getPreset({ industry: ctx.industry, config: ctx.config });
+  return preset.modules.filter((key) => {
+    if (key === "drivers" && ctx.driversEnabled === false) return false;
+    const def = MODULES[key];
+    return def != null && def.unbuilt !== true;
+  });
+}
+
 export function resolveLabel(def: ModuleDef, preset: Preset): string {
   if (preset.labels && preset.labels[def.key]) return preset.labels[def.key] as string;
   if (def.vocabKey) {
@@ -53,8 +76,9 @@ export function resolveLabel(def: ModuleDef, preset: Preset): string {
 export function resolveNav(ctx: NavContext): NavItem[] {
   const preset = getPreset({ industry: ctx.industry, config: ctx.config });
   const items: NavItem[] = [];
-  for (const key of preset.modules) {
-    if (key === "drivers" && ctx.driversEnabled === false) continue;
+  // enabledModules() owns "which modules is this business actually running",
+  // so the menu and the page guards in lib/modules/access.ts can't drift apart.
+  for (const key of enabledModules(ctx)) {
     const def = MODULES[key];
     if (!def) continue;
     items.push({

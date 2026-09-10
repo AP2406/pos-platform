@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
+import { requireModule } from "@/lib/modules/access";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
@@ -60,6 +61,7 @@ export default async function TripDetailPage({
 }) {
   const { id } = await params;
   const { business } = await requireBusiness();
+  requireModule(business, "/app/trips");
   const vocab = getVocab(business.industry);
   const supabase = await createClient();
 
