@@ -18,11 +18,13 @@ export default function OpengraphImage() {
           justifyContent: "center",
           padding: "80px",
           color: "#ffffff",
-          // The kit's presentation ink, replacing the old #0b0e14, and a wash
-          // in the kit blue rather than the sky-blue #38bdf8 it used to use.
+          // The kit's presentation ink. FLAT: there was a 900x520 radial wash
+          // in the kit blue over the top-right of this card, and a radial wash
+          // is a gradient with no flat equivalent that isn't a coloured
+          // rectangle across a social card. The ink alone is what the kit
+          // specifies as the presentation background, and the blue on the card
+          // is now only where the blue belongs — in the mark.
           backgroundColor: "#101318",
-          backgroundImage:
-            "radial-gradient(900px 520px at 78% 26%, rgba(0,140,255,0.26), transparent 60%)",
           fontFamily: "sans-serif",
         }}
       >

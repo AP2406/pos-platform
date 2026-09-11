@@ -6,7 +6,7 @@ type MetricTone = "default" | "warning" | "danger" | "success"
 
 /**
  * Dashboard/reports metric: quiet label + optional icon, big value, helper line.
- * Set `hero` for the single most important number on a screen (gradient accent).
+ * Set `hero` for the single most important number on a screen (brand accent).
  */
 function MetricCard({
   label,
@@ -48,12 +48,14 @@ function MetricCard({
           "mt-3 font-bold tabular-nums tracking-tight leading-none",
           hero ? "text-3xl" : "text-2xl",
           hero
-            // One hue across the sweep — the blue→teal it replaces was drawn
-            // from the retired mark's cyan, which the new kit does not have.
-            // Both stops are the brand blue and its working rung; at text-3xl
-            // bold this is WCAG large text, and the lighter stop measures
-            // 3.39:1 on a white card against a 3:1 requirement.
-            ? "bg-gradient-to-r from-brand to-primary bg-clip-text text-transparent"
+            // Flat --brand, where this was a --brand -> --primary sweep clipped
+            // to the text. The accent is the point of the hero value, so it
+            // keeps the brand blue rather than dropping to --foreground; what
+            // goes is the sweep. The old measurement was taken at the sweep's
+            // lightest point, which WAS --brand, so the number does not move:
+            // 3.40:1 on a white card, 5.27:1 on a dark one. At text-3xl bold
+            // this is WCAG large text, floor 3:1.
+            ? "text-brand"
             : tone === "warning"
             ? "text-amber-500"
             : tone === "danger"

@@ -18,9 +18,20 @@ export const btnPrimary = "rounded-[4px] bg-[#0A2540] px-7 py-3.5 text-[15.5px] 
 export const btnOutline = "rounded-[4px] border-[1.5px] border-[#0A2540] px-7 py-3.5 text-center text-[15.5px] font-bold text-[#0A2540] transition-colors hover:bg-[#F4F7FA]";
 export const btnWhite = "rounded-[4px] bg-white px-7 py-3.5 text-[15.5px] font-bold text-[#0A2540] transition-colors hover:bg-[#F4F7FA]";
 
+// THE HERO BAND IS FLAT. It was `linear-gradient(180deg,#F4F7FA,#FFFFFF)` here
+// and on five other marketing routes — a tint fading into the white of the
+// section below it. Flat #F4F7FA is the top stop, i.e. the colour the band was
+// actually trying to be; what the fade was doing was hiding the seam, and the
+// seam is already drawn by `border-b border-[#D9E1EA]`. #F4F7FA against the
+// white next section is 1.08:1 — a tone difference, which is all a band needs
+// when it has a rule under it — and the copy on it measures 14.45:1 (heading),
+// 7.04:1 (body) and 4.88:1 (crumb).
+// The hex literals are the marketing surface's own convention: these routes
+// are deliberately outside the tokenised admin palette and carry no OKLCH
+// tokens at all, so a token here would have no system to belong to.
 export function PageHero({ crumb, title, sub }: { crumb: string; title: string; sub?: string }) {
   return (
-    <section className="border-b border-[#D9E1EA] bg-[linear-gradient(180deg,#F4F7FA,#FFFFFF)]">
+    <section className="border-b border-[#D9E1EA] bg-[#F4F7FA]">
       <div className="mx-auto max-w-3xl px-6 pb-14 pt-40 text-center">
         <Crumb>{crumb}</Crumb>
         <h1 className="mt-4 text-[40px] font-bold leading-[1.12] tracking-[-0.015em] text-[#0A2540] sm:text-[46px]">{title}</h1>

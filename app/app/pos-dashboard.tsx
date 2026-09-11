@@ -1153,22 +1153,13 @@ export async function PosDashboard({
   ];
 
   return (
-    // `isolate` is doing real work: it makes this element a stacking context,
-    // which is what lets the lit-canvas layer sit at -z-10 (behind every card's
-    // background, which is unpositioned and therefore paints below positioned
-    // siblings) without escaping behind the app shell's own background. The
-    // grain sits at the other end, above everything, because grain belongs to
-    // the photograph rather than to one object in it.
+    // `isolate` still earns its place: the grain layer sits above everything
+    // at z-10 and this is what keeps it scoped to the dashboard rather than
+    // resolving against the page root and covering the app shell.
+    // D0 · THE LIT CANVAS IS GONE. It was two radial washes anchored above the
+    // top edge — a gradient page background by any other name. The canvas is
+    // the flat --background now.
     <div className="relative isolate max-w-7xl">
-      {/* D0 · The light. An ellipse anchored above the top edge and wider than
-          the content box, so what reaches the screen is the middle of a
-          falloff and never an arc. It stops after 620px — this is the light
-          on the top of the page, not a gradient background. */}
-      <div
-        aria-hidden
-        className="u-canvas absolute -inset-x-8 -top-24 -z-10 h-[620px]"
-      />
-
       {/* THE VERTICAL SCALE. Two steps and no others: 28px between major bands
           (the title block, the KPI summary, the two-column detail region, the
           operations band, the register) and 16px between cards inside a band.

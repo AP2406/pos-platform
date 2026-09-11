@@ -38,7 +38,6 @@
   --color-auth-bar: var(--auth-bar);
   --color-auth-bar-peak: var(--auth-bar-peak);
   --color-auth-scrim: var(--auth-scrim);
-  --color-auth-scrim-top: var(--auth-scrim-top);
   /* 6 and 7 exist because the payment mix has up to seven tenders — cash, card,
      other, split, gift card, store credit and third-party delivery — and a
      donut that reuses a hue for two slices is a donut that lies. */
@@ -83,7 +82,6 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
-  --color-primary-2: var(--primary-2);
   --color-primary: var(--primary);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
@@ -153,18 +151,14 @@
      hue, legible label. */
   --primary: oklch(0.54 0.2 253);
   --primary-foreground: oklch(0.99 0.002 265);
-  /* The far stop of the ONE gradient fill in the system — Button's `primary`
-     variant, which is the register's Charge key and the KDS's Done key. That
-     gradient used to run --primary -> --chart-2, i.e. blue into teal, because
-     the old mark had a cyan in it. The new mark does not: it is one blue that
-     fades toward white at the tips, so the gradient became one blue too.
-     It is a token and not `--chart-2` because the contrast of a gradient is
-     the contrast of its LIGHTEST point, and a chart series is free to move for
-     charting reasons that have nothing to do with a label sitting on it. The
-     teal end measured 3.49:1 under near-white — a failure that predates this
-     branch. Here the lightest point of the sweep is --primary itself, so the
-     key is 4.93:1 at worst and 7.24:1 at the far corner. */
-  --primary-2: oklch(0.45 0.17 253);
+  /* --primary-2 IS GONE. It existed only as the far stop of the one gradient
+     fill in the system — Button's `primary` variant, the register's Charge key
+     and the KDS's Done key. That variant is now the flat --primary, so the
+     second stop has no consumer and a token nobody reads is a token that will
+     be wrong the next time somebody edits it. Nothing is lost in contrast
+     terms: a gradient is only ever as legible as its worst point, and that
+     point was --primary itself (4.89:1 under --primary-foreground), which is
+     exactly what the flat fill now measures. */
   --secondary: oklch(0.96 0.006 265);
   --secondary-foreground: oklch(0.27 0.02 265);
   --muted: oklch(0.965 0.005 265);
@@ -193,6 +187,15 @@
      important one" purely because it is brighter. */
   --chart-6: oklch(0.62 0.17 25);
   --chart-7: oklch(0.6 0.15 330);
+
+  /* THE AREA UNDER A LINE, FLAT. One tint of the series colour, one alpha, used
+     everywhere an area is filled. It replaces a top-to-baseline fade that ran
+     0.22 down to 0; 0.14 is the alpha that puts about the same amount of ink
+     under the line without the fade, so the fill still reads as belonging to
+     the line rather than as a slab of its own. Same value in both themes on
+     purpose — one alpha, so a second area chart cannot quietly pick a
+     different one. */
+  --chart-1-area: oklch(0.64 0.2 253 / 0.14);
 
   /* The share ramp, light. One hue — the brand blue, now 253 — walked up in
      lightness while chroma comes down with it, which is what keeps the pale
@@ -338,21 +341,21 @@
      more of it — an unlit dark surface has nothing but gradient to say
      "this is a raised object", where a white card already has its own edge. */
 
-  /* D1 · The bloom behind the hero figure. Brand hue, no hard edge, and low
-     enough that it reads as the card being lit rather than as a coloured
-     shape sitting on it.
-     ALPHA CAME DOWN WITH THE HUE CHANGE (0.13 -> 0.115). The old blue was
-     0.58/0.2; the kit blue is 0.64/0.2 — six points of lightness brighter at
-     the same chroma — so the identical alpha puts visibly more colour on the
-     card. The threshold this is tuned against is "can a reader name a shape
-     here", not a number, so the alpha moves to hold the same answer. */
-  --bloom: oklch(0.64 0.2 253 / 0.115);
+  /* D1 · THE BLOOM IS GONE. It was a radial brand-hue glow behind the hero
+     figure, and a radial glow has no flat equivalent — the entire object IS
+     the falloff, so "flatten it" and "delete it" are the same edit. The card
+     already separates itself from the page with its own surface step, its
+     hairline and the one shadow on the page, which is what was carrying the
+     hero before the bloom was added and is what carries it again. */
 
-  /* D3 · The gradient-lit top border. A hairline that is brightest where the
-     light lands and gone by the far edge, replacing a uniform rule on the two
-     cards that lead their columns. Used on more than two it stops being light
-     and becomes a pattern. */
-  --lit: oklch(0.64 0.2 253 / 0.5);
+  /* D3 · The lit top border, now a FLAT hairline. It used to run brightest at
+     the left and fade out by two thirds across; flat, the same alpha would put
+     roughly twice the ink on the card and read as a brand stripe rather than
+     as light, so the value comes down to 0.40 — between the old gradient's
+     peak (0.5) and its mean. 1.63:1 against a white card: no contrast floor
+     applies to a 1px decoration that carries nothing, and the card's real
+     boundary is still --line. */
+  --lit: oklch(0.64 0.2 253 / 0.4);
 
   /* D4 · Film grain over the canvas. Light mode gets less: the noise darkens
      a white page, and white has further to fall than ink has to rise.
@@ -362,21 +365,18 @@
      a rendering fault on their monitor rather than as an intention. */
   --grain: 0.025;
 
-  /* D2 · The well a bar sits in. Darker at the lip than at the floor, which is
-     the whole of what an inset shadow says. */
-  --well-top: oklch(0.21 0.02 265 / 0.085);
-  --well-bottom: oklch(0.21 0.02 265 / 0.025);
+  /* D2 · The well a bar stands in. ONE flat value, where it used to be a two
+     stop ramp from a dark lip to a light floor. A track is a track: what makes
+     the bar read as standing IN something is that the track is drawn at all
+     and is the full height of the plot, not that its top edge is a shade
+     darker. 0.06 sits between the old lip (0.085) and floor (0.025), so the
+     track carries the same total weight it did. */
+  --well: oklch(0.21 0.02 265 / 0.06);
 
-  /* D0 · The light on the canvas. Two stops of a single warm-neutral wash
-     anchored above the top of the page, so the background is LIT from
-     somewhere rather than painted one flat value edge to edge. Warm on
-     purpose: every surface token in this file is cooled toward 265, and a page
-     whose light is the same temperature as its shadows has no light in it.
-     The chroma is 0.012 — about a fifth of what it takes to name a colour —
-     because the moment a reader can say "the top is beige" this has stopped
-     being light and become a panel. */
-  --canvas-lit: oklch(0.79 0.012 70 / 0.5);
-  --canvas-lit-2: oklch(0.83 0.008 40 / 0.22);
+  /* D0 · THE LIT CANVAS IS GONE. It was two radial washes anchored above the
+     top of the page — the same object as the bloom, at page scale, and the
+     same reasoning applies: a falloff cannot be made flat without becoming a
+     panel with a visible edge. The page is its --background, edge to edge. */
 
   /* B1 · The lip on a solid button. 1px of the light that is falling on it,
      along the top edge only — the difference between a filled rectangle and a
@@ -426,8 +426,7 @@
 
   /* The left panel in the "stats" variant. Warm where the rest of light mode
      is cool (hue 85 against the system's 265) so the split reads as two
-     materials rather than as one surface with a line down it — the same
-     trick --canvas-lit plays, at the same sub-nameable chroma. */
+     materials rather than as one surface with a line down it. */
   --auth-panel: oklch(0.972 0.004 85);
   --auth-panel-foreground: oklch(0.21 0.02 265); /* 16.35:1 on the panel */
   --auth-panel-muted: oklch(0.52 0.02 265); /*  5.08:1 on the panel */
@@ -441,15 +440,18 @@
   --auth-bar: oklch(0.9 0.012 265);
   --auth-bar-peak: oklch(0.54 0.2 253);
 
-  /* The scrim over the "photo" variant. Two layers, because the photograph
-     underneath is a real room and its brightness is not ours to choose: a
-     flat wash across the whole panel, plus a heavier band down the top where
-     the white lockup sits. Composited over the WORST case the photo can
-     present (a blown-out white pixel) the top band lands at 78% effective
-     ink, and white on that measures 10.0:1 — so the mark clears AA against
-     any frame, not just the one we happened to ship. */
-  --auth-scrim: oklch(0.16 0.014 265 / 0.32);
-  --auth-scrim-top: oklch(0.16 0.014 265 / 0.68);
+  /* The scrim over the "photo" variant. ONE flat wash now, where it used to be
+     a flat wash at 0.32 plus a top-down fade to transparent that took the
+     lockup's band to 78% effective ink. A fade is a gradient, so the band is
+     gone and its job moves into this single value.
+     The number is still set by the WORST case the photograph can present — a
+     blown-out white pixel — not by the frame we happen to ship: at 0.56 the
+     white lockup measures 4.45:1 on that pixel, clear of AA for the mark in
+     any frame. It was 10.0:1 under the band, so this IS less headroom; what
+     buys it back is that there is no longer a bright bottom half for a reader
+     to notice the band against. The cost is real and is called out in the
+     report: the photograph is a stop darker overall than it was. */
+  --auth-scrim: oklch(0.16 0.014 265 / 0.56);
 }
 
 .dark {
@@ -479,10 +481,9 @@
      is the one that has to walk the fill down; see the note there. */
   --primary: oklch(0.64 0.2 253);
   --primary-foreground: oklch(0.16 0.02 265);
-  /* Runs the other way in dark, for the same reason the ramp does: the label
-     here is INK, so the gradient's risky end is its darkest one, and that is
-     --primary at 5.73:1. The far corner lightens to 8.20:1. */
-  --primary-2: oklch(0.74 0.17 253);
+  /* --primary-2 is gone here too; see the note in :root. Dark's flat key is
+     the logo blue under ink at 5.71:1, which was already the sweep's worst
+     point, so the measurement does not move. */
   --secondary: oklch(0.245 0.017 265);
   --secondary-foreground: oklch(0.98 0.004 265);
   --muted: oklch(0.245 0.016 265);
@@ -510,6 +511,12 @@
   --chart-5: oklch(0.78 0.14 90);
   --chart-6: oklch(0.72 0.17 25);
   --chart-7: oklch(0.72 0.15 330);
+
+  /* Same tint, same alpha as light — see the note there. It reads slightly
+     stronger on ink (1.19:1 against the card, against light's 1.18:1) because
+     the card has further to travel, which is the right way round: the fill
+     has to survive a dark surface. */
+  --chart-1-area: oklch(0.64 0.2 253 / 0.14);
 
   /* The share ramp, dark. Same hue, same largest-first order, but the walk
      runs the other way: on ink the biggest share has to be the *brightest*
@@ -589,31 +596,29 @@
     0 2px 4px -2px oklch(0 0 0 / 0.6),
     0 14px 28px -16px oklch(0 0 0 / 0.8);
 
-  /* MATERIAL, dark. Deliberately stronger than light across the board — see
-     D6. A dark surface carries gradient because it has room to be lit; a white
-     card is already at the top of its range and anything you add to it reads
-     as dirt rather than as light. */
-  /* Down from 0.22/0.8. The kit blue is more chromatic than the blue it
-     replaces (0.2 vs 0.19) and dark mode is where a bloom has the most room to
-     shout, so the alphas come back a notch to land on the same impression. */
-  --bloom: oklch(0.64 0.2 253 / 0.2);
-  --lit: oklch(0.64 0.2 253 / 0.75);
+  /* MATERIAL, dark. Still stronger than light — a dark surface has room to be
+     lit where a white card is already at the top of its range — but what is
+     left of it is edges and texture, not sweeps. --bloom and the two
+     --canvas-lit stops are gone; they were radial glows, and a glow is a
+     gradient with no flat form to take. */
+  /* Flat, full width, where it used to fade out by two thirds across. At the
+     old 0.75 a uniform rule was a brand stripe rather than a light source, so
+     the value comes down to 0.55 — 2.43:1 against the card, which on ink is
+     still plainly a lit edge. */
+  --lit: oklch(0.64 0.2 253 / 0.55);
   --grain: 0.03;
-  --well-top: oklch(0 0 0 / 0.28);
-  --well-bottom: oklch(0 0 0 / 0.08);
-  /* The canvas light inverts its job. On white it is a warm shadow falling
-     across the top of the page; on ink there is nothing to shade, so it
-     becomes an actual light — a lift in lightness, still warm, still under the
-     threshold where a reader could name the hue. */
-  --canvas-lit: oklch(0.62 0.02 70 / 0.16);
-  --canvas-lit-2: oklch(0.55 0.03 40 / 0.09);
+  /* One flat value, between the old lip (0.28) and floor (0.08). */
+  --well: oklch(0 0 0 / 0.2);
   --btn-lip: oklch(1 0 0 / 0.28);
   /* On ink the coloured shade has to come almost entirely from the glow, not
      from a dark drop — there is nothing under a dark card for a dark shadow to
      land on. */
   /* The glow is the button's own fill — which in dark IS the logo blue — so
-     this tracks --primary exactly. Alphas ease back (0.55 -> 0.5, 0.7 -> 0.65)
-     for the same reason as --bloom: more chroma, same intended weight. */
+     this tracks --primary exactly. Alphas were eased back (0.55 -> 0.5,
+     0.7 -> 0.65) when the kit blue arrived: more chroma, same intended weight.
+     A box-shadow is kept and is NOT in scope for the flat pass: it is a
+     shadow — the absence of light on a surface below the object — not a colour
+     transition across the object's own fill. */
   --btn-brand-shadow:
     inset 0 1px 0 var(--btn-lip),
     0 1px 2px -1px oklch(0 0 0 / 0.5),
@@ -664,13 +669,12 @@
   --auth-bar: oklch(0.34 0.018 265);
   --auth-bar-peak: oklch(0.64 0.2 253);
 
-  /* The photograph is the same photograph, but it is now the brightest thing
-     on the page rather than a panel beside a white form, so the flat wash
-     goes from 32% to 52% and the ink underneath goes deeper. The top band is
-     unchanged: it was already sized by the photo's worst case, not by the
-     theme. Combined, the lockup sits on ~85% effective ink here. */
-  --auth-scrim: oklch(0.12 0.014 265 / 0.52);
-  --auth-scrim-top: oklch(0.12 0.014 265 / 0.68);
+  /* One flat wash, as in light, and the ink under it is deeper because here
+     the photograph is the brightest thing on the page rather than a panel
+     beside a white form. 0.62 against light's 0.56 for the same reason the
+     old pair ran 0.52/0.32. White lockup on a blown-out white photo pixel:
+     5.88:1. */
+  --auth-scrim: oklch(0.12 0.014 265 / 0.62);
 }
 
 @layer base {
@@ -680,14 +684,12 @@
   body {
     @apply bg-background text-foreground;
   }
-  /* The two-corner wash behind the whole dark product. Same geometry, brand
-     hue, and alphas trimmed for the brighter blue exactly as --bloom was. */
-  .dark body {
-    background-image:
-      radial-gradient(55rem 38rem at 78% -12%, oklch(0.64 0.2 253 / 0.06), transparent 60%),
-      radial-gradient(48rem 36rem at -8% 108%, oklch(0.64 0.2 253 / 0.045), transparent 55%);
-    background-attachment: fixed;
-  }
+  /* The two-corner brand wash behind the dark product is GONE. It was a pair
+     of fixed radial gradients on <body>, i.e. the page background was a
+     gradient — which is the thing this pass exists to remove. The dark page is
+     its --background, flat, edge to edge; every card on it is separated by its
+     own surface step (0.205 against the canvas's 0.145) and its hairline,
+     which is what was doing the work anyway. */
   html {
     @apply font-sans;
   }
@@ -777,21 +779,20 @@ a,
     animation-delay: var(--in-delay, 0ms);
   }
 
-  /* D1 · The bloom. Sized and positioned by the element it is put on; this
-     only decides that it has no edge. */
-  .u-bloom {
-    background: radial-gradient(closest-side, var(--bloom), transparent);
-  }
+  /* D1 · .u-bloom is gone along with --bloom. See the note at the token.
 
-  /* D3 · The gradient-lit top border. Brightest at the left, gone by two
-     thirds across — a hairline with a light source instead of a uniform rule.
+     D3 · The lit top border. A FLAT 1px rule in --lit across the full width,
+     where it used to be a gradient that was brightest at the left and gone by
+     two thirds across. A solid rule is what a top-edge highlight is when it
+     cannot be a falloff, and the alpha has been retuned (see --lit) so that
+     going full-width does not double the ink on the card.
      Requires a positioned parent, which every Panel that uses it has. */
   .u-lit::before {
     content: "";
     position: absolute;
     inset: 0 0 auto 0;
     height: 1px;
-    background: linear-gradient(90deg, var(--lit), transparent 62%);
+    background: var(--lit);
     pointer-events: none;
     z-index: 1;
   }
@@ -814,59 +815,20 @@ a,
     background-size: 160px 160px;
   }
 
-  /* D0 · The lit canvas. An ellipse of warm light anchored above the top edge
-     and wider than the page, so what lands on screen is the middle of a
-     falloff rather than a circle somebody placed. `120% 620px` is the whole
-     trick: tall enough to reach past the KPI strip, wide enough that its sides
-     leave the viewport before they curve, so no reader ever sees an arc. */
-  .u-canvas {
-    pointer-events: none;
-    background:
-      radial-gradient(
-        120% 620px at 50% -140px,
-        var(--canvas-lit),
-        transparent 70%
-      ),
-      radial-gradient(
-        70% 380px at 88% -60px,
-        var(--canvas-lit-2),
-        transparent 72%
-      );
-  }
+  /* D0 · .u-canvas is gone along with --canvas-lit / --canvas-lit-2, and
+     D2 · .u-well is gone along with --well-top / --well-bottom. Both were
+     falloffs (two radial washes and a blurred inset shadow) with no consumer
+     left once the flat pass landed — the bar track is an SVG <rect> that now
+     takes the flat --well directly.
 
-  /* D2 · The well a bar stands in. An inset gradient rather than an inset
-     box-shadow because the track is an SVG <rect> — it takes a fill and
-     nothing else — so the same idea is spent as a two-stop linear gradient in
-     <defs>. This class exists for the DOM-side wells (the donut's unfilled
-     ring backing) that can use a real inset shadow. */
-  .u-well {
-    box-shadow:
-      inset 0 1px 2px var(--well-top),
-      inset 0 -1px 0 var(--well-bottom);
-  }
-
-  /* D6 · The hero figure, filled with a gradient instead of a flat ink.
-     Top-to-bottom, and the range is tiny — full foreground down to 82% of it.
-     At 48px that reads as the number having a top edge that catches the light;
-     at any smaller size it reads as a rendering fault, which is why nothing
-     else on the page is allowed to use it.
-     The fallback matters: `background-clip: text` with a transparent fill
-     paints NOTHING if the gradient fails to resolve, so `color` is set to the
-     real ink first and only overridden inside @supports. */
+     D6 · The hero figure. It was `background-clip: text` over a top-to-bottom
+     ramp from the foreground to 82% of it; it is now the flat foreground, set
+     as plain `color`, which is exactly what the old rule's no-gradient
+     fallback already was. 17.73:1 on a white card, 16.92:1 on a dark one — the
+     figure got MORE contrast by losing the fade, because the fade was eating
+     18% of the ink at the baseline of every digit. */
   .u-hero-fill {
     color: var(--foreground);
-  }
-  @supports (background-clip: text) or (-webkit-background-clip: text) {
-    .u-hero-fill {
-      background-image: linear-gradient(
-        180deg,
-        var(--foreground) 12%,
-        color-mix(in oklch, var(--foreground) 82%, transparent) 100%
-      );
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
   }
 
   /* C2 · A line drawing itself. The path carries pathLength="1", so the dash
@@ -919,17 +881,11 @@ a,
   }
 }
 
-/* The heavy material is desktop-only. On a 375px phone the canvas is barely
-   taller than the light falling on it — so the wash has no room to be a
-   falloff and becomes a visible band — and the grain is being asked to sit at
-   3% over a screen a reader is holding 30cm from their face in daylight,
-   where it is either invisible or dirt. Neither is worth the paint cost on
-   the class of device least able to pay it. The page keeps every edge,
-   shadow and hairline; it just isn't lit. */
+/* What is left of the heavy material is the grain, and it is halved on a
+   phone: 3% over a screen a reader holds 30cm from their face in daylight is
+   either invisible or dirt. The lit-canvas half of this rule went with
+   .u-canvas. */
 @media (max-width: 640px) {
-  .u-canvas {
-    display: none;
-  }
   .u-grain {
     opacity: calc(var(--grain) * 0.5);
   }

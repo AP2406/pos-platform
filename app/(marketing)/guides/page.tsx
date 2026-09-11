@@ -16,7 +16,7 @@ export default function GuidesIndexPage() {
   return (
     <>
       <JsonLd data={breadcrumb("Guides", "/guides")} />
-      <section className="border-b border-[#D9E1EA] bg-[linear-gradient(180deg,#F4F7FA,#FFFFFF)]">
+      <section className="border-b border-[#D9E1EA] bg-[#F4F7FA]">
         <div className="mx-auto max-w-3xl px-6 pb-14 pt-40 text-center">
           <LandingEyebrow>Guides</LandingEyebrow>
           <h1 className="mt-4 text-[38px] font-bold leading-[1.12] tracking-[-0.015em] text-[#0A2540] sm:text-[44px]">Straight answers on payments &amp; POS.</h1>

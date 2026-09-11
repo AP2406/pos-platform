@@ -107,13 +107,12 @@ function moneyParts(n: number, currency: string): { main: string; cents: string 
 function HeroMoney({ amount, currency }: { amount: number; currency: string }) {
   const { main, cents } = moneyParts(amount, currency);
   return (
-    // D6 · The dollars take a gradient fill; the cents deliberately do not.
-    // The gradient runs top-to-bottom across roughly 18% of the foreground's
-    // lightness, which at 48px reads as the number having an edge that catches
-    // the light and at any smaller size reads as a printer running out of ink.
-    // The cents are already stepped back to 45% opacity, so filling them too
-    // would be fading a fade — and they'd fall out of the gradient's box
-    // anyway, since they sit on a different baseline.
+    // D6 · The dollars take the flat foreground. This used to be a
+    // background-clip ramp that spent 18% of the foreground's lightness on a
+    // top-to-bottom fade; flat, the figure is the same ink all the way down
+    // and measures 17.73:1 on a white card instead of losing contrast toward
+    // the baseline of every digit. The cents keep their 45% step-back, which
+    // is one flat colour against another and not a fade.
     <span className="tabular-nums">
       <span className="u-hero-fill">{main}</span>
       {cents && (
@@ -555,31 +554,6 @@ function PaceChart({
             : ". The figures are written out below.")
         }
       >
-        <defs>
-          {/* D2 · The area under the line, as a fall-off rather than a slab.
-              A flat 10% wash has a hard horizontal top edge everywhere the
-              line isn't, which is the tell that a chart was filled rather than
-              lit; a gradient that reaches 14% at the line and nothing at the
-              baseline reads as the line casting light downward.
-              gradientUnits="userSpaceOnUse" with explicit y1/y2 is deliberate:
-              the default objectBoundingBox would rescale the gradient to each
-              path's own bounding box, so a quiet morning (a short path) would
-              get the same full ramp compressed into 20px and read DARKER than
-              a busy day. Pinned to the viewBox, the fall-off is the same
-              physical gradient whatever the data does. */}
-          <linearGradient
-            id="pace-area"
-            gradientUnits="userSpaceOnUse"
-            x1="0"
-            y1="0"
-            x2="0"
-            y2={H}
-          >
-            <stop offset="0%" stopColor="var(--chart-1)" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="var(--chart-1)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
         {/* Gridlines take the soft line, not the card's edge weight: inside a
             card, structure should be quieter than the boundary around it. */}
         <line x1="0" y1="0" x2={W} y2="0" className="stroke-line-soft" strokeWidth="1" vectorEffect="non-scaling-stroke" />
@@ -605,14 +579,22 @@ function PaceChart({
 
         {curve.today.length > 0 && (
           <>
-            {/* The fill fades up rather than being drawn: an area mask that
-                unrolled with the line would need a clip rect animating its
-                width, which is exactly the layout-costing animation the rest
-                of this page avoids. Fading it in behind a line that is drawing
-                itself reads as the same gesture and costs one opacity. */}
+            {/* D2 · The area under the line: ONE flat tint of the series
+                colour, --chart-1-area, at a single alpha (0.14). It was a
+                top-to-baseline fade from 0.22 to nothing, which read as the
+                line casting light downward; flat, it reads as the area the
+                line encloses, which is the thing the shape actually means.
+                The alpha is a token rather than a number here so that the next
+                area chart cannot pick a second one — the whole point of
+                "one alpha everywhere" is that it is written down once.
+                The fill still fades UP on arrival rather than being drawn: an
+                area mask that unrolled with the line would need a clip rect
+                animating its width, which is the layout-costing animation the
+                rest of this page avoids. That is an opacity transition for
+                motion, not a colour gradient. */}
             <path
               d={line(curve.today) + " L " + todayEnd.toFixed(2) + " " + H + " L 0 " + H + " Z"}
-              fill="url(#pace-area)"
+              fill="var(--chart-1-area)"
               className="u-fade"
               style={enterAt(6)}
               stroke="none"
@@ -716,11 +698,9 @@ export function TodayModule({
     // that terminate a column, and whichever column comes up short absorbs the
     // difference here rather than leaving a ragged foot of canvas. See the
     // grid note in pos-dashboard.tsx.
-    // `lit` puts a gradient hairline along the top edge — brightest at the
-    // left, gone by two thirds across. Only this card and the rail carry it:
-    // they lead their columns, so the page opens with light in the top-left of
-    // each, and on a third card it would stop being a light source and start
-    // being a stripe.
+    // `lit` puts a flat brand-tinted hairline along the top edge. Only this
+    // card and the rail carry it: they lead their columns, and on a third card
+    // a coloured top edge stops being an accent and starts being a stripe.
     //
     // THE ONLY CARD ON THE PAGE WITH A SHADOW. Elevation means "this floats
     // above the page", and it can only mean that while it is rare — every panel
@@ -745,30 +725,19 @@ export function TodayModule({
           leaves lakes of air between digits and the figure stops reading as one
           object. This is the loudest thing on the page and it should look
           drawn, not typed. */}
-      {/* `isolate` is required, not stylistic: without a stacking context here
-          the bloom's -z-10 would resolve against the page root and paint
-          BEHIND the card's own white background, which renders it invisible in
-          the one theme it exists for. */}
       {/* 44/64, up from 36/48. The KPI band below now tops out at 26 and the
           ops band at 22, which makes this figure roughly 2.5× the next loudest
           number on the page — a ratio you read at a squint rather than one you
           have to measure. It was 48 against the strip's 32, which is 1.5×, and
           1.5× is what two things of the same importance look like. */}
-      <div className="relative isolate w-fit text-[44px] sm:text-[64px] font-bold tracking-[-0.02em] leading-none">
-        {/* D1 · The bloom, dark mode only. On ink a big number sits in a lot of
-            empty card and there is nothing to say the card is lit; a brand-hue
-            glow behind it gives the figure somewhere to sit. In light mode the
-            same layer is invisible at any honest opacity and merely dirty at a
-            dishonest one, so it simply isn't rendered — `hidden dark:block`
-            rather than a token that resolves to transparent, because a layer
-            that paints nothing is still a layer the compositor pays for.
-            -z-10 keeps it behind the digits; the parent is `relative`, and
-            `w-fit` is what stops the glow spanning the full card width and
-            becoming a band. */}
-        <span
-          aria-hidden
-          className="u-bloom pointer-events-none absolute -inset-x-10 -inset-y-8 -z-10 hidden dark:block"
-        />
+      {/* D1 · THE DARK-MODE BLOOM IS GONE. It was a brand-hue radial glow
+          behind the figure, and a radial glow is a gradient with no flat form
+          to take — flattening it would mean painting a coloured rectangle
+          behind the number, which is a worse object than no object. The
+          figure sits on the card's own surface step and the page's one drop
+          shadow, which is what it sat on before the bloom existed.
+          `isolate` and `-z-10` went with it; nothing is layered here now. */}
+      <div className="w-fit text-[44px] sm:text-[64px] font-bold tracking-[-0.02em] leading-none">
         <HeroMoney amount={pace.today} currency={currency} />
       </div>
 
@@ -986,51 +955,12 @@ export function DailySalesCard({
                 bars.map((b) => b.full + ": " + money(b.amount, currency)).join(", ")
               }
             >
-              <defs>
-                {/* D2 · Two gradients, one for each rung of the single hue.
-                    A bar filled flat is a rectangle; a bar that is a shade
-                    lighter at its head than at its foot is an object standing
-                    in a well. The range is small — about 12% of lightness —
-                    and pinned to the viewBox rather than to each bar's own
-                    box, so a tall bar and a short one are lit by the same
-                    light rather than each carrying a full ramp of its own. */}
-                <linearGradient
-                  id="bar-current"
-                  gradientUnits="userSpaceOnUse"
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2={H}
-                >
-                  <stop offset="0%" stopColor="var(--ramp-2)" />
-                  <stop offset="100%" stopColor="var(--ramp-1)" />
-                </linearGradient>
-                <linearGradient
-                  id="bar-rest"
-                  gradientUnits="userSpaceOnUse"
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2={H}
-                >
-                  <stop offset="0%" stopColor="var(--ramp-2)" stopOpacity="0.5" />
-                  <stop offset="100%" stopColor="var(--ramp-1)" stopOpacity="0.32" />
-                </linearGradient>
-                {/* The well itself: the track is darker at the lip than at the
-                    floor, which is the whole of what an inset shadow says and
-                    all an SVG <rect> can be given. */}
-                <linearGradient
-                  id="bar-well"
-                  gradientUnits="userSpaceOnUse"
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2={H}
-                >
-                  <stop offset="0%" stopColor="var(--well-top)" />
-                  <stop offset="100%" stopColor="var(--well-bottom)" />
-                </linearGradient>
-              </defs>
+              {/* D2 · No <defs>. The three gradients that used to live here —
+                  two bar fills and the track — are three flat tokens now.
+                  The ramp is what makes that work: --ramp-N is already a
+                  ladder of DISCRETE stops of one hue, tuned for how many rungs
+                  the eye can order, so "a step down" is a real value in the
+                  system rather than an opacity invented at the call site. */}
               {bars.map((b, i) => {
                 const x = i * slot + (slot - barW) / 2;
                 const h = ceiling > 0 ? Math.min(1, b.amount / ceiling) * H : 0;
@@ -1045,14 +975,22 @@ export function DailySalesCard({
                       width={barW}
                       height={H}
                       rx={radius}
-                      fill="url(#bar-well)"
+                      fill="var(--well)"
                     />
-                    {/* One hue, two rungs of it. The scoped day — the one the
-                        hero figure above is talking about — at full strength;
-                        the other thirteen stepped well down, because their job
-                        is to be the shape this day sits in rather than to
-                        compete with it. Two thirds of a hue was not enough of a
-                        step: the current bar didn't read as the current bar. */}
+                    {/* One hue, two rungs of it, both flat. The scoped day —
+                        the one the hero figure above is talking about — takes
+                        --ramp-1, the strongest rung in either theme; the other
+                        thirteen take --ramp-3, two rungs down.
+                        --ramp-3 rather than something fainter on purpose: the
+                        idle bars used to be the same two rungs at 32–50%
+                        opacity, which put them at roughly 1.5:1 against the
+                        card. Flat --ramp-3 measures 3.24:1 in light and 4.71:1
+                        in dark, so the thirteen days a reader is meant to see
+                        the SHAPE of now clear the 3:1 graphical floor they
+                        never used to. The step to --ramp-1 is 1.83:1, which is
+                        two rungs of a ladder built to be ordered by eye, and
+                        the current day's axis tick is also set in semibold
+                        foreground below — the highlight is carried twice. */}
                     {drawn > 0 && (
                       // scaleY from a bottom origin, so fourteen bars grow out
                       // of the baseline for the price of a transform each and
@@ -1072,7 +1010,7 @@ export function DailySalesCard({
                         rx={radius}
                         className="u-rise"
                         style={enterAt(7 + i * 0.5)}
-                        fill={b.current ? "url(#bar-current)" : "url(#bar-rest)"}
+                        fill={b.current ? "var(--ramp-1)" : "var(--ramp-3)"}
                       />
                     )}
                   </g>

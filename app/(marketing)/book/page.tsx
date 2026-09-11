@@ -15,7 +15,7 @@ const points = ["A clear quote on your lower rate", "Your exact savings vs what 
 
 export default function BookPage() {
   return (
-    <section className="border-b border-[#D9E1EA] bg-[linear-gradient(180deg,#F4F7FA,#FFFFFF)] pb-28">
+    <section className="border-b border-[#D9E1EA] bg-[#F4F7FA] pb-28">
       <JsonLd data={breadcrumb("Book a Call", "/book")} />
       <div className="mx-auto max-w-2xl px-6 pt-40 text-center">
         <Crumb>Book a call</Crumb>

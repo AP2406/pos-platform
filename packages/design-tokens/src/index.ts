@@ -27,11 +27,9 @@ export const color = {
   brand: "#008CFF",
   blue: "#006BDD",
   blueHover: "#0057B8",
-  // Retired as a brand colour. The kit has no cyan — the old mark's speed
-  // lines were #06B6D4 and the new one's are the blue itself — but the value
-  // stays because `gradient.primary` is still exported for the web, and a
-  // token nobody can see is cheaper than a broken import.
-  cyan: "#06B6D4",
+  // `cyan` is gone. It was retired as a brand colour when the logo kit landed
+  // and was only still exported because `gradient.primary` referenced it; that
+  // export is gone too, so the value has no consumer left.
 
   // Dark surfaces: page → raised → cards/inputs.
   bg: "#0B0D12",
@@ -94,16 +92,12 @@ export const floor = {
 // color in the data). Distinct from the status ring colors.
 export const sectionPalette = ["#2E2A5E", "#8E2C5B", "#006BDD", "#0E7C86", "#6D3A73", "#9A5A2B"] as const;
 
-// Brand gradient — reserved for brand surfaces. Normal buttons are SOLID
-// `color.blue` (design review §2). Kept so the web can import it.
-//
-// Re-aimed at the kit: the ramp used to run blue -> cyan, which was the old
-// mark's two colours. The new mark has ONE colour and fades it toward white at
-// the tips, so the gradient does the same — kit blue into its own darker rung,
-// no second hue invented for it.
-export const gradient = {
-  primary: [color.brand, color.blueHover] as [string, string],
-} as const;
+// THERE IS NO `gradient` EXPORT ANY MORE. It held one two-stop ramp, kept
+// "so the web can import it" — and the web never did: the one gradient button
+// on the web was written in Tailwind utilities, and nothing in mobile/ ever
+// read this. Now that the product is flat colour throughout, a token whose
+// whole purpose is to be a colour transition has nothing left to describe.
+// Native buttons were already SOLID `color.blue` (design review §2).
 
 // Fixed type scale (Poppins). SemiBold 600 for numbers/headings, Regular/Medium
 // body. Bumped one step across the board for an iPad held at arm's length; no
@@ -250,7 +244,6 @@ export function agingTier(minutes: number | null, yellowMin: number, redMin: num
 
 export const tokens = {
   color,
-  gradient,
   fontSize,
   fontWeight,
   fontFamily,

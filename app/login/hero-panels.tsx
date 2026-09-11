@@ -32,8 +32,8 @@ const LOCKUP = "h-[65px] w-[220px]";
    a half-width column at 2x on a 1440 display.
 
    It is also considerably brighter than the comp, which is why the scrim below
-   is two layers and sized against a blown-out white pixel rather than against
-   this particular frame. See --auth-scrim / --auth-scrim-top in globals.css.
+   is sized against a blown-out white pixel rather than against this particular
+   frame. See --auth-scrim in globals.css.
    =========================================================================== */
 export function PhotoHero() {
   return (
@@ -54,15 +54,14 @@ export function PhotoHero() {
         fetchPriority="high"
         className="object-cover"
       />
-      {/* Layer 1 — the flat wash. Unifies the frame with the theme and stops a
-          warm photograph from reading as a different product beside a cool
-          form column. */}
+      {/* ONE flat wash, and it is the only layer now. There used to be a
+          second one: a top-down fade that carried the lockup's contrast. That
+          fade is a gradient, so it is gone, and --auth-scrim has absorbed its
+          job by getting heavier (0.32 -> 0.56 light, 0.52 -> 0.62 dark). The
+          lockup still clears AA against the worst pixel the photograph can
+          present; the photograph is a stop darker than it was, which is the
+          honest cost of not having a falloff to hide the difference in. */}
       <div className="absolute inset-0 bg-auth-scrim" />
-      {/* Layer 2 — the band that carries the lockup. Gradients cannot be
-          expressed as a single token, so the token is the stop colour and the
-          geometry lives here: full strength at the top edge, gone by 42%,
-          which is well clear of the mark's baseline at any panel height. */}
-      <div className="absolute inset-x-0 top-0 h-[42%] bg-gradient-to-b from-auth-scrim-top to-transparent" />
       <div className="relative z-10 flex h-full flex-col p-10 xl:p-14">
         {/* `tone="dark"` is pinned rather than `auto`: this panel is ink in
             BOTH themes, so the lettering must stay white even in light mode,

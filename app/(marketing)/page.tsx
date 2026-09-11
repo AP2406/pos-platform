@@ -27,7 +27,7 @@ function Tick() {
 export default function HomePage() {
   return (
     <>
-      <section className="border-b border-[#D9E1EA] bg-[linear-gradient(180deg,#F4F7FA,#FFFFFF)]">
+      <section className="border-b border-[#D9E1EA] bg-[#F4F7FA]">
         <div className="mx-auto max-w-6xl px-6 pb-20 pt-40">
           <div className="grid items-center gap-14 lg:grid-cols-2">
             <div>

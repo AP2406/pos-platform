@@ -12,7 +12,7 @@ export function LandingEyebrow({ children }: { children: React.ReactNode }) {
 
 export function LandingHero({ eyebrow, h1, intro }: { eyebrow: string; h1: React.ReactNode; intro: React.ReactNode }) {
   return (
-    <section className="border-b border-[#D9E1EA] bg-[linear-gradient(180deg,#F4F7FA,#FFFFFF)]">
+    <section className="border-b border-[#D9E1EA] bg-[#F4F7FA]">
       <div className="mx-auto max-w-3xl px-6 pb-16 pt-40 text-center">
         <LandingEyebrow>{eyebrow}</LandingEyebrow>
         <h1 className="mt-4 text-[38px] font-bold leading-[1.12] tracking-[-0.015em] text-[#0A2540] sm:text-[44px]">{h1}</h1>

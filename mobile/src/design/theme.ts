@@ -10,7 +10,6 @@ export {
   color,
   floor,
   sectionPalette,
-  gradient,
   fontSize,
   fontFamily,
   space,

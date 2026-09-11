@@ -117,13 +117,13 @@ const BODY_PAD: Record<PanelSize, string> = {
  * passes `shadow-elevation` back in through className — the primary one — and
  * it does so because being lifted is part of how it says it is primary.
  *
- * `lit` replaces the uniform top hairline with one that has a light source:
- * brightest at the left, gone by two thirds across. It is a prop rather than
- * the default because the effect is only legible while it is rare — on every
- * card it stops being light falling on a surface and becomes a stripe, which
- * is precisely the kind of nameable decoration this page is not allowed. Two
- * cards carry it: the hero, and the rail. They are the two that lead their
- * columns, so the page opens with light in the top-left of each.
+ * `lit` puts a brand-tinted 1px rule along the top edge. It used to be a
+ * gradient — brightest at the left, gone by two thirds across — and is now a
+ * FLAT hairline at a lower alpha, because a full-width rule at the gradient's
+ * peak value is roughly twice the ink. It stays a prop rather than the default
+ * for the same reason it always was: on every card a coloured top edge stops
+ * reading as an accent and becomes a stripe. Two cards carry it — the hero and
+ * the rail — the two that lead their columns.
  */
 function Panel({
   className,
