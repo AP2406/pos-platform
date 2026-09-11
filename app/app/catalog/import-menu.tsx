@@ -177,13 +177,9 @@ export function ImportMenu() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={openModal}
-        className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-foreground bg-accent px-3 py-1.5 text-sm font-medium hover:bg-accent/80"
-      >
+      <Button variant="subtle" size="lg" onClick={openModal}>
         Import menu
-      </button>
+      </Button>
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setOpen(false)}>

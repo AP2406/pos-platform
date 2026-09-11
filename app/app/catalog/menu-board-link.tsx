@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 // P3-46 surface the public menu-board URL so the owner can put it on a TV/web.
 export function MenuBoardLink({ businessId }: { businessId: string }) {
@@ -16,8 +17,8 @@ export function MenuBoardLink({ businessId }: { businessId: string }) {
   }
 
   return (
-    <button type="button" onClick={copy} className="text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent">
-      {copied ? "Copied!" : "Menu board link"}
-    </button>
+    <Button variant="subtle" size="lg" onClick={copy}>
+      {copied ? "Copied!" : "Copy menu link"}
+    </Button>
   );
 }
