@@ -119,9 +119,14 @@ export const radius = {
 } as const;
 
 // Minimum touch target (accessibility + fast-paced floor use).
+// `key` is the POS keypad key: a PIN/amount key is hit at speed, at arm's
+// length, sometimes with wet hands, so it is deliberately larger than a CTA.
+// 80 is where Square for Restaurants sits (measured 96 × 80 pt on its passcode
+// screen) and it is the only size in this scale drawn against a competitor.
 export const touch = {
   min: 48,
   cta: 56,
+  key: 80,
 } as const;
 
 // Status → color helper, with wait-time escalation for tables.
