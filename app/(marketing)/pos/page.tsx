@@ -78,9 +78,12 @@ const advanced = [
 
 // SoftwareApplication, not Product. The old markup described this as a Product
 // with a priced Offer, which reads as physical goods; what we ship is software,
-// and applicationCategory is the field Google's docs want for it. The Offer is
-// kept because a free tier is a real, published offer — but it carries no rate
-// and no payment-processing language.
+// and applicationCategory is the field Google's docs want for it.
+//
+// There is deliberately no `offers` block: a pilot with no published end date
+// cannot honestly carry a machine-readable price, and a bare `price: "0"` reads
+// to a crawler or an AI summariser as unconditionally free — the promise
+// /pricing is written not to make.
 const softwareSchema = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
@@ -90,21 +93,7 @@ const softwareSchema = {
   description:
     "A point-of-sale system for restaurants, cafes and retail — register, floor plan and table service, kitchen display, menu builder, online and QR ordering, kiosk, inventory, staff and time clock, and reporting.",
   brand: { "@type": "Brand", name: "Surge" },
-  offers: {
-    "@type": "Offer",
-    priceCurrency: "CAD",
-    price: "0",
-    availability: "https://schema.org/InStock",
-    // price "0" predates this change (it described the free Basic tier) and is
-    // still true today, so it stays — but the tier names had to go, and the
-    // description now carries the qualifier the bare number cannot. There is no
-    // `priceValidUntil` because we have no end date to put in one.
-    // OWNER: this Offer has to be revisited the day the pilot ends. A price of
-    // 0 with no validity window is the closest this codebase comes to promising
-    // permanently free, and /pricing is deliberately written not to.
-    description: "Currently offered free through a limited-time pilot program.",
-    url: "https://www.surgetechpos.com/pos",
-  },
+  url: "https://www.surgetechpos.com/pos",
 };
 
 export default function PosPage() {

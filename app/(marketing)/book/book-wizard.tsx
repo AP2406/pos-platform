@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import { submitBooking } from "../actions";
+import { HoneypotField } from "../honeypot";
 
 const businessTypeOptions = ["Cafe / quick-serve", "Restaurant / bar", "Retail / shop", "Salon / services", "Transportation", "Other", "New / not open yet"];
 const volumeRanges = ["Under $5k", "$5k - $20k", "$20k - $50k", "$50k - $100k", "$100k+"];
@@ -35,6 +36,14 @@ export function BookWizard() {
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
+  const honeypotRef = useRef<HTMLInputElement | null>(null);
+  // Stamped in start(), not at mount: the wizard lives behind a button that may
+  // sit on a page for a long time, so the clock has to begin when the modal
+  // opens. Five steps mean a real visitor is never near MIN_FILL_MS anyway.
+  // (start() is an event handler, so Date.now() there is not a purity problem;
+  // in the useRef initialiser it would be. 0 before the modal has ever opened
+  // reads server-side as an implausible stamp and is ignored.)
+  const startedAtRef = useRef<number>(0);
 
   useEffect(() => {
     if (open) { document.body.style.overflow = "hidden"; } else { document.body.style.overflow = ""; }
@@ -45,6 +54,7 @@ export function BookWizard() {
     setStep(0); setAnswers({}); setStatus("idle"); setError("");
     setVolumeInput(""); setVolumeExact("");
     setName(""); setBusiness(""); setEmail(""); setPhone(""); setInterest(""); setPreferred(""); setMessage("");
+    startedAtRef.current = Date.now();
     setOpen(true);
   }
 
@@ -70,7 +80,7 @@ export function BookWizard() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setStatus("sending"); setError("");
-    const res = await submitBooking({ name: name, business: business, email: email, phone: phone, businessType: answers.businessType || "", volume: answers.volume || "", volumeExact: volumeExact, avgTicket: answers.avgTicket || "", paymentMix: answers.paymentMix || "", interest: interest, preferred: preferred, message: message });
+    const res = await submitBooking({ name: name, business: business, email: email, phone: phone, businessType: answers.businessType || "", volume: answers.volume || "", volumeExact: volumeExact, avgTicket: answers.avgTicket || "", paymentMix: answers.paymentMix || "", interest: interest, preferred: preferred, message: message, website: honeypotRef.current?.value || "", startedAt: startedAtRef.current });
     if (res.ok) { setStatus("ok"); } else { setStatus("error"); setError(res.error || "Something went wrong."); }
   }
 
@@ -140,6 +150,7 @@ export function BookWizard() {
                       </div>
                     ) : (
                       <form onSubmit={onSubmit}>
+                        <HoneypotField formId="book" inputRef={honeypotRef} />
                         <h3 className="text-xl font-bold tracking-tight text-slate-900">Last step &mdash; where do we reach you?</h3>
                         <div className="mt-5 grid gap-4 sm:grid-cols-2">
                           <div>

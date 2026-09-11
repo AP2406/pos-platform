@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useRef, useEffect, type FormEvent } from "react";
 import { submitContact } from "../actions";
+import { HoneypotField } from "../honeypot";
 
 export function ContactForm() {
   const [name, setName] = useState("");
@@ -10,12 +11,30 @@ export function ContactForm() {
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
+  const honeypotRef = useRef<HTMLInputElement | null>(null);
+  // Stamped once on mount — when the visitor got the form, not when they
+  // submitted it. See MIN_FILL_MS in lib/services/form-throttle.ts. The stamp is
+  // taken in an effect rather than in the useRef initialiser because Date.now()
+  // during render is impure (react-hooks/purity); 0 until the effect runs, which
+  // the server-side check reads as an implausible stamp and ignores, so the
+  // failure mode is "no signal", never a false positive against a real visitor.
+  const startedAtRef = useRef<number>(0);
+  useEffect(() => {
+    startedAtRef.current = Date.now();
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setStatus("sending");
     setError("");
-    const res = await submitContact({ name: name, email: email, phone: phone, message: message });
+    const res = await submitContact({
+      name: name,
+      email: email,
+      phone: phone,
+      message: message,
+      website: honeypotRef.current?.value || "",
+      startedAt: startedAtRef.current,
+    });
     if (res.ok) {
       setStatus("ok");
     } else {
@@ -38,6 +57,7 @@ export function ContactForm() {
 
   return (
     <form onSubmit={onSubmit} className="rounded-md border border-[#D9E1EA] bg-white p-7 sm:p-8">
+      <HoneypotField formId="contact" inputRef={honeypotRef} />
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="c-name" className="text-sm font-semibold text-[#1A2B3C]">Name</label>

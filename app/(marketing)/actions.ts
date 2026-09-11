@@ -1,7 +1,15 @@
 "use server";
 
 import { z } from "zod";
+import { headers } from "next/headers";
 import { sendEmail, isEmailConfigured } from "@/lib/services/email";
+import {
+  consume,
+  isHoneypotTripped,
+  isTooFast,
+  HONEYPOT_FIELD,
+  MAX_SENDS_PER_WINDOW,
+} from "@/lib/services/form-throttle";
 
 const LEADS_TO = process.env.SURGE_LEADS_EMAIL || "info@surgetechpos.com";
 const LEADS_FROM = process.env.SURGE_LEADS_FROM || "Surge <noreply@surgetechpos.com>";
@@ -25,6 +33,79 @@ function rateFor(mix: string): { surgePct: number; surgeFixed: number; costPct: 
 
 function money(n: number): string {
   return "$" + Math.round(n).toLocaleString("en-CA");
+}
+
+// ----- ABUSE CONTROLS, SHARED BY ALL THREE FORMS -----
+//
+// These three actions are the only unauthenticated write path on the site, and
+// each of them sends a confirmation to a user-supplied address from
+// noreply@surgetechpos.com — the same sending domain the live merchants'
+// receipts and invoices use. Left open they are an arbitrary-recipient relay for
+// branded, SPF/DKIM-valid mail, and the cost of that domain being blocklisted is
+// not measured in leads, it is measured in merchants who stop getting receipts.
+//
+// Three layers, cheapest first. See lib/services/form-throttle.ts for the honest
+// limitations of each.
+
+/** Shape every form adds on top of its real fields. Neither field is shown to a human. */
+type BotFields = {
+  /** Honeypot. Named by HONEYPOT_FIELD; any value at all means a bot. */
+  website?: string;
+  /** Client mount timestamp (ms). Forgeable — see MIN_FILL_MS. */
+  startedAt?: number;
+};
+
+/**
+ * True when the submission looks automated.
+ *
+ * Checked against the RAW input BEFORE zod on purpose: a bot that stuffs 5kB
+ * into the honeypot must get exactly the same response as one that types "x",
+ * and neither may ever see a validation error it could learn to avoid. Callers
+ * return their normal success state on true — no mail, no lead, no log line the
+ * attacker can provoke.
+ */
+function looksAutomated(input: BotFields | null | undefined): boolean {
+  if (!input || typeof input !== "object") return false;
+  if (isHoneypotTripped((input as Record<string, unknown>)[HONEYPOT_FIELD])) return true;
+  if (isTooFast(input.startedAt)) return true;
+  return false;
+}
+
+/**
+ * Client IP as the throttle key. On Vercel both of these headers are written by
+ * the platform edge and overwrite whatever the client sent, so they are not
+ * spoofable here; the leftmost x-forwarded-for entry is the client. "unknown" is
+ * a real bucket rather than a bypass — if the header is ever missing, everyone
+ * who lands there shares one allowance, which fails closed.
+ */
+async function clientIp(): Promise<string> {
+  const h = await headers();
+  const fwd = h.get("x-forwarded-for");
+  if (fwd) {
+    const first = fwd.split(",")[0].trim();
+    if (first) return first;
+  }
+  return h.get("x-real-ip")?.trim() || "unknown";
+}
+
+/**
+ * Spend one send. Call immediately before the first sendEmail, never at the top
+ * of the action: a visitor who mistypes their email must not burn quota, and a
+ * request that sends no mail is not the thing being rationed.
+ *
+ * Returns null when allowed, or a user-facing sentence when the limit is hit.
+ * Unlike the honeypot this is NOT silent — a real person behind a shared IP
+ * deserves to be told why, and to be given the inbox that always works.
+ */
+async function spendSendQuota(): Promise<string | null> {
+  const res = consume(await clientIp());
+  if (res.allowed) return null;
+  const minutes = Math.max(1, Math.ceil(res.retryAfterSeconds / 60));
+  return (
+    "That is " + MAX_SENDS_PER_WINDOW + " submissions from this connection in the last hour. " +
+    "Please try again in " + minutes + " minute" + (minutes === 1 ? "" : "s") +
+    ", or email us directly at " + SUPPORT_EMAIL + "."
+  );
 }
 
 function esc(s: string): string {
@@ -143,9 +224,11 @@ const contactSchema = z.object({
   message: z.string().trim().min(1, "Message is required").max(4000),
 });
 
-export type ContactInput = z.infer<typeof contactSchema>;
+export type ContactInput = z.infer<typeof contactSchema> & BotFields;
 
 export async function submitContact(input: ContactInput): Promise<{ ok: boolean; error?: string }> {
+  // Silent success. The bot is told nothing and nothing is sent.
+  if (looksAutomated(input)) return { ok: true };
   const parsed = contactSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "Please check the form and try again." };
@@ -153,6 +236,8 @@ export async function submitContact(input: ContactInput): Promise<{ ok: boolean;
   if (!isEmailConfigured()) {
     return { ok: false, error: "Messaging is not set up yet. Please email or call us directly." };
   }
+  const throttled = await spendSendQuota();
+  if (throttled) return { ok: false, error: throttled };
   const d = parsed.data;
   const html =
     "<h2>New contact message</h2>" +
@@ -203,7 +288,7 @@ const pilotSchema = z.object({
   painPoint: z.string().trim().max(4000).optional().or(z.literal("")),
 });
 
-export type PilotInput = z.infer<typeof pilotSchema>;
+export type PilotInput = z.infer<typeof pilotSchema> & BotFields;
 
 // fieldErrors lets the form mark the offending input rather than only printing a
 // sentence at the bottom — required for the error to be announced against the
@@ -211,6 +296,10 @@ export type PilotInput = z.infer<typeof pilotSchema>;
 export type PilotResult = { ok: boolean; error?: string; fieldErrors?: Record<string, string> };
 
 export async function submitPilot(input: PilotInput): Promise<PilotResult> {
+  // Silent success — the bot gets the same { ok: true } a real sign-up gets, and
+  // no mail leaves the building. Deliberately ahead of the zod parse so the
+  // honeypot content can never itself trigger a validation error.
+  if (looksAutomated(input)) return { ok: true };
   const parsed = pilotSchema.safeParse(input);
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -223,6 +312,8 @@ export async function submitPilot(input: PilotInput): Promise<PilotResult> {
   if (!isEmailConfigured()) {
     return { ok: false, error: "Sign-up is not set up yet. Please email or call us directly and we will add you by hand." };
   }
+  const throttled = await spendSendQuota();
+  if (throttled) return { ok: false, error: throttled };
   const d = parsed.data;
   const html =
     "<h2>New pilot program sign-up</h2>" +
@@ -274,9 +365,11 @@ const bookingSchema = z.object({
   message: z.string().trim().max(4000).optional().or(z.literal("")),
 });
 
-export type BookingInput = z.infer<typeof bookingSchema>;
+export type BookingInput = z.infer<typeof bookingSchema> & BotFields;
 
 export async function submitBooking(input: BookingInput): Promise<{ ok: boolean; error?: string }> {
+  // Silent success. The bot is told nothing and nothing is sent.
+  if (looksAutomated(input)) return { ok: true };
   const parsed = bookingSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "Please check the form and try again." };
@@ -284,6 +377,8 @@ export async function submitBooking(input: BookingInput): Promise<{ ok: boolean;
   if (!isEmailConfigured()) {
     return { ok: false, error: "Booking is not set up yet. Please email or call us directly." };
   }
+  const throttled = await spendSendQuota();
+  if (throttled) return { ok: false, error: throttled };
   const d = parsed.data;
 
   const exactNum = d.volumeExact ? Number(d.volumeExact.replace(/[^0-9]/g, "")) : 0;

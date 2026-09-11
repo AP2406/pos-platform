@@ -26,7 +26,11 @@ export const LOCAL_BUSINESS = {
   description: "Point-of-sale software for restaurants, cafes and retail across the Greater Toronto Area — register, floor plan, kitchen display, online and QR ordering, inventory, staff and reporting.",
   telephone: "+1-888-648-8097",
   email: "info@surgetechpos.com",
-  priceRange: "$$",
+  // No `priceRange`. It is an optional LocalBusiness property, and a
+  // machine-readable price band on a site whose whole position is "we have no
+  // price yet" is the same error as a structured Offer of 0 — it just spreads
+  // it across all 21 pages instead of one. Bring it back when there is a
+  // published price to band.
   address: {
     "@type": "PostalAddress",
     addressLocality: "Toronto",

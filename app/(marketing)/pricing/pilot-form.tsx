@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, type FormEvent } from "react";
 import { submitPilot } from "../actions";
+import { HoneypotField } from "../honeypot";
 
 // THE PILOT SIGN-UP FORM.
 //
@@ -49,6 +50,17 @@ export function PilotForm() {
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const doneRef = useRef<HTMLDivElement>(null);
+  const honeypotRef = useRef<HTMLInputElement | null>(null);
+  // Stamped once on mount — when the visitor got the form, not when they
+  // submitted it. See MIN_FILL_MS in lib/services/form-throttle.ts. Taken in an
+  // effect rather than in the useRef initialiser because Date.now() during
+  // render is impure (react-hooks/purity); 0 until the effect runs, which the
+  // server reads as an implausible stamp and ignores, so the failure mode is
+  // "no signal", never a false positive against a real visitor.
+  const startedAtRef = useRef<number>(0);
+  useEffect(() => {
+    startedAtRef.current = Date.now();
+  }, []);
 
   // Move focus to the confirmation when it replaces the form. Without this a
   // screen-reader user submits and is left on a button that no longer exists;
@@ -71,6 +83,8 @@ export function PilotForm() {
       locations: locations,
       currentPos: currentPos,
       painPoint: painPoint,
+      website: honeypotRef.current?.value || "",
+      startedAt: startedAtRef.current,
     });
     if (res.ok) {
       setStatus("ok");
@@ -110,6 +124,7 @@ export function PilotForm() {
 
   return (
     <form onSubmit={onSubmit} className="rounded-md border border-[#D9E1EA] bg-white p-7 sm:p-8">
+      <HoneypotField formId="pilot" inputRef={honeypotRef} />
       <h3 className="text-xl font-bold text-[#0A2540]">Join the pilot</h3>
       <p className="mt-2 text-sm leading-relaxed text-[#42566B]">Tell us about the shop. We read every one of these ourselves and reply.</p>
 
