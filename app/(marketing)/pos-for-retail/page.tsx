@@ -5,28 +5,28 @@ import { JsonLd, localService, breadcrumb } from "../jsonld";
 import { PaymentsComingSoon } from "../ui";
 import { LandingHero, LandingSection, LandingPoints, LandingGuides, LandingCTA } from "../local-landing";
 
-// Promoted into the top nav alongside /pos-for-restaurants. Two claims came off
-// beyond the payments copy: BARCODE SCANNING (inventory exists in
-// app/app/inventory; a scan path does not, so "scan to ring up and receive
-// stock" was describing something we could not demo) and APPOINTMENTS (no
-// module — app/app/reservations is dining-room covers and a waitlist).
+// Promoted into the top nav alongside /pos-for-restaurants. Barcode scanning
+// and low-stock warnings stay — both are real (app/app/pos/barcode-scanner.tsx,
+// and the low-stock path in app/app/inventory and app/app/pos/register-client).
+// APPOINTMENTS came off: lib/modules/modes.ts marks that mode `status: "soon"`,
+// so the product already calls it unbuilt and only this page disagreed.
 export const metadata: Metadata = {
   title: { absolute: "POS for Retail (GTA) — Free Point of Sale & Inventory | Surge" },
-  description: "A retail point-of-sale for GTA shops: fast checkout, stock counts, purchasing, receipts and reports, with staff roles and a time clock. Free Basic tier, runs on the device you already have. Book a free demo.",
+  description: "A retail point-of-sale for GTA shops: fast checkout, barcode inventory, low-stock warnings, purchasing, receipts and reports, with staff roles and a time clock. Free Basic tier. Book a free demo.",
   alternates: { canonical: "/pos-for-retail" },
   openGraph: { ...OG_BASE, url: "/pos-for-retail" },
 };
 
 const points = [
-  { title: "Stock that moves as you sell", body: "Counts come down off the register itself, so the number on the screen is the number on the shelf." },
-  { title: "Purchasing and cost", body: "Receive deliveries, track what an item cost you, and record waste — not just what rang through the till." },
+  { title: "Barcode inventory", body: "Scan to ring up and to receive stock, so counts stay honest without a spreadsheet." },
+  { title: "Low-stock warnings", body: "Know what's running out before your shelf does, and see what actually sells." },
   { title: "Fast, flexible checkout", body: "Discounts, returns, voids and split tender, each with a reason logged against the staff member who did it." },
   { title: "Reports that help", body: "Best sellers, busiest hours and daily totals, without doing the math by hand." },
 ];
 
 const service = localService({
   name: "Retail point of sale",
-  description: "A retail point-of-sale for GTA shops — checkout, stock counts, purchasing, receipts, staff roles and reporting, with a free Basic tier.",
+  description: "A retail point-of-sale for GTA shops — checkout, barcode inventory, low-stock warnings, purchasing, receipts, staff roles and reporting, with a free Basic tier.",
   areaServed: ["Greater Toronto Area", "Toronto", "Mississauga", "Durham Region", "Markham", "Vaughan"],
   path: "/pos-for-retail",
 });
@@ -40,11 +40,11 @@ export default function PosForRetailPage() {
       <LandingHero
         eyebrow="For retail"
         h1={<>A retail POS that keeps your <span className="text-blue-600">shelves honest</span>.</>}
-        intro="Boutiques, grocers, convenience and specialty shops across the GTA run Surge: fast checkout, stock that stays honest and reports you will actually open — free to start, on the device you already own."
+        intro="Boutiques, grocers, convenience and specialty shops across the GTA run Surge: barcode checkout, stock that stays honest and reports you will actually open — free to start, on the device you already own."
       />
 
       <LandingSection title="Inventory that keeps up with the floor">
-        <p>Retail lives and dies on stock. In Surge the counts come off the register itself, so what sold is already subtracted by the time you cash out. Receive deliveries against a purchase record, see your best and worst sellers, and stop reordering from memory &mdash; all on the tablet or terminal you already have.</p>
+        <p>Retail lives and dies on stock. Surge scans a barcode to ring a sale and to receive a delivery, so your counts stay accurate as the day moves. Set the point where an item counts as low, see your best and worst sellers, and stop reordering from memory &mdash; all on the tablet or terminal you already have.</p>
         <LandingPoints items={points} />
       </LandingSection>
 

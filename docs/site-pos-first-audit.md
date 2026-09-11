@@ -22,6 +22,7 @@ assumed.
 | Orders hub | `app/app/orders/` |
 | Reports + exports | `app/app/reports/`, `app/app/exports/` |
 | Inventory, purchasing, waste, recipes | `app/app/inventory/`, `purchasing/`, `waste/`, `recipes/` |
+| Barcode scanning + low-stock warnings | `app/app/pos/barcode-scanner.tsx`, `app/app/inventory/`, `app/app/pos/register-client.tsx` |
 | Staff, scheduling, time clock, attendance | `app/app/staff/`, `schedule/`, `clock/`, `attendance/`, `labor/` |
 | Reservations **and waitlist** | `app/app/reservations/`, `lib/services/reservations.ts` |
 | Online ordering | `app/order/[businessId]/online-order-client.tsx` |
@@ -48,11 +49,20 @@ come off the site rather than be softened.
 * **`$10 one-time setup` and `$35 dispute fee`** — same; no billing code.
 * **`Advanced $29/month`, `30-day free trial`** — no plan/billing/entitlement
   code found. The tier names do not map to anything in `lib/modules/registry.ts`.
-* **"Appointments & bookings"** (claimed on `/pos` and `/pricing`) — there is
-  `app/app/reservations/` (restaurant covers + waitlist), which is not the same
-  thing as salon/chair appointment booking. No appointments module exists.
-* **"Barcode scanning"** (claimed on `/pos`, `/pos-for-retail`, `/pricing`) —
-  inventory exists; a barcode scan path was not found.
+* **"Appointments & bookings"** (claimed on `/pos` and `/pricing`) — no
+  appointments module exists. `lib/modules/modes.ts` declares the
+  `appointments` mode with **`status: "soon"`**, so the product itself already
+  calls this unbuilt and only the marketing site disagreed.
+  `app/app/reservations/` is restaurant covers + a waitlist, which is a
+  different feature; the pages now name that instead.
+
+*(Corrected after first pass: **barcode scanning** and **low-stock warnings**
+were briefly listed here as unverifiable. They are real —
+`app/app/pos/barcode-scanner.tsx` plus the low-stock path in
+`app/app/inventory/` and `app/app/pos/register-client.tsx` — and both claims
+were restored to `/pos`, `/pos-for-retail` and `/pricing`. The first search
+missed them because of a shell-quoting error, which is the argument for
+verifying a removal as carefully as an addition.)*
 * **"We supply terminals / thermal printers / in-person terminal setup"** — a
   hardware sourcing doc exists (`docs/hardware-sourcing.md`) but nothing ships.
 * **"Custom CRM / SaaS builds"** — an agency service line, unverifiable from

@@ -100,7 +100,12 @@ export function LandingCompare({ competitor, rows, note }: { competitor: string;
               <tr key={r[0]} className="border-t border-[#D9E1EA]">
                 <td className="px-4 py-3.5 font-semibold text-[#42566B]">{r[0]}</td>
                 <td className="bg-[#F4F7FA] px-4 py-3.5 font-bold text-[#0A2540]">{r[1]}</td>
-                <td className="px-4 py-3.5 text-[#7A8CA0]">{r[2]}</td>
+                {/* Was #7A8CA0, which is 3.55:1 on white — under AA for body
+                    text, and these cells are body text, not fine print. The
+                    competitor column still has to read as the quieter one, so
+                    this is the darkest value that keeps the de-emphasis while
+                    clearing the bar: #5A6E82 measures 5.27:1. */}
+                <td className="px-4 py-3.5 text-[#5A6E82]">{r[2]}</td>
               </tr>
             ))}
           </tbody>

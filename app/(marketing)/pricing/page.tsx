@@ -33,14 +33,16 @@ function Check({ className }: { className?: string }) {
   );
 }
 
-// Feature lists trimmed to what /pos could be verified against in the code.
-// Removed from Basic: "tap, chip, swipe and mobile payments" (payments claim).
-// Removed from Advanced: "barcode and low-stock inventory" and "appointments
-// and bookings" — no barcode scan path and no appointments module were found;
-// app/app/reservations is dining-room covers and a waitlist, which is a
-// different product and is named as such.
+// Feature lists trimmed to what could be verified in the code. Removed from
+// Basic: "tap, chip, swipe and mobile payments" — a payments claim. Removed
+// from Advanced: "appointments and bookings", because lib/modules/modes.ts
+// declares the `appointments` mode with `status: "soon"`, so the product itself
+// already calls it unbuilt. Barcode and low-stock inventory STAYED: both are
+// real (app/app/pos/barcode-scanner.tsx and the low-stock path in
+// app/app/inventory), and "reservations and waitlist" replaces the
+// appointments line because that is the booking feature that does exist.
 const basicFeatures = ["Unlimited sales and checkout", "Printed and emailed receipts", "Menu and catalog builder", "Daily sales reports", "Simple inventory tracking", "One register"];
-const advancedFeatures = ["Everything in Basic", "Floor plan and table service", "Kitchen display and stations", "Reservations and waitlist", "Staff roles, scheduling and time clock", "Online, QR and kiosk ordering", "Deeper reporting and exports", "Priority support"];
+const advancedFeatures = ["Everything in Basic", "Floor plan and table service", "Kitchen display and stations", "Barcode and low-stock inventory", "Reservations and waitlist", "Staff roles, scheduling and time clock", "Online, QR and kiosk ordering", "Deeper reporting and exports", "Priority support"];
 const customFeatures = ["Custom CRM systems", "Business dashboards and reporting", "Workflow automation and integrations", "Booking and customer portals", "Internal tools and admin panels", "Full custom web apps and SaaS"];
 
 const noFees = ["No lock-in contract", "No setup fee on the software", "Free tier that stays free", "Cancel any time"];

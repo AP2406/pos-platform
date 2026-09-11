@@ -7,15 +7,21 @@ import { Crumb, btnPrimary, btnOutline, CtaBand, PaymentsComingSoon } from "../u
 
 // THE FLAGSHIP PAGE. Every feature named below was checked against a real
 // screen in the product before it was written here, and the file each one lives
-// in is noted beside it. Two things the page used to claim are gone because no
-// code backs them: "appointments & bookings" (app/app/reservations is covers
-// and a waitlist for a dining room, which is not chair-booking) and barcode
-// scanning (inventory exists; a scan path does not). "Every way they pay" is
-// gone too — that is the payments claim, and it now lives in the coming-soon
-// band at the bottom of the page in future tense.
+// in is noted beside it.
+//
+// One claim came off for not being real: "appointments & bookings". There is no
+// appointments module — lib/modules/modes.ts declares the `appointments` mode
+// with `status: "soon"`, so the product itself already says this is unbuilt,
+// and only the marketing site was claiming otherwise. app/app/reservations is
+// dining-room covers and a waitlist, which is a different thing and is named as
+// such below.
+//
+// "Every way they pay" also came off, for a different reason: it is true of the
+// product's card path but not of us as a processor, so it now lives in the
+// coming-soon band at the bottom of the page, in future tense.
 export const metadata: Metadata = {
   title: { absolute: "POS System for Restaurants, Cafes & Retail (GTA) | Surge" },
-  description: "Surge POS: register, floor plan and table service, kitchen display, menu builder, online and QR ordering, kiosk, inventory, staff and time clock, and reports. Free Basic tier, runs on the device you already have.",
+  description: "Surge POS: register, floor plan and table service, kitchen display, menu builder, online and QR ordering, kiosk, barcode inventory, staff and time clock, and reports. Free Basic tier, runs on the device you already have.",
   alternates: { canonical: "/pos" },
   openGraph: { ...OG_BASE, url: "/pos" },
 };
@@ -43,7 +49,7 @@ const features = [
   { icon: "floor", title: "Floor plan and table service", body: "Draw your room, open and move tables, fire by seat and course, and transfer a table between servers without losing the order." }, // app/app/floor, app/app/pos/floor-client.tsx
   { icon: "kitchen", title: "Kitchen display", body: "Tickets go straight to the line and route to the station that cooks them, so nothing depends on handwriting or a spike of paper dupes." }, // app/app/kitchen
   { icon: "menu", title: "Menu builder", body: "Items, modifiers, prices and availability in one place. 86 something once and it clears every register, screen and online menu at the same time." }, // app/app/catalog
-  { icon: "box", title: "Inventory and cost", body: "Stock counts, purchasing, recipes and waste, so you can see what a dish costs you rather than only what it sold for." }, // app/app/inventory, purchasing, recipes, waste
+  { icon: "box", title: "Inventory and cost", body: "Scan a barcode to ring up or to receive stock, with low-stock warnings, purchasing, recipes and waste behind it — so you can see what a dish costs you, not only what it sold for." }, // app/app/pos/barcode-scanner.tsx, app/app/inventory, purchasing, recipes, waste
   { icon: "people", title: "Staff, roles and time clock", body: "Owner, manager and custom roles with real permissions, plus scheduling, clock-in, attendance and labour measured against sales." }, // app/app/staff, schedule, clock, attendance, labor
   { icon: "receipt", title: "Receipts and reservations", body: "Print or email a receipt as the sale closes; take bookings for the dining room and run a waitlist from the same system." }, // app/app/reservations
   { icon: "chart", title: "Reports you will actually open", body: "Daily totals, best sellers, busiest hours, and exports for whoever does the books." }, // app/app/reports, exports

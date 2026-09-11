@@ -57,7 +57,8 @@ export function PageHero({ crumb, title, sub }: { crumb: string; title: string; 
 const PAY_METHODS = ["Tap", "Chip & swipe", "Apple Pay", "Google Pay", "Interac", "Visa", "Mastercard"];
 
 export function ComingSoonBadge({ children = "Coming soon" }: { children?: React.ReactNode }) {
-  // #1B6DC1 on #E8F1FB is 4.98:1 — AA for the 13px it renders at.
+  // #1B6DC1 on #E8F1FB measures 4.60:1 — over AA's 4.5:1 for the 12.5px this
+  // renders at, which is below the large-text threshold, so it needs the full bar.
   return (
     <span className="inline-flex items-center rounded-[3px] bg-[#E8F1FB] px-2.5 py-1 text-[12.5px] font-bold uppercase tracking-[0.05em] text-[#1B6DC1]">
       {children}
