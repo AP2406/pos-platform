@@ -43,7 +43,7 @@ export default async function RepDetail({ params }: { params: Promise<{ id: stri
             <tbody>
               {merchants.map((m) => (
                 <tr key={m.id} className="border-b border-zinc-800 last:border-0">
-                  <td className="py-1.5"><Link href={"/hq/merchants/" + m.id} className="hover:text-emerald-400">{m.name}</Link> <span className="text-[12px] text-zinc-500 capitalize">{m.status}</span></td>
+                  <td className="py-1.5"><Link href={"/hq/merchants/" + m.id} className="hover:text-emerald-400">{m.name}</Link> <span className="text-[11px] text-zinc-500 capitalize">{m.status}</span></td>
                   <td className="py-1.5 text-right tabular-nums text-zinc-400">{m.volume > 0 ? money(m.volume) + " vol" : "—"}</td>
                   <td className="py-1.5 text-right tabular-nums">{m.residual > 0 ? money(m.residual) + " residual" : "—"}</td>
                 </tr>
@@ -74,7 +74,7 @@ export default async function RepDetail({ params }: { params: Promise<{ id: stri
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3"><div className="text-[12px] uppercase tracking-wide text-zinc-500">{label}</div><div className="text-lg font-semibold mt-0.5 tabular-nums">{value}</div></div>;
+  return <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3"><div className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</div><div className="text-lg font-semibold mt-0.5 tabular-nums">{value}</div></div>;
 }
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 mb-4"><h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">{title}</h2>{children}</div>;

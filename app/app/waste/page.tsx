@@ -150,7 +150,7 @@ export default async function WastePage({
               />
             </div>
             <div className="divide-y divide-border">
-              <div className="grid grid-cols-12 gap-2 text-[11px] uppercase tracking-wide text-muted-foreground pb-1">
+              <div className="grid grid-cols-12 gap-2 text-[10px] uppercase tracking-wide text-muted-foreground pb-1">
                 <div className="col-span-4">Ingredient</div>
                 <div className="col-span-3 text-right">Sales usage</div>
                 <div className="col-span-3 text-right">Waste</div>
@@ -190,7 +190,7 @@ function fmt(n: number, currency: string): string {
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "warning" }) {
   return (
     <div className="rounded-lg border border-border p-3">
-      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className={"text-lg font-semibold tabular-nums " + (tone === "warning" ? "text-amber-600" : "")}>
         {value}
       </div>

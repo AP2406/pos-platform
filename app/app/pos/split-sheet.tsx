@@ -372,7 +372,7 @@ export function SplitSheet(props: Props) {
                 </div>
                 {allowUnits && sharePicker === i && (
                   <div className="mt-2 rounded-md bg-accent/30 p-2">
-                    <div className="text-[12px] text-muted-foreground mb-1.5">Which seats are sharing this item? Tap each seat splitting it.</div>
+                    <div className="text-[11px] text-muted-foreground mb-1.5">Which seats are sharing this item? Tap each seat splitting it.</div>
                     <div className="flex flex-wrap gap-1.5">
                       {Array.from({ length: n }, (_, ci) => {
                         const on = (alloc[i]?.[ci] ?? 0) > 0;
@@ -411,7 +411,7 @@ export function SplitSheet(props: Props) {
                 <div key={ci} className={"rounded-md border p-3 " + (done ? "border-emerald-500/60 bg-emerald-500/5" : "border-border")}>
                   <button type="button" onClick={() => setActiveSquare(activeSquare === ci ? null : ci)} className="w-full flex items-center justify-between text-left">
                     <div>
-                      <div className="text-sm font-medium">Seat {ci + 1} {done && <span className="ml-1 text-[11px] rounded-full bg-emerald-600 text-white px-1.5 py-0.5 align-middle">PAID</span>}</div>
+                      <div className="text-sm font-medium">Seat {ci + 1} {done && <span className="ml-1 text-[10px] rounded-full bg-emerald-600 text-white px-1.5 py-0.5 align-middle">PAID</span>}</div>
                       <div className="text-xs text-muted-foreground tabular-nums">Total ${q.total.toFixed(2)} · Paid ${paid.toFixed(2)}{!done && <span className="text-red-600"> · Outstanding ${out.toFixed(2)}</span>}</div>
                     </div>
                     <span className="text-xs text-muted-foreground">{activeSquare === ci ? "Close" : done ? "Edit" : "Pay"}</span>
@@ -437,7 +437,7 @@ export function SplitSheet(props: Props) {
                         <Input type="number" min="0" step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder={out.toFixed(2)} className="h-9 flex-1 text-right" />
                         <Button className="h-9" onClick={() => addPayment(ci)}>Add</Button>
                       </div>
-                      <p className="text-[12px] text-muted-foreground">Leave blank to pay the full outstanding ${out.toFixed(2)}. Enter less for a partial (split) tender.</p>
+                      <p className="text-[11px] text-muted-foreground">Leave blank to pay the full outstanding ${out.toFixed(2)}. Enter less for a partial (split) tender.</p>
                     </div>
                   )}
                 </div>
@@ -457,7 +457,7 @@ export function SplitSheet(props: Props) {
                   </div>
                 ))}
               </div>
-              <p className="text-[12px] text-muted-foreground">Item subtotals shown. Tax, service charge and discounts divide proportionally — exact per-seat amounts are computed when you continue.</p>
+              <p className="text-[11px] text-muted-foreground">Item subtotals shown. Tax, service charge and discounts divide proportionally — exact per-seat amounts are computed when you continue.</p>
               {quoteErr && <p className="text-xs text-red-600">{quoteErr}</p>}
               {props.settleNow ? (
                 <Button className="w-full h-12" disabled={!canConfirm || quoting} onClick={continueToPayment}>

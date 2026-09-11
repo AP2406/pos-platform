@@ -62,7 +62,7 @@ function WorkspaceSwitcher({
         className="w-full flex items-center gap-2 text-left rounded-md p-1.5 -m-1.5 hover:bg-sidebar-accent transition-colors"
       >
         <span className="min-w-0 flex-1">
-          <span className="block text-[11px] uppercase tracking-[0.1em] text-sidebar-muted font-medium">
+          <span className="block text-[10px] uppercase tracking-[0.08em] text-sidebar-muted font-medium">
             Workspace
           </span>
           <span className="block font-medium text-sm mt-1 truncate">{name}</span>
@@ -202,13 +202,7 @@ export function AppShell({
   // register's own slim top bar provides the only way out (exit to dashboard).
   if (isTill) {
     return (
-      // u-serif is repeated here rather than hoisted: the till returns early
-      // and shares no wrapper with the shell below, and a register that keeps
-      // the old face while every other screen changed is the single most
-      // visible way this could go wrong.
-      <main className="u-serif h-[100dvh] overflow-hidden bg-background">
-        {children}
-      </main>
+      <main className="h-[100dvh] overflow-hidden bg-background">{children}</main>
     );
   }
 
@@ -226,9 +220,7 @@ export function AppShell({
     "fixed inset-0 z-40 bg-black/60 backdrop-blur-sm " + (isTill ? "" : "md:hidden");
 
   return (
-    // The whole admin surface hangs off this one class — sidebar, header,
-    // page content and every route under /app.
-    <div className="u-serif min-h-screen flex bg-background">
+    <div className="min-h-screen flex bg-background">
       <header className={headerClasses}>
         <button
           type="button"

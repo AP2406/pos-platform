@@ -79,7 +79,7 @@ export default async function SettlementPage({
             <div className={"flex justify-between py-1 " + (Math.abs(report.feeVariance) > 0.01 ? "text-amber-600" : "")}><span>Fee variance</span><span className="tabular-nums">{(report.feeVariance >= 0 ? "+" : "") + money(report.feeVariance)}</span></div>
             <div className="border-t border-border my-1" />
             <div className="flex justify-between py-1 font-semibold"><span>Net deposited</span><span className="tabular-nums">{money(report.settledNet)}</span></div>
-            <p className="text-[12px] text-muted-foreground mt-2">Expected fees cover processing only; payout-timing fees (instant 1.5% / T+1 $0.75 / T+2 $0.50), disputes ($30) and ACH returns ($5) appear in the actual total. Gross variance is usually timing — sales settle a day or two later.</p>
+            <p className="text-[11px] text-muted-foreground mt-2">Expected fees cover processing only; payout-timing fees (instant 1.5% / T+1 $0.75 / T+2 $0.50), disputes ($30) and ACH returns ($5) appear in the actual total. Gross variance is usually timing — sales settle a day or two later.</p>
           </div>
 
           <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl overflow-hidden">

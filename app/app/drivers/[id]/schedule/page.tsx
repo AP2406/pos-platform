@@ -73,13 +73,13 @@ export default async function DriverSchedulePage({
               </div>
               <div className="mt-3 space-y-2 text-sm">
                 <div>
-                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                     Pickup
                   </div>
                   <div className="font-medium">{t.pickup_address}</div>
                 </div>
                 <div>
-                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                     Dropoff
                   </div>
                   <div className="font-medium">{t.dropoff_address}</div>

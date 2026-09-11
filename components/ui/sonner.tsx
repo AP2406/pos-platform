@@ -38,11 +38,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       toastOptions={{
         classNames: {
-          // Sonner renders its own container on document.body, so a toast is
-          // outside the admin shell's serif scope for the same reason a
-          // Dialog is. This Toaster is admin-only furniture; nothing on a
-          // guest screen mounts it.
-          toast: "cn-toast u-serif",
+          toast: "cn-toast",
         },
       }}
       {...props}

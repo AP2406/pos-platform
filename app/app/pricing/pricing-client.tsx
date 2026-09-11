@@ -142,13 +142,13 @@ export function PricingClient({ windows, items, categories, currency }: { window
                 <div className="font-medium text-sm">
                   {w.name}
                   <span className="ml-2 text-xs font-normal text-muted-foreground">{w.scope === "item" ? itemName(w.targetItemId) : w.targetCategory}</span>
-                  {!w.active && <span className="ml-2 text-[12px] rounded-full px-2 py-0.5 bg-muted text-muted-foreground">off</span>}
+                  {!w.active && <span className="ml-2 text-[11px] rounded-full px-2 py-0.5 bg-muted text-muted-foreground">off</span>}
                 </div>
-                <div className="text-[12px] text-muted-foreground">
+                <div className="text-[11px] text-muted-foreground">
                   {w.mode === "percent" ? w.value + "% off" : money(w.value)} · {winLabel(w)}
                 </div>
               </div>
-              <div className="flex gap-2 text-[12px] shrink-0">
+              <div className="flex gap-2 text-[11px] shrink-0">
                 <button onClick={() => start(async () => { await setPriceWindowActive(w.id, !w.active); })} disabled={pending} className="underline text-muted-foreground">{w.active ? "disable" : "enable"}</button>
                 <button onClick={() => { if (confirm("Delete this window?")) start(async () => { await deletePriceWindow(w.id); }); }} disabled={pending} className="underline text-red-600">delete</button>
               </div>

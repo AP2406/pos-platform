@@ -35,7 +35,7 @@ export function ClockEnforcementCard({ enabled: initEnabled = false, graceMin: i
         <div className="space-y-1">
           <Label className="text-xs">Early grace (min)</Label>
           <Input value={grace} onChange={(e) => setGrace(e.target.value)} inputMode="numeric" className="h-9 w-28" />
-          <p className="text-[12px] text-muted-foreground">How many minutes early they may clock in.</p>
+          <p className="text-[11px] text-muted-foreground">How many minutes early they may clock in.</p>
         </div>
         <Button onClick={save} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
       </div>

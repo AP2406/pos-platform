@@ -101,7 +101,7 @@ export default async function InventoryPage() {
             </tbody>
           </table>
           {valuation.length > topValue.length && (
-            <div className="text-[12px] text-muted-foreground mt-2">
+            <div className="text-[11px] text-muted-foreground mt-2">
               Showing the {topValue.length} highest-value of {valuation.length} tracked ingredients. Manage ingredient costs &amp; stock under Recipes.
             </div>
           )}

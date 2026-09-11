@@ -659,7 +659,7 @@ export function KitchenClient({
               const ld = stationLoad.get(s.id);
               if (!ld) return null;
               const hot = ld.oldest >= kdsLate;
-              return <span className={"ml-1.5 text-[12px] tabular-nums " + (stationFilter === s.id ? "opacity-90" : hot ? "text-red-600 font-semibold" : "text-muted-foreground")}>{ld.items}·{formatDuration(ld.oldest)}</span>;
+              return <span className={"ml-1.5 text-[11px] tabular-nums " + (stationFilter === s.id ? "opacity-90" : hot ? "text-red-600 font-semibold" : "text-muted-foreground")}>{ld.items}·{formatDuration(ld.oldest)}</span>;
             })()}
           </button>
         ))}
@@ -717,7 +717,7 @@ export function KitchenClient({
             <button key={p} type="button" onClick={() => sendMsg(p)} disabled={pending} className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-accent disabled:opacity-50">{p}</button>
           ))}
         </div>
-        <p className="text-[12px] text-muted-foreground mt-2">Sent live to the table&apos;s server.</p>
+        <p className="text-[11px] text-muted-foreground mt-2">Sent live to the table&apos;s server.</p>
       </div>
     </div>
   ) : null;
@@ -850,10 +850,10 @@ export function KitchenClient({
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="min-w-0">
             {o.rush && !isVoid && (
-              <div className="text-[12px] font-bold uppercase tracking-wide text-orange-600 mb-0.5">🔥 Rush</div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-orange-600 mb-0.5">🔥 Rush</div>
             )}
             {o.channel && CHANNEL_META[o.channel] && !isVoid && (
-              <div className="text-[12px] font-bold uppercase tracking-wide text-blue-600 mb-0.5">{CHANNEL_META[o.channel].badge}</div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-blue-600 mb-0.5">{CHANNEL_META[o.channel].badge}</div>
             )}
             {isVoid ? (
               <div className="text-lg font-bold leading-tight truncate text-red-600">⚠ VOID — {o.tableName ?? o.tableLabel ?? "Table"}</div>
@@ -862,7 +862,7 @@ export function KitchenClient({
             ) : (
               <div className="text-lg font-bold leading-tight truncate">{(o.channel && CHANNEL_META[o.channel]?.title) || "Online"}</div>
             )}
-            <div className="text-[12px] text-muted-foreground tabular-nums mt-0.5">
+            <div className="text-[11px] text-muted-foreground tabular-nums mt-0.5">
               {(o.kind === "kitchen" ? "" : "#" + o.id.slice(0, 8) + " · ") + timeLabel(o.createdAt)}
             </div>
           </div>
@@ -885,9 +885,9 @@ export function KitchenClient({
                   <div className="flex justify-between items-center gap-2">
                     <span className={"min-w-0 flex items-center gap-2 " + (it.ready ? "text-muted-foreground" : "")}>
                       {/* Per-item bump: tap to mark this line done (round target). */}
-                      <span className={"shrink-0 w-5 h-5 rounded-full border flex items-center justify-center text-[12px] leading-none transition-colors " + (it.ready ? "bg-emerald-500 border-emerald-500 text-white" : "border-muted-foreground/40 text-transparent")}>✓</span>
+                      <span className={"shrink-0 w-5 h-5 rounded-full border flex items-center justify-center text-[11px] leading-none transition-colors " + (it.ready ? "bg-emerald-500 border-emerald-500 text-white" : "border-muted-foreground/40 text-transparent")}>✓</span>
                       <span className={"truncate" + (it.ready ? " line-through" : "") + (it.void ? " line-through text-red-600 font-semibold" : "")}>{(it.void ? "✗ " : "") + (it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}</span>
-                      {recipes[displayItemName(it.name).toLowerCase()] && <span role="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); setRecipeItem(displayItemName(it.name)); }} className="shrink-0 text-[11px] text-sky-600 underline">build</span>}
+                      {recipes[displayItemName(it.name).toLowerCase()] && <span role="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); setRecipeItem(displayItemName(it.name)); }} className="shrink-0 text-[10px] text-sky-600 underline">build</span>}
                     </span>
                     <span className={"tabular-nums " + (it.ready ? "text-muted-foreground line-through" : "text-muted-foreground")}>{"x" + it.quantity}</span>
                   </div>
@@ -905,9 +905,9 @@ export function KitchenClient({
                 >
                   <div className="flex justify-between items-center gap-2">
                     <span className={"min-w-0 flex items-center gap-2 " + (it.ready ? "text-muted-foreground" : "")}>
-                      <span className={"shrink-0 w-5 h-5 rounded-full border flex items-center justify-center text-[12px] leading-none transition-colors " + (it.ready ? "bg-emerald-500 border-emerald-500 text-white" : "border-muted-foreground/40 text-transparent")}>✓</span>
+                      <span className={"shrink-0 w-5 h-5 rounded-full border flex items-center justify-center text-[11px] leading-none transition-colors " + (it.ready ? "bg-emerald-500 border-emerald-500 text-white" : "border-muted-foreground/40 text-transparent")}>✓</span>
                       <span className={"truncate" + (it.ready ? " line-through" : "") + (it.void ? " line-through text-red-600 font-semibold" : "")}>{(it.void ? "✗ " : "") + (it.seat ? "S" + it.seat + " · " : "") + displayItemName(it.name)}</span>
-                      {recipes[displayItemName(it.name).toLowerCase()] && <span role="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); setRecipeItem(displayItemName(it.name)); }} className="shrink-0 text-[11px] text-sky-600 underline">build</span>}
+                      {recipes[displayItemName(it.name).toLowerCase()] && <span role="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); setRecipeItem(displayItemName(it.name)); }} className="shrink-0 text-[10px] text-sky-600 underline">build</span>}
                     </span>
                     <span className={"tabular-nums " + (it.ready ? "text-muted-foreground line-through" : "text-muted-foreground")}>{"x" + it.quantity}</span>
                   </div>
@@ -994,7 +994,7 @@ export function KitchenClient({
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="min-w-0">
                     <div className="text-lg font-bold leading-tight truncate">{g.tableName}</div>
-                    <div className="text-[12px] text-muted-foreground tabular-nums mt-0.5">{timeLabel(g.firstAt)}</div>
+                    <div className="text-[11px] text-muted-foreground tabular-nums mt-0.5">{timeLabel(g.firstAt)}</div>
                   </div>
                   <Chip tone={gAge.tone} dot className="shrink-0">{gAge.label}</Chip>
                 </div>
@@ -1002,7 +1002,7 @@ export function KitchenClient({
                   {g.tickets.map((t) => (
                     <div key={t.id}>
                       {t.stationName && (
-                        <div className="text-[12px] uppercase tracking-wide text-muted-foreground mb-0.5">{t.stationName}</div>
+                        <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-0.5">{t.stationName}</div>
                       )}
                       {t.items.map((it, i) => (
                         <div key={i} className="flex flex-col">

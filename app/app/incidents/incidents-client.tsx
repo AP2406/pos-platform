@@ -114,7 +114,7 @@ export function IncidentsClient({ incidents }: { incidents: Incident[] }) {
                       <Button variant="outline" className="h-8" onClick={() => { setResolvingId(null); setResText(""); }} disabled={pending}>Cancel</Button>
                     </div>
                   ) : (
-                    <div className="mt-2 flex gap-3 text-[12px]">
+                    <div className="mt-2 flex gap-3 text-[11px]">
                       <button onClick={() => { setResolvingId(i.id); setResText(""); }} className="underline text-emerald-600">resolve</button>
                       <button onClick={() => start(async () => { await deleteIncident(i.id); })} disabled={pending} className="underline text-red-600">delete</button>
                     </div>
@@ -128,7 +128,7 @@ export function IncidentsClient({ incidents }: { incidents: Incident[] }) {
               {resolved.map((i) => (
                 <Row key={i.id} i={i} typeLabel={typeLabel} fmt={fmt} pending={pending}>
                   {i.resolution && <p className="mt-1 text-xs text-muted-foreground"><span className="font-medium">Resolution:</span> {i.resolution}</p>}
-                  <div className="mt-2 flex gap-3 text-[12px]">
+                  <div className="mt-2 flex gap-3 text-[11px]">
                     <button onClick={() => start(async () => { await reopenIncident(i.id); })} disabled={pending} className="underline text-muted-foreground">reopen</button>
                     <button onClick={() => start(async () => { await deleteIncident(i.id); })} disabled={pending} className="underline text-red-600">delete</button>
                   </div>
@@ -157,8 +157,8 @@ function Row({ i, typeLabel, fmt, children }: { i: Incident; typeLabel: (t: stri
     <div className="p-3">
       <div className="flex items-center gap-2 mb-1 flex-wrap">
         <span className="font-medium text-sm">{typeLabel(i.type)}</span>
-        <span className={"inline-block rounded-full px-2 py-0.5 text-[12px] font-medium " + sev.cls}>{sev.label}</span>
-        <span className="text-[12px] text-muted-foreground ml-auto">{fmt(i.createdAt)}{i.createdByName ? " · " + i.createdByName : ""}</span>
+        <span className={"inline-block rounded-full px-2 py-0.5 text-[11px] font-medium " + sev.cls}>{sev.label}</span>
+        <span className="text-[11px] text-muted-foreground ml-auto">{fmt(i.createdAt)}{i.createdByName ? " · " + i.createdByName : ""}</span>
       </div>
       <p className="text-sm whitespace-pre-wrap">{i.body}</p>
       {children}

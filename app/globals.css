@@ -10,21 +10,6 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
-  /* THE ADMIN TYPEFACE. Times New Roman is a system font on macOS, iOS and
-     Windows, so it is set with no request at all — self-hosting it or pulling
-     it from a font CDN would be strictly worse than reading the copy already
-     on the machine. It is absent from most Android and Linux boxes, though,
-     and a bare `serif` fallback there lands on whatever the distro nominated,
-     which on a stock Ubuntu is frequently a sans. Tinos, Liberation Serif and
-     Nimbus Roman are the metric-compatible clones the common Linux font
-     packages ship: same advance widths, so a Linux operator gets the line
-     breaks this was drawn against rather than a re-flow of them. */
-  --font-serif:
-    "Times New Roman", Tinos, "Liberation Serif", "Nimbus Roman", Times, serif;
-  /* THE FIGURES. Hanken Grotesk — the face the rest of the product is set in,
-     so it is already in the page and costs nothing to reach for here. Why the
-     serif can't carry them, and where this is applied, is in `.u-serif` below. */
-  --font-numeric: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -36,6 +21,24 @@
   --color-sidebar: var(--sidebar);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
+  /* THE SIGN-IN SURFACE. /login is the one admin screen with no chrome around
+     it — no sidebar, no header, no card grid — so it is the one screen whose
+     colours cannot be borrowed from the shell. These are registered as real
+     utilities rather than reached for as `bg-[var(--auth-…)]` so that the
+     values stay in this file and the page stays readable; every one of them is
+     defined for BOTH themes below. */
+  --color-auth-cta: var(--auth-cta);
+  --color-auth-cta-hover: var(--auth-cta-hover);
+  --color-auth-cta-foreground: var(--auth-cta-foreground);
+  --color-auth-panel: var(--auth-panel);
+  --color-auth-panel-foreground: var(--auth-panel-foreground);
+  --color-auth-panel-muted: var(--auth-panel-muted);
+  --color-auth-panel-line: var(--auth-panel-line);
+  --color-auth-card: var(--auth-card);
+  --color-auth-bar: var(--auth-bar);
+  --color-auth-bar-peak: var(--auth-bar-peak);
+  --color-auth-scrim: var(--auth-scrim);
+  --color-auth-scrim-top: var(--auth-scrim-top);
   /* 6 and 7 exist because the payment mix has up to seven tenders — cash, card,
      other, split, gift card, store credit and third-party delivery — and a
      donut that reuses a hue for two slices is a donut that lies. */
@@ -397,6 +400,56 @@
     inset 0 1px 0 var(--btn-lip),
     0 2px 5px -2px oklch(0.36 0.15 253 / 0.5),
     0 12px 22px -10px oklch(0.36 0.15 253 / 0.55);
+
+  /* ====================================================================
+     THE SIGN-IN SURFACE (light). See the matching block in .dark.
+     ==================================================================== */
+
+  /* THE PRIMARY ACTION HERE IS INK, NOT THE BRAND BLUE — and that is a
+     deliberate exception to the rest of the product, not an oversight.
+     Everywhere else `primary` means "the one blue key on a screen full of
+     other keys", and the blue earns its place by being the only saturated
+     thing in view. /login has nothing to compete with: one form, one button.
+     A blue fill there spends the brand on a decision the reader has already
+     made, and it puts the page's single highest-contrast element at 4.93:1
+     when it could be at 17. So the CTA is the neutral extreme of the theme
+     and the blue stays where it carries identity — the mark in the panel.
+
+     It is its own token rather than `bg-foreground` because this is a FILL
+     with a label on it: it needs a hover step and a paired foreground, and
+     body-text ink must be free to move without dragging a button with it.
+
+     MEASURED: --auth-cta-foreground on --auth-cta = 17.23:1. */
+  --auth-cta: oklch(0.21 0.02 265);
+  --auth-cta-hover: oklch(0.28 0.022 265);
+  --auth-cta-foreground: oklch(0.99 0.002 265);
+
+  /* The left panel in the "stats" variant. Warm where the rest of light mode
+     is cool (hue 85 against the system's 265) so the split reads as two
+     materials rather than as one surface with a line down it — the same
+     trick --canvas-lit plays, at the same sub-nameable chroma. */
+  --auth-panel: oklch(0.972 0.004 85);
+  --auth-panel-foreground: oklch(0.21 0.02 265); /* 16.35:1 on the panel */
+  --auth-panel-muted: oklch(0.52 0.02 265); /*  5.08:1 on the panel */
+  --auth-panel-line: oklch(0.21 0.02 265 / 0.1);
+  --auth-card: oklch(1 0 0);
+
+  /* The illustrative hourly chart. The idle bars are deliberately near the
+     card — they are texture, not data, and nothing is read off them. The one
+     highlighted bar is the only element there that carries meaning, so it is
+     the only one held to a contrast figure: 4.65:1 on the panel. */
+  --auth-bar: oklch(0.9 0.012 265);
+  --auth-bar-peak: oklch(0.54 0.2 253);
+
+  /* The scrim over the "photo" variant. Two layers, because the photograph
+     underneath is a real room and its brightness is not ours to choose: a
+     flat wash across the whole panel, plus a heavier band down the top where
+     the white lockup sits. Composited over the WORST case the photo can
+     present (a blown-out white pixel) the top band lands at 78% effective
+     ink, and white on that measures 10.0:1 — so the mark clears AA against
+     any frame, not just the one we happened to ship. */
+  --auth-scrim: oklch(0.16 0.014 265 / 0.32);
+  --auth-scrim-top: oklch(0.16 0.014 265 / 0.68);
 }
 
 .dark {
@@ -569,6 +622,55 @@
     inset 0 1px 0 var(--btn-lip),
     0 2px 5px -2px oklch(0 0 0 / 0.55),
     0 14px 26px -12px oklch(0.64 0.2 253 / 0.65);
+
+  /* ====================================================================
+     THE SIGN-IN SURFACE (dark).
+
+     The mockups are light-only, so this half is designed rather than
+     derived, and the CTA is where it has to stop being a translation. In
+     light the sign-in key is ink because ink is the far end of the theme
+     from the page. In dark, ink IS the page — a 0.21 fill on a 0.145 canvas
+     is a card, not a button, and it would be the least visible control on a
+     screen where it is the only one that matters. So the rule that survives
+     is the rule, not the colour: the key is the neutral extreme AWAY from
+     the canvas, which in dark means near-white with ink lettering.
+
+     That also keeps the two themes agreeing about what blue is for. Dark's
+     --primary is the logo blue uncut; if the sign-in key stayed blue here it
+     would be the loudest object on the page and the mark beside it would be
+     the second. Near-white on ink outranks it without borrowing from it.
+     ==================================================================== */
+
+  /* MEASURED: --auth-cta-foreground on --auth-cta = 17.80:1. */
+  --auth-cta: oklch(0.97 0.004 265);
+  --auth-cta-hover: oklch(0.88 0.006 265);
+  --auth-cta-foreground: oklch(0.16 0.02 265);
+
+  /* Light's panel is warmer than its page; dark's is LIGHTER than its page
+     (0.185 against the 0.145 canvas), because on ink a warm tint at this
+     chroma is invisible and lightness is the only axis with room left. Same
+     intent — the split reads as two planes — via the axis that still works.
+     The panel sits between the canvas and a card, so it reads as a wall the
+     card is mounted on rather than as another card. */
+  --auth-panel: oklch(0.185 0.015 265);
+  --auth-panel-foreground: oklch(0.98 0.004 265); /* 17.60:1 on the panel */
+  --auth-panel-muted: oklch(0.75 0.022 265); /*  8.38:1 on the panel */
+  --auth-panel-line: oklch(1 0 0 / 0.1);
+  --auth-card: oklch(0.225 0.016 265);
+
+  /* Idle bars lift off the card instead of dropping toward it — on ink,
+     "recessive" is darker in light mode and lighter here. The peak keeps the
+     logo blue uncut, as everything else in dark does: 5.03:1 on the card. */
+  --auth-bar: oklch(0.34 0.018 265);
+  --auth-bar-peak: oklch(0.64 0.2 253);
+
+  /* The photograph is the same photograph, but it is now the brightest thing
+     on the page rather than a panel beside a white form, so the flat wash
+     goes from 32% to 52% and the ink underneath goes deeper. The top band is
+     unchanged: it was already sized by the photo's worst case, not by the
+     theme. Combined, the lockup sits on ~85% effective ink here. */
+  --auth-scrim: oklch(0.12 0.014 265 / 0.52);
+  --auth-scrim-top: oklch(0.12 0.014 265 / 0.68);
 }
 
 @layer base {
@@ -607,128 +709,6 @@ a,
 }
 
 @layer utilities {
-  /* ======================================================================
-     THE SERIF SCOPE
-     ======================================================================
-
-     Everything the signed-in operator sees is set in Times New Roman: /app,
-     /login, /onboarding, /hq, and the portals those routes open.
-
-     It is a class applied at those roots rather than a change to `html`
-     because the marketing site and the guest-facing screens — kiosk, the
-     customer-facing display, online ordering, booking — are a different
-     product talking to a different reader, and they keep the grotesque.
-     Opting IN also means a route added later inherits the guest face until
-     somebody decides otherwise, which is the safer direction to be wrong in.
-
-     The portals matter as much as the routes. A Dialog or a Sheet renders
-     into document.body, outside this subtree, so a modal would otherwise be
-     the one screen still speaking in the old voice. `u-serif` therefore goes
-     on their content as well — and because every consumer of those two
-     primitives lives under /app, that can't leak the serif onto a guest
-     screen in the other direction. */
-  .u-serif {
-    font-family: var(--font-serif);
-
-    /* THE SMALL END OF THE LADDER MOVES UP ONE STEP.
-       Times has a small x-height — measured against the grotesque it replaces,
-       44.7 vs 52.3 at the same 100px — so 12px of Times reads about as large
-       as 10px of Hanken did. That is under the floor where a table cell is
-       comfortable and well under it on the register and the KDS-adjacent
-       screens, which are read at arm's length rather than at a desk.
-       Matching the x-height outright would mean 1.17x everywhere and no
-       layout on this surface has that much room, so the whole small end
-       shifts by exactly one step instead: the two ladder tokens here, and the
-       arbitrary sizes in the components with them (9→10, 10→11, 11→12, 13→14,
-       15→16, 17→18). Times also sets about 7.5% narrower than the grotesque,
-       which pays back most of the width the bump costs.
-       text-base and up are deliberately untouched: past 16px x-height stops
-       being what gates legibility, and every display size on this surface is
-       a figure, which is not set in the serif at all. */
-    --text-xs: 0.8125rem; /* 12 → 13 */
-    --text-sm: 0.9375rem; /* 14 → 15 */
-
-    /* Serif body wants more leading at the same measure — the smaller
-       x-height puts more white inside the line and proportionally less
-       between them, and dense rows start to look like a block of grey.
-       Only the defaults move: anything that sets leading-* explicitly (the
-       KPI figures at leading-none, the tight list rows) keeps its own. */
-    --text-xs--line-height: 1.45;
-    --text-sm--line-height: 1.5;
-    --text-base--line-height: 1.6;
-
-    /* NEGATIVE TRACKING IS A SANS IDEA. -0.025em was drawn against Hanken's
-       even, closed shapes; on Times it pushes the serifs of adjacent letters
-       into each other and the word reads as crushed rather than as tight.
-       Neutralised here rather than deleted from 35 call sites, so
-       `tracking-tight` keeps meaning what it has always meant wherever the
-       grotesque still runs and simply stops applying on the serif. */
-    --tracking-tight: 0em;
-
-    /* The other direction, for the same reason. The uppercase micro-labels —
-       SALES TODAY, TIME, CHECK, the table column names — are the one place a
-       serif wants MORE air than a grotesque: caps have no descenders to hold
-       them apart and Times' are narrow with heavy bracketed serifs that start
-       to touch at 10 and 11px. */
-    --tracking-wide: 0.045em; /* was 0.025em */
-    --tracking-wider: 0.075em; /* was 0.05em  */
-    --tracking-widest: 0.12em; /* was 0.1em   */
-  }
-
-  /* ----------------------------------------------------------------------
-     THE ONE EXCEPTION: figures.
-
-     Times New Roman ships no tabular figure set, and no amount of
-     `font-variant-numeric` can conjure one. Measured in the browser at 40px:
-     `1111` sets 75.55px against `0000` at 80.00px — a 4.45px drift over four
-     digits — and asking for tabular-nums changes neither number. So a money
-     column in Times walks sideways as the day's totals climb through it, and
-     a live total twitches while you are reading it.
-
-     `tabular-nums` therefore carries the FAMILY as well as the feature inside
-     the serif scope. This codebase already uses that class, in ~390 places,
-     to mean precisely "this figure sits in a column or updates live" — the
-     currency amounts, check totals, counts, chart axis labels, KPI values,
-     the hero figure, the register totals. Hanging the face off it is what
-     makes the rule impossible to forget: a figure is set in the numeric face
-     because somebody marked it columnar, not because somebody remembered to
-     add a second class next to the first one. Numbers inside sentences —
-     "3 items at or below the reorder point" — are prose, carry no such mark,
-     and stay in the serif where they belong.
-
-     The face is Hanken Grotesk. It is already loaded by next/font for the
-     rest of the product, so this adds no request; it is a neutral grotesque
-     rather than a mono, so it sits beside the serif without announcing
-     itself; and it is natively tabular — measured, `1111` and `0000` both set
-     89.61px at 40px, with and without the feature flag.
-
-     `font-mono` still wins where it was asked for. A Finix transfer id or a
-     gift-card code is not a column of arithmetic; it was set in mono on
-     purpose and this has no business overriding that. */
-  .u-serif .tabular-nums:not(.font-mono),
-  .u-serif.tabular-nums:not(.font-mono) {
-    font-family: var(--font-numeric);
-  }
-
-  /* ----------------------------------------------------------------------
-     BUTTONS GET THE BOLD.
-
-     Times New Roman ships two weights: 400 and 500 both render as its Regular,
-     600 and 700 both as its Bold. Every Button carries `font-medium`, which
-     was a real 500 in the grotesque and is plain regular here — and a short
-     serif label at regular weight sitting on a saturated fill reads as a
-     caption somebody dropped onto a button rather than as the control's name.
-     "New sale" in white Times regular on brand blue was the clearest example:
-     the strokes are thin enough that the label goes soft against the fill.
-
-     So the one weight the serif does have gets spent here. This is scoped to
-     the serif rather than changed in buttonVariants because the guest-facing
-     booking screen is the other consumer of that primitive and its buttons are
-     still set in the grotesque, where 500 is a real weight worth keeping. */
-  .u-serif [data-slot="button"] {
-    font-weight: 600;
-  }
-
   /* The one transition. Applied to anything that changes on hover or focus, so
      every interactive surface on the page moves at the same speed. Colour and
      shadow only — nothing here moves geometry, because a row that shifts under

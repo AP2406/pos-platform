@@ -36,7 +36,7 @@ function MetricCard({
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[14px] font-medium text-muted-foreground">{label}</span>
+        <span className="text-[13px] font-medium text-muted-foreground">{label}</span>
         {icon && (
           <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary [&_svg]:size-4">
             {icon}

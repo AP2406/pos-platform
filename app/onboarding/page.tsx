@@ -18,7 +18,7 @@ export default async function OnboardingPage({
   if (ctx && !isAdding) redirect("/app");
 
   return (
-    <div className="u-serif min-h-screen flex bg-background">
+    <div className="min-h-screen flex bg-background">
       <style
         dangerouslySetInnerHTML={{
           __html:

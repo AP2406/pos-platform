@@ -70,7 +70,7 @@ export function DepositsClient({ deposits, undeposited, currency }: { deposits: 
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="font-medium text-sm">{fmtDate(d.businessDate)}</div>
-                      <div className="text-[12px] text-muted-foreground">Counted {money(d.countedCash)} · cash sales {money(d.cashSales)}{Math.abs(d.overShort) >= 0.01 ? " · over/short " + money(d.overShort) : ""}</div>
+                      <div className="text-[11px] text-muted-foreground">Counted {money(d.countedCash)} · cash sales {money(d.cashSales)}{Math.abs(d.overShort) >= 0.01 ? " · over/short " + money(d.overShort) : ""}</div>
                     </div>
                     <Button variant="outline" className="h-9 shrink-0" onClick={() => openFor(d)}>Record deposit</Button>
                   </div>
@@ -101,13 +101,13 @@ export function DepositsClient({ deposits, undeposited, currency }: { deposits: 
                 const off = Math.abs(d.variance) >= 0.01;
                 return (
                   <tr key={d.id} className="border-b border-border last:border-0 align-top">
-                    <td className="px-3 py-2 font-medium">{fmtDate(d.businessDate)}<span className="block text-[12px] text-muted-foreground font-normal">{d.reference ? "ref " + d.reference + " · " : ""}{d.depositDate ? "dep " + fmtDate(d.depositDate) : "no date"}</span></td>
+                    <td className="px-3 py-2 font-medium">{fmtDate(d.businessDate)}<span className="block text-[11px] text-muted-foreground font-normal">{d.reference ? "ref " + d.reference + " · " : ""}{d.depositDate ? "dep " + fmtDate(d.depositDate) : "no date"}</span></td>
                     <td className="px-3 py-2 text-right tabular-nums">{money(d.expectedCash)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{money(d.depositedAmount)}</td>
                     <td className={"px-3 py-2 text-right tabular-nums font-medium " + (off ? "text-red-600" : "text-muted-foreground")}>{d.variance > 0 ? "+" : ""}{money(d.variance)}</td>
                     <td className="px-3 py-2 text-right">
-                      <span className={"inline-block rounded-full px-2 py-0.5 text-[12px] font-medium " + (d.status === "reconciled" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>{d.status}</span>
-                      <div className="mt-1 flex justify-end gap-1.5 text-[12px]">
+                      <span className={"inline-block rounded-full px-2 py-0.5 text-[11px] font-medium " + (d.status === "reconciled" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>{d.status}</span>
+                      <div className="mt-1 flex justify-end gap-1.5 text-[11px]">
                         <button onClick={() => start(async () => { await setDepositStatus(d.id, d.status === "reconciled" ? "recorded" : "reconciled"); })} disabled={pending} className="underline text-muted-foreground">{d.status === "reconciled" ? "unmatch" : "mark matched"}</button>
                         <button onClick={() => { if (confirm("Delete this deposit record?")) start(async () => { await deleteDeposit(d.id); }); }} disabled={pending} className="underline text-red-600">delete</button>
                       </div>
@@ -128,7 +128,7 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
     <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className={"text-xl font-semibold tabular-nums mt-0.5 " + (tone === "bad" ? "text-red-600" : tone === "warn" ? "text-amber-600" : "")}>{value}</div>
-      {hint && <div className="text-[12px] text-muted-foreground mt-0.5">{hint}</div>}
+      {hint && <div className="text-[11px] text-muted-foreground mt-0.5">{hint}</div>}
     </div>
   );
 }

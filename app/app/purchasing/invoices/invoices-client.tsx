@@ -109,7 +109,7 @@ export function InvoicesClient({
               { k: "Total", v: aging.total, strong: true },
             ].map((c) => (
               <div key={c.k}>
-                <div className="text-[12px] text-muted-foreground">{c.k}</div>
+                <div className="text-[11px] text-muted-foreground">{c.k}</div>
                 <div className={"tabular-nums " + (c.strong ? "font-semibold" : "") + (c.warn && c.v > 0 ? " text-amber-600" : "")}>{money(c.v)}</div>
               </div>
             ))}
@@ -214,15 +214,15 @@ export function InvoicesClient({
                     <tr key={i.id} className="border-b border-border last:border-0 align-top">
                       <td className="px-3 py-2">
                         <div className="font-medium">{i.invoice_number || "—"}</div>
-                        <div className="text-[12px] text-muted-foreground">{fmtDate(i.invoice_date)}</div>
-                        {i.attachment_url && <a href={i.attachment_url} target="_blank" rel="noopener noreferrer" className="text-[12px] underline text-muted-foreground hover:text-foreground">attachment ↗</a>}
+                        <div className="text-[11px] text-muted-foreground">{fmtDate(i.invoice_date)}</div>
+                        {i.attachment_url && <a href={i.attachment_url} target="_blank" rel="noopener noreferrer" className="text-[11px] underline text-muted-foreground hover:text-foreground">attachment ↗</a>}
                       </td>
                       <td className="px-3 py-2">{i.vendorName ?? <span className="text-muted-foreground">—</span>}</td>
                       <td className="px-3 py-2 text-muted-foreground">{i.gl_account ?? "—"}</td>
                       <td className="px-3 py-2 text-right tabular-nums font-medium">
                         {money(i.total)}
                         {i.tax > 0 && (
-                          <span className="block text-[12px] text-muted-foreground font-normal">
+                          <span className="block text-[11px] text-muted-foreground font-normal">
                             incl {money(i.tax)} tax{" "}
                             {canManage ? (
                               <button onClick={() => start(async () => { await setInvoiceItc(i.id, !i.itc_eligible); })} disabled={pending} className={"underline " + (i.itc_eligible ? "text-emerald-600" : "text-muted-foreground")}>
@@ -236,7 +236,7 @@ export function InvoicesClient({
                       <td className="px-3 py-2 text-right">
                         <StatusPill status={i.status} overdue={!!isOverdue} />
                         {canManage && (
-                          <div className="mt-1 flex justify-end gap-1.5 text-[12px]">
+                          <div className="mt-1 flex justify-end gap-1.5 text-[11px]">
                             {i.status !== "paid" && <button onClick={() => mark(i.id, "paid")} disabled={pending} className="underline text-emerald-600">paid</button>}
                             {i.status !== "open" && <button onClick={() => mark(i.id, "open")} disabled={pending} className="underline text-muted-foreground">reopen</button>}
                             {i.status !== "void" && <button onClick={() => mark(i.id, "void")} disabled={pending} className="underline text-muted-foreground">void</button>}
@@ -264,7 +264,7 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
     <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className={"text-xl font-semibold tabular-nums mt-0.5 " + (tone === "warn" ? "text-amber-600" : "")}>{value}</div>
-      {hint && <div className="text-[12px] text-muted-foreground mt-0.5">{hint}</div>}
+      {hint && <div className="text-[11px] text-muted-foreground mt-0.5">{hint}</div>}
     </div>
   );
 }
@@ -275,5 +275,5 @@ function StatusPill({ status, overdue }: { status: string; overdue: boolean }) {
     void: "bg-muted text-muted-foreground",
   };
   const label = status === "open" && overdue ? "overdue" : status;
-  return <span className={"inline-block rounded-full px-2 py-0.5 text-[12px] font-medium " + (map[status] ?? map.open)}>{label}</span>;
+  return <span className={"inline-block rounded-full px-2 py-0.5 text-[11px] font-medium " + (map[status] ?? map.open)}>{label}</span>;
 }

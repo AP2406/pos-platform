@@ -48,7 +48,7 @@ export function AskPanel({ aiConfigured }: { aiConfigured: boolean }) {
     <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 mb-4">
       <div className="flex items-baseline justify-between gap-3 mb-2">
         <h2 className="font-semibold text-sm">Ask your data</h2>
-        <span className="text-[12px] text-muted-foreground">Plain-English questions about your sales</span>
+        <span className="text-[11px] text-muted-foreground">Plain-English questions about your sales</span>
       </div>
 
       {!aiConfigured ? (
@@ -69,7 +69,7 @@ export function AskPanel({ aiConfigured }: { aiConfigured: boolean }) {
 
           <div className="flex flex-wrap gap-1.5 mt-2">
             {EXAMPLES.map((ex) => (
-              <button key={ex} type="button" onClick={() => { setQ(ex); ask(ex); }} className="text-[12px] rounded-full border border-border px-2.5 py-1 text-muted-foreground hover:bg-accent">
+              <button key={ex} type="button" onClick={() => { setQ(ex); ask(ex); }} className="text-[11px] rounded-full border border-border px-2.5 py-1 text-muted-foreground hover:bg-accent">
                 {ex}
               </button>
             ))}

@@ -250,7 +250,7 @@ export function PrinterSettings({ businessName, stations = [] }: { businessName:
                   </select>
                 </div>
               ))}
-              <p className="text-[12px] text-amber-600">
+              <p className="text-[11px] text-amber-600">
                 ⚠ Not verified against a physical printer yet — <strong>test-print each station</strong> and run a live fire before a kitchen relies on this. Falls back to the KDS screen if a printer is offline.
               </p>
             </div>

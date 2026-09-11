@@ -59,7 +59,7 @@ export default async function OpsPage() {
             <tbody>
               {atRisk.map(({ merchant: m, reason }) => (
                 <tr key={m.id} className="border-b border-zinc-800 last:border-0">
-                  <td className="py-1.5"><Link href={"/hq/merchants/" + m.id} className="hover:text-emerald-400">{m.name}</Link> <span className="text-[12px] text-zinc-500 capitalize">{m.status}</span></td>
+                  <td className="py-1.5"><Link href={"/hq/merchants/" + m.id} className="hover:text-emerald-400">{m.name}</Link> <span className="text-[11px] text-zinc-500 capitalize">{m.status}</span></td>
                   <td className="py-1.5 text-amber-400">{reason}</td>
                   <td className="py-1.5 text-right text-zinc-500 text-xs">{m.lastOrderAt ? "last " + new Date(m.lastOrderAt).toLocaleDateString() : "no orders"}</td>
                 </tr>

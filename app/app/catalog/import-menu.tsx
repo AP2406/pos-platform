@@ -224,7 +224,7 @@ export function ImportMenu() {
 
                 <div className="flex items-center gap-2">
                   <div className="flex-1 h-px bg-border" />
-                  <span className="text-[12px] uppercase tracking-wide text-muted-foreground">or paste a menu link</span>
+                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">or paste a menu link</span>
                   <div className="flex-1 h-px bg-border" />
                 </div>
                 <div className="flex gap-2">
