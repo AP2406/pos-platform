@@ -2,62 +2,106 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
 import { JsonLd, breadcrumb, decodeEntities } from "../jsonld";
-import { Crumb, btnPrimary, btnOutline, PageHero, CtaBand, ComingSoonBadge, PaymentsComingSoon } from "../ui";
+import { Crumb, Tick, btnPrimary, btnOutline, PageHero, ComingSoonBadge, PaymentsComingSoon } from "../ui";
+import { PilotForm } from "./pilot-form";
 
-// THIS PAGE PRICED CARD PROCESSING. NOW IT PRICES THE SOFTWARE.
+// THIS PAGE NO LONGER PRICES ANYTHING. IT OFFERS THE PILOT.
 //
-// What came off: the 2.5% + $0.15 rate card (headline, three-row rate table,
-// $10 setup, $35 dispute fee), the "Surge vs the big processors" per-transaction
-// comparison, the payments FAQ, and the Service/Offer JSON-LD that put the rate
-// into structured data. None of it can stand while we are not a live processor.
+// WHY THE URL STAYED. /pricing is in the sitemap, it is linked from six other
+// routes and from both the nav and the footer, and "surge pos pricing" is a
+// thing people type. Deleting it or 301-ing it throws that away to save a file.
+// So the route, the canonical, the breadcrumb and the title all still say
+// pricing — because the visitor's question is still "what does this cost" and
+// the page still answers it. The answer today is "nothing, while the pilot
+// runs", which is both true and the strongest thing we can say.
 //
-// WHAT DID NOT CHANGE, DELIBERATELY: the Basic / Advanced / Custom tiers and
-// their numbers. Those are prices the business has already published for the
-// software, and this task is repositioning, not repricing — inventing a new
-// number would be worse, and quietly deleting a published one would be worse
-// still. The one edit is the qualifier on Basic: it read "Free — with
-// payments", a bundle whose payments leg does not exist yet. It now reads
-// "Free", which is the more generous reading and so cannot mislead a customer,
-// but whether Basic stays free standing alone is the owner's call, not this
-// change's. Flagged, not decided here.
+// WHAT CAME OFF: the Basic (free) / Advanced ($29 per month, 30-day trial) /
+// Custom (per project) tier cards, the four-item "no fees" strip that included
+// "free tier that stays free", and the two FAQ answers that explained the
+// difference between the tiers. A previous pass established there is no
+// billing, plan or entitlement code anywhere in this repo, so none of those
+// numbers were enforced or enforceable — they were a price list for a thing
+// nobody could be charged for. They are not replaced with other numbers.
+//
+// WHAT IS DELIBERATELY NOT PROMISED, and must stay that way unless the owner
+// says otherwise: a price after the pilot, a discount for joining early,
+// grandfathered access, a number of spots, a duration in months, an end date,
+// or any scarcity at all. The only commitment made on this page is that we tell
+// people before anything changes and they can leave. That is the one we can keep.
+//
+// NO PLACEHOLDER CONSTANTS. The copy below was written so that it needs none —
+// there is no SPOTS_REMAINING or PILOT_ENDS waiting to be filled in, because a
+// blank constant tends to ship as a zero.
 export const metadata: Metadata = {
-  title: { absolute: "POS Pricing — Free Basic Point of Sale (GTA) | Surge" },
-  description: "Surge POS pricing: a free Basic tier, an Advanced tier at $29/month, and custom software quoted per project. No lock-in contract. Card processing is coming soon and is not priced yet.",
+  title: { absolute: "Surge POS Pricing — Free During the Pilot (GTA) | Surge" },
+  description: "What Surge POS costs right now: nothing. We are running a pilot — the full point of sale, free for a limited time, for independent shops across the GTA and Durham Region, set up in person. Card processing is not part of it yet.",
   alternates: { canonical: "/pricing" },
-  openGraph: { ...OG_BASE, url: "/pricing" },
+  // OG copy is set explicitly here rather than inherited, because the share card
+  // is the one place the offer has to land in a single line.
+  openGraph: {
+    ...OG_BASE,
+    title: "Free during the Surge pilot — the full point of sale, no charge",
+    description: "We are looking for GTA and Durham independents to run Surge for real. Full POS, free for a limited time, set up in person. In exchange we want blunt feedback.",
+    url: "/pricing",
+  },
 };
 
-function Check({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true"><path d="M4 10l4 4 8-9" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-  );
-}
+// The pilot in four honest parts. Each card answers one of the questions an
+// owner actually asks, in the order they ask them.
+const pillars = [
+  {
+    title: "What you get",
+    body: "The whole point of sale, not a cut-down trial version: the register, the floor plan, the kitchen display, the menu builder, online / QR / kiosk ordering, inventory, staff and reports. Free while the pilot runs, and we come out and set it up with you.",
+  },
+  {
+    title: "Who it is for",
+    body: "Independent restaurants, cafes, shops and salons across the GTA and Durham Region. In-person setup is part of the offer, not an extra — so you need to be somewhere we can drive to and a day we can turn up on.",
+  },
+  {
+    title: "What we want back",
+    body: "Real use and blunt feedback. Run it through actual service, then tell us what was slow, what was missing and what made a shift harder. That is the trade, and the second half of it is the part we cannot buy anywhere else.",
+  },
+  {
+    title: "What happens at the end",
+    body: "We tell you before anything changes, and you can walk away. We are not promising you a price, a discount or grandfathered access for joining early, because we do not know yet what it will cost and a promise we cannot keep is worth less than saying so.",
+  },
+];
 
-// Feature lists trimmed to what could be verified in the code. Removed from
-// Basic: "tap, chip, swipe and mobile payments" — a payments claim. Removed
-// from Advanced: "appointments and bookings", because lib/modules/modes.ts
-// declares the `appointments` mode with `status: "soon"`, so the product itself
-// already calls it unbuilt. Barcode and low-stock inventory STAYED: both are
-// real (app/app/pos/barcode-scanner.tsx and the low-stock path in
-// app/app/inventory), and "reservations and waitlist" replaces the
-// appointments line because that is the booking feature that does exist.
-const basicFeatures = ["Unlimited sales and checkout", "Printed and emailed receipts", "Menu and catalog builder", "Daily sales reports", "Simple inventory tracking", "One register"];
-const advancedFeatures = ["Everything in Basic", "Floor plan and table service", "Kitchen display and stations", "Barcode and low-stock inventory", "Reservations and waitlist", "Staff roles, scheduling and time clock", "Online, QR and kiosk ordering", "Deeper reporting and exports", "Priority support"];
-const customFeatures = ["Custom CRM systems", "Business dashboards and reporting", "Workflow automation and integrations", "Booking and customer portals", "Internal tools and admin panels", "Full custom web apps and SaaS"];
+// One list, because the pilot is one thing. This is the old Basic and Advanced
+// feature lists merged — every item was already verified against a screen that
+// exists in the product (app/app/pos, /floor, /kitchen, /catalog, /inventory,
+// /staff, /reports, /reservations and app/order/[businessId]) and nothing
+// aspirational has been added to it here.
+const included = [
+  "Unlimited sales and checkout, on as many registers as you need",
+  "Menu and catalog builder, with modifiers and availability",
+  "Floor plan and table service",
+  "Kitchen display, routed by station",
+  "Online, QR and kiosk ordering",
+  "Reservations and waitlist",
+  "Inventory, purchasing and low-stock alerts",
+  "Staff roles, scheduling and the time clock",
+  "Daily reports and exports for your bookkeeper",
+  "Printed and emailed receipts",
+];
 
-const noFees = ["No lock-in contract", "No setup fee on the software", "Free tier that stays free", "Cancel any time"];
+// Modest, checkable, and none of them a price. "Free tier that stays free" was
+// dropped from this strip along with the tiers: it was a forward-looking promise
+// about a plan that no longer exists.
+const reassurances = ["No card asked for", "No contract to sign", "No setup fee", "Stop whenever you like"];
 
 const faqs = [
-  { q: "What does Basic actually include?", a: "A working register: unlimited sales, the menu and catalog builder, receipts, simple stock tracking and your daily reports, on one till. It is the free tier and there is no card to enter to use it." },
-  { q: "What is the difference between Basic and Advanced?", a: "Advanced is the multi-screen version: floor plan and table service, the kitchen display, reservations and the waitlist, staff scheduling and the time clock, the online / QR / kiosk ordering channels, and deeper reporting. If you run a dining room rather than a counter, Advanced is the one you want." },
-  { q: "When will Surge process my cards?", a: "We are building it and we are not quoting a date, because a date we miss is worse than no date. Until it is live we do not process cards, we do not sell terminals, and we do not publish a rate. Your current processor keeps working beside the POS." },
-  { q: "Do I have to switch processors to use the POS?", a: "No. The point-of-sale does not care who takes the card &mdash; you can run Surge on the counter today and keep the merchant account you already have." },
-  { q: "Can you build custom software for my business?", a: "Yes. Beyond the POS we build bespoke software &mdash; CRMs, dashboards, automations and full custom apps. Pricing is scoped to your project, so book a call and we will work it out together." },
-  { q: "Am I locked into a contract?", a: "No. There is no term contract and no early-termination fee on the software." },
+  { q: "So what does Surge cost?", a: "During the pilot, nothing. You get the full point of sale free for a limited time, and we set it up with you in person. We have not set the price for afterwards, and we are not going to invent one on this page." },
+  { q: "How long does the pilot run?", a: "A limited time &mdash; and that is as precise as we can honestly be today. There is no date on this page because we would rather not publish one and then have to move it. What we will commit to is telling you before anything changes." },
+  { q: "What happens when the pilot ends?", a: "We contact you first and tell you where things stand. If you want to carry on, we will talk about it then. If you do not, you stop &mdash; there is no contract and nothing to cancel. We are not promising early joiners a set price or a locked-in rate, because we do not have one to promise." },
+  { q: "Is there a catch?", a: "The catch is that it is early software and you are being asked to say so out loud. Things will be rough in places, and we want to hear about it in detail rather than have you quietly go back to what you had." },
+  { q: "Does the pilot include card processing?", a: "No. We are not your processor yet &mdash; we do not take the card, we do not sell terminals and we do not publish a rate. You keep the merchant account you already have, and the point of sale records the sale either way." },
+  { q: "Do I have to switch anything to try it?", a: "No. Nothing to port, nothing to cancel, and your current processor keeps working exactly as it does now. The pilot is the software." },
+  { q: "Can you build custom software for my business?", a: "Yes &mdash; beyond the POS we build bespoke software, from CRMs and dashboards to full custom apps. That is scoped and quoted per project and sits outside the pilot, so book a call and we will work it out together." },
 ];
 
 // FAQPage generated from the SAME `faqs` array that renders on the page, so the
-// markup and structured data can't drift.
+// markup and the structured data cannot drift.
 const faqSchema = {
   "@context": "https://schema.org",
   "@type": "FAQPage",
@@ -68,20 +112,20 @@ const faqSchema = {
   })),
 };
 
-// Was `Service` / "Payment processing" with an Offer carrying "2.5% + $0.15 per
-// in-person transaction". Structured data is a claim like any other, and that
-// one told Google we sell processing at a rate. It is now the software, and the
-// Offer carries no price at all — a free tier and a paid tier is an offer
-// catalogue, not a single number, and inventing an aggregate here would be the
-// same mistake in a different syntax.
+// STILL NO `offers` BLOCK, and now for a second reason. The first was that a
+// price in structured data is a claim like any other. The second is that a
+// schema.org Offer with price 0 and no validThrough is a permanent free offer
+// as far as a crawler is concerned, which is the precise promise this page is
+// written to avoid making. The free-during-the-pilot line belongs in prose,
+// where it can carry its own qualifier.
 const serviceSchema = {
   "@context": "https://schema.org",
   "@type": "Service",
   name: "Point of sale software",
   serviceType: "Point of sale software",
-  description: "Point-of-sale software for restaurants, cafes and retail across the Greater Toronto Area — free Basic tier, paid Advanced tier, and custom software builds quoted per project.",
+  description: "Point-of-sale software for restaurants, cafes, shops and salons across the Greater Toronto Area, currently in a pilot program: full access free for a limited time, set up in person, in exchange for feedback.",
   provider: { "@type": "LocalBusiness", name: "Surge", url: "https://www.surgetechpos.com" },
-  areaServed: ["Greater Toronto Area", "Ontario"],
+  areaServed: ["Greater Toronto Area", "Durham Region", "Ontario"],
   url: "https://www.surgetechpos.com/pricing",
 };
 
@@ -92,87 +136,74 @@ export default function PricingPage() {
       <JsonLd data={serviceSchema} />
       <JsonLd data={breadcrumb("Pricing", "/pricing")} />
 
-      <PageHero crumb="Pricing" title="Start free. Pay when the shop needs more." sub="Surge POS has a free tier that is a real register, not a trial. Card processing is a separate thing, it is not live yet, and it is not priced here." />
+      {/* The H1 answers the pricing question in the first four words, because
+          that is the question the person arriving on this URL typed. */}
+      <PageHero
+        crumb="Pricing"
+        title="Right now it is free, and here is the catch."
+        sub="We are not selling the point of sale yet &mdash; we are running a pilot. Full access to the till for a limited time at no charge, for GTA and Durham independents willing to use it for real and tell us where it hurts."
+      />
 
       <section className="bg-white py-16">
         <div className="mx-auto max-w-6xl px-6">
           <div className="mx-auto mb-12 max-w-2xl text-center">
-            <Crumb>Software</Crumb>
-            <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">Pick the plan that fits</h2>
-            <p className="mx-auto mt-4 leading-relaxed text-[#42566B]">Start free with Basic, move to Advanced when the floor and the kitchen need their own screens, or have us build something completely custom.</p>
+            <Crumb>The pilot program</Crumb>
+            <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">Early access, free, in exchange for the truth</h2>
+            <p className="mx-auto mt-4 leading-relaxed text-[#42566B]">Surge is built and it runs real rooms. What it has not had is enough shops leaning on it at once. That is what the pilot is for, and why it does not cost you anything.</p>
           </div>
 
-          <div className="grid items-stretch gap-6 md:grid-cols-3">
-            <div className="flex h-full flex-col rounded-md border border-[#D9E1EA] bg-white p-7">
-              <div className="text-sm font-bold uppercase tracking-[0.05em] text-[#7A8CA0]">Basic</div>
-              <div className="mt-3 flex items-end gap-1.5">
-                <span className="text-4xl font-bold tracking-tight text-[#0A2540]">Free</span>
-                <span className="mb-1 text-sm text-[#7A8CA0]">one register</span>
+          <div className="grid gap-6 sm:grid-cols-2">
+            {pillars.map((p) => (
+              <div key={p.title} className="rounded-md border border-[#D9E1EA] border-t-[3px] border-t-[#0A2540] bg-white p-7">
+                <h3 className="text-lg font-bold text-[#0A2540]">{p.title}</h3>
+                <p className="mt-2.5 text-[14.5px] leading-relaxed text-[#42566B]">{p.body}</p>
               </div>
-              <p className="mt-2 text-sm text-[#42566B]">Everything you need to ring up sales and see your day.</p>
-              <div className="mt-6 space-y-3">
-                {basicFeatures.map((f) => (
-                  <div key={f} className="flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border border-[#D9E1EA] bg-[#F4F7FA] text-[#42566B]"><Check className="h-3 w-3" /></span>
-                    <span className="text-sm text-[#42566B]">{f}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-auto pt-7"><Link href="/book" className={"flex w-full items-center justify-center " + btnOutline}>Start with Basic</Link></div>
-            </div>
-
-            <div className="relative flex h-full flex-col rounded-md border border-[#D9E1EA] border-t-[3px] border-t-[#0A2540] bg-white p-7 shadow-[0_10px_30px_-18px_rgba(10,37,64,0.35)]">
-              <span className="absolute -top-3.5 left-7 rounded-[3px] bg-[#1E7B4D] px-2.5 py-1 text-xs font-bold text-white">30-day free trial</span>
-              <div className="text-sm font-bold uppercase tracking-[0.05em] text-[#1B6DC1]">Advanced</div>
-              <div className="mt-3 flex items-end gap-1.5">
-                <span className="text-4xl font-bold tracking-tight text-[#0A2540]">$29</span>
-                <span className="mb-1 text-sm text-[#7A8CA0]">/ month, after trial</span>
-              </div>
-              <p className="mt-2 text-sm text-[#42566B]">For rooms that run a floor, a kitchen and a schedule.</p>
-              <div className="mt-6 space-y-3">
-                {advancedFeatures.map((f) => (
-                  <div key={f} className="flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] bg-[#0A2540] text-white"><Check className="h-3 w-3" /></span>
-                    <span className="text-sm text-[#42566B]">{f}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-auto pt-7"><Link href="/book" className={"flex w-full items-center justify-center " + btnPrimary}>Start my free trial</Link></div>
-            </div>
-
-            <div className="flex h-full flex-col rounded-md border border-[#D9E1EA] bg-white p-7">
-              <div className="text-sm font-bold uppercase tracking-[0.05em] text-[#7A8CA0]">Custom</div>
-              <div className="mt-3 flex items-end gap-1.5">
-                <span className="text-4xl font-bold tracking-tight text-[#0A2540]">Custom</span>
-                <span className="mb-1 text-sm text-[#7A8CA0]">priced per project</span>
-              </div>
-              <p className="mt-2 text-sm text-[#42566B]">Bespoke software built around how your business runs.</p>
-              <div className="mt-6 space-y-3">
-                {customFeatures.map((f) => (
-                  <div key={f} className="flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border border-[#D9E1EA] bg-[#F4F7FA] text-[#42566B]"><Check className="h-3 w-3" /></span>
-                    <span className="text-sm text-[#42566B]">{f}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-auto pt-7"><Link href="/book" className={"flex w-full items-center justify-center " + btnOutline}>Book a call to scope it</Link></div>
-            </div>
+            ))}
           </div>
 
           <div className="mx-auto mt-10 grid max-w-3xl gap-2.5 sm:grid-cols-2">
-            {noFees.map((f) => (
+            {reassurances.map((f) => (
               <div key={f} className="flex items-center gap-2.5 rounded-[4px] border border-[#D9E1EA] bg-[#F4F7FA] px-4 py-3 text-sm font-semibold text-[#1A2B3C]">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] bg-[#1E7B4D] text-white"><Check className="h-3 w-3" /></span>
+                <Tick />
                 {f}
               </div>
             ))}
+          </div>
+
+          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link href="#apply" className={btnPrimary}>Join the pilot</Link>
+            <Link href="/book" className={btnOutline}>Book a 15-minute demo first</Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-[#D9E1EA] bg-[#F4F7FA] py-20">
+        <div className="mx-auto max-w-5xl px-6">
+          <div className="grid items-start gap-10 lg:grid-cols-2">
+            <div>
+              <Crumb>What is included</Crumb>
+              <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">All of it. There is no smaller version.</h2>
+              <p className="mt-4 leading-relaxed text-[#42566B]">There are no tiers during the pilot and nothing is held back behind an upgrade, because the point is to find out what breaks when a shop uses the whole thing.</p>
+              <p className="mt-3 leading-relaxed text-[#42566B]">Setup is part of it: we come to you, load your menu, draw your floor and walk your staff through it, across the GTA and Durham Region.</p>
+            </div>
+            <div className="rounded-md border border-[#D9E1EA] bg-white p-7">
+              <div className="space-y-3">
+                {included.map((f) => (
+                  <div key={f} className="flex items-start gap-2.5">
+                    <Tick />
+                    <span className="text-sm leading-relaxed text-[#42566B]">{f}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       {/* The rate card used to sit at the top of this page. What sits in its
-          place is the absence of one, said out loud. */}
-      <section id="payments" className="border-y border-[#D9E1EA] bg-[#F4F7FA] py-20">
+          place is the absence of one, said out loud — and now also the fact that
+          the pilot does not quietly include payments either. */}
+      <section id="payments" className="bg-white py-20">
         <div className="mx-auto max-w-5xl px-6">
           <div className="grid items-start gap-10 lg:grid-cols-2">
             <div>
@@ -180,11 +211,27 @@ export default function PricingPage() {
                 <Crumb>Card processing</Crumb>
                 <ComingSoonBadge />
               </div>
-              <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">There is no rate on this page</h2>
-              <p className="mt-4 leading-relaxed text-[#42566B]">Because we do not process cards yet, and quoting a number for something we cannot yet sell you is how every processor you have already dealt with got started.</p>
-              <p className="mt-3 leading-relaxed text-[#42566B]">When it launches we will publish the rate here, in full, with whatever it really costs beside it. Until then the software prices above are the whole commercial story.</p>
+              <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">There is still no rate on this page</h2>
+              <p className="mt-4 leading-relaxed text-[#42566B]">The pilot is the software. We are not your processor yet, so taking the card is not part of what you are signing up for, and there is no rate here to compare against the one you have.</p>
+              <p className="mt-3 leading-relaxed text-[#42566B]">When it launches we will publish the rate here, in full, with what it really costs beside it. Until then, joining the pilot changes nothing about how you get paid.</p>
             </div>
             <PaymentsComingSoon heading="What happens to your current processor" body="Nothing. Surge POS records the sale and your existing merchant account takes the card, exactly as it does now. There is nothing to cancel, nothing to port, and no contract to get out of before you can try the till." />
+          </div>
+        </div>
+      </section>
+
+      <section id="apply" className="scroll-mt-28 border-y border-[#D9E1EA] bg-[#F4F7FA] py-20">
+        <div className="mx-auto max-w-5xl px-6">
+          <div className="grid items-start gap-10 lg:grid-cols-5">
+            <div className="lg:col-span-2">
+              <Crumb>Join the pilot</Crumb>
+              <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">Tell us about your shop</h2>
+              <p className="mt-4 leading-relaxed text-[#42566B]">This goes straight to us, not to a queue. We read it, we reply, and if it looks like a fit we will arrange a day to come out and set you up.</p>
+              <p className="mt-3 leading-relaxed text-[#42566B]">If you would rather see it before you commit an hour of your week to it, <Link href="/book" className="font-bold text-[#1B6DC1] hover:underline">book a 15-minute demo</Link> instead &mdash; the pilot will still be here afterwards.</p>
+            </div>
+            <div className="lg:col-span-3">
+              <PilotForm />
+            </div>
           </div>
         </div>
       </section>
@@ -206,7 +253,17 @@ export default function PricingPage() {
         </div>
       </section>
 
-      <CtaBand title="Want to see it before you pick a plan?" sub="Book a free 15-minute demo. We will load your menu, draw your floor, and you can decide afterwards." cta="Book my free demo" />
+      {/* The closing band sends people back up to the form rather than to /book:
+          the demo is offered twice above and is the secondary path here. */}
+      <section className="bg-[#0A2540] py-20 text-white">
+        <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-8 px-6 lg:flex-row lg:items-center">
+          <div>
+            <h2 className="max-w-xl text-[32px] font-bold leading-[1.18] tracking-[-0.01em] sm:text-[34px]">Run the whole till for nothing, and tell us where it hurts.</h2>
+            <p className="mt-4 max-w-xl leading-relaxed text-[#B9C8D8]">Free for a limited time, set up in person across the GTA and Durham. No card, no contract, and you can stop whenever you like.</p>
+          </div>
+          <a href="#apply" className="whitespace-nowrap rounded-[4px] bg-white px-7 py-3.5 text-[15.5px] font-bold text-[#0A2540] transition-colors hover:bg-[#F4F7FA]">Join the pilot</a>
+        </div>
+      </section>
     </>
   );
 }

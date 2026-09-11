@@ -21,7 +21,7 @@ import { Crumb, btnPrimary, btnOutline, CtaBand, PaymentsComingSoon } from "../u
 // coming-soon band at the bottom of the page, in future tense.
 export const metadata: Metadata = {
   title: { absolute: "POS System for Restaurants, Cafes & Retail (GTA) | Surge" },
-  description: "Surge POS: register, floor plan and table service, kitchen display, menu builder, online and QR ordering, kiosk, barcode inventory, staff and time clock, and reports. Free Basic tier, runs on the device you already have.",
+  description: "Surge POS: register, floor plan and table service, kitchen display, menu builder, online and QR ordering, kiosk, barcode inventory, staff and time clock, and reports. Free during our pilot program, on the device you already have.",
   alternates: { canonical: "/pos" },
   openGraph: { ...OG_BASE, url: "/pos" },
 };
@@ -95,7 +95,14 @@ const softwareSchema = {
     priceCurrency: "CAD",
     price: "0",
     availability: "https://schema.org/InStock",
-    description: "Free Basic tier; Advanced tier available.",
+    // price "0" predates this change (it described the free Basic tier) and is
+    // still true today, so it stays — but the tier names had to go, and the
+    // description now carries the qualifier the bare number cannot. There is no
+    // `priceValidUntil` because we have no end date to put in one.
+    // OWNER: this Offer has to be revisited the day the pilot ends. A price of
+    // 0 with no validity window is the closest this codebase comes to promising
+    // permanently free, and /pricing is deliberately written not to.
+    description: "Currently offered free through a limited-time pilot program.",
     url: "https://www.surgetechpos.com/pos",
   },
 };
@@ -112,10 +119,13 @@ export default function PosPage() {
             <div>
               <Crumb>Point of sale</Crumb>
               <h1 className="mt-4 text-[44px] font-bold leading-[1.12] tracking-[-0.015em] text-[#0A2540] sm:text-[50px]">A full register, and everything behind it.</h1>
-              <p className="mt-5 max-w-lg text-lg leading-relaxed text-[#42566B]">Floor plan, kitchen display, menu builder, online and QR ordering, inventory, staff and reports &mdash; one system, on the device you already have, free to start.</p>
+              <p className="mt-5 max-w-lg text-lg leading-relaxed text-[#42566B]">Floor plan, kitchen display, menu builder, online and QR ordering, inventory, staff and reports &mdash; one system, on the device you already have, and free for a limited time while our pilot runs.</p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                {/* The demo stays primary HERE. Someone reading the full feature
+                    page is still evaluating; the pilot ask is the harder one and
+                    sits beside it rather than in front of it. */}
                 <Link href="/book" className={btnPrimary}>Book a free demo</Link>
-                <Link href="/pricing" className={btnOutline}>See pricing</Link>
+                <Link href="/pricing" className={btnOutline}>Join the free pilot</Link>
               </div>
             </div>
             <div className="overflow-hidden rounded-md border border-[#D9E1EA] bg-white shadow-[0_10px_30px_-18px_rgba(10,37,64,0.35)]">
@@ -219,7 +229,10 @@ export default function PosPage() {
             ))}
           </div>
           <div className="mt-10 text-center">
-            <Link href="/pricing" className={"inline-flex " + btnOutline}>Compare Basic and Advanced</Link>
+            {/* Was "Compare Basic and Advanced". There are no tiers to compare
+                any more — the pilot hands over the whole thing — so the button
+                now says what is actually on the other end of the link. */}
+            <Link href="/pricing" className={"inline-flex " + btnOutline}>See what the pilot includes</Link>
           </div>
         </div>
       </section>

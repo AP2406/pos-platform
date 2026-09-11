@@ -28,9 +28,9 @@ const tiles = [
 const compareRows: [string, string, string][] = [
   ["Card processing", "Not yet — coming soon", "Yes — this is what Stripe is"],
   ["Point-of-sale software", "A finished register, free tier included", "Bring-your-own or build it on Terminal"],
-  ["Floor plan & table service", "Included on Advanced", "Build it yourself"],
-  ["Kitchen display", "Included on Advanced", "Build it yourself"],
-  ["Online, QR & kiosk ordering", "Included on Advanced", "Build it yourself"],
+  ["Floor plan & table service", "Included", "Build it yourself"],
+  ["Kitchen display", "Included", "Build it yourself"],
+  ["Online, QR & kiosk ordering", "Included", "Build it yourself"],
   ["Setup", "Local, in person, no code", "Self-serve / developer integration"],
   ["Support", "Local, real human", "Docs, dashboard, email"],
   ["Contract", "None — cancel anytime", "None"],

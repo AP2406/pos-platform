@@ -20,7 +20,7 @@ const points = [
   { title: "Set up on your main street", body: "Pickering to Oshawa, we come to you, get the system live on your own devices, and stay reachable after." },
   { title: "Floor, line and counter", body: "Table service and a kitchen display for the dining rooms, a fast counter mode for everyone else." },
   { title: "Bookings and a waitlist", body: "Take reservations for the room and run the waitlist from the same screen the servers already use." },
-  { title: "Free to start", body: "The Basic tier is a real register with no monthly fee, on the tablet you already have." },
+  { title: "Free while the pilot runs", body: "We are piloting the whole system with Durham independents: a real register on the tablet you already have, at no charge for a limited time." },
 ];
 
 const service = localService({

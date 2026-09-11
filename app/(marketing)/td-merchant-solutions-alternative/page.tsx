@@ -32,10 +32,10 @@ const tiles = [
 
 const compareRows: [string, string, string][] = [
   ["Card processing", "Not yet — coming soon", "Yes — this is what a bank merchant account is"],
-  ["POS software", "Two tiers, free one included", "Typically separate / third-party"],
-  ["Floor plan & table service", "Included on Advanced", "Not part of the merchant account"],
-  ["Kitchen display", "Included on Advanced", "Not part of the merchant account"],
-  ["Online, QR & kiosk ordering", "Included on Advanced", "Separate products"],
+  ["POS software", "Free during our pilot", "Typically separate / third-party"],
+  ["Floor plan & table service", "Included", "Not part of the merchant account"],
+  ["Kitchen display", "Included", "Not part of the merchant account"],
+  ["Online, QR & kiosk ordering", "Included", "Separate products"],
   ["Hardware", "Runs on your own device", "Terminal often rented monthly"],
   ["Software contract", "None — cancel anytime", "Commonly a multi-year term"],
   ["Support", "Local, real human", "Call centre"],
@@ -62,7 +62,7 @@ export default function TdMerchantSolutionsAlternativePage() {
 
       <LandingSection title="Why owners look for a bank-processor alternative">
         <p>Signing up for payments through your bank is convenient, and for some businesses that is enough. But a lot of owners tell us the same story: a multi-year term they do not remember agreeing to, a monthly terminal rental that never ends, an account fee before the first sale, and a &ldquo;rate&rdquo; that is really a blend hiding what each card actually costs.</p>
-        <p>We are not yet the answer to the rate half of that. We are the answer to the part the bank never covered: the business still runs on a card machine, a notebook and a spreadsheet. Surge is the register, the floor plan, the kitchen display, the menu, the stock, the schedule and the reports &mdash; free to start, no term, working beside whatever processor you keep.</p>
+        <p>We are not yet the answer to the rate half of that. We are the answer to the part the bank never covered: the business still runs on a card machine, a notebook and a spreadsheet. Surge is the register, the floor plan, the kitchen display, the menu, the stock, the schedule and the reports &mdash; free while our pilot runs, no term, working beside whatever processor you keep.</p>
         <LandingPoints items={tiles} />
       </LandingSection>
 

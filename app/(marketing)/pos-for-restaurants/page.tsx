@@ -11,7 +11,7 @@ import { LandingHero, LandingSection, LandingPoints, LandingGuides, LandingCTA }
 // savings call rather than a demo.
 export const metadata: Metadata = {
   title: { absolute: "POS for Restaurants (GTA) — Free Point of Sale | Surge" },
-  description: "A restaurant point-of-sale for GTA cafes, quick-serve and full-service: tabs, tips, table service, coursing, a kitchen display, reservations and online ordering. Free Basic tier. Book a free demo.",
+  description: "A restaurant point-of-sale for GTA cafes, quick-serve and full-service: tabs, tips, table service, coursing, a kitchen display, reservations and online ordering. Free during our pilot program. Book a free demo.",
   alternates: { canonical: "/pos-for-restaurants" },
   openGraph: { ...OG_BASE, url: "/pos-for-restaurants" },
 };
@@ -41,11 +41,11 @@ export default function PosForRestaurantsPage() {
       <LandingHero
         eyebrow="For restaurants"
         h1={<>A restaurant POS that keeps up with the <span className="text-blue-600">rush</span>.</>}
-        intro="Cafés, quick-serve and full-service across the GTA run Surge: tabs, tips, table service, coursing and a kitchen display, with a free Basic tier to start."
+        intro="Cafés, quick-serve and full-service across the GTA run Surge: tabs, tips, table service, coursing and a kitchen display — free for a limited time while our pilot runs."
       />
 
       <LandingSection title="Built for the floor and the line">
-        <p>Most restaurant systems make you buy the floor and the pass separately &mdash; a till here, a kitchen screen there, a booking tool that emails you. Surge is one system: the Basic tier is a free register, and Advanced adds the floor plan, the kitchen display, reservations, the schedule and the ordering channels for a flat monthly fee with no term contract.</p>
+        <p>Most restaurant systems make you buy the floor and the pass separately &mdash; a till here, a kitchen screen there, a booking tool that emails you. Surge is one system, and during our <Link href="/pricing" className="font-semibold text-blue-600 hover:text-blue-700">pilot program</Link> the whole of it &mdash; register, floor plan, kitchen display, reservations, the schedule and the ordering channels &mdash; is free for a limited time, with no term contract.</p>
         <LandingPoints items={points} />
       </LandingSection>
 
@@ -55,7 +55,7 @@ export default function PosForRestaurantsPage() {
       </LandingSection>
 
       <LandingSection title="One system, whether you have one register or five">
-        <p>Add registers, stations and a second location as you grow, all on the same account. See what each tier includes on <Link href="/pricing" className="font-semibold text-blue-600 hover:text-blue-700">pricing</Link>, or read the full <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link> feature set.</p>
+        <p>Add registers, stations and a second location as you grow, all on the same account. See what the pilot includes, and what it costs, on <Link href="/pricing" className="font-semibold text-blue-600 hover:text-blue-700">pricing</Link>, or read the full <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link> feature set.</p>
       </LandingSection>
 
       <LandingSection title="What about taking the card?" tint>

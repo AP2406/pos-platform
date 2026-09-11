@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 
 const tiles = [
   { title: "A floor, not just a counter", body: "Square's till is built around a queue. Surge has a floor plan, coursing, seat numbers and table transfers, which is what a dining room actually needs." },
-  { title: "The kitchen is included", body: "Tickets route to the station that cooks them on the Advanced tier, rather than being a separate product you bolt on." },
+  { title: "The kitchen is included", body: "Tickets route to the station that cooks them as part of the same system, rather than being a separate product you bolt on." },
   { title: "Local, in-person setup", body: "Square ships you a reader and leaves the rest to you. We come to your room across the GTA and Durham, load the menu and train your staff." },
   { title: "Real human support", body: "Trade chat threads and callback queues for a local person who answers the phone and knows your account." },
 ];
@@ -30,10 +30,10 @@ const tiles = [
 // is the only comparison we can currently stand behind.
 const compareRows: [string, string, string][] = [
   ["Card processing", "Not yet — coming soon", "Built in, Square is the processor"],
-  ["Floor plan & table service", "Included on Advanced", "Restaurant product / paid tier"],
-  ["Kitchen display", "Included on Advanced", "Paid add-on in most setups"],
-  ["Reservations & waitlist", "Included on Advanced", "Separate product"],
-  ["Online, QR & kiosk ordering", "Included on Advanced", "Varies by product and tier"],
+  ["Floor plan & table service", "Included", "Restaurant product / paid tier"],
+  ["Kitchen display", "Included", "Paid add-on in most setups"],
+  ["Reservations & waitlist", "Included", "Separate product"],
+  ["Online, QR & kiosk ordering", "Included", "Varies by product and tier"],
   ["Free tier", "A real register, one till", "Free tier basic; upgrades are paid"],
   ["Contract", "None — cancel anytime", "None"],
   ["Setup", "Local, in person (GTA & Durham)", "Self-serve; ship-a-reader"],

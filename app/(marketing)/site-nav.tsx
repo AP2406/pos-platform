@@ -13,7 +13,10 @@ const LINKS = [
   { href: "/pos", label: "Point of sale" },
   { href: "/pos-for-restaurants", label: "Restaurants" },
   { href: "/pos-for-retail", label: "Retail" },
-  { href: "/pricing", label: "Pricing" },
+  // /pricing, still — the URL does not move. The LABEL does: the page is the
+  // pilot offer now, and "Free pilot" answers the cost question in the rail
+  // itself, which is the question the word "Pricing" was standing in for.
+  { href: "/pricing", label: "Free pilot" },
   { href: "/contact", label: "Contact" },
 ];
 
@@ -33,6 +36,12 @@ export function SiteNav() {
       <div className="bg-[#0A2540] text-[#B9C8D8]">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-1.5 text-xs">
           <span>Point of sale for the GTA &amp; Durham Region &middot; card processing coming soon</span>
+          {/* THE PAIR, AND WHY THIS WAY ROUND. The pilot is now the primary
+              ask — it is the button — and the demo keeps this strip slot as the
+              softer, lower-commitment path. An owner who is not ready to run
+              unfamiliar software through Friday service should still have a
+              one-click way to just look at it, and the demo is still the
+              primary CTA on /pos and on every industry page. */}
           <Link href="/book" className="hidden font-semibold text-white hover:underline sm:block">Book a demo &rarr;</Link>
         </div>
       </div>
@@ -55,7 +64,7 @@ export function SiteNav() {
           </div>
           <div className="hidden items-center gap-5 lg:flex">
             <Link href="/login" className="text-[14.5px] font-semibold text-[#1B6DC1] hover:underline">Sign in</Link>
-            <Link href="/book" className="rounded-[4px] bg-[#0A2540] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#123456]">Book a demo</Link>
+            <Link href="/pricing#apply" className="rounded-[4px] bg-[#0A2540] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#123456]">Join the pilot</Link>
           </div>
           <button type="button" onClick={() => setOpen(!open)} className="rounded-[4px] border border-[#D9E1EA] px-3 py-2 text-sm font-semibold text-[#1A2B3C] lg:hidden" aria-label="Toggle menu">{open ? "Close" : "Menu"}</button>
         </nav>
@@ -64,7 +73,10 @@ export function SiteNav() {
             <div className="flex flex-col gap-1 text-sm font-semibold text-[#1A2B3C]">
               {LINKS.map((l) => (<Link key={l.href} href={l.href} onClick={() => setOpen(false)} className="rounded-[4px] px-2 py-2.5 hover:bg-[#F4F7FA]">{l.label}</Link>))}
               <Link href="/login" onClick={() => setOpen(false)} className="rounded-[4px] px-2 py-2.5 text-[#1B6DC1] hover:bg-[#F4F7FA]">Sign in</Link>
-              <Link href="/book" onClick={() => setOpen(false)} className="mt-1 rounded-[4px] bg-[#0A2540] px-4 py-2.5 text-center font-bold text-white">Book a demo</Link>
+              {/* The strip's "Book a demo" link is hidden below sm, so the
+                  burger has to carry both halves of the pair itself. */}
+              <Link href="/book" onClick={() => setOpen(false)} className="rounded-[4px] px-2 py-2.5 hover:bg-[#F4F7FA]">Book a demo</Link>
+              <Link href="/pricing#apply" onClick={() => setOpen(false)} className="mt-1 rounded-[4px] bg-[#0A2540] px-4 py-2.5 text-center font-bold text-white">Join the pilot</Link>
             </div>
           </div>
         )}

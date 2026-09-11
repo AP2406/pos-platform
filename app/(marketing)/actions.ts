@@ -38,13 +38,36 @@ function nl2br(s: string): string {
 function confirmationHtml(name: string, kind: string): string {
   const safeName = esc(name) || "there";
   const isCall = kind === "call";
-  const heading = isCall ? "Your free call is booked" : "We got your message";
-  const intro = isCall
+  const isPilot = kind === "pilot";
+  // The pilot receipt is worded as an acknowledgement, not an acceptance. "We
+  // have your details" and "we will be in touch" commit us to a reply; they do
+  // not promise a place, a start date, or a price after the pilot, none of which
+  // we know. Anything stronger in a receipt is a promise in writing.
+  const heading = isPilot ? "We have your pilot sign-up" : isCall ? "Your free call is booked" : "We got your message";
+  const intro = isPilot
+    ? "Thanks, " + safeName + ". We have your details and we will be in touch to talk through the pilot and book a time to come and set the till up with you."
+    : isCall
     ? "Thanks for reaching out, " + safeName + ". We have your details and will contact you shortly to lock in a time that works &mdash; no pressure, no jargon."
     : "Thanks for reaching out, " + safeName + ". We have your message and a real person will get back to you shortly, usually the same day.";
 
   let steps = "";
-  if (isCall) {
+  if (isPilot) {
+    const items = ["We read what you told us about how your shop runs.", "We call or email you to talk it through and pick a setup day.", "We come out, load your menu and get you live on the pilot.", "You use it for real and tell us what is wrong with it."];
+    let rows = "";
+    for (let i = 0; i < items.length; i++) {
+      rows = rows +
+        "<tr>" +
+          "<td valign='top' style='padding:6px 12px 6px 0;'><div style='width:26px;height:26px;line-height:26px;text-align:center;border-radius:9999px;background-color:#E0F1FF;color:#0057B8;font-weight:700;font-size:13px;'>" + (i + 1) + "</div></td>" +
+          "<td valign='top' style='padding:6px 0;color:#475569;font-size:14px;line-height:1.5;'>" + items[i] + "</td>" +
+        "</tr>";
+    }
+    steps =
+      "<div style='margin-top:22px;'>" +
+        "<div style='font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#94a3b8;margin-bottom:8px;'>What happens next</div>" +
+        "<table role='presentation' cellpadding='0' cellspacing='0' border='0' width='100%'>" + rows + "</table>" +
+        "<p style='margin:18px 0 0;color:#64748b;font-size:13px;line-height:1.6;'>Two things worth repeating: Surge does not take the card yet, so you keep the processor you already have &mdash; and the pilot is free while it runs. We will tell you before anything about that changes, and you can walk away at any point.</p>" +
+      "</div>";
+  } else if (isCall) {
     const items = ["We review your business details to prep your numbers.", "We reach out to set a time that suits you.", "On the call, we show you exactly what you could save."];
     let rows = "";
     for (let i = 0; i < items.length; i++) {
@@ -151,6 +174,91 @@ export async function submitContact(input: ContactInput): Promise<{ ok: boolean;
   }
   return { ok: true };
 }
+// ----- PILOT PROGRAM SIGNUP -----
+//
+// WHY THIS LIVES HERE RATHER THAN IN ITS OWN ROUTE HANDLER: the site already has
+// exactly one working lead path — a server action in this file that hands the
+// lead to lib/services/email and copies the sender. `submitContact` and
+// `submitBooking` both use it, it reaches a real inbox (SURGE_LEADS_EMAIL,
+// defaulting to info@surgetechpos.com), and there is no leads table anywhere in
+// the schema for a DB write to reuse. A second, different submission path would
+// be a second thing to keep alive; this is the same one with a different shape.
+//
+// The one deliberate difference from its two siblings: this action checks the
+// RESULT of sendEmail. `sendEmail` returns `{ error }` instead of throwing when
+// Resend rejects a message, so a try/catch alone reports success for a lead that
+// never left the building. A pilot signup is the only form on the site where the
+// visitor has committed to something, so silent loss is the worst failure mode.
+const pilotSchema = z.object({
+  businessName: z.string().trim().min(1, "Tell us the business name").max(160),
+  contactName: z.string().trim().min(1, "Tell us who you are").max(120),
+  email: z.string().trim().email("Enter a valid email").max(200),
+  // Optional on purpose. In-person setup means we will end up on the phone, but a
+  // required phone number is the single biggest drop-off field on a B2B form and
+  // an email address is enough to start the conversation.
+  phone: z.string().trim().max(40).optional().or(z.literal("")),
+  businessType: z.string().trim().min(1, "Pick the closest match").max(60),
+  locations: z.string().trim().max(30).optional().or(z.literal("")),
+  currentPos: z.string().trim().max(120).optional().or(z.literal("")),
+  painPoint: z.string().trim().max(4000).optional().or(z.literal("")),
+});
+
+export type PilotInput = z.infer<typeof pilotSchema>;
+
+// fieldErrors lets the form mark the offending input rather than only printing a
+// sentence at the bottom — required for the error to be announced against the
+// control it belongs to.
+export type PilotResult = { ok: boolean; error?: string; fieldErrors?: Record<string, string> };
+
+export async function submitPilot(input: PilotInput): Promise<PilotResult> {
+  const parsed = pilotSchema.safeParse(input);
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      const key = String(issue.path[0] || "");
+      if (key && !fieldErrors[key]) fieldErrors[key] = issue.message;
+    }
+    return { ok: false, error: "Please check the highlighted fields and try again.", fieldErrors: fieldErrors };
+  }
+  if (!isEmailConfigured()) {
+    return { ok: false, error: "Sign-up is not set up yet. Please email or call us directly and we will add you by hand." };
+  }
+  const d = parsed.data;
+  const html =
+    "<h2>New pilot program sign-up</h2>" +
+    "<p><strong>Business:</strong> " + esc(d.businessName) + "</p>" +
+    "<p><strong>Contact:</strong> " + esc(d.contactName) + "</p>" +
+    "<p><strong>Email:</strong> " + esc(d.email) + "</p>" +
+    "<p><strong>Phone:</strong> " + esc(d.phone || "Not provided") + "</p>" +
+    "<hr>" +
+    "<p><strong>Business type:</strong> " + esc(d.businessType) + "</p>" +
+    "<p><strong>Locations:</strong> " + esc(d.locations || "-") + "</p>" +
+    "<p><strong>Current POS:</strong> " + esc(d.currentPos || "None / not said") + "</p>" +
+    "<hr>" +
+    "<p><strong>What is not working today:</strong></p>" +
+    "<p>" + nl2br(d.painPoint || "Not said") + "</p>" +
+    "<hr>" +
+    "<p style='color:#888;font-size:12px'>Lead capture only &mdash; no account, business or entitlement was created. Set them up by hand.</p>";
+
+  const subject = "Surge pilot sign-up: " + d.businessName + " (" + d.businessType + ")";
+
+  try {
+    const res = await sendEmail({ to: LEADS_TO, from: LEADS_FROM, replyTo: d.email, subject: subject, html: html });
+    if ("error" in res) {
+      return { ok: false, error: "We could not send your sign-up. Please try again, or email us at " + SUPPORT_EMAIL + "." };
+    }
+  } catch {
+    return { ok: false, error: "We could not send your sign-up. Please try again, or email us at " + SUPPORT_EMAIL + "." };
+  }
+  try {
+    await sendEmail({ to: d.email, from: LEADS_FROM, replyTo: SUPPORT_EMAIL, subject: "You are on the Surge pilot list", html: confirmationHtml(d.contactName, "pilot") });
+  } catch {
+    // Confirmation is best-effort — the lead is already in the owner's inbox and
+    // failing the whole submission over a receipt would lose it.
+  }
+  return { ok: true };
+}
+
 const bookingSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
   business: z.string().trim().max(160).optional().or(z.literal("")),

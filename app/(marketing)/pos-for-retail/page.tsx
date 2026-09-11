@@ -12,7 +12,7 @@ import { LandingHero, LandingSection, LandingPoints, LandingGuides, LandingCTA }
 // so the product already calls it unbuilt and only this page disagreed.
 export const metadata: Metadata = {
   title: { absolute: "POS for Retail (GTA) — Free Point of Sale & Inventory | Surge" },
-  description: "A retail point-of-sale for GTA shops: fast checkout, barcode inventory, low-stock warnings, purchasing, receipts and reports, with staff roles and a time clock. Free Basic tier. Book a free demo.",
+  description: "A retail point-of-sale for GTA shops: fast checkout, barcode inventory, low-stock warnings, purchasing, receipts and reports, with staff roles and a time clock. Free during our pilot program. Book a free demo.",
   alternates: { canonical: "/pos-for-retail" },
   openGraph: { ...OG_BASE, url: "/pos-for-retail" },
 };
@@ -26,7 +26,7 @@ const points = [
 
 const service = localService({
   name: "Retail point of sale",
-  description: "A retail point-of-sale for GTA shops — checkout, barcode inventory, low-stock warnings, purchasing, receipts, staff roles and reporting, with a free Basic tier.",
+  description: "A retail point-of-sale for GTA shops — checkout, barcode inventory, low-stock warnings, purchasing, receipts, staff roles and reporting, free during our pilot program.",
   areaServed: ["Greater Toronto Area", "Toronto", "Mississauga", "Durham Region", "Markham", "Vaughan"],
   path: "/pos-for-retail",
 });
@@ -40,7 +40,7 @@ export default function PosForRetailPage() {
       <LandingHero
         eyebrow="For retail"
         h1={<>A retail POS that keeps your <span className="text-blue-600">shelves honest</span>.</>}
-        intro="Boutiques, grocers, convenience and specialty shops across the GTA run Surge: barcode checkout, stock that stays honest and reports you will actually open — free to start, on the device you already own."
+        intro="Boutiques, grocers, convenience and specialty shops across the GTA run Surge: barcode checkout, stock that stays honest and reports you will actually open — free for a limited time while our pilot runs, on the device you already own."
       />
 
       <LandingSection title="Inventory that keeps up with the floor">
@@ -49,11 +49,11 @@ export default function PosForRetailPage() {
       </LandingSection>
 
       <LandingSection title="Free tier, no bill to start" tint>
-        <p>Most retail systems charge a monthly software fee before you have sold anything. Surge&rsquo;s Basic tier is <strong>free</strong> and is a real register, not a trial. Advanced adds staff roles and scheduling, the time clock, the ordering channels and deeper reporting for a flat monthly fee &mdash; and there is no lock-in either way.</p>
+        <p>Most retail systems charge a monthly software fee before you have sold anything. Surge is <strong>free while our <Link href="/pricing" className="font-semibold text-blue-600 hover:text-blue-700">pilot program</Link> runs</strong> &mdash; all of it, including staff roles and scheduling, the time clock, the ordering channels and the deeper reporting &mdash; and there is no lock-in either way.</p>
       </LandingSection>
 
       <LandingSection title="Grows with your shop">
-        <p>Add registers and a second location as you grow, all reporting to one dashboard. Compare the tiers on the <Link href="/pricing" className="font-semibold text-blue-600 hover:text-blue-700">pricing page</Link>, or see the full <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link> feature set.</p>
+        <p>Add registers and a second location as you grow, all reporting to one dashboard. See what the pilot includes on the <Link href="/pricing" className="font-semibold text-blue-600 hover:text-blue-700">pricing page</Link>, or see the full <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link> feature set.</p>
       </LandingSection>
 
       <LandingSection title="What about taking the card?" tint>

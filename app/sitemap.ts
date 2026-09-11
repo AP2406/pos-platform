@@ -18,7 +18,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: SITE_URL + "/pos", lastModified: now, changeFrequency: "weekly", priority: 0.9 },
     { url: SITE_URL + "/pos-for-restaurants", lastModified: now, changeFrequency: "monthly", priority: 0.9 },
     { url: SITE_URL + "/pos-for-retail", lastModified: now, changeFrequency: "monthly", priority: 0.9 },
-    { url: SITE_URL + "/pricing", lastModified: now, changeFrequency: "monthly", priority: 0.8 },
+    // 0.8 -> 0.9, monthly -> weekly. /pricing is no longer a price list; it is
+    // the pilot offer and the page that carries the sign-up form, which makes it
+    // the site's primary conversion page and puts it level with /pos and the two
+    // industry pages. Weekly because a live offer changes more often than a
+    // feature page does — and when the pilot ends this page changes first.
+    { url: SITE_URL + "/pricing", lastModified: now, changeFrequency: "weekly", priority: 0.9 },
     { url: SITE_URL + "/payment-processing-toronto", lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: SITE_URL + "/payment-processing-mississauga", lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: SITE_URL + "/merchant-services-durham", lastModified: now, changeFrequency: "monthly", priority: 0.6 },

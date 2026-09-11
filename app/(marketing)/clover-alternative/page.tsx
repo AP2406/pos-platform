@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 };
 
 const tiles = [
-  { title: "No app subscriptions", body: "Clover software plans and add-on apps commonly carry their own monthly fees. Surge has two tiers and everything in a tier is in it." },
+  { title: "No app subscriptions", body: "Clover software plans and add-on apps commonly carry their own monthly fees. Surge is one system and everything in it is in it." },
   { title: "No locked-in hardware", body: "Clover hardware is often tied to the processor that sold it and hard to reuse elsewhere. Surge runs on the device you already have." },
   { title: "One system, not a plan matrix", body: "Floor plan, kitchen display, reservations, ordering channels, stock and staff — on one tier, not assembled from a catalogue." },
   { title: "Local, real support", body: "In-person setup across the GTA and Durham and a human on the phone — not a hand-off to whichever reseller signed you up." },
@@ -26,10 +26,10 @@ const tiles = [
 
 const compareRows: [string, string, string][] = [
   ["Card processing", "Not yet — coming soon", "Sold with the device by a bank or reseller"],
-  ["POS software", "Two tiers, free one included", "Tiered plans + paid apps"],
-  ["Floor plan & table service", "Included on Advanced", "Depends on plan and apps"],
-  ["Kitchen display", "Included on Advanced", "Commonly a paid app"],
-  ["Reservations & waitlist", "Included on Advanced", "Third-party app"],
+  ["POS software", "Free during our pilot", "Tiered plans + paid apps"],
+  ["Floor plan & table service", "Included", "Depends on plan and apps"],
+  ["Kitchen display", "Included", "Commonly a paid app"],
+  ["Reservations & waitlist", "Included", "Third-party app"],
   ["Hardware", "Runs on your own device", "Proprietary, often processor-locked"],
   ["Contract", "None — cancel anytime", "Often set by the reselling processor"],
   ["Support", "Local, real human", "Depends on the reseller"],
@@ -56,7 +56,7 @@ export default function CloverAlternativePage() {
 
       <LandingSection title="Why owners look for a Clover alternative">
         <p>Clover isn&rsquo;t one company selling one product &mdash; it&rsquo;s a device sold through many banks and resellers, each setting their own plan. So two shops with identical Clover stations can pay very different amounts, and the monthly total often grows as &ldquo;essential&rdquo; apps get added on top of the software plan.</p>
-        <p>Surge has two tiers and no catalogue. Basic is a free register. Advanced is the whole system &mdash; floor plan and table service, kitchen display, reservations and waitlist, online, QR and kiosk ordering, stock, staff and the time clock &mdash; for one flat monthly fee, on hardware you already own, with no contract.</p>
+        <p>Surge has no catalogue and, right now, no price list either: we are running a <Link href="/pricing" className="font-semibold text-blue-600 hover:text-blue-700">pilot program</Link>, and it hands over the whole system &mdash; floor plan and table service, kitchen display, reservations and waitlist, online, QR and kiosk ordering, stock, staff and the time clock &mdash; free for a limited time, on hardware you already own, with no contract.</p>
         <LandingPoints items={tiles} />
       </LandingSection>
 

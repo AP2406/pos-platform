@@ -54,7 +54,10 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
               <li><Link href="/pos" className="hover:text-white">The POS</Link></li>
               <li><Link href="/pos-for-restaurants" className="hover:text-white">POS for restaurants</Link></li>
               <li><Link href="/pos-for-retail" className="hover:text-white">POS for retail</Link></li>
-              <li><Link href="/pricing" className="hover:text-white">Pricing</Link></li>
+              {/* Same URL, longer label. A footer has the room to keep the
+                  word "pricing" as anchor text — which is what /pricing ranks
+                  on — while still saying what the page now offers. */}
+              <li><Link href="/pricing" className="hover:text-white">Pricing &mdash; free pilot</Link></li>
               <li><Link href="/contact" className="hover:text-white">Contact</Link></li>
             </ul>
           </div>
@@ -79,6 +82,9 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
           <div>
             <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#6C8199]">Get started</div>
             <ul className="mt-4 space-y-2.5 text-sm text-[#C2D0DE]">
+              {/* The pilot leads this group because it is the action we want;
+                  the demo sits directly under it as the softer one. */}
+              <li><Link href="/pricing#apply" className="hover:text-white">Join the pilot</Link></li>
               <li><Link href="/book" className="hover:text-white">Book a demo</Link></li>
               <li><Link href="/guides" className="hover:text-white">Guides</Link></li>
               <li><Link href="/login" className="hover:text-white">Sign in</Link></li>

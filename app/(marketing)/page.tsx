@@ -75,11 +75,20 @@ export default function HomePage() {
               <Crumb>Point of sale</Crumb>
               <h1 className="mt-4 text-[44px] font-bold leading-[1.12] tracking-[-0.015em] text-[#0A2540] sm:text-[50px]">The till that runs the whole room.</h1>
               <p className="mt-5 max-w-lg text-lg leading-relaxed text-[#42566B]">Surge is a point-of-sale system for restaurants, cafes and shops across the GTA &mdash; register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports, in one place.</p>
+              {/* THE HERO PAIR NOW LEADS WITH THE PILOT. "Book a free demo" was
+                  primary and is now the outline button beside it; "See the point
+                  of sale" moved out of this row because three buttons is not a
+                  choice, it is a menu — /pos is still one click away in the nav,
+                  in the footer, and from "Explore the point of sale" further
+                  down this page. */}
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Link href="/book" className={btnPrimary}>Book a free demo</Link>
-                <Link href="/pos" className={btnOutline}>See the point of sale</Link>
+                <Link href="/pricing#apply" className={btnPrimary}>Join the free pilot</Link>
+                <Link href="/book" className={btnOutline}>Book a free demo</Link>
               </div>
               <div className="mt-8 grid gap-2.5">
+                {/* First line is the offer, stated plainly and without a number
+                    of spots, a duration or a deadline attached to it. */}
+                <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Free for a limited time while the pilot runs</div>
                 <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Runs on the tablet you already own</div>
                 <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Floor, kitchen and counter on one system</div>
                 <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Set up with you in person across the GTA</div>
@@ -210,10 +219,15 @@ export default function HomePage() {
       <section className="bg-[#0A2540] py-20 text-white">
         <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-8 px-6 lg:flex-row lg:items-center">
           <div>
-            <h2 className="max-w-xl text-[32px] font-bold leading-[1.18] tracking-[-0.01em] sm:text-[34px]">See it running your room.</h2>
-            <p className="mt-4 max-w-xl leading-relaxed text-[#B9C8D8]">A free 15-minute demo, set up around your actual menu and floor &mdash; not a generic slideshow.</p>
+            <h2 className="max-w-xl text-[32px] font-bold leading-[1.18] tracking-[-0.01em] sm:text-[34px]">Run the whole till for nothing.</h2>
+            <p className="mt-4 max-w-xl leading-relaxed text-[#B9C8D8]">We are piloting Surge with GTA and Durham independents: full access, free for a limited time, set up in person. All we want back is blunt feedback.</p>
+            {/* The demo survives as a text link rather than a second button —
+                the band has one job and the softer path should not compete with
+                it for the same eye. #B9C8D8 on #0A2540 is 8.3:1; the underline
+                carries the affordance without needing a second colour. */}
+            <p className="mt-3 text-sm text-[#B9C8D8]">Rather look first? <Link href="/book" className="font-bold text-white underline underline-offset-4 hover:no-underline">Book a free 15-minute demo</Link>.</p>
           </div>
-          <Link href="/book" className="whitespace-nowrap rounded-[4px] bg-white px-7 py-3.5 text-[15.5px] font-bold text-[#0A2540] transition-colors hover:bg-[#F4F7FA]">Book my free demo</Link>
+          <Link href="/pricing#apply" className="whitespace-nowrap rounded-[4px] bg-white px-7 py-3.5 text-[15.5px] font-bold text-[#0A2540] transition-colors hover:bg-[#F4F7FA]">Join the free pilot</Link>
         </div>
       </section>
     </>

@@ -19,7 +19,7 @@ const points = [
   { title: "Plaza-ready", body: "From Square One to a Streetsville storefront, we set the system up on site and get your staff through it the same day." },
   { title: "One menu, every screen", body: "Build the menu once and it feeds the register, the kitchen display, the online page and the menu board." },
   { title: "Stock that keeps itself", body: "Counts move as you sell, with purchasing, recipes and waste behind them when you want the real plate cost." },
-  { title: "Free to start", body: "The Basic tier is a working register on the device you already own — no card, no trial clock." },
+  { title: "Free while the pilot runs", body: "A working register on the device you already own, at no charge for a limited time — no card, no trial clock." },
 ];
 
 const service = localService({

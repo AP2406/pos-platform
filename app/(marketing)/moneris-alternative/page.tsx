@@ -26,7 +26,10 @@ export const metadata: Metadata = {
 const tiles = [
   { title: "No term contract", body: "Moneris agreements are commonly 3–5 years with an early-termination fee. There is no term on Surge software and no cancellation fee." },
   { title: "A till, not a terminal", body: "A bank merchant account gives you a card machine. Surge gives you the system around it — floor, kitchen, menu, stock, staff and reports." },
-  { title: "Free tier that is a real register", body: "Basic costs nothing and is not a trial. Advanced adds the floor plan, kitchen display, reservations and the ordering channels." },
+  // Was "Free tier that is a real register — Basic costs nothing… Advanced
+  // adds…". The tiers are gone with the pricing page; what replaces them is the
+  // pilot, stated without a duration or a number of places.
+  { title: "Free while the pilot runs", body: "We are piloting Surge with GTA and Durham independents: the whole system, free for a limited time, in exchange for honest feedback." },
   { title: "Local, real support", body: "Set up in person across the GTA and Durham, with a human on the phone rather than a call-centre queue." },
 ];
 
@@ -34,10 +37,10 @@ const tiles = [
 // What is left is a software comparison, plus an honest first row.
 const compareRows: [string, string, string][] = [
   ["Card processing", "Not yet — coming soon", "Yes — this is what Moneris is"],
-  ["POS software", "Two tiers, free one included", "Typically a paid add-on"],
-  ["Floor plan & table service", "Included on Advanced", "Not part of the merchant account"],
-  ["Kitchen display", "Included on Advanced", "Not part of the merchant account"],
-  ["Online, QR & kiosk ordering", "Included on Advanced", "Separate products"],
+  ["POS software", "Free during our pilot", "Typically a paid add-on"],
+  ["Floor plan & table service", "Included", "Not part of the merchant account"],
+  ["Kitchen display", "Included", "Not part of the merchant account"],
+  ["Online, QR & kiosk ordering", "Included", "Separate products"],
   ["Software contract", "None — cancel anytime", "Commonly a 3–5 year term"],
   ["Early-termination fee", "None", "Often $300–$500 to leave early"],
   ["Support", "Local, real human", "Call centre"],
@@ -64,7 +67,7 @@ export default function MonerisAlternativePage() {
 
       <LandingSection title="Why owners look for a Moneris alternative">
         <p>Moneris is Canada&rsquo;s largest processor, and for a big enterprise with a negotiating team it can work. But a lot of independent shops tell us the same things: they are locked into a multi-year term, they are paying monthly account and terminal fees before a single sale, and their &ldquo;rate&rdquo; is a blended number that hides what each transaction actually costs.</p>
-        <p>We are not yet the answer to the rate half of that. We are the answer to the other half: a bank merchant account leaves you running the business on a card machine and a spreadsheet. Surge is the register, the floor plan, the kitchen display, the menu, the stock, the schedule and the reports &mdash; free to start, no term, and it works beside whatever processor you keep.</p>
+        <p>We are not yet the answer to the rate half of that. We are the answer to the other half: a bank merchant account leaves you running the business on a card machine and a spreadsheet. Surge is the register, the floor plan, the kitchen display, the menu, the stock, the schedule and the reports &mdash; free while our pilot runs, no term, and it works beside whatever processor you keep.</p>
         <LandingPoints items={tiles} />
       </LandingSection>
 

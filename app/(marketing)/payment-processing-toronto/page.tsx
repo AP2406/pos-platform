@@ -22,7 +22,7 @@ const points = [
   { title: "Set up in person", body: "We come to your counter across the city, load the menu, draw the floor and show your staff around — not a box in the post." },
   { title: "Built for a busy room", body: "Floor plan, coursing and a kitchen display for the dining rooms; a fast counter mode for the cafes and shops." },
   { title: "Guests can order themselves", body: "Online ordering, a QR code on the table, and a self-serve kiosk — all landing in the same ticket queue." },
-  { title: "Free to start", body: "The Basic tier is a real register, on the tablet you already own, with no card to enter." },
+  { title: "Free while the pilot runs", body: "The whole system, on the tablet you already own, at no charge for a limited time and with no card to enter." },
 ];
 
 const service = localService({
