@@ -94,11 +94,14 @@ function CategoryRail({
   // colour and the uncategorised bucket is the neutral tile by definition.
   const colourTarget =
     selected !== null && selected !== NO_CATEGORY ? selected : null;
-  const previewItems = itemsInCategory(items, selected).slice(0, 3);
+  const previewItems = itemsInCategory(items, selected).slice(0, 4);
 
   return (
-    <Panel className="lg:sticky lg:top-6 lg:self-start">
-      <div className="border-b border-line-soft px-4 py-3">
+    // No longer sticky: the pane is a full-height column inside a full-height
+    // page, so it has nowhere to scroll away TO. What it needs instead is a
+    // bounded body that scrolls on its own when a merchant has forty categories.
+    <Panel className="lg:min-h-0">
+      <div className="shrink-0 border-b border-line-soft px-4 py-3">
         <h2 className="text-[13px] font-medium tracking-tight">Categories</h2>
       </div>
 
@@ -108,7 +111,7 @@ function CategoryRail({
       <div
         role="group"
         aria-label="Filter by category"
-        className="flex gap-1.5 overflow-x-auto p-2 lg:flex-col lg:overflow-visible"
+        className="flex gap-1.5 overflow-x-auto p-2 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-x-visible lg:overflow-y-auto"
       >
         {entries.map((e) => {
           const active = selected === e.key;
@@ -144,7 +147,7 @@ function CategoryRail({
       </div>
 
       {colourTarget && canManage && (
-        <div className="border-t border-line-soft px-4 py-3">
+        <div className="shrink-0 border-t border-line-soft px-4 py-3">
           <p id="cat-colour-label" className="text-xs font-medium">
             Register colour
           </p>
@@ -180,20 +183,27 @@ function CategoryRail({
       )}
 
       {previewItems.length > 0 && (
-        <div className="hidden border-t border-line-soft px-4 py-3 lg:block">
+        <div className="hidden shrink-0 border-t border-line-soft px-4 py-3 lg:block">
           <p className="text-xs font-medium">On the register</p>
-          <div className="mt-2 grid grid-cols-3 gap-1.5">
+          {/* Two columns, not three. At three the tile was ~48px wide inside a
+              176px rail and every name over one short word clipped —
+              "Mushr… risotto" is not a preview of anything. Two tiles of ~85px
+              hold two lines of a real dish name, and the fourth item makes the
+              block square instead of a stripe. */}
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
             {previewItems.map((i) => (
               <div
                 key={i.id}
                 aria-hidden
                 className={
-                  "flex min-h-16 flex-col justify-between rounded-lg border p-1.5 text-[10px] leading-tight " +
+                  "flex min-h-16 flex-col justify-between gap-1 rounded-lg border p-1.5 text-[10px] leading-tight " +
                   tileClassesFor(i.category, colors) +
                   (i.out_of_stock ? " opacity-50" : "")
                 }
               >
-                <span className="line-clamp-2 font-semibold">{i.name}</span>
+                <span className="line-clamp-3 font-semibold hyphens-auto">
+                  {i.name}
+                </span>
                 <span className="tabular-nums opacity-80">
                   {i.out_of_stock ? "86'd" : money(i.price)}
                 </span>
@@ -225,6 +235,12 @@ function ItemRow({
   onPatch: (id: string, patch: Partial<Item>) => void;
 }) {
   const [pending, startTransition] = useTransition();
+  // An image_url that 404s (storage object deleted, bucket renamed, a row
+  // carried over from an import) used to render the browser's broken-image
+  // glyph, which reads as "this product is broken" rather than "this item has
+  // no photo". One failed load and the row falls back to the same category
+  // swatch an item with no photo at all gets.
+  const [photoFailed, setPhotoFailed] = useState(false);
   const status = statusOf(item);
 
   const meta: string[] = [];
@@ -280,11 +296,12 @@ function ItemRow({
         aria-current={selected ? "true" : undefined}
         className="u-focus-inset flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-4 text-left"
       >
-        {item.image_url ? (
+        {item.image_url && !photoFailed ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={item.image_url}
             alt=""
+            onError={() => setPhotoFailed(true)}
             className="size-9 shrink-0 rounded-md object-cover ring-1 ring-line-soft"
           />
         ) : (
@@ -456,8 +473,14 @@ export function MenuBuilder({
   const hasLinkOuts = canManage;
 
   return (
-    <div>
-      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
+    // A working surface, not a document. The shell now hands a page the whole
+    // viewport (see app-shell.tsx), and this screen takes it: the header and
+    // the tab strip are fixed furniture, the three panes below split what's
+    // left, and each scrolls inside itself. Before, the panes stopped wherever
+    // the item list happened to end and the list scrolled in a 640px box with
+    // half a screen of empty canvas underneath it.
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="mb-5 flex shrink-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">{moduleLabel}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -528,19 +551,27 @@ export function MenuBuilder({
         </div>
       </header>
 
-      <Tabs defaultValue="items">
-        <TabsList className="mb-4">
+      <Tabs defaultValue="items" className="min-h-0 flex-1">
+        <TabsList className="mb-4 shrink-0">
           <TabsTrigger value="items">Items</TabsTrigger>
           <TabsTrigger value="availability">Availability</TabsTrigger>
           {hasFloorService && <TabsTrigger value="courses">Courses</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="items">
+        <TabsContent
+          value="items"
+          className="min-h-0 flex-1 data-[state=active]:flex data-[state=active]:flex-col"
+        >
           {/* Three panes at xl, where 960px of content actually fits three. Below
               that the editor takes the list's grid cell and the list steps aside
               — a master/detail swap, not a modal, and nothing is hidden behind a
-              scrim. */}
-          <div className="grid items-start gap-4 lg:grid-cols-[11rem_minmax(0,1fr)] xl:grid-cols-[11rem_minmax(0,1fr)_21rem]">
+              scrim.
+              The rail is 13rem rather than 11: at 11 the register preview's
+              tiles were too narrow to hold a dish name, and a category list
+              pressed against its own counters reads as cramped.
+              items-stretch + lg:flex-1 is what makes the three panes equal-height
+              columns of the screen instead of three cards of three heights. */}
+          <div className="grid items-stretch gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,1fr)_22rem]">
             <CategoryRail
               items={items}
               selected={category}
@@ -551,8 +582,12 @@ export function MenuBuilder({
               canManage={canManage}
             />
 
-            <Panel className={editorOpen ? "hidden xl:flex" : "flex"}>
-              <div className="flex items-center gap-2 border-b border-line-soft px-4 py-3">
+            <Panel
+              className={
+                "lg:min-h-0 " + (editorOpen ? "hidden xl:flex" : "flex")
+              }
+            >
+              <div className="flex shrink-0 items-center gap-2 border-b border-line-soft px-4 py-3">
                 <div className="relative min-w-0 flex-1">
                   <SearchIcon
                     aria-hidden
@@ -575,38 +610,48 @@ export function MenuBuilder({
                 </span>
               </div>
 
-              {visible.length === 0 ? (
-                <div className="p-4">
-                  <EmptyState
-                    title={items.length === 0 ? "Nothing on the menu yet" : "No matches"}
-                    description={
-                      items.length === 0
-                        ? "Add your first item, or import an existing menu from a PDF, photo or spreadsheet."
-                        : "Try a different search, or pick another category."
-                    }
-                  />
-                </div>
-              ) : (
-                <ul className="divide-y divide-line-soft">
-                  {visible.map((item) => (
-                    <ItemRow
-                      key={item.id}
-                      item={item}
-                      colors={colors}
-                      selected={item.id === selectedId}
-                      onSelect={() => selectItem(item.id)}
-                      onPatch={patchItem}
+              {/* The list owns the leftover height and scrolls in it, so a
+                  menu of ten fills the pane and a menu of four hundred is the
+                  only thing that moves when you flick it. */}
+              <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+                {visible.length === 0 ? (
+                  <div className="p-4">
+                    <EmptyState
+                      title={items.length === 0 ? "Nothing on the menu yet" : "No matches"}
+                      description={
+                        items.length === 0
+                          ? "Add your first item, or import an existing menu from a PDF, photo or spreadsheet."
+                          : "Try a different search, or pick another category."
+                      }
                     />
-                  ))}
-                </ul>
-              )}
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-line-soft">
+                    {visible.map((item) => (
+                      <ItemRow
+                        key={item.id}
+                        item={item}
+                        colors={colors}
+                        selected={item.id === selectedId}
+                        onSelect={() => selectItem(item.id)}
+                        onPatch={patchItem}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </div>
             </Panel>
 
             {editorOpen && (
-              <Panel className="xl:sticky xl:top-6 xl:max-h-[calc(100dvh-3rem)] xl:self-start">
+              // Was `xl:sticky xl:max-h-[calc(100dvh-3rem)]` — a card pinned to
+              // the viewport inside a document that scrolled past it. Now it is
+              // simply the third column of a full-height row, and ItemEditor's
+              // own `min-h-0 flex-1` body does the scrolling it was already
+              // written to do.
+              <Panel className="lg:min-h-0">
                 {/* Below xl the list is not on screen, so the panel needs its own
                     way back. */}
-                <div className="border-b border-line-soft px-3 py-2 xl:hidden">
+                <div className="shrink-0 border-b border-line-soft px-3 py-2 xl:hidden">
                   <Button variant="ghost" size="sm" onClick={closeEditor}>
                     &larr; Back to items
                   </Button>
@@ -639,7 +684,9 @@ export function MenuBuilder({
           )}
         </TabsContent>
 
-        <TabsContent value="availability">
+        {/* These two are documents, not working surfaces — they scroll inside
+            the pane rather than driving the page's height. */}
+        <TabsContent value="availability" className="min-h-0 flex-1 overflow-y-auto">
           <Panel className="max-w-3xl">
             <div className="border-b border-line-soft px-5 py-4">
               <h2 className="text-[15px] font-semibold tracking-tight">Menu hours</h2>
@@ -659,7 +706,7 @@ export function MenuBuilder({
         </TabsContent>
 
         {hasFloorService && (
-          <TabsContent value="courses">
+          <TabsContent value="courses" className="min-h-0 flex-1 overflow-y-auto">
             <Panel className="max-w-3xl">
               <div className="border-b border-line-soft px-5 py-4">
                 <h2 className="text-[15px] font-semibold tracking-tight">Courses</h2>

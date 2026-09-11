@@ -6,7 +6,7 @@ import {
   WEB_ROLE_PERMISSIONS,
   ROUTE_PERMISSIONS,
 } from "@/lib/services/route-access";
-import { buildNav } from "@/lib/modules/nav";
+import { buildNav, type NavLink } from "@/lib/modules/nav";
 
 // Admin route access used to be 42 copies of
 // `role !== "owner" && role !== "manager"`. These tests pin the replacement:
@@ -21,7 +21,25 @@ const restaurant = {
   hasPos: true,
 };
 
+// The rail nests its long tail one level deep, so "what is in the sidebar" is
+// the whole tree, not the top row. Every assertion below walks both levels —
+// which is strictly MORE surface than the flat version covered, not less.
+function flatten(items: NavLink[]): NavLink[] {
+  return items.flatMap((i) => [i, ...flatten(i.children ?? [])]);
+}
+
+function navLinks(role: string, extra: Record<string, unknown> = {}): NavLink[] {
+  return buildNav({ ...restaurant, role, ...extra }).flatMap((s) =>
+    flatten(s.items)
+  );
+}
+
 function navHrefs(role: string, extra: Record<string, unknown> = {}): string[] {
+  return navLinks(role, extra).map((i) => i.href);
+}
+
+/** The rows the rail paints before anything is expanded. */
+function primaryHrefs(role: string, extra: Record<string, unknown> = {}): string[] {
   return buildNav({ ...restaurant, role, ...extra }).flatMap((s) =>
     s.items.map((i) => i.href)
   );
@@ -143,17 +161,56 @@ describe("the sidebar and the guards agree", () => {
     }
   });
 
-  it("groups every item and drops empty groups", () => {
+  it("emits a non-empty section, and never an empty one", () => {
     const sections = buildNav({ ...restaurant, role: "bookkeeper" });
     expect(sections.length).toBeGreaterThan(0);
     for (const s of sections) {
       expect(s.label.length).toBeGreaterThan(0);
       expect(s.items.length).toBeGreaterThan(0);
     }
-    // A bookkeeper has no business in the team or marketing sections.
-    const hrefs = sections.flatMap((s) => s.items.map((i) => i.href));
+    // A bookkeeper has no business in the roster or in marketing — at either
+    // level of the tree.
+    const hrefs = navHrefs("bookkeeper");
     expect(hrefs).not.toContain("/app/schedule");
     expect(hrefs).not.toContain("/app/marketing");
+  });
+
+  // The point of the restructure. The category norm is 10–16 visible items
+  // (docs/competitor-dashboard-study.md §1.1); this used to paint 36.
+  it("opens at a primary rail no longer than the category norm", () => {
+    for (const role of Object.keys(WEB_ROLE_PERMISSIONS)) {
+      expect(primaryHrefs(role, { multiLocation: true }).length, role)
+        .toBeLessThanOrEqual(12);
+    }
+  });
+
+  it("keeps every destination reachable — a child only nests under a parent that survived", () => {
+    for (const role of Object.keys(WEB_ROLE_PERMISSIONS)) {
+      const sections = buildNav({ ...restaurant, role, multiLocation: true });
+      const primaries = new Set(sections.flatMap((s) => s.items.map((i) => i.href)));
+      for (const section of sections) {
+        for (const item of section.items) {
+          for (const child of item.children ?? []) {
+            // A child hanging off a parent the viewer cannot open would be a
+            // destination with no path to it.
+            expect(primaries.has(item.href), role + " -> " + child.href).toBe(true);
+            expect(canOpenRoute(role, item.href), role + " -> " + item.href).toBe(true);
+            // Exactly one level: no grandchildren.
+            expect(child.children, child.href).toBeUndefined();
+          }
+        }
+      }
+    }
+  });
+
+  it("promotes a child whose parent this role cannot open", () => {
+    // /app/staff needs edit_staff; /app/log needs void. A shift lead holds the
+    // second and not the first, so the Team branch has no head and its
+    // survivors have to come up to the top level or vanish.
+    expect(canOpenRoute("shift_lead", "/app/staff")).toBe(false);
+    expect(primaryHrefs("shift_lead")).toContain("/app/log");
+    expect(primaryHrefs("owner")).not.toContain("/app/log");
+    expect(navHrefs("owner")).toContain("/app/log");
   });
 
   it("only offers the locations roll-up to multi-location accounts", () => {
@@ -170,14 +227,9 @@ describe("the sidebar and the guards agree", () => {
 
   it("calls the orders hub Orders, not Tickets or Tabs", () => {
     for (const mode of ["full_service", "bar", "quick_service"]) {
-      const sections = buildNav({
-        ...restaurant,
-        config: { mode },
-        role: "owner",
-      });
-      const orders = sections
-        .flatMap((s) => s.items)
-        .find((i) => i.href === "/app/orders");
+      const orders = navLinks("owner", { config: { mode } }).find(
+        (i) => i.href === "/app/orders"
+      );
       if (orders) expect(orders.label, mode).toBe("Orders");
     }
   });

@@ -59,7 +59,16 @@ async function uploadItemImage(file: File): Promise<string> {
 
 /** A photo well that says "no photo" without implying photos are unavailable. */
 function PhotoWell({ src, alt }: { src: string | null; alt: string }) {
-  if (src) {
+  // Same reasoning as the item row: a stored URL that no longer resolves must
+  // degrade to the empty well, not to a broken-image glyph in the slot the
+  // merchant is about to upload into.
+  //
+  // Remembering WHICH url failed rather than a bare boolean is what makes a
+  // fresh upload retry on its own: the new src !== the failed one, so the well
+  // shows the image again without an effect to reset the flag.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+
+  if (src && failedSrc !== src) {
     return (
       // Storage-bucket URLs on an arbitrary Supabase project host: next/image
       // would need every merchant's hostname in next.config remotePatterns.
@@ -67,6 +76,7 @@ function PhotoWell({ src, alt }: { src: string | null; alt: string }) {
       <img
         src={src}
         alt={alt}
+        onError={() => setFailedSrc(src)}
         className="size-20 shrink-0 rounded-lg object-cover ring-1 ring-line"
       />
     );

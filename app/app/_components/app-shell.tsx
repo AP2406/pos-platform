@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { usePathname } from "next/navigation";
 import { SidebarNav, type NavSection } from "./sidebar-nav";
+import { TopBar } from "./top-bar";
 import { SignOutButton } from "./sign-out";
 import { ThemeToggle } from "./theme-toggle";
 import { PageTransition } from "./page-transition";
@@ -161,6 +162,8 @@ export function AppShell({
   businessName,
   industry,
   role,
+  roleLabel,
+  userName,
   businesses,
   activeBusinessId,
   nav,
@@ -172,6 +175,10 @@ export function AppShell({
   businessName: string;
   industry: string;
   role: string;
+  /** "Shift lead", not "shift_lead" — for the top bar's user chip. */
+  roleLabel: string;
+  /** The signed-in person, from auth: display name if set, else their email. */
+  userName: string;
   businesses: BizSummary[];
   activeBusinessId: string;
   nav: NavSection[];
@@ -186,6 +193,20 @@ export function AppShell({
   // The register is a full-screen till: no static sidebar, menu button at every
   // size, and the content fills the screen instead of the centered page wrapper.
   const isTill = pathname === "/app/pos";
+
+  // Pages that are WORKING SURFACES rather than documents: they take the height
+  // the frame has and scroll inside their own panes.
+  //
+  // This has to be opt-in, and it has to be a definite height rather than
+  // `min-h-full`. A minimum is a floor — a flex child measured against it still
+  // sizes to its own content and simply refuses to shrink, which is exactly how
+  // the menu builder ended up 630px of panes inside a 603px slot with the last
+  // 30px clipped. `h-full` is a ceiling as well, so `flex-1 min-h-0` down the
+  // chain finally has something to divide up. Every other page keeps the floor,
+  // because a report that is 3000px long must still be 3000px long.
+  //
+  // Exact match, not prefix: /app/catalog/push is an ordinary document.
+  const isWorkSurface = pathname === "/app/catalog";
 
   useEffect(() => {
     setOpen(false);
@@ -213,14 +234,27 @@ export function AppShell({
     (open ? "translate-x-0" : "-translate-x-full");
 
   const headerClasses =
-    "fixed top-0 inset-x-0 z-30 h-14 flex items-center gap-3 px-4 bg-sidebar text-sidebar-foreground border-b border-sidebar-border " +
+    "h-14 shrink-0 flex items-center gap-3 px-4 bg-sidebar text-sidebar-foreground border-b border-sidebar-border " +
     (isTill ? "" : "md:hidden");
 
   const backdropClasses =
     "fixed inset-0 z-40 bg-black/60 backdrop-blur-sm " + (isTill ? "" : "md:hidden");
 
+  // THE FRAME IS THE VIEWPORT, not the document.
+  //
+  // It used to be `min-h-screen`, which made the shell as tall as whatever the
+  // page happened to be — so on a 1980px menu screen the sidebar rail ran the
+  // whole 1980px (its own `overflow-y-auto` never engaging), and any page that
+  // wanted to be a working surface rather than a scrolling document had nothing
+  // to measure itself against. Pinning the frame to 100dvh and making <main>
+  // the one scroll container gives the rail a fixed height, puts the top bar
+  // where it cannot scroll away, and lets a page opt into filling the screen by
+  // being `flex-1` — which is what the menu builder's three panes now do.
   return (
-    <div className="min-h-screen flex bg-background">
+    // Column on a phone (bar over content), row from md (rail beside content).
+    // The bar is a flow item rather than `fixed` now, so nothing under it needs
+    // to reserve 56px of top padding and guess right.
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background md:flex-row">
       <header className={headerClasses}>
         <button
           type="button"
@@ -302,11 +336,27 @@ export function AppShell({
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto min-w-0">
-        {isTill ? (
-          <div className="h-[100dvh] pt-14 overflow-hidden">{children}</div>
-        ) : (
-          <div className="max-w-7xl mx-auto px-5 md:px-8 pt-20 md:pt-8 pb-10">
+      <div className="flex min-w-0 min-h-0 flex-1 flex-col">
+        <TopBar
+          workspaceName={businessName}
+          userName={userName}
+          roleLabel={roleLabel}
+          nav={nav}
+          className="hidden md:flex"
+        />
+
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          {/* The height contract: `min-h-full` so a short page still paints a
+              full canvas, plus `lg:h-full` on a work surface so its panes have
+              a real ceiling to divide. Below lg every page is a document —
+              three stacked panes each squashed to a third of a phone screen is
+              not a working surface, it is three slivers. */}
+          <div
+            className={
+              "mx-auto flex min-h-full w-full max-w-7xl flex-col px-5 pt-6 pb-10 md:px-8 md:pt-7 " +
+              (isWorkSurface ? "lg:h-full" : "")
+            }
+          >
             {isDemo && <DemoBanner />}
             {/* Not on /app — the dashboard runs its own launch-readiness panel
                 there, and a new merchant seeing both a checklist and a nudge to
@@ -316,10 +366,12 @@ export function AppShell({
                 orders, readiness on incomplete setup, so a fully-set-up shop
                 that hasn't rung a sale still gets nudged off the dashboard. */}
             {showOnboarding && pathname !== "/app" && <OnboardingNudge />}
-            <PageTransition>{children}</PageTransition>
+            <PageTransition className="flex min-h-0 flex-1 flex-col">
+              {children}
+            </PageTransition>
           </div>
-        )}
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

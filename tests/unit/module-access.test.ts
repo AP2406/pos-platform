@@ -7,7 +7,7 @@ import {
   requireModule,
 } from "@/lib/modules/access";
 import { enabledModules } from "@/lib/modules/resolve";
-import { buildNav } from "@/lib/modules/nav";
+import { buildNav, type NavLink } from "@/lib/modules/nav";
 import { BUSINESS_MODES } from "@/lib/modules/modes";
 
 // The sidebar has been mode-aware for a while, but the transportation URLs
@@ -15,6 +15,11 @@ import { BUSINESS_MODES } from "@/lib/modules/modes";
 // fleet page offering to help them "serve jobs". These tests pin the guard that
 // closes that, and pin the thing that made it possible to get wrong — the menu
 // and the guard reading from two different lists.
+
+// The rail nests one level, so "everything the sidebar offers" means both.
+function flatten(items: NavLink[]): NavLink[] {
+  return items.flatMap((i) => [i, ...flatten(i.children ?? [])]);
+}
 
 const restaurant = {
   industry: "restaurant",
@@ -100,7 +105,7 @@ describe("the sidebar and the module guard agree", () => {
     ];
     for (const ctx of contexts) {
       for (const section of buildNav({ ...ctx, role: "owner" })) {
-        for (const item of section.items) {
+        for (const item of flatten(section.items)) {
           expect(canOpenModuleRoute(ctx, item.href), ctx.industry + " -> " + item.href).toBe(true);
         }
       }
@@ -119,7 +124,7 @@ describe("modules with no route behind them", () => {
 
   it("are dropped before they can reach the nav", () => {
     expect(enabledModules(configured)).toEqual(["dashboard", "pos", "settings"]);
-    const hrefs = buildNav({ ...configured, role: "owner", hasPos: true }).flatMap((s) => s.items.map((i) => i.href));
+    const hrefs = buildNav({ ...configured, role: "owner", hasPos: true }).flatMap((s) => flatten(s.items).map((i) => i.href));
     for (const dead of ["/app/leads", "/app/calendar", "/app/invoices", "/app/proposals"]) {
       expect(hrefs, dead).not.toContain(dead);
     }
