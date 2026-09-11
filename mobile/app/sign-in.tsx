@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { View, Text, TextInput, StyleSheet, Pressable, ScrollView } from "react-native";
+import { useRef, useState } from "react";
+import { View, Text, TextInput, StyleSheet, Pressable, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, NumPad, color, space, radius, text, touch, fontFamily, fontSize } from "@/design";
 import { useSession } from "@/state/session";
@@ -28,6 +28,7 @@ export default function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pin, setPin] = useState("");
+  const passwordRef = useRef<TextInput>(null);
   const [busy, setBusy] = useState<null | "signIn" | "punch">(null);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -129,13 +130,45 @@ export default function SignIn() {
         )}
       </View>
 
-      <ScrollView contentContainerStyle={styles.body}>
+      {/* Measured on the till (iPad11,6, 1080×810pt landscape): the system
+          keyboard's top edge lands at y=402, so it owns the bottom 408pt —
+          slightly over HALF the screen. `body` centres the card in the scroll
+          viewport, and nothing here reacted to the keyboard, so the card stayed
+          put at 272–577 and the keyboard simply sat on top of it: the Email
+          field clipped, Password and the Sign in button covered outright. The
+          ScrollView could not rescue it either — `flexGrow: 1` with content
+          shorter than the frame makes contentSize == frameSize, i.e. zero
+          scrollable range.
+          `behavior="padding"` is the fix and the iOS behaviour ("height" is the
+          Android idiom): it shrinks this viewport to the 338pt the keyboard
+          leaves, `body`'s centring re-runs inside that smaller box, and the
+          whole card — Sign in button included — lifts clear. If the card ever
+          outgrows what's left (portrait, phones, larger accessibility text),
+          `flexGrow: 1` lets the content exceed the viewport and the ScrollView
+          takes over as the fallback.
+          Deliberately NOT `automaticallyAdjustKeyboardInsets`: it would add the
+          keyboard height a second time on top of this padding. It also only
+          promises to reveal the focused field, which would still leave the
+          Sign in button under the keyboard when Password has focus. */}
+      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView
+          contentContainerStyle={styles.body}
+          // A tap no control claims — the card, the backdrop — puts the keyboard
+          // away; a tap that lands on Sign in still reaches it on the first
+          // press instead of being eaten by the dismissal.
+          keyboardShouldPersistTaps="handled"
+          // Drag the keyboard down, the gesture iOS users already have.
+          keyboardDismissMode="interactive"
+        >
         {step === "auth" && (
           <View style={styles.card}>
             <Text style={text.heading}>Sign in</Text>
             <Text style={text.bodyDim}>Use your Surge account, then each team member enters their PIN.</Text>
-            <TextInput style={styles.input} placeholder="Email" placeholderTextColor={color.textFaint} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
-            <TextInput style={styles.input} placeholder="Password" placeholderTextColor={color.textFaint} secureTextEntry value={password} onChangeText={setPassword} />
+            {/* Return walks the card: Email hands focus to Password without
+                dropping the keyboard (submitBehavior="submit" — the default
+                would blur and close it), and Password's "Go" submits. */}
+            <TextInput style={styles.input} placeholder="Email" placeholderTextColor={color.textFaint} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} returnKeyType="next" submitBehavior="submit" onSubmitEditing={() => passwordRef.current?.focus()} />
+            <TextInput ref={passwordRef} style={styles.input} placeholder="Password" placeholderTextColor={color.textFaint} secureTextEntry value={password} onChangeText={setPassword} returnKeyType="go" onSubmitEditing={doSignIn} />
             {err ? <Text style={styles.err}>{err}</Text> : null}
             <Button title="Sign in" size="lg" onPress={doSignIn} loading={busy === "signIn"} />
           </View>
@@ -181,7 +214,8 @@ export default function SignIn() {
             <Button title="Switch location" variant="ghost" onPress={() => s.pickBusiness("")} />
           </>
         )}
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* One centred state line, TouchBistro's idea, minus its worst habit:
           TouchBistro prints "BELL303, 192.168.2.182" here. That is the venue's
@@ -198,6 +232,9 @@ export default function SignIn() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
+  // The keyboard-avoiding wrapper has to fill the space the ScrollView used to,
+  // or the ScrollView collapses to its content height and stops centring.
+  fill: { flex: 1 },
 
   topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, paddingHorizontal: space.xl, paddingTop: space.md },
   brand: { flexDirection: "row", alignItems: "center", gap: space.sm },

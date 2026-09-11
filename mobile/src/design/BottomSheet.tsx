@@ -1,4 +1,4 @@
-import { Modal, View, Pressable, Text, StyleSheet, type ViewStyle } from "react-native";
+import { Modal, View, Pressable, Text, StyleSheet, KeyboardAvoidingView, Platform, type ViewStyle } from "react-native";
 import { color, radius, space, fontFamily, fontSize } from "@surge/design-tokens";
 
 export function BottomSheet({
@@ -16,17 +16,26 @@ export function BottomSheet({
 }) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, style]}>
-        <View style={styles.handle} />
-        {title ? <Text style={styles.title}>{title}</Text> : null}
-        {children}
-      </View>
+      {/* The sheet is pinned to the bottom edge, which is exactly where the
+          keyboard arrives — so every sheet that holds a TextInput (Add walk-in,
+          the modifier note, the register line editor's discount/modifier rows)
+          used to be buried by it, the same way the sign-in card was. Shrinking
+          this box by the keyboard height lets `backdrop`'s flex push the sheet
+          to rest directly ON TOP of the keyboard instead of behind it. */}
+      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <Pressable style={styles.backdrop} onPress={onClose} />
+        <View style={[styles.sheet, style]}>
+          <View style={styles.handle} />
+          {title ? <Text style={styles.title}>{title}</Text> : null}
+          {children}
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  fill: { flex: 1 },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)" },
   sheet: {
     backgroundColor: color.card,
