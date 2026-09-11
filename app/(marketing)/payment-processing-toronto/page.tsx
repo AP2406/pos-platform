@@ -2,26 +2,32 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
 import { JsonLd, localService, breadcrumb } from "../jsonld";
-import { SavingsEstimator } from "../savings-estimator";
+import { PaymentsComingSoon } from "../ui";
 import { LandingHero, LandingSection, LandingPoints, LandingGuides, LandingCTA } from "../local-landing";
 
+// REPOSITIONED, NOT REDIRECTED. The URL ranks for "payment processing toronto"
+// and the slug is not worth throwing away, so the page keeps its keyword in the
+// title and in the H1 — but the H1 now leads with the thing we actually sell and
+// says in the same breath that processing is coming. That is the only version of
+// this page that is both honest and still about the query someone typed.
+// The savings estimator and the 2.5% + 15¢ paragraph are gone.
 export const metadata: Metadata = {
-  title: { absolute: "Payment Processing in Toronto — Lower Card Rates | Surge" },
-  description: "Lower credit and debit card processing rates for Toronto businesses, with no junk monthly fees and real local support. See what you'd save and book a free call.",
+  title: { absolute: "POS for Toronto Businesses — Payment Processing Coming Soon | Surge" },
+  description: "A point-of-sale system for Toronto restaurants, cafes and shops — register, floor plan, kitchen display, online and QR ordering, inventory and reports, set up in person. Card processing coming soon.",
   alternates: { canonical: "/payment-processing-toronto" },
   openGraph: { ...OG_BASE, url: "/payment-processing-toronto" },
 };
 
 const points = [
-  { title: "One honest rate", body: "2.5% + 15¢ on in-person cards, with the setup and terminal explained up front — no statement-fee maze." },
-  { title: "Interac done right", body: "Canadian debit is a big share of Toronto tabs. We keep Interac cheap instead of burying it in blended pricing." },
-  { title: "Set up in person", body: "We come to your counter across the city and the GTA, get your terminal live, and stay reachable after." },
-  { title: "Software included", body: "A point-of-sale, sales reports and inventory come with your payments — not a separate monthly bill." },
+  { title: "Set up in person", body: "We come to your counter across the city, load the menu, draw the floor and show your staff around — not a box in the post." },
+  { title: "Built for a busy room", body: "Floor plan, coursing and a kitchen display for the dining rooms; a fast counter mode for the cafes and shops." },
+  { title: "Guests can order themselves", body: "Online ordering, a QR code on the table, and a self-serve kiosk — all landing in the same ticket queue." },
+  { title: "Free to start", body: "The Basic tier is a real register, on the tablet you already own, with no card to enter." },
 ];
 
 const service = localService({
-  name: "Payment processing in Toronto",
-  description: "Credit and debit card payment processing for Toronto small businesses — lower rates, transparent pricing, Interac-friendly, with local setup and support.",
+  name: "Point of sale in Toronto",
+  description: "Point-of-sale software for Toronto restaurants, cafes and retail — register, floor plan and table service, kitchen display, online and QR ordering, inventory and reporting, with in-person setup.",
   areaServed: ["Toronto", "North York", "Scarborough", "Etobicoke", "East York", "Greater Toronto Area"],
   path: "/payment-processing-toronto",
 });
@@ -30,35 +36,35 @@ export default function PaymentProcessingTorontoPage() {
   return (
     <>
       <JsonLd data={service} />
-      <JsonLd data={breadcrumb("Payment processing in Toronto", "/payment-processing-toronto")} />
+      <JsonLd data={breadcrumb("Point of sale in Toronto", "/payment-processing-toronto")} />
 
       <LandingHero
         eyebrow="Toronto"
-        h1={<>Payment processing in <span className="text-blue-600">Toronto</span>, without the junk fees.</>}
-        intro="From a King West café to a Scarborough salon to a Kensington Market shop — Surge gives Toronto businesses a lower, transparent card rate and a real person who picks up the phone."
+        h1={<>A point of sale for <span className="text-blue-600">Toronto</span> &mdash; payment processing coming soon.</>}
+        intro="From a King West café to a Scarborough salon to a Kensington Market shop, Surge runs the counter, the floor and the kitchen on one system. We are building our own card processing; until it is live, you keep the processor you have."
       />
 
-      <LandingSection title="Why Toronto owners switch">
-        <p>Toronto runs on cards. Between tourists tapping foreign Visa and Mastercard, locals paying with Apple Pay, and a heavy share of Interac debit, most independent shops here are handing a bigger slice of every sale to their processor than they realize — usually inside a &ldquo;blended&rdquo; rate that hides what each transaction actually costs.</p>
-        <p>Surge replaces that with one clear rate: <strong>2.5% + 15¢</strong> on in-person cards, a one-time $10 setup, and no monthly fee. You see the number, you keep more of every sale, and you can walk away any time — there&rsquo;s no term contract.</p>
+      <LandingSection title="What Toronto owners get today">
+        <p>Toronto independents are usually running three or four things that do not talk to each other: a till, a tablet for delivery orders, a spreadsheet for stock, and a paper schedule taped inside the office door. The cost of that is not a line on a statement &mdash; it is the twenty minutes at close every night, and the order that got missed because it came in on the wrong screen.</p>
+        <p>Surge is one system for all of it: a register, a floor plan with table service, a kitchen display, a menu builder, online and QR ordering, inventory, staff scheduling and the time clock, and reports that are already written when you lock up.</p>
         <LandingPoints items={points} />
       </LandingSection>
 
-      <LandingSection title="See what you'd save" tint>
-        <p>Drag the sliders to your real monthly card volume and average ticket. Most Toronto owners are surprised by the annual number.</p>
-        <div className="mt-6"><SavingsEstimator /></div>
-        <p className="text-sm text-slate-500">Prefer we do the math? <Link href="/book" className="font-semibold text-blue-600 hover:text-blue-700">Book a free 15-minute call</Link> and we&rsquo;ll read your current statement with you.</p>
+      <LandingSection title="About the payment processing" tint>
+        <p>This page used to quote a card rate. It does not any more, because we are not a live processor yet and a rate we cannot honour is not a selling point.</p>
+        <div className="mt-6"><PaymentsComingSoon /></div>
+        <p className="text-sm text-[#7A8CA0]">Want to be told when it launches? <Link href="/book" className="font-semibold text-blue-600 hover:text-blue-700">Book a free 15-minute demo</Link> and we will take your details.</p>
       </LandingSection>
 
-      <LandingSection title="Payments and point of sale, together">
-        <p>Every Surge account includes a built-in <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link>: fast checkout, inventory, receipts, and daily reports on the device you already have. Run a restaurant? Our <Link href="/pos-for-restaurants" className="font-semibold text-blue-600 hover:text-blue-700">POS for restaurants</Link> handles tabs, tips and the kitchen. It&rsquo;s the same lower rate whether you&rsquo;re a single register or several across the city.</p>
+      <LandingSection title="Which POS fits your room">
+        <p>Restaurants, bars and cafes should start with <Link href="/pos-for-restaurants" className="font-semibold text-blue-600 hover:text-blue-700">POS for restaurants</Link> &mdash; tabs, coursing, the floor and the pass. Shops and service counters want <Link href="/pos-for-retail" className="font-semibold text-blue-600 hover:text-blue-700">POS for retail</Link> for stock and receipts. Either way the full feature list lives on the <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale page</Link>, and it is the same system whether you have one till or several across the city.</p>
       </LandingSection>
 
       <LandingGuides slugs={["lower-credit-card-processing-fees-ontario", "interac-vs-credit-card-fees"]} />
 
       <LandingCTA
-        heading="Find out what you're overpaying in Toronto"
-        sub="A free 15-minute call, a clear quote, and the exact dollar amount you'd save by switching. No pressure, no jargon."
+        heading="See it running a Toronto counter"
+        sub="A free 15-minute demo with your own menu loaded and your floor drawn. No pressure, no jargon."
       />
     </>
   );

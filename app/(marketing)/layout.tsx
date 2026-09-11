@@ -10,8 +10,8 @@ const publicSans = Public_Sans({ subsets: ["latin"], display: "swap", variable: 
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.surgetechpos.com"),
-  title: { default: "Surge — Transparent payments for local business", template: "%s — Surge" },
-  description: "Surge gives local businesses lower card processing rates, real human support, and built-in software that shows exactly how much you save on every sale.",
+  title: { default: "Surge — Point of sale for local business", template: "%s — Surge" },
+  description: "Surge is a point-of-sale system for GTA restaurants, cafes and shops — register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports. Card processing coming soon.",
   icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }], apple: "/icon-192.png" },
   openGraph: { ...OG_BASE, url: "/" },
   // No title/description — Twitter tags inherit each page's own title/description.
@@ -38,47 +38,56 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                 the footer is #0B1E33 navy irrespective of theme, and the
                 marketing site never renders in dark mode anyway. */}
             <SurgeLogo tone="dark" className="h-[65px] w-[220px]" />
-            <p className="mt-3 max-w-sm text-sm leading-relaxed text-[#8FA3B8]">Lower card processing rates and software that shows your savings on every sale &mdash; plus a real person on the other end of the phone.</p>
+            <p className="mt-3 max-w-sm text-sm leading-relaxed text-[#8FA3B8]">A point-of-sale system that runs the floor, the kitchen and the counter &mdash; plus a real person on the other end of the phone.</p>
           </div>
+          {/* FOOTER GROUPS ARE THE SITE'S OWN RANKING OF ITSELF.
+              Product used to be Pricing-then-POS; the POS is now first and the
+              two industry pages joined it, because those are the pages we want
+              crawled and clicked. The location pages moved out of "Solutions"
+              (which read as a list of things we sell) into a plainly-labelled
+              local group, and the five competitor pages moved BELOW them —
+              those are the demoted set. Nothing was unlinked: a landing page
+              that loses its last internal link loses its crawl path too. */}
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#6C8199]">Product</div>
+            <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#6C8199]">Point of sale</div>
             <ul className="mt-4 space-y-2.5 text-sm text-[#C2D0DE]">
+              <li><Link href="/pos" className="hover:text-white">The POS</Link></li>
+              <li><Link href="/pos-for-restaurants" className="hover:text-white">POS for restaurants</Link></li>
+              <li><Link href="/pos-for-retail" className="hover:text-white">POS for retail</Link></li>
               <li><Link href="/pricing" className="hover:text-white">Pricing</Link></li>
-              <li><Link href="/pos" className="hover:text-white">Point of sale</Link></li>
               <li><Link href="/contact" className="hover:text-white">Contact</Link></li>
             </ul>
           </div>
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#6C8199]">Solutions</div>
+            <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#6C8199]">Across the GTA</div>
             <ul className="mt-4 space-y-2.5 text-sm text-[#C2D0DE]">
-              <li><Link href="/payment-processing-toronto" className="hover:text-white">Payment processing Toronto</Link></li>
-              <li><Link href="/payment-processing-mississauga" className="hover:text-white">Payment processing Mississauga</Link></li>
-              <li><Link href="/merchant-services-durham" className="hover:text-white">Merchant services Durham</Link></li>
-              <li><Link href="/pos-for-restaurants" className="hover:text-white">POS for restaurants</Link></li>
-              <li><Link href="/pos-for-retail" className="hover:text-white">POS for retail</Link></li>
+              <li><Link href="/payment-processing-toronto" className="hover:text-white">Toronto</Link></li>
+              <li><Link href="/payment-processing-mississauga" className="hover:text-white">Mississauga</Link></li>
+              <li><Link href="/merchant-services-durham" className="hover:text-white">Durham Region</Link></li>
             </ul>
           </div>
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#6C8199]">Compare</div>
+            <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#6C8199]">Switching from</div>
             <ul className="mt-4 space-y-2.5 text-sm text-[#C2D0DE]">
-              <li><Link href="/moneris-alternative" className="hover:text-white">Moneris alternative</Link></li>
-              <li><Link href="/square-alternative" className="hover:text-white">Square alternative</Link></li>
-              <li><Link href="/clover-alternative" className="hover:text-white">Clover alternative</Link></li>
-              <li><Link href="/stripe-alternative" className="hover:text-white">Stripe alternative</Link></li>
-              <li><Link href="/td-merchant-solutions-alternative" className="hover:text-white">TD Merchant Solutions alternative</Link></li>
+              <li><Link href="/square-alternative" className="hover:text-white">Square</Link></li>
+              <li><Link href="/clover-alternative" className="hover:text-white">Clover</Link></li>
+              <li><Link href="/moneris-alternative" className="hover:text-white">Moneris</Link></li>
+              <li><Link href="/stripe-alternative" className="hover:text-white">Stripe</Link></li>
+              <li><Link href="/td-merchant-solutions-alternative" className="hover:text-white">TD Merchant Solutions</Link></li>
             </ul>
           </div>
           <div>
             <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#6C8199]">Get started</div>
             <ul className="mt-4 space-y-2.5 text-sm text-[#C2D0DE]">
-              <li><Link href="/book" className="hover:text-white">Book a call</Link></li>
+              <li><Link href="/book" className="hover:text-white">Book a demo</Link></li>
               <li><Link href="/guides" className="hover:text-white">Guides</Link></li>
               <li><Link href="/login" className="hover:text-white">Sign in</Link></li>
+              <li><span className="text-[#6C8199]">Card processing &mdash; coming soon</span></li>
             </ul>
           </div>
         </div>
         <div className="mx-auto flex max-w-6xl flex-col gap-2 border-t border-[#1C3550] px-6 py-6 text-xs text-[#6C8199] sm:flex-row sm:justify-between">
-          <span>&copy; 2026 Surge. Smarter payments for local business.</span>
+          <span>&copy; 2026 Surge. Point of sale for local business.</span>
           <span>Toronto &middot; Mississauga &middot; Durham Region</span>
         </div>
       </footer>

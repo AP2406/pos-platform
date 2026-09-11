@@ -9,16 +9,21 @@ export function JsonLd({ data }: { data: object }) {
 // Site-wide LocalBusiness. Real contact details supplied by the operator.
 export const LOCAL_BUSINESS = {
   "@context": "https://schema.org",
-  // FinancialService is a subtype of LocalBusiness — more accurate for a payment
-  // processor, and Google still gives it LocalBusiness rich-result treatment.
-  "@type": "FinancialService",
+  // WAS FinancialService, which is the schema.org type for a bank, a broker or
+  // a PAYMENT PROCESSOR. That was a structured-data claim that we process
+  // cards, made site-wide on every page, and it had to move with the copy.
+  // ProfessionalService is the other LocalBusiness subtype that keeps the
+  // LocalBusiness rich-result treatment (address, geo, hours, areaServed all
+  // still apply) without asserting we are a financial institution. If and when
+  // processing goes live, FinancialService is the honest type to come back to.
+  "@type": "ProfessionalService",
   "@id": SITE + "/#business",
   name: "Surge Payment Solutions",
   alternateName: "Surge",
   url: SITE,
   logo: SITE + "/icon-512.png",
   image: SITE + "/jpg18.png",
-  description: "Transparent payment processing and point-of-sale software for local businesses across the GTA — lower card rates, real human support, no junk fees.",
+  description: "Point-of-sale software for restaurants, cafes and retail across the Greater Toronto Area — register, floor plan, kitchen display, online and QR ordering, inventory, staff and reporting.",
   telephone: "+1-888-648-8097",
   email: "info@surgetechpos.com",
   priceRange: "$$",

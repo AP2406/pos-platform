@@ -10,7 +10,9 @@ const mixOptions = ["Mostly in person", "A mix of both", "Mostly online or phone
 
 const steps: { key?: string; type: string; q?: string; options?: string[] }[] = [
   { key: "businessType", type: "choice", q: "What kind of business do you run?", options: businessTypeOptions },
-  { key: "volume", type: "volume", q: "Roughly how much do you process in card sales each month?" },
+  // Still asked, because volume is how we size the demo (one till or five,
+  // counter or dining room) — not, any more, how we compute a savings number.
+  { key: "volume", type: "volume", q: "Roughly how much do you take in card sales each month?" },
   { key: "avgTicket", type: "choice", q: "What is your average sale size?", options: ticketOptions },
   { key: "paymentMix", type: "choice", q: "How do most customers pay?", options: mixOptions },
   { type: "contact" },
@@ -80,7 +82,7 @@ export function BookWizard() {
 
   return (
     <>
-      <button type="button" onClick={start} className="rounded-[4px] bg-[#0A2540] px-8 py-4 text-[15.5px] font-bold text-white transition-colors hover:bg-[#123456]">Book my free call</button>
+      <button type="button" onClick={start} className="rounded-[4px] bg-[#0A2540] px-8 py-4 text-[15.5px] font-bold text-white transition-colors hover:bg-[#123456]">Book my free demo</button>
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 backdrop-blur-sm sm:items-center" onClick={() => setOpen(false)}>
@@ -95,13 +97,13 @@ export function BookWizard() {
                 <div className="py-6 text-center">
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[4px] bg-[#1E7B4D] text-white"><svg viewBox="0 0 20 20" className="h-7 w-7" fill="none"><path d="M4 10l4 4 8-9" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg></div>
                   <h3 className="mt-4 text-2xl font-bold tracking-tight text-slate-900">You are booked in</h3>
-                  <p className="mx-auto mt-2 max-w-sm text-sm text-slate-600">Thanks{name ? ", " + name : ""}! We will reach out shortly to lock in your free call and show you your exact savings.</p>
+                  <p className="mx-auto mt-2 max-w-sm text-sm text-slate-600">Thanks{name ? ", " + name : ""}! We will reach out shortly to lock in your free demo and set the till up the way you run.</p>
                   <button type="button" onClick={() => setOpen(false)} className="mt-6 rounded-full border border-slate-200 bg-white px-6 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50">Done</button>
                 </div>
               ) : (
                 <>
                   <div className="pr-8">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-blue-600">Free 15-min call &bull; Step {Math.min(step + 1, TOTAL)} of {TOTAL}</div>
+                    <div className="text-xs font-semibold uppercase tracking-wider text-blue-600">Free 15-min demo &bull; Step {Math.min(step + 1, TOTAL)} of {TOTAL}</div>
                     <div className="mt-3 h-1.5 w-full overflow-hidden rounded-[2px] bg-[#E4EAF1]"><div className="h-full rounded-[2px] bg-[#0A2540] transition-all duration-300" style={{ width: pct + "%" }} /></div>
                   </div>
 
@@ -161,14 +163,18 @@ export function BookWizard() {
                         </div>
                         <div className="mt-4">
                           <label htmlFor="b-interest" className="text-sm font-medium text-slate-700">Mainly interested in <span className="text-slate-400">(optional)</span></label>
-                          <select id="b-interest" value={interest} onChange={(e) => setInterest(e.target.value)} className={inputClass}><option value="">Choose one</option><option value="Lower payment rates">Lower payment rates</option><option value="POS software">POS software</option><option value="Custom software build">Custom software build</option><option value="Not sure yet">Not sure yet</option></select>
+                          <select id="b-interest" value={interest} onChange={(e) => setInterest(e.target.value)} className={inputClass}>{/* POS first, and the payments option now says plainly that it is not
+                              live — this select is the one place on the site a visitor could
+                              still ask us for a rate today. The option VALUES are what lands in
+                              the lead email, so they changed with the labels deliberately. */}
+                          <option value="">Choose one</option><option value="POS software">POS software</option><option value="Payments (when it launches)">Payments (when it launches)</option><option value="Custom software build">Custom software build</option><option value="Not sure yet">Not sure yet</option></select>
                         </div>
                         <div className="mt-4">
                           <label htmlFor="b-preferred" className="text-sm font-medium text-slate-700">Best time to reach you <span className="text-slate-400">(optional)</span></label>
                           <input id="b-preferred" type="text" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="e.g. weekday mornings" className={inputClass} />
                         </div>
                         {status === "error" ? (<p className="mt-3 text-sm text-red-600">{error}</p>) : null}
-                        <button type="submit" disabled={status === "sending"} className="mt-5 flex w-full items-center justify-center rounded-[4px] bg-[#0A2540] px-6 py-3.5 text-sm font-bold text-white transition-colors hover:bg-[#123456] disabled:opacity-60">{status === "sending" ? "Booking..." : "Book my free call"}</button>
+                        <button type="submit" disabled={status === "sending"} className="mt-5 flex w-full items-center justify-center rounded-[4px] bg-[#0A2540] px-6 py-3.5 text-sm font-bold text-white transition-colors hover:bg-[#123456] disabled:opacity-60">{status === "sending" ? "Booking..." : "Book my free demo"}</button>
                       </form>
                     )}
                   </div>

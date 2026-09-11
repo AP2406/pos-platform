@@ -2,36 +2,48 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
 import { JsonLd, localService, breadcrumb } from "../jsonld";
-import { SavingsEstimator } from "../savings-estimator";
+import { PaymentsComingSoon } from "../ui";
 import { LandingHero, LandingSection, LandingPoints, LandingCompare, LandingGuides, LandingCTA, LandingDisclaimer } from "../local-landing";
 
+// THE WEAKEST FIT OF THE FIVE, AND STILL NOT DELETED. A bank merchant account
+// has no POS story at all, so there is nothing here to swap like-for-like — the
+// honest version of this page is "we are not a bank processor; if you are
+// leaving one you still need a till, and that is the part we do". Deleting it
+// would 404 a ranking URL with no close survivor to redirect to, and a 301 onto
+// /pricing would be a consolidation Google commonly treats as a soft 404.
+// Kept, repositioned, demoted. Full reasoning: docs/site-pos-first-audit.md §3.
+//
+// Off: the 2.5% + 15¢ rate, the $10 setup, "the terminal is yours, not rented"
+// (we do not supply terminals), the savings estimator, and the rate/monthly-fee
+// comparison rows.
 export const metadata: Metadata = {
-  title: { absolute: "TD Merchant Solutions Alternative — No Contract | Surge" },
-  description: "A TD Merchant Solutions alternative for local business: one clear card rate, no term contract, no monthly account or terminal-rental fees, and a free POS. See what you'd save.",
-  alternates: { canonical: "/td-merchant-solutions-alternative" },
+  title: { absolute: "TD Merchant Solutions Alternative — The POS Half | Surge" },
+  description: "Leaving a bank merchant account? Surge is the point-of-sale half: register, floor plan, kitchen display, reservations and ordering channels, with no term contract and local setup across the GTA. Card processing coming soon.",
+  alternates: { canonical: "/td-merchant-solutions-alternative", },
   openGraph: { ...OG_BASE, url: "/td-merchant-solutions-alternative", type: "website" },
 };
 
 const tiles = [
-  { title: "No term contract", body: "Bank merchant agreements are commonly multi-year with an early-termination fee. Surge has no term and no cancellation fee — leave any time." },
-  { title: "No monthly or rental fees", body: "No account fee, no terminal rental stacked on before you've sold anything. One transparent rate, and the terminal is yours." },
-  { title: "A rate you can actually read", body: "One clear 2.5% + 15¢ in person — not a blended, negotiated number with the markup buried inside." },
-  { title: "POS included free", body: "A full point-of-sale comes with your payments — not a separate line item or a third-party add-on." },
+  { title: "No term contract", body: "Bank merchant agreements are commonly multi-year with an early-termination fee. There is no term on Surge software and no cancellation fee." },
+  { title: "Nothing rented", body: "No monthly terminal rental, because there is no terminal — the POS runs on the tablet or phone you already own." },
+  { title: "The business, not just the sale", body: "A bank gives you a card machine. Surge gives you the floor plan, the kitchen display, the menu, the stock, the schedule and the reports." },
+  { title: "Local, real support", body: "In-person setup across the GTA and Durham and a human on the phone rather than a call-centre queue." },
 ];
 
 const compareRows: [string, string, string][] = [
-  ["In-person rate", "2.5% + 15¢, clearly stated", "Often a blended / negotiated rate"],
-  ["Monthly fee", "$0", "Account + terminal rental commonly apply"],
-  ["Contract", "None — cancel anytime", "Commonly a multi-year term"],
-  ["Early-termination fee", "None", "Often applies"],
-  ["POS software", "Included free", "Typically separate / third-party"],
-  ["Terminal", "Yours, $10 one-time setup", "Often rented monthly"],
+  ["Card processing", "Not yet — coming soon", "Yes — this is what a bank merchant account is"],
+  ["POS software", "Two tiers, free one included", "Typically separate / third-party"],
+  ["Floor plan & table service", "Included on Advanced", "Not part of the merchant account"],
+  ["Kitchen display", "Included on Advanced", "Not part of the merchant account"],
+  ["Online, QR & kiosk ordering", "Included on Advanced", "Separate products"],
+  ["Hardware", "Runs on your own device", "Terminal often rented monthly"],
+  ["Software contract", "None — cancel anytime", "Commonly a multi-year term"],
   ["Support", "Local, real human", "Call centre"],
 ];
 
 const service = localService({
-  name: "Payment processing (TD Merchant Solutions alternative)",
-  description: "A TD Merchant Solutions alternative for local businesses — one clear card rate, no term contract, no monthly account or terminal-rental fees, and a free point-of-sale, with local setup across the GTA and Durham.",
+  name: "Point of sale (bank merchant services alternative)",
+  description: "For businesses leaving a bank merchant account — a point-of-sale with floor plan, kitchen display, reservations and ordering channels, no term contract, and local setup across the GTA and Durham.",
   areaServed: ["Greater Toronto Area", "Toronto", "Durham Region", "Ontario"],
   path: "/td-merchant-solutions-alternative",
 });
@@ -44,18 +56,18 @@ export default function TdMerchantSolutionsAlternativePage() {
 
       <LandingHero
         eyebrow="Switching from TD Merchant Solutions"
-        h1={<>A bank-processor alternative without the <span className="text-blue-600">contract</span> or rental fees.</>}
-        intro="Bank merchant services like TD's are dependable, but they commonly come with a multi-year term, a monthly account fee, a rented terminal, and a blended rate. Surge gives you one clear rate, no contract, and a terminal that's actually yours."
+        h1={<>Leaving a bank processor? We are the <span className="text-blue-600">till</span>, not the merchant account.</>}
+        intro="Straight answer first: Surge does not process cards yet, so we cannot take over a TD merchant account today. What a bank account never gave you in the first place is a point-of-sale — and that is the part we do, with no term contract and nothing rented."
       />
 
-      <LandingSection title="Why owners look for a TD Merchant Solutions alternative">
-        <p>Signing up for payments through your bank is convenient, and for some businesses that&rsquo;s enough. But a lot of owners tell us the same story: a multi-year term they don&rsquo;t remember agreeing to, a monthly terminal rental that never ends, an account fee before the first sale, and a &ldquo;rate&rdquo; that&rsquo;s really a blend hiding what each card actually costs.</p>
-        <p>Surge is built the other way around: <strong>2.5% + 15¢</strong> in person, a one-time $10 setup, <strong>no monthly fee</strong>, <strong>no term contract</strong>, and a full point-of-sale included free. The terminal is yours, not rented, and if we&rsquo;re not saving you money, you walk.</p>
+      <LandingSection title="Why owners look for a bank-processor alternative">
+        <p>Signing up for payments through your bank is convenient, and for some businesses that is enough. But a lot of owners tell us the same story: a multi-year term they do not remember agreeing to, a monthly terminal rental that never ends, an account fee before the first sale, and a &ldquo;rate&rdquo; that is really a blend hiding what each card actually costs.</p>
+        <p>We are not yet the answer to the rate half of that. We are the answer to the part the bank never covered: the business still runs on a card machine, a notebook and a spreadsheet. Surge is the register, the floor plan, the kitchen display, the menu, the stock, the schedule and the reports &mdash; free to start, no term, working beside whatever processor you keep.</p>
         <LandingPoints items={tiles} />
       </LandingSection>
 
       <LandingSection title="How Surge compares to a bank processor" tint>
-        <p>Every bank merchant agreement is negotiated, so treat the right-hand column as the patterns small merchants commonly report &mdash; your own terms are in your contract.</p>
+        <p>These are two different kinds of product, which is what the first row says. Every bank merchant agreement is negotiated, so treat the right-hand column as the patterns small merchants commonly report &mdash; your own terms are in your contract.</p>
         <LandingCompare
           competitor="TD Merchant Solutions (typical)"
           rows={compareRows}
@@ -63,23 +75,24 @@ export default function TdMerchantSolutionsAlternativePage() {
         />
       </LandingSection>
 
-      <LandingSection title="See what you'd save vs your bank's rate">
-        <p>Drag the sliders to your real monthly card volume and average ticket. Add your account and terminal-rental fees on top of your blended rate, and the yearly gap versus Surge&rsquo;s flat 2.5% + 15¢ gets clear fast.</p>
-        <div className="mt-6"><SavingsEstimator /></div>
-        <p className="text-sm text-slate-500">Not sure what your bank is actually charging? <Link href="/book" className="font-semibold text-blue-600 hover:text-blue-700">Send us your last statement</Link> and we&rsquo;ll compute your real effective rate &mdash; here&rsquo;s <Link href="/guides/how-to-read-your-merchant-statement" className="font-semibold text-blue-600 hover:text-blue-700">how to read it yourself</Link>.</p>
+      <LandingSection title="When we will be a real alternative">
+        <p>We are building our own card processing. Until it is live we do not quote a rate, we do not sell terminals, and we will not pretend otherwise to win a call.</p>
+        <div className="mt-6"><PaymentsComingSoon /></div>
+        <p className="text-sm text-[#7A8CA0]">Not sure what your bank is actually charging? Here is <Link href="/guides/how-to-read-your-merchant-statement" className="font-semibold text-blue-600 hover:text-blue-700">how to read the statement yourself</Link>, and we are happy to go through it with you on a <Link href="/book" className="font-semibold text-blue-600 hover:text-blue-700">free call</Link> even though we cannot quote against it yet.</p>
       </LandingSection>
 
-      <LandingSection title="Switching is easier than staying" tint>
-        <p>You don&rsquo;t have to wait for a term to end to get a quote. We&rsquo;ll read your current statement with you, show you the exact difference, set up your terminal in person across the GTA and Durham, and factor any early-termination cost into the math honestly so you know the real break-even.</p>
+      <LandingSection title="You can move the till first" tint>
+        <p>Nothing about your merchant account has to change to run Surge on the counter. Put the <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link> in now and keep the bank taking the card. Restaurants start with <Link href="/pos-for-restaurants" className="font-semibold text-blue-600 hover:text-blue-700">POS for restaurants</Link>; shops with <Link href="/pos-for-retail" className="font-semibold text-blue-600 hover:text-blue-700">POS for retail</Link>.</p>
       </LandingSection>
 
       <LandingGuides slugs={["how-to-read-your-merchant-statement", "what-is-a-junk-fee-on-a-merchant-account", "flat-rate-vs-interchange-plus-pricing"]} />
 
       <LandingCTA
-        heading="See exactly what you'd save vs your bank"
-        sub="A free 15-minute call, a clear quote, and the real dollar difference — no pressure, no jargon."
+        heading="See the till you'd be moving to"
+        sub="A free 15-minute demo on your own menu — no pressure, no jargon."
       />
 
+      {/* Legal text, left exactly as it was. */}
       <LandingDisclaimer>
         This page is general information, not financial or legal advice, and is not affiliated with or endorsed by The Toronto-Dominion Bank or Global Payments. TD and TD Merchant Solutions are trademarks of their owner. Competitor terms and fees change and vary by merchant &mdash; confirm your own agreement before switching.
       </LandingDisclaimer>

@@ -6,8 +6,8 @@ import { JsonLd, breadcrumb } from "../jsonld";
 import { PageHero } from "../ui";
 
 export const metadata: Metadata = {
-  title: { absolute: "Contact Surge — Payments & POS in the GTA" },
-  description: "Get in touch with Surge for payment processing, point of sale, or custom software in the GTA. Send a message and we will get back to you, or book a free call.",
+  title: { absolute: "Contact Surge — Point of Sale in the GTA" },
+  description: "Get in touch with Surge about the point-of-sale or a custom software build in the GTA. Send a message and we will get back to you, or book a free demo.",
   alternates: { canonical: "/contact" },
   openGraph: { ...OG_BASE, url: "/contact" },
 };
@@ -20,7 +20,7 @@ export default function ContactPage() {
     <>
       <JsonLd data={breadcrumb("Contact", "/contact")} />
 
-      <PageHero crumb="Contact" title="Let's talk." sub="Questions about rates, the POS, or a custom build? Send a note and a real person gets back to you — usually same day." />
+      <PageHero crumb="Contact" title="Let's talk." sub="Questions about the POS, a custom build, or when our card processing lands? Send a note and a real person gets back to you — usually same day." />
 
       <section className="bg-white py-16">
         <div className="mx-auto max-w-5xl px-6">
@@ -46,7 +46,7 @@ export default function ContactPage() {
                     <div className="mt-1 text-[#42566B]">Mon&ndash;Fri, 9am&ndash;6pm ET</div>
                   </div>
                 </div>
-                <div className="mt-6 rounded-[4px] border border-[#D9E1EA] bg-[#F4F7FA] p-4 text-sm text-[#42566B]">Ready to switch? <Link href="/book" className="font-bold text-[#1B6DC1] hover:underline">Book a free call &rarr;</Link></div>
+                <div className="mt-6 rounded-[4px] border border-[#D9E1EA] bg-[#F4F7FA] p-4 text-sm text-[#42566B]">Want to see it first? <Link href="/book" className="font-bold text-[#1B6DC1] hover:underline">Book a free demo &rarr;</Link></div>
               </div>
             </div>
             <div className="lg:col-span-3">

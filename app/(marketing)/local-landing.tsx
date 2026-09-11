@@ -18,8 +18,8 @@ export function LandingHero({ eyebrow, h1, intro }: { eyebrow: string; h1: React
         <h1 className="mt-4 text-[38px] font-bold leading-[1.12] tracking-[-0.015em] text-[#0A2540] sm:text-[44px]">{h1}</h1>
         <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-[#42566B]">{intro}</p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-          <Link href="/book" className={btnPrimary}>Book a free call</Link>
-          <Link href="/pricing" className={btnOutline}>See pricing</Link>
+          <Link href="/book" className={btnPrimary}>Book a free demo</Link>
+          <Link href="/pos" className={btnOutline}>See the POS</Link>
         </div>
       </div>
     </section>
@@ -55,7 +55,11 @@ export function LandingPoints({ items }: { items: { title: string; body: string 
 
 // A short "learn the fees" band that links a landing page into the /guides
 // cluster. Titles come from the shared GUIDES list so they can't drift.
-export function LandingGuides({ slugs, heading = "Learn the fees before you switch" }: { slugs: string[]; heading?: string }) {
+// Default heading was "Learn the fees before you switch" — a switch-your-
+// processor call to action, which is not what we are asking anyone to do while
+// payments are still in build. The guides themselves are unchanged and still
+// worth reading; only the framing moved.
+export function LandingGuides({ slugs, heading = "Background reading on card fees" }: { slugs: string[]; heading?: string }) {
   const guides = slugs.map(getGuide).filter((g): g is NonNullable<typeof g> => Boolean(g));
   if (!guides.length) return null;
   return (
@@ -125,7 +129,7 @@ export function LandingCTA({ heading, sub }: { heading: string; sub: string }) {
         <h2 className="text-[30px] font-bold leading-[1.18] tracking-[-0.01em] sm:text-[34px]">{heading}</h2>
         <p className="mx-auto mt-4 max-w-xl leading-relaxed text-[#B9C8D8]">{sub}</p>
         <div className="mt-8 flex justify-center">
-          <Link href="/book" className={btnWhite}>Book my free savings call</Link>
+          <Link href="/book" className={btnWhite}>Book my free demo</Link>
         </div>
       </div>
     </section>

@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 // Site-wide social card (section 2). Rendered at build by Next — no binary asset to
 // maintain — and the absolute www URL is derived automatically from metadataBase.
-export const alt = "Surge — transparent payment processing and POS for the GTA";
+export const alt = "Surge — point of sale for restaurants, cafes and retail in the GTA";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -53,11 +53,16 @@ export default function OpengraphImage() {
             </g>
           </svg>
         </div>
+        {/* Every marketing segment re-exports this file, so this headline is
+            the social card for the whole site — which is why the payments line
+            had to come off here too, not just on the pages. Shorter than the
+            old one, and it has to stay short: Satori has no auto-fit, so a
+            third line at 88px would run off a 630px-tall card. */}
         <div style={{ fontSize: "88px", fontWeight: 800, lineHeight: 1.04, letterSpacing: "-2px", maxWidth: "920px" }}>
-          Stop overpaying to get paid.
+          The till that runs the whole room.
         </div>
         <div style={{ fontSize: "34px", color: "#9fb2c8", marginTop: "34px", maxWidth: "820px" }}>
-          Transparent payment processing &amp; point-of-sale for the GTA.
+          Point of sale for restaurants, cafes &amp; retail across the GTA.
         </div>
       </div>
     ),

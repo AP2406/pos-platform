@@ -35,10 +35,14 @@ export default function GuidePage() {
       <GuideP>Since 2022, Canadian merchants can surcharge credit cards up to 2.4% (with notice and network rules), but <strong>not</strong> Interac debit. It can offset credit costs, but it can also cost you sales if customers resent it. It&rsquo;s a tool, not a default &mdash; model it before you turn it on.</GuideP>
 
       <GuideH2>7. Consolidate payments and POS</GuideH2>
-      <GuideP>Paying separately for a point-of-sale and for payments usually means two markups. When the POS is included with processing, that&rsquo;s one less monthly bill and one less place to hide a fee. That&rsquo;s the model we built <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">Surge POS</Link> around.</GuideP>
+      <GuideP>Paying separately for a point-of-sale and for payments usually means two markups, and a POS bill that arrives whether or not you sold anything. <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">Surge POS</Link> has a free tier for exactly that reason &mdash; it is one bill you can take off the pile today, regardless of who processes your cards.</GuideP>
 
+      {/* The shortcut used to offer to compare a merchant's statement against
+          "Surge's flat 2.5% + 15¢". No rate, so no comparison — but reading a
+          statement with an owner is a thing we can still genuinely do, so the
+          offer stays and the number goes. */}
       <GuideH2>The shortcut</GuideH2>
-      <GuideP>You can do all seven yourself. Or you can hand us last month&rsquo;s statement and we&rsquo;ll compute your effective rate, flag the junk fees, and show you the exact dollar difference against Surge&rsquo;s flat <strong>2.5% + 15¢</strong> &mdash; free, in about fifteen minutes. If you&rsquo;re in the city, start with <Link href="/payment-processing-toronto" className="font-semibold text-blue-600 hover:text-blue-700">payment processing in Toronto</Link>, or just <Link href="/book" className="font-semibold text-blue-600 hover:text-blue-700">book a call</Link>.</GuideP>
+      <GuideP>You can do all seven yourself. Or you can hand us last month&rsquo;s statement and we&rsquo;ll compute your effective rate and flag the junk fees with you &mdash; free, in about fifteen minutes. We are not a processor yet, so there is nothing for us to sell you at the end of it. If you&rsquo;re in the city, see <Link href="/payment-processing-toronto" className="font-semibold text-blue-600 hover:text-blue-700">what we do for Toronto businesses</Link>, or just <Link href="/book" className="font-semibold text-blue-600 hover:text-blue-700">book a call</Link>.</GuideP>
     </GuideArticle>
   );
 }

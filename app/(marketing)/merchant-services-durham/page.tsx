@@ -2,27 +2,31 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
 import { JsonLd, localService, breadcrumb } from "../jsonld";
-import { SavingsEstimator } from "../savings-estimator";
+import { PaymentsComingSoon } from "../ui";
 import { LandingHero, LandingSection, LandingPoints, LandingGuides, LandingCTA } from "../local-landing";
 
+// "Merchant services" is the broadest of the three local keywords, and a
+// point-of-sale is genuinely a merchant service — so this page carries its
+// keyword more comfortably than the two "payment-processing-*" slugs do. It
+// still says plainly that the processing half is not live.
 export const metadata: Metadata = {
-  title: { absolute: "Merchant Services in Durham Region — Payments & POS | Surge" },
-  description: "Merchant services for Durham Region businesses — Pickering, Ajax, Whitby and Oshawa. Lower card rates, built-in POS, no monthly junk fees, local setup. Book a free call.",
+  title: { absolute: "POS & Merchant Services in Durham Region | Surge" },
+  description: "A point-of-sale system for Durham Region businesses — Pickering, Ajax, Whitby and Oshawa. Register, floor plan, kitchen display, online and QR ordering, inventory and reports, set up locally. Card processing coming soon.",
   alternates: { canonical: "/merchant-services-durham" },
   openGraph: { ...OG_BASE, url: "/merchant-services-durham" },
 };
 
 const points = [
-  { title: "One honest rate", body: "2.5% + 15¢ in person, $10 one-time setup, no monthly fee. The whole cost, in one line." },
-  { title: "Set up on your main street", body: "Pickering to Oshawa, we come to you, get the terminal live, and stay reachable after." },
-  { title: "Interac priced right", body: "Everyday Durham spend leans on debit. We keep Interac cheap instead of blending it in." },
-  { title: "Software included", body: "A full point-of-sale with inventory and reports comes with your payments — no extra bill." },
+  { title: "Set up on your main street", body: "Pickering to Oshawa, we come to you, get the system live on your own devices, and stay reachable after." },
+  { title: "Floor, line and counter", body: "Table service and a kitchen display for the dining rooms, a fast counter mode for everyone else." },
+  { title: "Bookings and a waitlist", body: "Take reservations for the room and run the waitlist from the same screen the servers already use." },
+  { title: "Free to start", body: "The Basic tier is a real register with no monthly fee, on the tablet you already have." },
 ];
 
 const service = localService({
-  name: "Merchant services in Durham Region",
-  description: "Payment processing and point-of-sale for Durham Region small businesses — Pickering, Ajax, Whitby, Oshawa and Clarington — with transparent flat-rate pricing and local support.",
-  areaServed: ["Durham Region", "Pickering", "Ajax", "Whitby", "Oshawa", "Clarington"],
+  name: "Point of sale in Durham Region",
+  description: "Point-of-sale software for Durham Region small businesses — Pickering, Ajax, Whitby, Oshawa and Clarington — register, floor plan and table service, kitchen display, online and QR ordering, inventory and reporting, with local setup.",
+  areaServed: ["Durham Region", "Pickering", "Ajax", "Whitby", "Oshawa", "Clarington", "Greater Toronto Area"],
   path: "/merchant-services-durham",
 });
 
@@ -30,35 +34,35 @@ export default function MerchantServicesDurhamPage() {
   return (
     <>
       <JsonLd data={service} />
-      <JsonLd data={breadcrumb("Merchant services in Durham Region", "/merchant-services-durham")} />
+      <JsonLd data={breadcrumb("Point of sale in Durham Region", "/merchant-services-durham")} />
 
       <LandingHero
         eyebrow="Durham Region"
-        h1={<>Merchant services for <span className="text-blue-600">Durham Region</span>, done straight.</>}
-        intro="Pickering, Ajax, Whitby, Oshawa — Surge gives Durham's main-street businesses a lower, transparent card rate, a built-in POS, and a real local person on the phone."
+        h1={<>Point of sale for <span className="text-blue-600">Durham Region</span>, done straight.</>}
+        intro="Pickering, Ajax, Whitby, Oshawa — Surge runs the counter, the floor and the kitchen on one system, set up in person by someone who lives here. Card processing is the one part we have not shipped yet."
       />
 
       <LandingSection title="Built for Durham's main streets">
-        <p>Durham Region is growing fast, and its independent businesses &mdash; the Whitby café, the Oshawa barbershop, the Ajax grocer, the Pickering trades outfit &mdash; deserve better than a call-centre processor three provinces away. Most are on a blended rate that overcharges their everyday Interac debit and buries the markup.</p>
-        <p>Surge is different in the way that matters: one clear rate of <strong>2.5% + 15¢</strong> in person, no monthly fee, no term contract, and someone in the GTA who actually sets up your terminal and answers when you call.</p>
+        <p>Durham Region is growing fast, and its independent businesses &mdash; the Whitby café, the Oshawa barbershop, the Ajax grocer, the Pickering trades outfit &mdash; deserve better than a call-centre vendor three provinces away and a till that does one thing.</p>
+        <p>Surge is one system: a register, a floor plan with table service, a kitchen display, the menu builder, online and QR ordering, reservations and a waitlist, inventory, staff scheduling and the time clock, and reports that are written by the time you lock the door.</p>
         <LandingPoints items={points} />
       </LandingSection>
 
-      <LandingSection title="See what you'd save" tint>
-        <p>Drag the sliders to your real numbers and see the yearly difference for your shop.</p>
-        <div className="mt-6"><SavingsEstimator /></div>
-        <p className="text-sm text-slate-500">Prefer we do the math on your statement? <Link href="/book" className="font-semibold text-blue-600 hover:text-blue-700">Book a free 15-minute call.</Link></p>
+      <LandingSection title="About the merchant account" tint>
+        <p>To be clear about what this page is not: we do not hold your merchant account, we do not take the card, and we do not quote a rate. That side is being built. The software side is ready now.</p>
+        <div className="mt-6"><PaymentsComingSoon /></div>
+        <p className="text-sm text-[#7A8CA0]">Want us to tell you when processing goes live? <Link href="/book" className="font-semibold text-blue-600 hover:text-blue-700">Book a free 15-minute demo.</Link></p>
       </LandingSection>
 
-      <LandingSection title="Payments and point of sale, together">
-        <p>Every Surge account includes a built-in <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link>: checkout, inventory, receipts and reports on the device you already have. Restaurants can use <Link href="/pos-for-restaurants" className="font-semibold text-blue-600 hover:text-blue-700">POS for restaurants</Link> for tabs, tips and the kitchen. One rate, whether you run one counter or several across Durham.</p>
+      <LandingSection title="Which POS fits your room">
+        <p>Restaurants and bars want <Link href="/pos-for-restaurants" className="font-semibold text-blue-600 hover:text-blue-700">POS for restaurants</Link>; shops and service counters want <Link href="/pos-for-retail" className="font-semibold text-blue-600 hover:text-blue-700">POS for retail</Link>. The whole feature list is on the <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale page</Link>, and it is the same system whether you run one counter or several across Durham.</p>
       </LandingSection>
 
       <LandingGuides slugs={["lower-credit-card-processing-fees-ontario", "how-to-read-your-merchant-statement"]} />
 
       <LandingCTA
-        heading="Find out what you're overpaying in Durham"
-        sub="A free 15-minute call, a clear quote, and the exact dollar amount you'd save by switching. No pressure, no jargon."
+        heading="See it running a Durham counter"
+        sub="A free 15-minute demo with your own menu loaded and your floor drawn. No pressure, no jargon."
       />
     </>
   );
