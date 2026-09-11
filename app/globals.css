@@ -80,6 +80,7 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-2: var(--primary-2);
   --color-primary: var(--primary);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
@@ -137,8 +138,30 @@
   --card-foreground: oklch(0.21 0.02 265);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.21 0.02 265);
-  --primary: oklch(0.58 0.2 250);
+  /* THE BUTTON FILL IS NOT THE LOGO BLUE, AND THAT IS THE POINT.
+     The kit's blue is #008CFF = oklch(0.64 0.2 253), and white text on it
+     measures 3.39:1 — under AA for body text. (The blue this replaces,
+     oklch(0.58 0.2 250), measured 4.18:1 against --primary-foreground, so it
+     was already failing; this is not a regression the new hue introduced, it
+     is one it forced us to look at.) The logo blue is therefore kept intact in
+     --brand and --chart-1, where nothing sits on top of it, and the FILL that
+     carries near-white text is walked down to 0.54 at the same chroma and hue:
+     measured 4.93:1 against --primary-foreground. Same colour family, same
+     hue, legible label. */
+  --primary: oklch(0.54 0.2 253);
   --primary-foreground: oklch(0.99 0.002 265);
+  /* The far stop of the ONE gradient fill in the system — Button's `primary`
+     variant, which is the register's Charge key and the KDS's Done key. That
+     gradient used to run --primary -> --chart-2, i.e. blue into teal, because
+     the old mark had a cyan in it. The new mark does not: it is one blue that
+     fades toward white at the tips, so the gradient became one blue too.
+     It is a token and not `--chart-2` because the contrast of a gradient is
+     the contrast of its LIGHTEST point, and a chart series is free to move for
+     charting reasons that have nothing to do with a label sitting on it. The
+     teal end measured 3.49:1 under near-white — a failure that predates this
+     branch. Here the lightest point of the sweep is --primary itself, so the
+     key is 4.93:1 at worst and 7.24:1 at the far corner. */
+  --primary-2: oklch(0.45 0.17 253);
   --secondary: oklch(0.96 0.006 265);
   --secondary-foreground: oklch(0.27 0.02 265);
   --muted: oklch(0.965 0.005 265);
@@ -149,8 +172,15 @@
   /* A hairline you can actually see against white, without it becoming a box. */
   --border: oklch(0.885 0.007 265);
   --input: oklch(0.875 0.008 265);
-  --ring: oklch(0.58 0.2 250);
-  --chart-1: oklch(0.58 0.2 250);
+  /* The focus ring tracks --primary rather than --brand, as it always has.
+     A ring has to clear 3:1 against whatever it lands on, and the page canvas
+     (0.965) is the worst case: the logo blue manages only 3.057:1 there, which
+     is a pass by arithmetic and a coin-flip in practice. At --primary's
+     lightness it is 4.57:1 against the same canvas. */
+  --ring: oklch(0.54 0.2 253);
+  /* Series 1 IS the logo blue. Nothing is printed on top of a chart series, so
+     the 3:1 graphical floor is what applies: 3.39:1 against a white card. */
+  --chart-1: oklch(0.64 0.2 253);
   --chart-2: oklch(0.6 0.13 200);
   --chart-3: oklch(0.65 0.13 165);
   --chart-4: oklch(0.58 0.16 300);
@@ -161,19 +191,24 @@
   --chart-6: oklch(0.62 0.17 25);
   --chart-7: oklch(0.6 0.15 330);
 
-  /* The share ramp, light. One hue — the brand blue, 250 — walked up in
+  /* The share ramp, light. One hue — the brand blue, now 253 — walked up in
      lightness while chroma comes down with it, which is what keeps the pale
      end from turning chalky. Ordered darkest-first because paymentMix() hands
      back slices largest-first, so weight on the page tracks weight in the
      till. The pale rungs are swatch and arc colours only; they are never asked
-     to be text on white. */
-  --ramp-1: oklch(0.5 0.19 250);
-  --ramp-2: oklch(0.58 0.17 250);
-  --ramp-3: oklch(0.65 0.145 250);
-  --ramp-4: oklch(0.71 0.12 250);
-  --ramp-5: oklch(0.77 0.1 250);
-  --ramp-6: oklch(0.82 0.08 250);
-  --ramp-7: oklch(0.87 0.065 250);
+     to be text on white.
+     The LADDER is unchanged — those lightness steps were tuned for how many
+     rungs the eye can order, and the new blue gives no reason to re-space
+     them. What moves is hue (250 -> 253) and chroma, which comes up about 5%
+     across the walk to meet the kit blue's higher saturation: at the old
+     chroma the ramp read as a slightly greyer blue sitting next to the logo. */
+  --ramp-1: oklch(0.5 0.2 253);
+  --ramp-2: oklch(0.58 0.18 253);
+  --ramp-3: oklch(0.65 0.155 253);
+  --ramp-4: oklch(0.71 0.13 253);
+  --ramp-5: oklch(0.77 0.105 253);
+  --ramp-6: oklch(0.82 0.085 253);
+  --ramp-7: oklch(0.87 0.068 253);
   --radius: 0.75rem;
 
   /* MOTION. One duration and one easing for every hover and focus change on
@@ -209,19 +244,39 @@
      and starts reading as a page loading slowly. */
   --motion-stagger: 40ms;
 
-  --brand: oklch(0.58 0.2 250);
-  --brand-foreground: oklch(0.99 0.002 265);
+  /* THE LOGO BLUE, EXACTLY. Surge-Logo-Kit-v1 specifies #008CFF, which is
+     oklch(0.64 0.2 253) — it round-trips back to #008CFF with no drift, so the
+     UI accent and the artwork are literally the same colour rather than two
+     blues that nearly agree. This token is the identity; --primary is the
+     working button fill derived from it (see the note up at --primary).
+     Held identical in both themes: the mark's blue does not get a dark-mode
+     variant, so neither does this. */
+  --brand: oklch(0.64 0.2 253);
+  /* Was near-white, which measures 3.39:1 on the new blue — a fail. The kit's
+     own pairing is ink on blue (#101318), and that measures 5.44:1, so the
+     foreground follows the kit instead of the old habit. Same value in dark. */
+  --brand-foreground: oklch(0.19 0.011 261);
+  /* The kit's ink, for the lettering and outline of the inline mark
+     (components/brand/surge-logo.tsx). It is a separate token from
+     --foreground because it must be the LOGO's ink — #101318 — not the UI
+     text colour, which is cooler and lighter. Flips to white in .dark, which
+     is how one inline SVG serves both the kit's `light` and `flat-dark`
+     variants without shipping two files. */
+  --logo-ink: oklch(0.19 0.011 261);
 
   /* Sidebar — dark rail in both modes */
   --sidebar: oklch(0.18 0.015 265);
   --sidebar-foreground: oklch(0.97 0.004 265);
   --sidebar-muted: oklch(0.62 0.02 265);
-  --sidebar-primary: oklch(0.66 0.19 250);
+  /* The rail is dark in both themes, so the active marker can be the logo blue
+     at full strength: 5.54:1 against the rail as a 3px bar and an icon tint,
+     and 5.73:1 as a fill under --sidebar-primary-foreground. */
+  --sidebar-primary: oklch(0.64 0.2 253);
   --sidebar-primary-foreground: oklch(0.16 0.02 265);
-  --sidebar-accent: oklch(0.66 0.19 250 / 0.16);
-  --sidebar-accent-foreground: oklch(0.92 0.06 250);
+  --sidebar-accent: oklch(0.64 0.2 253 / 0.16);
+  --sidebar-accent-foreground: oklch(0.92 0.06 253);
   --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.66 0.19 250);
+  --sidebar-ring: oklch(0.64 0.2 253);
 
   /* Floor table status — turn-time at a glance */
   --table-available-bg: var(--card);
@@ -282,14 +337,19 @@
 
   /* D1 · The bloom behind the hero figure. Brand hue, no hard edge, and low
      enough that it reads as the card being lit rather than as a coloured
-     shape sitting on it. */
-  --bloom: oklch(0.58 0.2 250 / 0.13);
+     shape sitting on it.
+     ALPHA CAME DOWN WITH THE HUE CHANGE (0.13 -> 0.115). The old blue was
+     0.58/0.2; the kit blue is 0.64/0.2 — six points of lightness brighter at
+     the same chroma — so the identical alpha puts visibly more colour on the
+     card. The threshold this is tuned against is "can a reader name a shape
+     here", not a number, so the alpha moves to hold the same answer. */
+  --bloom: oklch(0.64 0.2 253 / 0.115);
 
   /* D3 · The gradient-lit top border. A hairline that is brightest where the
      light lands and gone by the far edge, replacing a uniform rule on the two
      cards that lead their columns. Used on more than two it stops being light
      and becomes a pattern. */
-  --lit: oklch(0.58 0.2 250 / 0.55);
+  --lit: oklch(0.64 0.2 253 / 0.5);
 
   /* D4 · Film grain over the canvas. Light mode gets less: the noise darkens
      a white page, and white has further to fall than ink has to rise.
@@ -322,14 +382,21 @@
      and a grey shadow under a blue key is the tell that the blue was painted
      on afterwards. */
   --btn-lip: oklch(1 0 0 / 0.22);
+  /* RE-DERIVED FROM THE NEW FILL, NOT NUDGED. The rule this obeys is "a
+     saturated object casts a saturated shade", so the tint is the button's own
+     colour driven down into shadow territory: --primary is oklch(0.54 0.2 253)
+     and the shade is two-thirds of its lightness at three-quarters of its
+     chroma, on the same hue. Carrying the old 250 here would have left a shadow
+     a measurable step cooler than the key it falls from, which is the exact
+     tell this token exists to avoid. */
   --btn-brand-shadow:
     inset 0 1px 0 var(--btn-lip),
-    0 1px 2px -1px oklch(0.38 0.15 250 / 0.45),
-    0 6px 14px -8px oklch(0.38 0.15 250 / 0.5);
+    0 1px 2px -1px oklch(0.36 0.15 253 / 0.45),
+    0 6px 14px -8px oklch(0.36 0.15 253 / 0.5);
   --btn-brand-shadow-hover:
     inset 0 1px 0 var(--btn-lip),
-    0 2px 5px -2px oklch(0.38 0.15 250 / 0.5),
-    0 12px 22px -10px oklch(0.38 0.15 250 / 0.55);
+    0 2px 5px -2px oklch(0.36 0.15 253 / 0.5),
+    0 12px 22px -10px oklch(0.36 0.15 253 / 0.55);
 }
 
 .dark {
@@ -352,8 +419,17 @@
   --card-foreground: oklch(0.98 0.004 265);
   --popover: oklch(0.275 0.019 265);
   --popover-foreground: oklch(0.98 0.004 265);
-  --primary: oklch(0.66 0.19 250);
+  /* DARK GETS THE LOGO BLUE UNCUT, because dark's primary button already
+     carries DARK text (--primary-foreground below is 0.16, not white). Ink on
+     #008CFF measures 5.73:1 — comfortably AA — so there is nothing to trade
+     away here and the button on ink is literally the mark's blue. Light mode
+     is the one that has to walk the fill down; see the note there. */
+  --primary: oklch(0.64 0.2 253);
   --primary-foreground: oklch(0.16 0.02 265);
+  /* Runs the other way in dark, for the same reason the ramp does: the label
+     here is INK, so the gradient's risky end is its darkest one, and that is
+     --primary at 5.73:1. The far corner lightens to 8.20:1. */
+  --primary-2: oklch(0.74 0.17 253);
   --secondary: oklch(0.245 0.017 265);
   --secondary-foreground: oklch(0.98 0.004 265);
   --muted: oklch(0.245 0.016 265);
@@ -366,13 +442,15 @@
   /* A hairline you can actually see. 9% vanished against the new canvas. */
   --border: oklch(1 0 0 / 14%);
   --input: oklch(1 0 0 / 20%);
-  --ring: oklch(0.66 0.19 250);
+  /* 5.84:1 against the dark canvas — the logo blue has all the contrast it
+     needs on ink, so dark's ring is the brand blue itself. */
+  --ring: oklch(0.64 0.2 253);
 
   /* Rung 3 of the ladder, for surfaces nested INSIDE a card: table headers,
      inputs, inline chips. Referenced as bg-raised / border-raised. */
   --raised: oklch(0.245 0.017 265);
   --raised-border: oklch(1 0 0 / 10%);
-  --chart-1: oklch(0.66 0.19 250);
+  --chart-1: oklch(0.64 0.2 253);
   --chart-2: oklch(0.72 0.14 200);
   --chart-3: oklch(0.78 0.13 165);
   --chart-4: oklch(0.7 0.16 300);
@@ -384,16 +462,19 @@
      runs the other way: on ink the biggest share has to be the *brightest*
      rung, because a dark slice on a dark card is a slice you can't see. The
      last rung stops at 0.35 — still clear of the card at 0.205. */
-  --ramp-1: oklch(0.78 0.17 250);
-  --ramp-2: oklch(0.69 0.16 250);
-  --ramp-3: oklch(0.61 0.145 250);
-  --ramp-4: oklch(0.54 0.125 250);
-  --ramp-5: oklch(0.47 0.105 250);
-  --ramp-6: oklch(0.41 0.085 250);
-  --ramp-7: oklch(0.36 0.07 250);
+  --ramp-1: oklch(0.78 0.18 253);
+  --ramp-2: oklch(0.69 0.17 253);
+  --ramp-3: oklch(0.61 0.155 253);
+  --ramp-4: oklch(0.54 0.13 253);
+  --ramp-5: oklch(0.47 0.11 253);
+  --ramp-6: oklch(0.41 0.09 253);
+  --ramp-7: oklch(0.36 0.072 253);
 
-  --brand: oklch(0.66 0.19 250);
-  --brand-foreground: oklch(0.16 0.02 265);
+  /* Identical to light — see the note there. The mark's blue has one value. */
+  --brand: oklch(0.64 0.2 253);
+  --brand-foreground: oklch(0.19 0.011 261);
+  /* The kit's `flat-dark` variant: white lettering and outline. */
+  --logo-ink: oklch(1 0 0);
 
   /* Deeper than the canvas (0.145) so the rail reads as a distinct plane
      rather than merging into the page, which is what happened once the canvas
@@ -402,12 +483,12 @@
   --sidebar-foreground: oklch(0.98 0.004 265);
   /* Group headings and inactive items were 0.6 — too dim to scan six sections. */
   --sidebar-muted: oklch(0.68 0.02 265);
-  --sidebar-primary: oklch(0.66 0.19 250);
+  --sidebar-primary: oklch(0.64 0.2 253);
   --sidebar-primary-foreground: oklch(0.16 0.02 265);
-  --sidebar-accent: oklch(0.66 0.19 250 / 0.18);
-  --sidebar-accent-foreground: oklch(0.94 0.06 250);
+  --sidebar-accent: oklch(0.64 0.2 253 / 0.18);
+  --sidebar-accent-foreground: oklch(0.94 0.06 253);
   --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.66 0.19 250);
+  --sidebar-ring: oklch(0.64 0.2 253);
 
   /* Floor table status — darker fills, brighter text for dark mode.
      Available is a gray clearly lighter than the floor canvas so empty tables
@@ -459,8 +540,11 @@
      D6. A dark surface carries gradient because it has room to be lit; a white
      card is already at the top of its range and anything you add to it reads
      as dirt rather than as light. */
-  --bloom: oklch(0.66 0.19 250 / 0.22);
-  --lit: oklch(0.66 0.19 250 / 0.8);
+  /* Down from 0.22/0.8. The kit blue is more chromatic than the blue it
+     replaces (0.2 vs 0.19) and dark mode is where a bloom has the most room to
+     shout, so the alphas come back a notch to land on the same impression. */
+  --bloom: oklch(0.64 0.2 253 / 0.2);
+  --lit: oklch(0.64 0.2 253 / 0.75);
   --grain: 0.03;
   --well-top: oklch(0 0 0 / 0.28);
   --well-bottom: oklch(0 0 0 / 0.08);
@@ -474,14 +558,17 @@
   /* On ink the coloured shade has to come almost entirely from the glow, not
      from a dark drop — there is nothing under a dark card for a dark shadow to
      land on. */
+  /* The glow is the button's own fill — which in dark IS the logo blue — so
+     this tracks --primary exactly. Alphas ease back (0.55 -> 0.5, 0.7 -> 0.65)
+     for the same reason as --bloom: more chroma, same intended weight. */
   --btn-brand-shadow:
     inset 0 1px 0 var(--btn-lip),
     0 1px 2px -1px oklch(0 0 0 / 0.5),
-    0 8px 18px -10px oklch(0.66 0.19 250 / 0.55);
+    0 8px 18px -10px oklch(0.64 0.2 253 / 0.5);
   --btn-brand-shadow-hover:
     inset 0 1px 0 var(--btn-lip),
     0 2px 5px -2px oklch(0 0 0 / 0.55),
-    0 14px 26px -12px oklch(0.66 0.19 250 / 0.7);
+    0 14px 26px -12px oklch(0.64 0.2 253 / 0.65);
 }
 
 @layer base {
@@ -491,10 +578,12 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* The two-corner wash behind the whole dark product. Same geometry, brand
+     hue, and alphas trimmed for the brighter blue exactly as --bloom was. */
   .dark body {
     background-image:
-      radial-gradient(55rem 38rem at 78% -12%, oklch(0.66 0.19 250 / 0.07), transparent 60%),
-      radial-gradient(48rem 36rem at -8% 108%, oklch(0.66 0.19 250 / 0.05), transparent 55%);
+      radial-gradient(55rem 38rem at 78% -12%, oklch(0.64 0.2 253 / 0.06), transparent 60%),
+      radial-gradient(48rem 36rem at -8% 108%, oklch(0.64 0.2 253 / 0.045), transparent 55%);
     background-attachment: fixed;
   }
   html {

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { SurgeLogo } from "@/components/brand/surge-logo";
 
 type Notice = { title: string; body: React.ReactNode };
 
@@ -98,7 +99,11 @@ export default function LoginPage() {
         />
         <div
           className="oa-float absolute -top-24 -left-12 w-80 h-80 rounded-full blur-3xl"
-          style={{ background: "oklch(0.66 0.19 250 / 0.35)" }}
+          // Brand hue, re-derived for the kit blue. Alpha eases 0.35 -> 0.32:
+          // #008CFF is both lighter and more chromatic than the blue this
+          // replaces, so the same alpha put a brighter disc on the panel than
+          // the one this was tuned to.
+          style={{ background: "oklch(0.64 0.2 253 / 0.32)" }}
         />
         <div
           className="oa-float absolute -bottom-16 right-0 w-96 h-96 rounded-full blur-3xl"
@@ -113,10 +118,13 @@ export default function LoginPage() {
           }}
         />
         <div className="relative z-10 flex flex-col justify-between p-12 text-white w-full">
-          <div className="flex items-center gap-2.5 oa-rise">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/surge-appicon.svg" alt="Surge" className="w-9 h-9 rounded-lg" />
-            <span className="font-semibold text-lg tracking-tight">Surge</span>
+          {/* The full horizontal lockup, not icon + a typeset "Surge". This
+              panel is a brand moment with a whole column to itself, which is
+              the case the lockup exists for — and it is 220px wide, the kit's
+              stated floor for the horizontal. `tone="dark"` is pinned rather
+              than auto because the panel is ink in BOTH themes. */}
+          <div className="oa-rise">
+            <SurgeLogo tone="dark" className="h-[65px] w-[220px]" />
           </div>
           <div className="max-w-md">
             <h2
@@ -160,10 +168,12 @@ export default function LoginPage() {
       {/* Form panel */}
       <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
         <div className="w-full max-w-sm">
-          <div className="lg:hidden flex items-center gap-2 mb-8 oa-rise">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/surge-appicon.svg" alt="Surge" className="w-8 h-8 rounded-lg" />
-            <span className="font-semibold text-lg tracking-tight">Surge</span>
+          {/* The narrow-viewport identity, where the brand panel is hidden. The
+              form column is max-w-sm (384px), so the lockup still clears the
+              kit's 220px floor; `auto` because this one IS on the themed
+              background. */}
+          <div className="lg:hidden mb-8 oa-rise">
+            <SurgeLogo className="h-[65px] w-[220px]" />
           </div>
 
           {notice ? (

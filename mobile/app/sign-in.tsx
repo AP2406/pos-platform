@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, TextInput, StyleSheet, Pressable } from "react-native";
+import { View, Text, TextInput, StyleSheet, Pressable, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, NumPad, color, space, radius, text, touch } from "@/design";
 import { useSession } from "@/state/session";
@@ -42,10 +42,25 @@ export default function SignIn() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.center}>
+        {/* THE REAL LOCKUP REPLACES THE TYPESET PILL. This screen is the one
+            unambiguous brand moment the native app has — a centred, otherwise
+            empty sign-in — so it gets the horizontal lockup at the kit's 220pt
+            floor, not "SURGE" letterspaced inside a blue chip. That chip was
+            also the worst white-on-blue case on the surface: at 14pt it needed
+            4.5:1 and the kit blue gives 3.39:1, so replacing it removes the
+            contrast problem rather than working around it.
+            A PNG and not vector: the lockup's wordmark is five long outline
+            paths under a compound scale/flip transform, and a raster at 3x
+            (660px for a 220pt box) is both smaller and certain to be correct.
+            The optical ICON is the opposite call — see SurgeIcon.tsx. */}
         <View style={styles.brand}>
-          <View style={styles.mark}>
-            <Text style={styles.markTxt}>SURGE</Text>
-          </View>
+          <Image
+            source={require("../assets/surge-lockup.png")}
+            style={styles.lockup}
+            resizeMode="contain"
+            accessibilityRole="image"
+            accessibilityLabel="Surge"
+          />
           <Text style={text.title}>Point of Sale</Text>
         </View>
 
@@ -106,8 +121,9 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: space.xl },
   brand: { alignItems: "center", gap: space.sm, marginBottom: space.lg },
-  mark: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.control, backgroundColor: color.blue },
-  markTxt: { fontFamily: "Poppins_600SemiBold", fontSize: 14, letterSpacing: 3, color: color.onPrimary },
+  // 220 x 65 is the kit's stated starting size for the horizontal lockup, at
+  // its native 980:290 ratio — no stretching.
+  lockup: { width: 220, height: 65 },
   card: { width: 380, maxWidth: "100%", backgroundColor: color.card, borderRadius: radius.tile, borderWidth: 1, borderColor: color.border, padding: space.xl, gap: space.md },
   input: { minHeight: touch.min, backgroundColor: color.card2, borderRadius: radius.control, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.md, color: color.text, fontFamily: "Poppins_400Regular", fontSize: 16 },
   bizRow: { minHeight: touch.min + 4, borderRadius: radius.control, borderWidth: 1, borderColor: color.border, backgroundColor: color.card2, paddingHorizontal: space.md, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

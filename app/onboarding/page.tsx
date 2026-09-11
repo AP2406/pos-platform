@@ -1,6 +1,7 @@
 import { requireUser, getCurrentBusiness } from "@/lib/services/tenancy";
 import { redirect } from "next/navigation";
 import { OnboardingForm } from "./form";
+import { SurgeLogo } from "@/components/brand/surge-logo";
 
 export default async function OnboardingPage({
   searchParams,
@@ -36,7 +37,8 @@ export default async function OnboardingPage({
         />
         <div
           className="oa-float absolute -top-24 -left-12 w-80 h-80 rounded-full blur-3xl"
-          style={{ background: "oklch(0.66 0.19 250 / 0.35)" }}
+          // Brand hue, re-derived for the kit blue — same trim as /login.
+          style={{ background: "oklch(0.64 0.2 253 / 0.32)" }}
         />
         <div
           className="oa-float absolute -bottom-16 right-0 w-96 h-96 rounded-full blur-3xl"
@@ -52,10 +54,11 @@ export default async function OnboardingPage({
         />
 
         <div className="relative z-10 flex flex-col justify-between p-12 text-white w-full">
-          <div className="flex items-center gap-2.5 oa-rise">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/surge-appicon.svg" alt="Surge" className="w-9 h-9 rounded-lg" />
-            <span className="font-semibold text-lg tracking-tight">Surge</span>
+          {/* Horizontal lockup at the kit's 220px floor. Pinned dark: this
+              panel is ink regardless of theme. Matches /login exactly — the
+              two hero panels are the same surface. */}
+          <div className="oa-rise">
+            <SurgeLogo tone="dark" className="h-[65px] w-[220px]" />
           </div>
 
           <div className="max-w-md">

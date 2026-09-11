@@ -33,7 +33,10 @@ export function SiteNav() {
       <div className={"border-b border-[#D9E1EA] bg-white transition-shadow " + (scrolled ? "shadow-[0_2px_12px_rgba(10,37,64,0.08)]" : "")}>
         <nav className="mx-auto flex h-[68px] max-w-6xl items-center justify-between gap-3 px-6">
           <Link href="/" className="flex shrink-0 items-center gap-2">
-            <SurgeMark className="h-[28px] w-[47px] shrink-0" />
+            {/* Square now, not 47x28: the old mark was a wide card-and-bolt
+                drawing; the new symbol is drawn on a square grid and would be
+                stretched by a non-square box, which the kit forbids. */}
+            <SurgeMark className="h-8 w-8 shrink-0" />
             <span className="text-lg font-bold tracking-tight text-[#0A2540]">Surge</span>
           </Link>
           <div className="hidden items-center gap-7 md:flex">

@@ -10,9 +10,14 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
-        // The single most important CTA per screen: blue→cyan gradient, lifted.
+        // The single most important CTA per screen: a brand-blue gradient,
+        // lifted. It ran blue→cyan until the logo kit landed; the new mark has
+        // no second hue in it, so neither does this. --primary-2 is the far
+        // stop and is deliberately the darker rung in light mode and the
+        // lighter one in dark, so the sweep's worst-contrast point is always
+        // --primary itself. See the note on --primary-2 in globals.css.
         primary:
-          "bg-gradient-to-br from-primary to-chart-2 text-primary-foreground shadow-elevation-sm hover:brightness-110 focus-visible:ring-ring/50",
+          "bg-gradient-to-br from-primary to-primary-2 text-primary-foreground shadow-elevation-sm hover:brightness-110 focus-visible:ring-ring/50",
         // ADDED, not swapped in. `primary` is the register's Charge key and the
         // KDS's Done key and it is a blue→cyan gradient; changing it to reach
         // the admin home would have reached two screens where a wrong button is

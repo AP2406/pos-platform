@@ -48,7 +48,12 @@ function MetricCard({
           "mt-3 font-bold tabular-nums tracking-tight leading-none",
           hero ? "text-3xl" : "text-2xl",
           hero
-            ? "bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent"
+            // One hue across the sweep — the blue→teal it replaces was drawn
+            // from the retired mark's cyan, which the new kit does not have.
+            // Both stops are the brand blue and its working rung; at text-3xl
+            // bold this is WCAG large text, and the lighter stop measures
+            // 3.39:1 on a white card against a 3:1 requirement.
+            ? "bg-gradient-to-r from-brand to-primary bg-clip-text text-transparent"
             : tone === "warning"
             ? "text-amber-500"
             : tone === "danger"

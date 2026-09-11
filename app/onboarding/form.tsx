@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createBusiness } from "./actions";
 import { BUSINESS_MODES } from "@/lib/modules/modes";
+import { SurgeLogo } from "@/components/brand/surge-logo";
 
 const icons: Record<string, React.ReactNode> = {
   register: (
@@ -80,10 +81,10 @@ export function OnboardingForm() {
 
   return (
     <div className="w-full max-w-lg">
-      <div className="lg:hidden flex items-center gap-2 mb-8 oa-rise">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/surge-appicon.svg" alt="Surge" className="w-8 h-8 rounded-lg" />
-        <span className="font-semibold text-lg tracking-tight">Surge</span>
+      {/* Narrow-viewport identity, where the brand panel is hidden. Column is
+          max-w-lg, so the lockup clears the kit's 220px floor comfortably. */}
+      <div className="lg:hidden mb-8 oa-rise">
+        <SurgeLogo className="h-[65px] w-[220px]" />
       </div>
 
       <div className="oa-rise">

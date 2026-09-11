@@ -22,3 +22,4 @@ export * from "./ScanSheet";
 export * from "./CategoryRail";
 export * from "./MenuItemSheet";
 export * from "./Brand";
+export * from "./SurgeIcon";

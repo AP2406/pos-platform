@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Public_Sans } from "next/font/google";
 import { SiteNav } from "./site-nav";
-import { SurgeMark } from "./surge-mark";
+import { SurgeLogo } from "@/components/brand/surge-logo";
 import { OG_BASE } from "./shared-metadata";
 import { JsonLd, LOCAL_BUSINESS } from "./jsonld";
 
@@ -31,10 +31,13 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <footer className="bg-[#0B1E33] text-white">
         <div className="mx-auto grid max-w-6xl gap-10 px-6 py-14 sm:grid-cols-2 lg:grid-cols-6">
           <div className="lg:col-span-2">
-            <div className="flex items-center gap-2">
-              <SurgeMark className="h-[28px] w-[47px]" />
-              <span className="text-xl font-bold tracking-tight text-white">Surge</span>
-            </div>
+            {/* The footer takes the full lockup where the nav takes the icon:
+                this column is ~370px wide with nothing beside the mark, which
+                clears the kit's 220px floor, and a footer is where a brand is
+                allowed to sign its name properly. `tone="dark"` is pinned —
+                the footer is #0B1E33 navy irrespective of theme, and the
+                marketing site never renders in dark mode anyway. */}
+            <SurgeLogo tone="dark" className="h-[65px] w-[220px]" />
             <p className="mt-3 max-w-sm text-sm leading-relaxed text-[#8FA3B8]">Lower card processing rates and software that shows your savings on every sale &mdash; plus a real person on the other end of the phone.</p>
           </div>
           <div>

@@ -111,7 +111,10 @@ export function article({ headline, description, path, datePublished }: { headli
     description,
     datePublished,
     author: { "@type": "Organization", name: "Surge", url: SITE },
-    publisher: { "@type": "Organization", name: "Surge", logo: { "@type": "ImageObject", url: SITE + "/brand/surge-appicon.svg" } },
+    // Was /brand/surge-appicon.svg. Google's structured-data docs want a
+    // raster for a publisher logo (and the old SVG no longer exists), so this
+    // points at the same 512px tile the Organization `logo` above uses.
+    publisher: { "@type": "Organization", name: "Surge", logo: { "@type": "ImageObject", url: SITE + "/icon-512.png" } },
     mainEntityOfPage: SITE + path,
   };
 }

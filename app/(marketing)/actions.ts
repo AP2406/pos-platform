@@ -50,7 +50,12 @@ function confirmationHtml(name: string, kind: string): string {
     for (let i = 0; i < items.length; i++) {
       rows = rows +
         "<tr>" +
-          "<td valign='top' style='padding:6px 12px 6px 0;'><div style='width:26px;height:26px;line-height:26px;text-align:center;border-radius:9999px;background-color:#e0edff;color:#2563eb;font-weight:700;font-size:13px;'>" + (i + 1) + "</div></td>" +
+          // The numbered step chip, re-derived on the kit blue: a 12% tint of
+          // #008CFF over white (#E0F1FF) with the numeral one rung darker than
+          // the button fill. 5.96:1 — the pairing it replaces (#2563eb on
+          // #e0edff) was 4.36:1, i.e. this chip was already under AA before the
+          // hue moved, and a 13px numeral is not large text.
+          "<td valign='top' style='padding:6px 12px 6px 0;'><div style='width:26px;height:26px;line-height:26px;text-align:center;border-radius:9999px;background-color:#E0F1FF;color:#0057B8;font-weight:700;font-size:13px;'>" + (i + 1) + "</div></td>" +
           "<td valign='top' style='padding:6px 0;color:#475569;font-size:14px;line-height:1.5;'>" + items[i] + "</td>" +
         "</tr>";
     }
@@ -66,19 +71,38 @@ function confirmationHtml(name: string, kind: string): string {
       "<table role='presentation' cellpadding='0' cellspacing='0' border='0' width='100%' style='background-color:#f1f5f9;padding:24px 0;'>" +
         "<tr><td align='center'>" +
           "<table role='presentation' cellpadding='0' cellspacing='0' border='0' width='560' style='width:560px;max-width:560px;'>" +
-            "<tr><td style='background-color:#2563eb;background-image:linear-gradient(135deg,#2563eb 0%,#06b6d4 100%);border-radius:18px 18px 0 0;padding:26px 32px;text-align:center;'>" +
-              "<img src='" + SITE_URL + "/icon-192.png' width='38' height='38' alt='Surge' style='display:inline-block;vertical-align:middle;border-radius:9px;border:0;' />" +
-              "<span style='display:inline-block;vertical-align:middle;margin-left:10px;color:#ffffff;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:22px;font-weight:700;letter-spacing:-0.01em;'>Surge</span>" +
+            // THE HEADER IS NOW INK, NOT BLUE, and carries the real lockup.
+            // Two reasons. (1) The kit's dark artwork is white lettering with
+            // blue bars; putting it on a blue bar would sit brand blue on
+            // brand blue and lose the bars entirely. Ink #101318 is the
+            // background the kit publishes that variant for. (2) The old
+            // header paired a square icon with the word "Surge" typeset in
+            // whatever sans the mail client happened to have — a lockup the
+            // brand never drew. The kit has a real one; an email header is
+            // wide enough to use it.
+            // It has to be a hosted PNG: every mail client of consequence
+            // blocks SVG, and Gmail strips <svg> outright. 440px source shown
+            // at 220 (the kit's floor for the horizontal) = 2x for retina.
+            "<tr><td style='background-color:#101318;border-radius:18px 18px 0 0;padding:26px 32px;text-align:center;'>" +
+              "<img src='" + SITE_URL + "/brand/surge-lockup-email.png' width='220' height='65' alt='Surge' style='display:inline-block;border:0;outline:none;text-decoration:none;' />" +
             "</td></tr>" +
             "<tr><td style='background-color:#ffffff;padding:34px 32px 30px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'>" +
               "<div style='width:54px;height:54px;line-height:54px;text-align:center;border-radius:9999px;background-color:#d1fae5;color:#059669;font-size:26px;margin:0 auto 18px;'>&#10003;</div>" +
               "<h1 style='margin:0 0 10px;text-align:center;color:#0f172a;font-size:24px;font-weight:700;'>" + heading + "</h1>" +
               "<p style='margin:0;text-align:center;color:#475569;font-size:15px;line-height:1.6;'>" + intro + "</p>" +
               steps +
-              "<div style='text-align:center;margin-top:26px;'><a href='" + SITE_URL + "' style='display:inline-block;background-color:#2563eb;background-image:linear-gradient(135deg,#2563eb 0%,#06b6d4 100%);color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:13px 30px;border-radius:9999px;'>Visit Surge</a></div>" +
+              // Solid #006BDD, not the old blue-to-cyan gradient. That is the
+              // same value as the web's light-theme --primary — the AA-safe
+              // fill derived from the kit blue — and white on it measures
+              // 5.06:1. A gradient could not be measured at all: half the mail
+              // clients that matter drop background-image and fall back to
+              // background-color, so the tested colour has to BE the fill.
+              "<div style='text-align:center;margin-top:26px;'><a href='" + SITE_URL + "' style='display:inline-block;background-color:#006BDD;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:13px 30px;border-radius:9999px;'>Visit Surge</a></div>" +
               "<p style='margin:22px 0 0;text-align:center;color:#94a3b8;font-size:13px;line-height:1.5;'>Questions in the meantime? Just reply to this email.</p>" +
             "</td></tr>" +
-            "<tr><td style='background-color:#0e1a2b;border-radius:0 0 18px 18px;padding:22px 32px;text-align:center;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'>" +
+            // Footer takes the kit ink too, so the card's two dark bands are
+            // the same colour rather than #101318 above and #0e1a2b below.
+            "<tr><td style='background-color:#101318;border-radius:0 0 18px 18px;padding:22px 32px;text-align:center;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'>" +
               "<div style='color:#ffffff;font-size:14px;font-weight:700;'>Surge</div>" +
               "<div style='color:#94a3b8;font-size:12px;margin-top:6px;line-height:1.6;'>Smarter payments for local business<br/>Serving the GTA &amp; Durham Region<br/>" + esc(SUPPORT_EMAIL) + "</div>" +
               "<div style='color:#64748b;font-size:11px;margin-top:10px;'>&copy; 2026 Surge</div>" +

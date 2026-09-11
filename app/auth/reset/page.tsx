@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { SurgeLogo } from "@/components/brand/surge-logo";
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
@@ -33,10 +34,11 @@ export default function ResetPasswordPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm">
-        <div className="flex items-center gap-2 mb-8">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/surge-appicon.svg" alt="Surge" className="w-8 h-8 rounded-lg" />
-          <span className="font-semibold text-lg tracking-tight">Surge</span>
+        {/* Lockup rather than icon + typeset "Surge": this is a standalone,
+            unauthenticated page whose only job is to say whose password box
+            this is, and the column (max-w-sm) has room for the full mark. */}
+        <div className="mb-8">
+          <SurgeLogo className="h-[62px] w-[210px]" />
         </div>
 
         <h1 className="text-2xl font-semibold tracking-tight">Set a new password</h1>

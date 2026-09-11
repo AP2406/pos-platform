@@ -9,6 +9,7 @@ import { PageTransition } from "./page-transition";
 import { OnboardingNudge } from "./onboarding-nudge";
 import { switchBusiness } from "@/lib/services/switch-business";
 import { modeLabel } from "@/lib/modules/modes";
+import { SurgeIcon } from "@/components/brand/surge-logo";
 
 type BizSummary = {
   id: string;
@@ -240,8 +241,15 @@ export function AppShell({
           </svg>
         </button>
         <div className="flex items-center gap-2 min-w-0">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/surge-appicon.svg" alt="Surge" className="w-9 h-9 rounded-lg shrink-0" />
+          {/* THE ONE PLACE THAT KEEPS ICON + TYPESET WORDMARK. The row is 36px
+              tall and, on a till, carries "· {businessName}" after the word
+              Surge — so the lockup would either be squeezed miles under the
+              kit's 220px floor or push the merchant's own name off the bar.
+              The README's answer to exactly this is the dedicated optical
+              icon, so that is what this is: the 32px grid, with its own stroke
+              weight, not the full mark scaled down. `tone="dark"` because the
+              header bar is the dark rail's colour in BOTH themes. */}
+          <SurgeIcon size={32} tone="dark" className="shrink-0" title={null} />
           <span className="font-semibold text-base tracking-tight">Surge</span>
           {isTill && (
             <span className="text-sm text-sidebar-foreground/70 truncate hidden sm:inline">
@@ -263,8 +271,11 @@ export function AppShell({
         <div className="px-4 pt-5 pb-4 border-b border-sidebar-border">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/brand/surge-appicon.svg" alt="Surge" className="w-9 h-9 rounded-lg shrink-0 shadow-sm" />
+              {/* Same reasoning as the header: 32px optical icon on the dark
+                  rail, with the close button sharing the row. The shadow-sm is
+                  gone — the mark is transparent now and the kit forbids
+                  shadows on it. */}
+              <SurgeIcon size={32} tone="dark" className="shrink-0" title={null} />
               <span className="font-semibold text-base tracking-tight">Surge</span>
             </div>
             <button

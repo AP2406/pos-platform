@@ -46,7 +46,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b0e14",
+  // Surge-Logo-Kit-v1's ink, #101318 — the same value the app tile's square is
+  // filled with, so the installed app's status bar and its icon are one colour.
+  themeColor: "#101318",
   // The POS runs as an installed app on tablets and phones: draw edge-to-edge
   // behind notches/home bars (safe-area padding is applied where needed) and
   // disable pinch/double-tap zoom so fast register taps never zoom the UI.

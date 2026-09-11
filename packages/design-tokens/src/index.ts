@@ -7,9 +7,30 @@
 // the floor, board, kitchen and orders all share.
 
 export const color = {
-  // Brand / primary action — solid. `cyan` stays for brand accents only.
-  blue: "#2563EB",
-  blueHover: "#1D4ED8",
+  // THE TWO BLUES, AND WHY THERE ARE TWO.
+  //
+  // Surge-Logo-Kit-v1 specifies #008CFF. White on it measures 3.39:1 — under
+  // AA for anything that isn't large text — and on this surface `blue` is a
+  // FILL under white labels in roughly a dozen places: the primary Button, the
+  // segmented tabs, the category rail, the seat tabs, the sign-in device
+  // chips. So the identity blue and the working fill are split:
+  //
+  //   brand  #008CFF  the kit blue, untouched. Used where nothing sits on top
+  //                   of it — the mark itself, hairlines, focus rings, tints.
+  //                   5.16:1 against `card`, so it is legible as a tint too.
+  //   blue   #006BDD  the same hue and chroma in OKLCH — oklch(0.54 0.2 253)
+  //                   against the kit's oklch(0.64 0.2 253) — walked down in
+  //                   lightness until white passes. 5.06:1, versus the 5.17:1
+  //                   that #2563EB gave, so no control gets harder to read.
+  //                   This is byte-identical to the web's light-theme
+  //                   --primary, which is the point: one product, one fill.
+  brand: "#008CFF",
+  blue: "#006BDD",
+  blueHover: "#0057B8",
+  // Retired as a brand colour. The kit has no cyan — the old mark's speed
+  // lines were #06B6D4 and the new one's are the blue itself — but the value
+  // stays because `gradient.primary` is still exported for the web, and a
+  // token nobody can see is cheaper than a broken import.
   cyan: "#06B6D4",
 
   // Dark surfaces: page → raised → cards/inputs.
@@ -27,7 +48,7 @@ export const color = {
 
   // Status semantics — the same four meanings everywhere.
   available: "#5B6472", // neutral / empty
-  occupied: "#2563EB", // seated / active
+  occupied: "#006BDD", // seated / active — tracks `blue`, white seat text on it
   success: "#14B86E", // confirmed / ready / paid
   warning: "#F59E0B", // attention / payment due
   late: "#EF4444", // error / late
@@ -35,7 +56,10 @@ export const color = {
   successSoft: "rgba(20,184,110,0.16)",
   warningSoft: "rgba(245,158,11,0.16)",
   lateSoft: "rgba(239,68,68,0.16)",
-  blueSoft: "rgba(37,99,235,0.18)",
+  // A tint, never a text background — so this one takes the KIT blue rather
+  // than the fill: a wash of #008CFF at 18% is the brand showing through, and
+  // at 18% the lightness difference between the two blues is invisible anyway.
+  blueSoft: "rgba(0,140,255,0.18)",
 } as const;
 
 // Floor map: a warm wood floor that fills the screen; tables are large, solid,
@@ -55,7 +79,7 @@ export const floor = {
   wall: "#C9BBA2",
   // Legacy status fills (kept for the web floor renderer).
   statusAvailable: "#4B5563",
-  statusOccupied: "#2563EB",
+  statusOccupied: "#006BDD",
   statusWarning: "#F59E0B",
   statusLate: "#EF4444",
   statusPaid: "#14B86E",
@@ -63,17 +87,22 @@ export const floor = {
   ring: "rgba(0,0,0,0.22)",
   // Bar stools.
   stoolOpen: "#14B86E",
-  stoolBusy: "#2563EB",
+  stoolBusy: "#006BDD",
 } as const;
 
 // Bold, saturated fills assigned per SECTION (used when a section has no explicit
 // color in the data). Distinct from the status ring colors.
-export const sectionPalette = ["#2E2A5E", "#8E2C5B", "#2563EB", "#0E7C86", "#6D3A73", "#9A5A2B"] as const;
+export const sectionPalette = ["#2E2A5E", "#8E2C5B", "#006BDD", "#0E7C86", "#6D3A73", "#9A5A2B"] as const;
 
-// Brand gradient — reserved for brand surfaces (sign-in hero, marketing). Normal
-// buttons are SOLID `color.blue` (design review §2). Kept so the web can import it.
+// Brand gradient — reserved for brand surfaces. Normal buttons are SOLID
+// `color.blue` (design review §2). Kept so the web can import it.
+//
+// Re-aimed at the kit: the ramp used to run blue -> cyan, which was the old
+// mark's two colours. The new mark has ONE colour and fades it toward white at
+// the tips, so the gradient does the same — kit blue into its own darker rung,
+// no second hue invented for it.
 export const gradient = {
-  primary: [color.blue, color.cyan] as [string, string],
+  primary: [color.brand, color.blueHover] as [string, string],
 } as const;
 
 // Fixed type scale (Poppins). SemiBold 600 for numbers/headings, Regular/Medium
@@ -171,7 +200,7 @@ export type ServiceStage = "available" | "open" | "sent" | "ready" | "pay";
 export const stage = {
   available: "#4B5563",
   open: "#7C3AED",
-  sent: "#2563EB",
+  sent: "#006BDD",
   ready: "#14B86E",
   pay: "#F59E0B",
 } as const;
