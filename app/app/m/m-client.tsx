@@ -205,7 +205,7 @@ function Alert({ label, value, hint, tone }: { label: string; value: string; hin
 function Big({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="bg-card border border-border rounded-xl p-4">
-      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="text-2xl font-bold tabular-nums mt-0.5">{value}</div>
       {hint && <div className="text-xs text-muted-foreground mt-0.5">{hint}</div>}
     </div>
@@ -214,7 +214,7 @@ function Big({ label, value, hint }: { label: string; value: string; hint?: stri
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold mb-2 mt-6">
+    <h2 className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-2 mt-6">
       {children}
     </h2>
   );

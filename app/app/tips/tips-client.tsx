@@ -216,7 +216,7 @@ export function TipsClient({
           ) : (
             <div className="pt-2 border-t border-border overflow-x-auto">
               {cashout.tipOutPct > 0 && (
-                <p className="text-[12px] text-muted-foreground mb-2">Tip-out: {cashout.tipOutPct}% of each server&apos;s tips.</p>
+                <p className="text-[11px] text-muted-foreground mb-2">Tip-out: {cashout.tipOutPct}% of each server&apos;s tips.</p>
               )}
               <table className="w-full text-sm">
                 <thead>

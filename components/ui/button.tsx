@@ -10,18 +10,23 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
-        // The single most important CTA per screen: blue→cyan gradient, lifted.
+        // The single most important CTA per screen: the register's Charge key
+        // and the KDS's Done key. It was the last gradient fill in the system
+        // — --primary into --primary-2 — and is now the flat --primary.
+        // Nothing is lost: a gradient is only as legible as its worst point,
+        // and that point was --primary at both ends of the theme (the far stop
+        // was deliberately the DARKER rung in light and the LIGHTER one in
+        // dark). Measured after the change: 4.89:1 light, 5.71:1 dark, under
+        // --primary-foreground. The lift is still carried by shadow and the
+        // hover brightness, which is where it always was.
         primary:
-          "bg-gradient-to-br from-primary to-chart-2 text-primary-foreground shadow-elevation-sm hover:brightness-110 focus-visible:ring-ring/50",
-        // ADDED, not swapped in. `primary` is the register's Charge key and the
-        // KDS's Done key and it is a blue→cyan gradient; changing it to reach
-        // the admin home would have reached two screens where a wrong button is
-        // a wrong sale. So this is a second solid-fill variant, and the two
-        // never appear on the same screen.
+          "bg-primary text-primary-foreground shadow-elevation-sm hover:brightness-110 focus-visible:ring-ring/50",
+        // ADDED, not swapped in, back when `primary` was a gradient and
+        // changing it would have reached two screens where a wrong button is a
+        // wrong sale. The two are now the same fill and differ only in edge
+        // treatment; they still never appear on the same screen.
         //
-        // Solid brand rather than a gradient, because a gradient on a 34px
-        // control is a texture nobody can see and a hue nobody can name. What
-        // makes it read as a key instead of a rectangle is the edge treatment:
+        // What makes this one read as a key instead of a rectangle:
         // 1px of light along the top lip, and a drop shadow carried in the
         // button's own hue. Hover lifts it a pixel and brightens; pressed puts
         // it back down and takes 2% off it, which is the fastest way to say

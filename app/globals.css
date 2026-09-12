@@ -10,21 +10,6 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
-  /* THE ADMIN TYPEFACE. Times New Roman is a system font on macOS, iOS and
-     Windows, so it is set with no request at all — self-hosting it or pulling
-     it from a font CDN would be strictly worse than reading the copy already
-     on the machine. It is absent from most Android and Linux boxes, though,
-     and a bare `serif` fallback there lands on whatever the distro nominated,
-     which on a stock Ubuntu is frequently a sans. Tinos, Liberation Serif and
-     Nimbus Roman are the metric-compatible clones the common Linux font
-     packages ship: same advance widths, so a Linux operator gets the line
-     breaks this was drawn against rather than a re-flow of them. */
-  --font-serif:
-    "Times New Roman", Tinos, "Liberation Serif", "Nimbus Roman", Times, serif;
-  /* THE FIGURES. Hanken Grotesk — the face the rest of the product is set in,
-     so it is already in the page and costs nothing to reach for here. Why the
-     serif can't carry them, and where this is applied, is in `.u-serif` below. */
-  --font-numeric: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -36,6 +21,23 @@
   --color-sidebar: var(--sidebar);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
+  /* THE SIGN-IN SURFACE. /login is the one admin screen with no chrome around
+     it — no sidebar, no header, no card grid — so it is the one screen whose
+     colours cannot be borrowed from the shell. These are registered as real
+     utilities rather than reached for as `bg-[var(--auth-…)]` so that the
+     values stay in this file and the page stays readable; every one of them is
+     defined for BOTH themes below. */
+  --color-auth-cta: var(--auth-cta);
+  --color-auth-cta-hover: var(--auth-cta-hover);
+  --color-auth-cta-foreground: var(--auth-cta-foreground);
+  --color-auth-panel: var(--auth-panel);
+  --color-auth-panel-foreground: var(--auth-panel-foreground);
+  --color-auth-panel-muted: var(--auth-panel-muted);
+  --color-auth-panel-line: var(--auth-panel-line);
+  --color-auth-card: var(--auth-card);
+  --color-auth-bar: var(--auth-bar);
+  --color-auth-bar-peak: var(--auth-bar-peak);
+  --color-auth-scrim: var(--auth-scrim);
   /* 6 and 7 exist because the payment mix has up to seven tenders — cash, card,
      other, split, gift card, store credit and third-party delivery — and a
      donut that reuses a hue for two slices is a donut that lies. */
@@ -137,8 +139,26 @@
   --card-foreground: oklch(0.21 0.02 265);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.21 0.02 265);
-  --primary: oklch(0.58 0.2 250);
+  /* THE BUTTON FILL IS NOT THE LOGO BLUE, AND THAT IS THE POINT.
+     The kit's blue is #008CFF = oklch(0.64 0.2 253), and white text on it
+     measures 3.39:1 — under AA for body text. (The blue this replaces,
+     oklch(0.58 0.2 250), measured 4.18:1 against --primary-foreground, so it
+     was already failing; this is not a regression the new hue introduced, it
+     is one it forced us to look at.) The logo blue is therefore kept intact in
+     --brand and --chart-1, where nothing sits on top of it, and the FILL that
+     carries near-white text is walked down to 0.54 at the same chroma and hue:
+     measured 4.93:1 against --primary-foreground. Same colour family, same
+     hue, legible label. */
+  --primary: oklch(0.54 0.2 253);
   --primary-foreground: oklch(0.99 0.002 265);
+  /* --primary-2 IS GONE. It existed only as the far stop of the one gradient
+     fill in the system — Button's `primary` variant, the register's Charge key
+     and the KDS's Done key. That variant is now the flat --primary, so the
+     second stop has no consumer and a token nobody reads is a token that will
+     be wrong the next time somebody edits it. Nothing is lost in contrast
+     terms: a gradient is only ever as legible as its worst point, and that
+     point was --primary itself (4.89:1 under --primary-foreground), which is
+     exactly what the flat fill now measures. */
   --secondary: oklch(0.96 0.006 265);
   --secondary-foreground: oklch(0.27 0.02 265);
   --muted: oklch(0.965 0.005 265);
@@ -149,8 +169,15 @@
   /* A hairline you can actually see against white, without it becoming a box. */
   --border: oklch(0.885 0.007 265);
   --input: oklch(0.875 0.008 265);
-  --ring: oklch(0.58 0.2 250);
-  --chart-1: oklch(0.58 0.2 250);
+  /* The focus ring tracks --primary rather than --brand, as it always has.
+     A ring has to clear 3:1 against whatever it lands on, and the page canvas
+     (0.965) is the worst case: the logo blue manages only 3.057:1 there, which
+     is a pass by arithmetic and a coin-flip in practice. At --primary's
+     lightness it is 4.57:1 against the same canvas. */
+  --ring: oklch(0.54 0.2 253);
+  /* Series 1 IS the logo blue. Nothing is printed on top of a chart series, so
+     the 3:1 graphical floor is what applies: 3.39:1 against a white card. */
+  --chart-1: oklch(0.64 0.2 253);
   --chart-2: oklch(0.6 0.13 200);
   --chart-3: oklch(0.65 0.13 165);
   --chart-4: oklch(0.58 0.16 300);
@@ -161,19 +188,33 @@
   --chart-6: oklch(0.62 0.17 25);
   --chart-7: oklch(0.6 0.15 330);
 
-  /* The share ramp, light. One hue — the brand blue, 250 — walked up in
+  /* THE AREA UNDER A LINE, FLAT. One tint of the series colour, one alpha, used
+     everywhere an area is filled. It replaces a top-to-baseline fade that ran
+     0.22 down to 0; 0.14 is the alpha that puts about the same amount of ink
+     under the line without the fade, so the fill still reads as belonging to
+     the line rather than as a slab of its own. Same value in both themes on
+     purpose — one alpha, so a second area chart cannot quietly pick a
+     different one. */
+  --chart-1-area: oklch(0.64 0.2 253 / 0.14);
+
+  /* The share ramp, light. One hue — the brand blue, now 253 — walked up in
      lightness while chroma comes down with it, which is what keeps the pale
      end from turning chalky. Ordered darkest-first because paymentMix() hands
      back slices largest-first, so weight on the page tracks weight in the
      till. The pale rungs are swatch and arc colours only; they are never asked
-     to be text on white. */
-  --ramp-1: oklch(0.5 0.19 250);
-  --ramp-2: oklch(0.58 0.17 250);
-  --ramp-3: oklch(0.65 0.145 250);
-  --ramp-4: oklch(0.71 0.12 250);
-  --ramp-5: oklch(0.77 0.1 250);
-  --ramp-6: oklch(0.82 0.08 250);
-  --ramp-7: oklch(0.87 0.065 250);
+     to be text on white.
+     The LADDER is unchanged — those lightness steps were tuned for how many
+     rungs the eye can order, and the new blue gives no reason to re-space
+     them. What moves is hue (250 -> 253) and chroma, which comes up about 5%
+     across the walk to meet the kit blue's higher saturation: at the old
+     chroma the ramp read as a slightly greyer blue sitting next to the logo. */
+  --ramp-1: oklch(0.5 0.2 253);
+  --ramp-2: oklch(0.58 0.18 253);
+  --ramp-3: oklch(0.65 0.155 253);
+  --ramp-4: oklch(0.71 0.13 253);
+  --ramp-5: oklch(0.77 0.105 253);
+  --ramp-6: oklch(0.82 0.085 253);
+  --ramp-7: oklch(0.87 0.068 253);
   --radius: 0.75rem;
 
   /* MOTION. One duration and one easing for every hover and focus change on
@@ -209,19 +250,39 @@
      and starts reading as a page loading slowly. */
   --motion-stagger: 40ms;
 
-  --brand: oklch(0.58 0.2 250);
-  --brand-foreground: oklch(0.99 0.002 265);
+  /* THE LOGO BLUE, EXACTLY. Surge-Logo-Kit-v1 specifies #008CFF, which is
+     oklch(0.64 0.2 253) — it round-trips back to #008CFF with no drift, so the
+     UI accent and the artwork are literally the same colour rather than two
+     blues that nearly agree. This token is the identity; --primary is the
+     working button fill derived from it (see the note up at --primary).
+     Held identical in both themes: the mark's blue does not get a dark-mode
+     variant, so neither does this. */
+  --brand: oklch(0.64 0.2 253);
+  /* Was near-white, which measures 3.39:1 on the new blue — a fail. The kit's
+     own pairing is ink on blue (#101318), and that measures 5.44:1, so the
+     foreground follows the kit instead of the old habit. Same value in dark. */
+  --brand-foreground: oklch(0.19 0.011 261);
+  /* The kit's ink, for the lettering and outline of the inline mark
+     (components/brand/surge-logo.tsx). It is a separate token from
+     --foreground because it must be the LOGO's ink — #101318 — not the UI
+     text colour, which is cooler and lighter. Flips to white in .dark, which
+     is how one inline SVG serves both the kit's `light` and `flat-dark`
+     variants without shipping two files. */
+  --logo-ink: oklch(0.19 0.011 261);
 
   /* Sidebar — dark rail in both modes */
   --sidebar: oklch(0.18 0.015 265);
   --sidebar-foreground: oklch(0.97 0.004 265);
   --sidebar-muted: oklch(0.62 0.02 265);
-  --sidebar-primary: oklch(0.66 0.19 250);
+  /* The rail is dark in both themes, so the active marker can be the logo blue
+     at full strength: 5.54:1 against the rail as a 3px bar and an icon tint,
+     and 5.73:1 as a fill under --sidebar-primary-foreground. */
+  --sidebar-primary: oklch(0.64 0.2 253);
   --sidebar-primary-foreground: oklch(0.16 0.02 265);
-  --sidebar-accent: oklch(0.66 0.19 250 / 0.16);
-  --sidebar-accent-foreground: oklch(0.92 0.06 250);
+  --sidebar-accent: oklch(0.64 0.2 253 / 0.16);
+  --sidebar-accent-foreground: oklch(0.92 0.06 253);
   --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.66 0.19 250);
+  --sidebar-ring: oklch(0.64 0.2 253);
 
   /* Floor table status — turn-time at a glance */
   --table-available-bg: var(--card);
@@ -280,16 +341,21 @@
      more of it — an unlit dark surface has nothing but gradient to say
      "this is a raised object", where a white card already has its own edge. */
 
-  /* D1 · The bloom behind the hero figure. Brand hue, no hard edge, and low
-     enough that it reads as the card being lit rather than as a coloured
-     shape sitting on it. */
-  --bloom: oklch(0.58 0.2 250 / 0.13);
+  /* D1 · THE BLOOM IS GONE. It was a radial brand-hue glow behind the hero
+     figure, and a radial glow has no flat equivalent — the entire object IS
+     the falloff, so "flatten it" and "delete it" are the same edit. The card
+     already separates itself from the page with its own surface step, its
+     hairline and the one shadow on the page, which is what was carrying the
+     hero before the bloom was added and is what carries it again. */
 
-  /* D3 · The gradient-lit top border. A hairline that is brightest where the
-     light lands and gone by the far edge, replacing a uniform rule on the two
-     cards that lead their columns. Used on more than two it stops being light
-     and becomes a pattern. */
-  --lit: oklch(0.58 0.2 250 / 0.55);
+  /* D3 · The lit top border, now a FLAT hairline. It used to run brightest at
+     the left and fade out by two thirds across; flat, the same alpha would put
+     roughly twice the ink on the card and read as a brand stripe rather than
+     as light, so the value comes down to 0.40 — between the old gradient's
+     peak (0.5) and its mean. 1.63:1 against a white card: no contrast floor
+     applies to a 1px decoration that carries nothing, and the card's real
+     boundary is still --line. */
+  --lit: oklch(0.64 0.2 253 / 0.4);
 
   /* D4 · Film grain over the canvas. Light mode gets less: the noise darkens
      a white page, and white has further to fall than ink has to rise.
@@ -299,21 +365,18 @@
      a rendering fault on their monitor rather than as an intention. */
   --grain: 0.025;
 
-  /* D2 · The well a bar sits in. Darker at the lip than at the floor, which is
-     the whole of what an inset shadow says. */
-  --well-top: oklch(0.21 0.02 265 / 0.085);
-  --well-bottom: oklch(0.21 0.02 265 / 0.025);
+  /* D2 · The well a bar stands in. ONE flat value, where it used to be a two
+     stop ramp from a dark lip to a light floor. A track is a track: what makes
+     the bar read as standing IN something is that the track is drawn at all
+     and is the full height of the plot, not that its top edge is a shade
+     darker. 0.06 sits between the old lip (0.085) and floor (0.025), so the
+     track carries the same total weight it did. */
+  --well: oklch(0.21 0.02 265 / 0.06);
 
-  /* D0 · The light on the canvas. Two stops of a single warm-neutral wash
-     anchored above the top of the page, so the background is LIT from
-     somewhere rather than painted one flat value edge to edge. Warm on
-     purpose: every surface token in this file is cooled toward 265, and a page
-     whose light is the same temperature as its shadows has no light in it.
-     The chroma is 0.012 — about a fifth of what it takes to name a colour —
-     because the moment a reader can say "the top is beige" this has stopped
-     being light and become a panel. */
-  --canvas-lit: oklch(0.79 0.012 70 / 0.5);
-  --canvas-lit-2: oklch(0.83 0.008 40 / 0.22);
+  /* D0 · THE LIT CANVAS IS GONE. It was two radial washes anchored above the
+     top of the page — the same object as the bloom, at page scale, and the
+     same reasoning applies: a falloff cannot be made flat without becoming a
+     panel with a visible edge. The page is its --background, edge to edge. */
 
   /* B1 · The lip on a solid button. 1px of the light that is falling on it,
      along the top edge only — the difference between a filled rectangle and a
@@ -322,14 +385,73 @@
      and a grey shadow under a blue key is the tell that the blue was painted
      on afterwards. */
   --btn-lip: oklch(1 0 0 / 0.22);
+  /* RE-DERIVED FROM THE NEW FILL, NOT NUDGED. The rule this obeys is "a
+     saturated object casts a saturated shade", so the tint is the button's own
+     colour driven down into shadow territory: --primary is oklch(0.54 0.2 253)
+     and the shade is two-thirds of its lightness at three-quarters of its
+     chroma, on the same hue. Carrying the old 250 here would have left a shadow
+     a measurable step cooler than the key it falls from, which is the exact
+     tell this token exists to avoid. */
   --btn-brand-shadow:
     inset 0 1px 0 var(--btn-lip),
-    0 1px 2px -1px oklch(0.38 0.15 250 / 0.45),
-    0 6px 14px -8px oklch(0.38 0.15 250 / 0.5);
+    0 1px 2px -1px oklch(0.36 0.15 253 / 0.45),
+    0 6px 14px -8px oklch(0.36 0.15 253 / 0.5);
   --btn-brand-shadow-hover:
     inset 0 1px 0 var(--btn-lip),
-    0 2px 5px -2px oklch(0.38 0.15 250 / 0.5),
-    0 12px 22px -10px oklch(0.38 0.15 250 / 0.55);
+    0 2px 5px -2px oklch(0.36 0.15 253 / 0.5),
+    0 12px 22px -10px oklch(0.36 0.15 253 / 0.55);
+
+  /* ====================================================================
+     THE SIGN-IN SURFACE (light). See the matching block in .dark.
+     ==================================================================== */
+
+  /* THE PRIMARY ACTION HERE IS INK, NOT THE BRAND BLUE — and that is a
+     deliberate exception to the rest of the product, not an oversight.
+     Everywhere else `primary` means "the one blue key on a screen full of
+     other keys", and the blue earns its place by being the only saturated
+     thing in view. /login has nothing to compete with: one form, one button.
+     A blue fill there spends the brand on a decision the reader has already
+     made, and it puts the page's single highest-contrast element at 4.93:1
+     when it could be at 17. So the CTA is the neutral extreme of the theme
+     and the blue stays where it carries identity — the mark in the panel.
+
+     It is its own token rather than `bg-foreground` because this is a FILL
+     with a label on it: it needs a hover step and a paired foreground, and
+     body-text ink must be free to move without dragging a button with it.
+
+     MEASURED: --auth-cta-foreground on --auth-cta = 17.23:1. */
+  --auth-cta: oklch(0.21 0.02 265);
+  --auth-cta-hover: oklch(0.28 0.022 265);
+  --auth-cta-foreground: oklch(0.99 0.002 265);
+
+  /* The left panel in the "stats" variant. Warm where the rest of light mode
+     is cool (hue 85 against the system's 265) so the split reads as two
+     materials rather than as one surface with a line down it. */
+  --auth-panel: oklch(0.972 0.004 85);
+  --auth-panel-foreground: oklch(0.21 0.02 265); /* 16.35:1 on the panel */
+  --auth-panel-muted: oklch(0.52 0.02 265); /*  5.08:1 on the panel */
+  --auth-panel-line: oklch(0.21 0.02 265 / 0.1);
+  --auth-card: oklch(1 0 0);
+
+  /* The illustrative hourly chart. The idle bars are deliberately near the
+     card — they are texture, not data, and nothing is read off them. The one
+     highlighted bar is the only element there that carries meaning, so it is
+     the only one held to a contrast figure: 4.65:1 on the panel. */
+  --auth-bar: oklch(0.9 0.012 265);
+  --auth-bar-peak: oklch(0.54 0.2 253);
+
+  /* The scrim over the "photo" variant. ONE flat wash now, where it used to be
+     a flat wash at 0.32 plus a top-down fade to transparent that took the
+     lockup's band to 78% effective ink. A fade is a gradient, so the band is
+     gone and its job moves into this single value.
+     The number is still set by the WORST case the photograph can present — a
+     blown-out white pixel — not by the frame we happen to ship: at 0.56 the
+     white lockup measures 4.45:1 on that pixel, clear of AA for the mark in
+     any frame. It was 10.0:1 under the band, so this IS less headroom; what
+     buys it back is that there is no longer a bright bottom half for a reader
+     to notice the band against. The cost is real and is called out in the
+     report: the photograph is a stop darker overall than it was. */
+  --auth-scrim: oklch(0.16 0.014 265 / 0.56);
 }
 
 .dark {
@@ -352,8 +474,16 @@
   --card-foreground: oklch(0.98 0.004 265);
   --popover: oklch(0.275 0.019 265);
   --popover-foreground: oklch(0.98 0.004 265);
-  --primary: oklch(0.66 0.19 250);
+  /* DARK GETS THE LOGO BLUE UNCUT, because dark's primary button already
+     carries DARK text (--primary-foreground below is 0.16, not white). Ink on
+     #008CFF measures 5.73:1 — comfortably AA — so there is nothing to trade
+     away here and the button on ink is literally the mark's blue. Light mode
+     is the one that has to walk the fill down; see the note there. */
+  --primary: oklch(0.64 0.2 253);
   --primary-foreground: oklch(0.16 0.02 265);
+  /* --primary-2 is gone here too; see the note in :root. Dark's flat key is
+     the logo blue under ink at 5.71:1, which was already the sweep's worst
+     point, so the measurement does not move. */
   --secondary: oklch(0.245 0.017 265);
   --secondary-foreground: oklch(0.98 0.004 265);
   --muted: oklch(0.245 0.016 265);
@@ -366,13 +496,15 @@
   /* A hairline you can actually see. 9% vanished against the new canvas. */
   --border: oklch(1 0 0 / 14%);
   --input: oklch(1 0 0 / 20%);
-  --ring: oklch(0.66 0.19 250);
+  /* 5.84:1 against the dark canvas — the logo blue has all the contrast it
+     needs on ink, so dark's ring is the brand blue itself. */
+  --ring: oklch(0.64 0.2 253);
 
   /* Rung 3 of the ladder, for surfaces nested INSIDE a card: table headers,
      inputs, inline chips. Referenced as bg-raised / border-raised. */
   --raised: oklch(0.245 0.017 265);
   --raised-border: oklch(1 0 0 / 10%);
-  --chart-1: oklch(0.66 0.19 250);
+  --chart-1: oklch(0.64 0.2 253);
   --chart-2: oklch(0.72 0.14 200);
   --chart-3: oklch(0.78 0.13 165);
   --chart-4: oklch(0.7 0.16 300);
@@ -380,20 +512,29 @@
   --chart-6: oklch(0.72 0.17 25);
   --chart-7: oklch(0.72 0.15 330);
 
+  /* Same tint, same alpha as light — see the note there. It reads slightly
+     stronger on ink (1.19:1 against the card, against light's 1.18:1) because
+     the card has further to travel, which is the right way round: the fill
+     has to survive a dark surface. */
+  --chart-1-area: oklch(0.64 0.2 253 / 0.14);
+
   /* The share ramp, dark. Same hue, same largest-first order, but the walk
      runs the other way: on ink the biggest share has to be the *brightest*
      rung, because a dark slice on a dark card is a slice you can't see. The
      last rung stops at 0.35 — still clear of the card at 0.205. */
-  --ramp-1: oklch(0.78 0.17 250);
-  --ramp-2: oklch(0.69 0.16 250);
-  --ramp-3: oklch(0.61 0.145 250);
-  --ramp-4: oklch(0.54 0.125 250);
-  --ramp-5: oklch(0.47 0.105 250);
-  --ramp-6: oklch(0.41 0.085 250);
-  --ramp-7: oklch(0.36 0.07 250);
+  --ramp-1: oklch(0.78 0.18 253);
+  --ramp-2: oklch(0.69 0.17 253);
+  --ramp-3: oklch(0.61 0.155 253);
+  --ramp-4: oklch(0.54 0.13 253);
+  --ramp-5: oklch(0.47 0.11 253);
+  --ramp-6: oklch(0.41 0.09 253);
+  --ramp-7: oklch(0.36 0.072 253);
 
-  --brand: oklch(0.66 0.19 250);
-  --brand-foreground: oklch(0.16 0.02 265);
+  /* Identical to light — see the note there. The mark's blue has one value. */
+  --brand: oklch(0.64 0.2 253);
+  --brand-foreground: oklch(0.19 0.011 261);
+  /* The kit's `flat-dark` variant: white lettering and outline. */
+  --logo-ink: oklch(1 0 0);
 
   /* Deeper than the canvas (0.145) so the rail reads as a distinct plane
      rather than merging into the page, which is what happened once the canvas
@@ -402,12 +543,12 @@
   --sidebar-foreground: oklch(0.98 0.004 265);
   /* Group headings and inactive items were 0.6 — too dim to scan six sections. */
   --sidebar-muted: oklch(0.68 0.02 265);
-  --sidebar-primary: oklch(0.66 0.19 250);
+  --sidebar-primary: oklch(0.64 0.2 253);
   --sidebar-primary-foreground: oklch(0.16 0.02 265);
-  --sidebar-accent: oklch(0.66 0.19 250 / 0.18);
-  --sidebar-accent-foreground: oklch(0.94 0.06 250);
+  --sidebar-accent: oklch(0.64 0.2 253 / 0.18);
+  --sidebar-accent-foreground: oklch(0.94 0.06 253);
   --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.66 0.19 250);
+  --sidebar-ring: oklch(0.64 0.2 253);
 
   /* Floor table status — darker fills, brighter text for dark mode.
      Available is a gray clearly lighter than the floor canvas so empty tables
@@ -455,33 +596,85 @@
     0 2px 4px -2px oklch(0 0 0 / 0.6),
     0 14px 28px -16px oklch(0 0 0 / 0.8);
 
-  /* MATERIAL, dark. Deliberately stronger than light across the board — see
-     D6. A dark surface carries gradient because it has room to be lit; a white
-     card is already at the top of its range and anything you add to it reads
-     as dirt rather than as light. */
-  --bloom: oklch(0.66 0.19 250 / 0.22);
-  --lit: oklch(0.66 0.19 250 / 0.8);
+  /* MATERIAL, dark. Still stronger than light — a dark surface has room to be
+     lit where a white card is already at the top of its range — but what is
+     left of it is edges and texture, not sweeps. --bloom and the two
+     --canvas-lit stops are gone; they were radial glows, and a glow is a
+     gradient with no flat form to take. */
+  /* Flat, full width, where it used to fade out by two thirds across. At the
+     old 0.75 a uniform rule was a brand stripe rather than a light source, so
+     the value comes down to 0.55 — 2.43:1 against the card, which on ink is
+     still plainly a lit edge. */
+  --lit: oklch(0.64 0.2 253 / 0.55);
   --grain: 0.03;
-  --well-top: oklch(0 0 0 / 0.28);
-  --well-bottom: oklch(0 0 0 / 0.08);
-  /* The canvas light inverts its job. On white it is a warm shadow falling
-     across the top of the page; on ink there is nothing to shade, so it
-     becomes an actual light — a lift in lightness, still warm, still under the
-     threshold where a reader could name the hue. */
-  --canvas-lit: oklch(0.62 0.02 70 / 0.16);
-  --canvas-lit-2: oklch(0.55 0.03 40 / 0.09);
+  /* One flat value, between the old lip (0.28) and floor (0.08). */
+  --well: oklch(0 0 0 / 0.2);
   --btn-lip: oklch(1 0 0 / 0.28);
   /* On ink the coloured shade has to come almost entirely from the glow, not
      from a dark drop — there is nothing under a dark card for a dark shadow to
      land on. */
+  /* The glow is the button's own fill — which in dark IS the logo blue — so
+     this tracks --primary exactly. Alphas were eased back (0.55 -> 0.5,
+     0.7 -> 0.65) when the kit blue arrived: more chroma, same intended weight.
+     A box-shadow is kept and is NOT in scope for the flat pass: it is a
+     shadow — the absence of light on a surface below the object — not a colour
+     transition across the object's own fill. */
   --btn-brand-shadow:
     inset 0 1px 0 var(--btn-lip),
     0 1px 2px -1px oklch(0 0 0 / 0.5),
-    0 8px 18px -10px oklch(0.66 0.19 250 / 0.55);
+    0 8px 18px -10px oklch(0.64 0.2 253 / 0.5);
   --btn-brand-shadow-hover:
     inset 0 1px 0 var(--btn-lip),
     0 2px 5px -2px oklch(0 0 0 / 0.55),
-    0 14px 26px -12px oklch(0.66 0.19 250 / 0.7);
+    0 14px 26px -12px oklch(0.64 0.2 253 / 0.65);
+
+  /* ====================================================================
+     THE SIGN-IN SURFACE (dark).
+
+     The mockups are light-only, so this half is designed rather than
+     derived, and the CTA is where it has to stop being a translation. In
+     light the sign-in key is ink because ink is the far end of the theme
+     from the page. In dark, ink IS the page — a 0.21 fill on a 0.145 canvas
+     is a card, not a button, and it would be the least visible control on a
+     screen where it is the only one that matters. So the rule that survives
+     is the rule, not the colour: the key is the neutral extreme AWAY from
+     the canvas, which in dark means near-white with ink lettering.
+
+     That also keeps the two themes agreeing about what blue is for. Dark's
+     --primary is the logo blue uncut; if the sign-in key stayed blue here it
+     would be the loudest object on the page and the mark beside it would be
+     the second. Near-white on ink outranks it without borrowing from it.
+     ==================================================================== */
+
+  /* MEASURED: --auth-cta-foreground on --auth-cta = 17.80:1. */
+  --auth-cta: oklch(0.97 0.004 265);
+  --auth-cta-hover: oklch(0.88 0.006 265);
+  --auth-cta-foreground: oklch(0.16 0.02 265);
+
+  /* Light's panel is warmer than its page; dark's is LIGHTER than its page
+     (0.185 against the 0.145 canvas), because on ink a warm tint at this
+     chroma is invisible and lightness is the only axis with room left. Same
+     intent — the split reads as two planes — via the axis that still works.
+     The panel sits between the canvas and a card, so it reads as a wall the
+     card is mounted on rather than as another card. */
+  --auth-panel: oklch(0.185 0.015 265);
+  --auth-panel-foreground: oklch(0.98 0.004 265); /* 17.60:1 on the panel */
+  --auth-panel-muted: oklch(0.75 0.022 265); /*  8.38:1 on the panel */
+  --auth-panel-line: oklch(1 0 0 / 0.1);
+  --auth-card: oklch(0.225 0.016 265);
+
+  /* Idle bars lift off the card instead of dropping toward it — on ink,
+     "recessive" is darker in light mode and lighter here. The peak keeps the
+     logo blue uncut, as everything else in dark does: 5.03:1 on the card. */
+  --auth-bar: oklch(0.34 0.018 265);
+  --auth-bar-peak: oklch(0.64 0.2 253);
+
+  /* One flat wash, as in light, and the ink under it is deeper because here
+     the photograph is the brightest thing on the page rather than a panel
+     beside a white form. 0.62 against light's 0.56 for the same reason the
+     old pair ran 0.52/0.32. White lockup on a blown-out white photo pixel:
+     5.88:1. */
+  --auth-scrim: oklch(0.12 0.014 265 / 0.62);
 }
 
 @layer base {
@@ -491,12 +684,12 @@
   body {
     @apply bg-background text-foreground;
   }
-  .dark body {
-    background-image:
-      radial-gradient(55rem 38rem at 78% -12%, oklch(0.66 0.19 250 / 0.07), transparent 60%),
-      radial-gradient(48rem 36rem at -8% 108%, oklch(0.66 0.19 250 / 0.05), transparent 55%);
-    background-attachment: fixed;
-  }
+  /* The two-corner brand wash behind the dark product is GONE. It was a pair
+     of fixed radial gradients on <body>, i.e. the page background was a
+     gradient — which is the thing this pass exists to remove. The dark page is
+     its --background, flat, edge to edge; every card on it is separated by its
+     own surface step (0.205 against the canvas's 0.145) and its hairline,
+     which is what was doing the work anyway. */
   html {
     @apply font-sans;
   }
@@ -518,128 +711,6 @@ a,
 }
 
 @layer utilities {
-  /* ======================================================================
-     THE SERIF SCOPE
-     ======================================================================
-
-     Everything the signed-in operator sees is set in Times New Roman: /app,
-     /login, /onboarding, /hq, and the portals those routes open.
-
-     It is a class applied at those roots rather than a change to `html`
-     because the marketing site and the guest-facing screens — kiosk, the
-     customer-facing display, online ordering, booking — are a different
-     product talking to a different reader, and they keep the grotesque.
-     Opting IN also means a route added later inherits the guest face until
-     somebody decides otherwise, which is the safer direction to be wrong in.
-
-     The portals matter as much as the routes. A Dialog or a Sheet renders
-     into document.body, outside this subtree, so a modal would otherwise be
-     the one screen still speaking in the old voice. `u-serif` therefore goes
-     on their content as well — and because every consumer of those two
-     primitives lives under /app, that can't leak the serif onto a guest
-     screen in the other direction. */
-  .u-serif {
-    font-family: var(--font-serif);
-
-    /* THE SMALL END OF THE LADDER MOVES UP ONE STEP.
-       Times has a small x-height — measured against the grotesque it replaces,
-       44.7 vs 52.3 at the same 100px — so 12px of Times reads about as large
-       as 10px of Hanken did. That is under the floor where a table cell is
-       comfortable and well under it on the register and the KDS-adjacent
-       screens, which are read at arm's length rather than at a desk.
-       Matching the x-height outright would mean 1.17x everywhere and no
-       layout on this surface has that much room, so the whole small end
-       shifts by exactly one step instead: the two ladder tokens here, and the
-       arbitrary sizes in the components with them (9→10, 10→11, 11→12, 13→14,
-       15→16, 17→18). Times also sets about 7.5% narrower than the grotesque,
-       which pays back most of the width the bump costs.
-       text-base and up are deliberately untouched: past 16px x-height stops
-       being what gates legibility, and every display size on this surface is
-       a figure, which is not set in the serif at all. */
-    --text-xs: 0.8125rem; /* 12 → 13 */
-    --text-sm: 0.9375rem; /* 14 → 15 */
-
-    /* Serif body wants more leading at the same measure — the smaller
-       x-height puts more white inside the line and proportionally less
-       between them, and dense rows start to look like a block of grey.
-       Only the defaults move: anything that sets leading-* explicitly (the
-       KPI figures at leading-none, the tight list rows) keeps its own. */
-    --text-xs--line-height: 1.45;
-    --text-sm--line-height: 1.5;
-    --text-base--line-height: 1.6;
-
-    /* NEGATIVE TRACKING IS A SANS IDEA. -0.025em was drawn against Hanken's
-       even, closed shapes; on Times it pushes the serifs of adjacent letters
-       into each other and the word reads as crushed rather than as tight.
-       Neutralised here rather than deleted from 35 call sites, so
-       `tracking-tight` keeps meaning what it has always meant wherever the
-       grotesque still runs and simply stops applying on the serif. */
-    --tracking-tight: 0em;
-
-    /* The other direction, for the same reason. The uppercase micro-labels —
-       SALES TODAY, TIME, CHECK, the table column names — are the one place a
-       serif wants MORE air than a grotesque: caps have no descenders to hold
-       them apart and Times' are narrow with heavy bracketed serifs that start
-       to touch at 10 and 11px. */
-    --tracking-wide: 0.045em; /* was 0.025em */
-    --tracking-wider: 0.075em; /* was 0.05em  */
-    --tracking-widest: 0.12em; /* was 0.1em   */
-  }
-
-  /* ----------------------------------------------------------------------
-     THE ONE EXCEPTION: figures.
-
-     Times New Roman ships no tabular figure set, and no amount of
-     `font-variant-numeric` can conjure one. Measured in the browser at 40px:
-     `1111` sets 75.55px against `0000` at 80.00px — a 4.45px drift over four
-     digits — and asking for tabular-nums changes neither number. So a money
-     column in Times walks sideways as the day's totals climb through it, and
-     a live total twitches while you are reading it.
-
-     `tabular-nums` therefore carries the FAMILY as well as the feature inside
-     the serif scope. This codebase already uses that class, in ~390 places,
-     to mean precisely "this figure sits in a column or updates live" — the
-     currency amounts, check totals, counts, chart axis labels, KPI values,
-     the hero figure, the register totals. Hanging the face off it is what
-     makes the rule impossible to forget: a figure is set in the numeric face
-     because somebody marked it columnar, not because somebody remembered to
-     add a second class next to the first one. Numbers inside sentences —
-     "3 items at or below the reorder point" — are prose, carry no such mark,
-     and stay in the serif where they belong.
-
-     The face is Hanken Grotesk. It is already loaded by next/font for the
-     rest of the product, so this adds no request; it is a neutral grotesque
-     rather than a mono, so it sits beside the serif without announcing
-     itself; and it is natively tabular — measured, `1111` and `0000` both set
-     89.61px at 40px, with and without the feature flag.
-
-     `font-mono` still wins where it was asked for. A Finix transfer id or a
-     gift-card code is not a column of arithmetic; it was set in mono on
-     purpose and this has no business overriding that. */
-  .u-serif .tabular-nums:not(.font-mono),
-  .u-serif.tabular-nums:not(.font-mono) {
-    font-family: var(--font-numeric);
-  }
-
-  /* ----------------------------------------------------------------------
-     BUTTONS GET THE BOLD.
-
-     Times New Roman ships two weights: 400 and 500 both render as its Regular,
-     600 and 700 both as its Bold. Every Button carries `font-medium`, which
-     was a real 500 in the grotesque and is plain regular here — and a short
-     serif label at regular weight sitting on a saturated fill reads as a
-     caption somebody dropped onto a button rather than as the control's name.
-     "New sale" in white Times regular on brand blue was the clearest example:
-     the strokes are thin enough that the label goes soft against the fill.
-
-     So the one weight the serif does have gets spent here. This is scoped to
-     the serif rather than changed in buttonVariants because the guest-facing
-     booking screen is the other consumer of that primitive and its buttons are
-     still set in the grotesque, where 500 is a real weight worth keeping. */
-  .u-serif [data-slot="button"] {
-    font-weight: 600;
-  }
-
   /* The one transition. Applied to anything that changes on hover or focus, so
      every interactive surface on the page moves at the same speed. Colour and
      shadow only — nothing here moves geometry, because a row that shifts under
@@ -708,21 +779,20 @@ a,
     animation-delay: var(--in-delay, 0ms);
   }
 
-  /* D1 · The bloom. Sized and positioned by the element it is put on; this
-     only decides that it has no edge. */
-  .u-bloom {
-    background: radial-gradient(closest-side, var(--bloom), transparent);
-  }
+  /* D1 · .u-bloom is gone along with --bloom. See the note at the token.
 
-  /* D3 · The gradient-lit top border. Brightest at the left, gone by two
-     thirds across — a hairline with a light source instead of a uniform rule.
+     D3 · The lit top border. A FLAT 1px rule in --lit across the full width,
+     where it used to be a gradient that was brightest at the left and gone by
+     two thirds across. A solid rule is what a top-edge highlight is when it
+     cannot be a falloff, and the alpha has been retuned (see --lit) so that
+     going full-width does not double the ink on the card.
      Requires a positioned parent, which every Panel that uses it has. */
   .u-lit::before {
     content: "";
     position: absolute;
     inset: 0 0 auto 0;
     height: 1px;
-    background: linear-gradient(90deg, var(--lit), transparent 62%);
+    background: var(--lit);
     pointer-events: none;
     z-index: 1;
   }
@@ -745,59 +815,20 @@ a,
     background-size: 160px 160px;
   }
 
-  /* D0 · The lit canvas. An ellipse of warm light anchored above the top edge
-     and wider than the page, so what lands on screen is the middle of a
-     falloff rather than a circle somebody placed. `120% 620px` is the whole
-     trick: tall enough to reach past the KPI strip, wide enough that its sides
-     leave the viewport before they curve, so no reader ever sees an arc. */
-  .u-canvas {
-    pointer-events: none;
-    background:
-      radial-gradient(
-        120% 620px at 50% -140px,
-        var(--canvas-lit),
-        transparent 70%
-      ),
-      radial-gradient(
-        70% 380px at 88% -60px,
-        var(--canvas-lit-2),
-        transparent 72%
-      );
-  }
+  /* D0 · .u-canvas is gone along with --canvas-lit / --canvas-lit-2, and
+     D2 · .u-well is gone along with --well-top / --well-bottom. Both were
+     falloffs (two radial washes and a blurred inset shadow) with no consumer
+     left once the flat pass landed — the bar track is an SVG <rect> that now
+     takes the flat --well directly.
 
-  /* D2 · The well a bar stands in. An inset gradient rather than an inset
-     box-shadow because the track is an SVG <rect> — it takes a fill and
-     nothing else — so the same idea is spent as a two-stop linear gradient in
-     <defs>. This class exists for the DOM-side wells (the donut's unfilled
-     ring backing) that can use a real inset shadow. */
-  .u-well {
-    box-shadow:
-      inset 0 1px 2px var(--well-top),
-      inset 0 -1px 0 var(--well-bottom);
-  }
-
-  /* D6 · The hero figure, filled with a gradient instead of a flat ink.
-     Top-to-bottom, and the range is tiny — full foreground down to 82% of it.
-     At 48px that reads as the number having a top edge that catches the light;
-     at any smaller size it reads as a rendering fault, which is why nothing
-     else on the page is allowed to use it.
-     The fallback matters: `background-clip: text` with a transparent fill
-     paints NOTHING if the gradient fails to resolve, so `color` is set to the
-     real ink first and only overridden inside @supports. */
+     D6 · The hero figure. It was `background-clip: text` over a top-to-bottom
+     ramp from the foreground to 82% of it; it is now the flat foreground, set
+     as plain `color`, which is exactly what the old rule's no-gradient
+     fallback already was. 17.73:1 on a white card, 16.92:1 on a dark one — the
+     figure got MORE contrast by losing the fade, because the fade was eating
+     18% of the ink at the baseline of every digit. */
   .u-hero-fill {
     color: var(--foreground);
-  }
-  @supports (background-clip: text) or (-webkit-background-clip: text) {
-    .u-hero-fill {
-      background-image: linear-gradient(
-        180deg,
-        var(--foreground) 12%,
-        color-mix(in oklch, var(--foreground) 82%, transparent) 100%
-      );
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
   }
 
   /* C2 · A line drawing itself. The path carries pathLength="1", so the dash
@@ -850,17 +881,11 @@ a,
   }
 }
 
-/* The heavy material is desktop-only. On a 375px phone the canvas is barely
-   taller than the light falling on it — so the wash has no room to be a
-   falloff and becomes a visible band — and the grain is being asked to sit at
-   3% over a screen a reader is holding 30cm from their face in daylight,
-   where it is either invisible or dirt. Neither is worth the paint cost on
-   the class of device least able to pay it. The page keeps every edge,
-   shadow and hairline; it just isn't lit. */
+/* What is left of the heavy material is the grain, and it is halved on a
+   phone: 3% over a screen a reader holds 30cm from their face in daylight is
+   either invisible or dirt. The lit-canvas half of this rule went with
+   .u-canvas. */
 @media (max-width: 640px) {
-  .u-canvas {
-    display: none;
-  }
   .u-grain {
     opacity: calc(var(--grain) * 0.5);
   }

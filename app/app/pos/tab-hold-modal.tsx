@@ -96,7 +96,7 @@ export function TabHoldModal(props: Props) {
               placeholder="e.g. 100.00"
               className="h-9 mt-1"
             />
-            <p className="text-[12px] text-muted-foreground mt-1">The hold must cover the whole tab at close — set it high enough for the expected total plus tip.</p>
+            <p className="text-[11px] text-muted-foreground mt-1">The hold must cover the whole tab at close — set it high enough for the expected total plus tip.</p>
           </div>
           <div>
             <Label className="text-xs">Cardholder name</Label>
@@ -120,9 +120,9 @@ export function TabHoldModal(props: Props) {
         </Button>
 
         {props.config.environment === "sandbox" && (
-          <p className="text-[12px] text-muted-foreground mt-2">Sandbox cards: 4111 1111 1111 1111 approves, 4000 0000 0000 0002 declines.</p>
+          <p className="text-[11px] text-muted-foreground mt-2">Sandbox cards: 4111 1111 1111 1111 approves, 4000 0000 0000 0002 declines.</p>
         )}
-        <p className="text-[12px] text-muted-foreground mt-2">
+        <p className="text-[11px] text-muted-foreground mt-2">
           Card details are entered in a secure field hosted by the payment processor and never touch Surge&rsquo;s servers.
         </p>
       </div>

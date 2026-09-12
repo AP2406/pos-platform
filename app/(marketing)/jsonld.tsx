@@ -9,19 +9,28 @@ export function JsonLd({ data }: { data: object }) {
 // Site-wide LocalBusiness. Real contact details supplied by the operator.
 export const LOCAL_BUSINESS = {
   "@context": "https://schema.org",
-  // FinancialService is a subtype of LocalBusiness — more accurate for a payment
-  // processor, and Google still gives it LocalBusiness rich-result treatment.
-  "@type": "FinancialService",
+  // WAS FinancialService, which is the schema.org type for a bank, a broker or
+  // a PAYMENT PROCESSOR. That was a structured-data claim that we process
+  // cards, made site-wide on every page, and it had to move with the copy.
+  // ProfessionalService is the other LocalBusiness subtype that keeps the
+  // LocalBusiness rich-result treatment (address, geo, hours, areaServed all
+  // still apply) without asserting we are a financial institution. If and when
+  // processing goes live, FinancialService is the honest type to come back to.
+  "@type": "ProfessionalService",
   "@id": SITE + "/#business",
   name: "Surge Payment Solutions",
   alternateName: "Surge",
   url: SITE,
   logo: SITE + "/icon-512.png",
   image: SITE + "/jpg18.png",
-  description: "Transparent payment processing and point-of-sale software for local businesses across the GTA — lower card rates, real human support, no junk fees.",
+  description: "Point-of-sale software for restaurants, cafes and retail across the Greater Toronto Area — register, floor plan, kitchen display, online and QR ordering, inventory, staff and reporting.",
   telephone: "+1-888-648-8097",
   email: "info@surgetechpos.com",
-  priceRange: "$$",
+  // No `priceRange`. It is an optional LocalBusiness property, and a
+  // machine-readable price band on a site whose whole position is "we have no
+  // price yet" is the same error as a structured Offer of 0 — it just spreads
+  // it across all 21 pages instead of one. Bring it back when there is a
+  // published price to band.
   address: {
     "@type": "PostalAddress",
     addressLocality: "Toronto",
@@ -111,7 +120,10 @@ export function article({ headline, description, path, datePublished }: { headli
     description,
     datePublished,
     author: { "@type": "Organization", name: "Surge", url: SITE },
-    publisher: { "@type": "Organization", name: "Surge", logo: { "@type": "ImageObject", url: SITE + "/brand/surge-appicon.svg" } },
+    // Was /brand/surge-appicon.svg. Google's structured-data docs want a
+    // raster for a publisher logo (and the old SVG no longer exists), so this
+    // points at the same 512px tile the Organization `logo` above uses.
+    publisher: { "@type": "Organization", name: "Surge", logo: { "@type": "ImageObject", url: SITE + "/icon-512.png" } },
     mainEntityOfPage: SITE + path,
   };
 }

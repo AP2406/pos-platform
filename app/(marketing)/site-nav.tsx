@@ -4,10 +4,19 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { SurgeMark } from "./surge-mark";
 
+// POS-FIRST ORDER. "Point of sale" was third behind Home and Pricing; it is now
+// the first thing after the logo, and the two industry pages sit beside it so a
+// restaurant owner can self-select in the nav instead of reading a home page
+// first. "Home" is dropped as a label — the logo is the home link on every site
+// and repeating it cost the slot that "Restaurants" now occupies.
 const LINKS = [
-  { href: "/", label: "Home" },
-  { href: "/pricing", label: "Pricing" },
   { href: "/pos", label: "Point of sale" },
+  { href: "/pos-for-restaurants", label: "Restaurants" },
+  { href: "/pos-for-retail", label: "Retail" },
+  // /pricing, still — the URL does not move. The LABEL does: the page is the
+  // pilot offer now, and "Free pilot" answers the cost question in the rail
+  // itself, which is the question the word "Pricing" was standing in for.
+  { href: "/pricing", label: "Free pilot" },
   { href: "/contact", label: "Contact" },
 ];
 
@@ -26,31 +35,48 @@ export function SiteNav() {
     <header className="fixed inset-x-0 top-0 z-50">
       <div className="bg-[#0A2540] text-[#B9C8D8]">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-1.5 text-xs">
-          <span>Serving the Greater Toronto Area &amp; Durham Region</span>
-          <Link href="/book" className="hidden font-semibold text-white hover:underline sm:block">Talk to a specialist &rarr;</Link>
+          <span>Point of sale for the GTA &amp; Durham Region &middot; card processing coming soon</span>
+          {/* THE PAIR, AND WHY THIS WAY ROUND. The pilot is now the primary
+              ask — it is the button — and the demo keeps this strip slot as the
+              softer, lower-commitment path. An owner who is not ready to run
+              unfamiliar software through Friday service should still have a
+              one-click way to just look at it, and the demo is still the
+              primary CTA on /pos and on every industry page. */}
+          <Link href="/book" className="hidden font-semibold text-white hover:underline sm:block">Book a demo &rarr;</Link>
         </div>
       </div>
       <div className={"border-b border-[#D9E1EA] bg-white transition-shadow " + (scrolled ? "shadow-[0_2px_12px_rgba(10,37,64,0.08)]" : "")}>
         <nav className="mx-auto flex h-[68px] max-w-6xl items-center justify-between gap-3 px-6">
           <Link href="/" className="flex shrink-0 items-center gap-2">
-            <SurgeMark className="h-[28px] w-[47px] shrink-0" />
+            {/* Square now, not 47x28: the old mark was a wide card-and-bolt
+                drawing; the new symbol is drawn on a square grid and would be
+                stretched by a non-square box, which the kit forbids. */}
+            <SurgeMark className="h-8 w-8 shrink-0" />
             <span className="text-lg font-bold tracking-tight text-[#0A2540]">Surge</span>
           </Link>
-          <div className="hidden items-center gap-7 md:flex">
+          {/* md -> lg. The rail carried four labels at 768px; it now carries
+              five, and "Restaurants"/"Retail" are longer than the "Home" they
+              replaced, so the row collided with the Sign in + Book pair at the
+              md breakpoint. The burger now covers tablet as well, and the gap
+              drops a notch so the five still sit comfortably at lg. */}
+          <div className="hidden items-center gap-6 lg:flex">
             {LINKS.map((l) => (<Link key={l.href} href={l.href} className="text-[14.5px] font-semibold text-[#1A2B3C] transition-colors hover:text-[#1B6DC1]">{l.label}</Link>))}
           </div>
-          <div className="hidden items-center gap-5 md:flex">
+          <div className="hidden items-center gap-5 lg:flex">
             <Link href="/login" className="text-[14.5px] font-semibold text-[#1B6DC1] hover:underline">Sign in</Link>
-            <Link href="/book" className="rounded-[4px] bg-[#0A2540] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#123456]">Book a call</Link>
+            <Link href="/pricing#apply" className="rounded-[4px] bg-[#0A2540] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#123456]">Join the pilot</Link>
           </div>
-          <button type="button" onClick={() => setOpen(!open)} className="rounded-[4px] border border-[#D9E1EA] px-3 py-2 text-sm font-semibold text-[#1A2B3C] md:hidden" aria-label="Toggle menu">{open ? "Close" : "Menu"}</button>
+          <button type="button" onClick={() => setOpen(!open)} className="rounded-[4px] border border-[#D9E1EA] px-3 py-2 text-sm font-semibold text-[#1A2B3C] lg:hidden" aria-label="Toggle menu">{open ? "Close" : "Menu"}</button>
         </nav>
         {open && (
-          <div className="border-t border-[#D9E1EA] bg-white px-6 py-3 md:hidden">
+          <div className="border-t border-[#D9E1EA] bg-white px-6 py-3 lg:hidden">
             <div className="flex flex-col gap-1 text-sm font-semibold text-[#1A2B3C]">
               {LINKS.map((l) => (<Link key={l.href} href={l.href} onClick={() => setOpen(false)} className="rounded-[4px] px-2 py-2.5 hover:bg-[#F4F7FA]">{l.label}</Link>))}
               <Link href="/login" onClick={() => setOpen(false)} className="rounded-[4px] px-2 py-2.5 text-[#1B6DC1] hover:bg-[#F4F7FA]">Sign in</Link>
-              <Link href="/book" onClick={() => setOpen(false)} className="mt-1 rounded-[4px] bg-[#0A2540] px-4 py-2.5 text-center font-bold text-white">Book a call</Link>
+              {/* The strip's "Book a demo" link is hidden below sm, so the
+                  burger has to carry both halves of the pair itself. */}
+              <Link href="/book" onClick={() => setOpen(false)} className="rounded-[4px] px-2 py-2.5 hover:bg-[#F4F7FA]">Book a demo</Link>
+              <Link href="/pricing#apply" onClick={() => setOpen(false)} className="mt-1 rounded-[4px] bg-[#0A2540] px-4 py-2.5 text-center font-bold text-white">Join the pilot</Link>
             </div>
           </div>
         )}

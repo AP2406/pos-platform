@@ -2,36 +2,53 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
 import { JsonLd, localService, breadcrumb } from "../jsonld";
-import { SavingsEstimator } from "../savings-estimator";
+import { PaymentsComingSoon } from "../ui";
 import { LandingHero, LandingSection, LandingPoints, LandingCompare, LandingGuides, LandingCTA, LandingDisclaimer } from "../local-landing";
 
+// MONERIS IS A PROCESSOR, NOT A POS — so this page cannot simply swap one
+// comparison for another, and it was the hardest of the five to decide on.
+// Kept rather than 301'd (see docs/site-pos-first-audit.md §3): the merchant
+// typing "moneris alternative" is leaving a merchant account, and the thing
+// that makes leaving painful is usually the till on the counter, which IS what
+// we sell. The page therefore answers a narrower question than it used to, and
+// says so in the first paragraph rather than burying it.
+//
+// Off: the 2.5% + 15¢ rate, the "$10 one-time setup", the savings estimator,
+// the rate/monthly-fee comparison rows, and the "get you taking tap, chip,
+// Interac, Apple Pay and Google Pay from day one" promise.
 export const metadata: Metadata = {
-  title: { absolute: "Moneris Alternative — No Contract, No Junk Fees | Surge" },
-  description: "Looking for a Moneris alternative? Surge offers transparent card processing — one clear rate, no term contract, no monthly fee, and a free POS. See what you'd save.",
-  alternates: { canonical: "/moneris-alternative" },
+  title: { absolute: "Moneris Alternative — The POS Side, No Lock-In | Surge" },
+  description: "Leaving Moneris? Surge is the point-of-sale half: a register, floor plan, kitchen display, reservations and ordering channels, with no term contract and local setup across the GTA. Card processing coming soon.",
+  alternates: { canonical: "/moneris-alternative", },
   openGraph: { ...OG_BASE, url: "/moneris-alternative", type: "website" },
 };
 
 const tiles = [
-  { title: "No term contract", body: "Moneris agreements are commonly 3–5 years with an early-termination fee. Surge has no term and no cancellation fee — stay because it works, not because you're stuck." },
-  { title: "No monthly fee", body: "No account fee or software fee stacked on before you've sold anything. One transparent rate, that's it." },
-  { title: "A rate you can actually read", body: "One clear 2.5% + 15¢ in person — not a blended number with the markup buried inside." },
-  { title: "POS included free", body: "A full point-of-sale comes with your payments — no separate monthly POS bill." },
+  { title: "No term contract", body: "Moneris agreements are commonly 3–5 years with an early-termination fee. There is no term on Surge software and no cancellation fee." },
+  { title: "A till, not a terminal", body: "A bank merchant account gives you a card machine. Surge gives you the system around it — floor, kitchen, menu, stock, staff and reports." },
+  // Was "Free tier that is a real register — Basic costs nothing… Advanced
+  // adds…". The tiers are gone with the pricing page; what replaces them is the
+  // pilot, stated without a duration or a number of places.
+  { title: "Free while the pilot runs", body: "We are piloting Surge with GTA and Durham independents: the whole system, free for a limited time, in exchange for honest feedback." },
+  { title: "Local, real support", body: "Set up in person across the GTA and Durham, with a human on the phone rather than a call-centre queue." },
 ];
 
+// Rate and monthly-fee rows are gone: we have no rate to put in the left column.
+// What is left is a software comparison, plus an honest first row.
 const compareRows: [string, string, string][] = [
-  ["In-person rate", "2.5% + 15¢, clearly stated", "Often a blended/custom rate"],
-  ["Monthly fee", "$0", "Account + terminal fees commonly apply"],
-  ["Contract", "None — cancel anytime", "Commonly a 3–5 year term"],
+  ["Card processing", "Not yet — coming soon", "Yes — this is what Moneris is"],
+  ["POS software", "Free during our pilot", "Typically a paid add-on"],
+  ["Floor plan & table service", "Included", "Not part of the merchant account"],
+  ["Kitchen display", "Included", "Not part of the merchant account"],
+  ["Online, QR & kiosk ordering", "Included", "Separate products"],
+  ["Software contract", "None — cancel anytime", "Commonly a 3–5 year term"],
   ["Early-termination fee", "None", "Often $300–$500 to leave early"],
-  ["POS software", "Included free", "Typically a paid add-on"],
-  ["Setup", "$10 one-time", "Varies"],
   ["Support", "Local, real human", "Call centre"],
 ];
 
 const service = localService({
-  name: "Payment processing (Moneris alternative)",
-  description: "A transparent Moneris alternative for local businesses — one clear card rate, no term contract, no monthly fee, and a free point-of-sale, with local setup across the GTA and Durham.",
+  name: "Point of sale (Moneris alternative)",
+  description: "For businesses leaving Moneris — a point-of-sale with floor plan, kitchen display, reservations and ordering channels, no term contract, and local setup across the GTA and Durham.",
   areaServed: ["Greater Toronto Area", "Toronto", "Durham Region", "Ontario"],
   path: "/moneris-alternative",
 });
@@ -44,18 +61,18 @@ export default function MonerisAlternativePage() {
 
       <LandingHero
         eyebrow="Switching from Moneris"
-        h1={<>A Moneris alternative built for local business — not <span className="text-blue-600">lock-in</span>.</>}
-        intro="If you're on Moneris and tired of the term contract, the monthly line items, and a rate you can't quite decode, there's a simpler option. Surge gives you one clear rate, no lock-in, and a real local person who picks up the phone."
+        h1={<>Leaving Moneris? We are the <span className="text-blue-600">till</span>, not the merchant account.</>}
+        intro="Straight answer first: Surge does not process cards yet, so we cannot replace your Moneris merchant account today. What we can replace is the terminal-shaped hole where your point-of-sale should be — and do it with no term contract."
       />
 
       <LandingSection title="Why owners look for a Moneris alternative">
-        <p>Moneris is Canada&rsquo;s largest processor, and for big enterprises with a negotiating team it can work. But a lot of independent shops tell us the same things: they&rsquo;re locked into a multi-year term, they&rsquo;re paying monthly account and terminal fees before a single sale, and their &ldquo;rate&rdquo; is a blended number that hides what each transaction actually costs.</p>
-        <p>Surge is built the other way around: <strong>2.5% + 15¢</strong> on in-person cards, a one-time $10 setup, <strong>no monthly fee</strong>, and <strong>no term contract</strong> — cancel any time. You see the number, you keep more of every sale, and if we&rsquo;re not saving you money, you walk.</p>
+        <p>Moneris is Canada&rsquo;s largest processor, and for a big enterprise with a negotiating team it can work. But a lot of independent shops tell us the same things: they are locked into a multi-year term, they are paying monthly account and terminal fees before a single sale, and their &ldquo;rate&rdquo; is a blended number that hides what each transaction actually costs.</p>
+        <p>We are not yet the answer to the rate half of that. We are the answer to the other half: a bank merchant account leaves you running the business on a card machine and a spreadsheet. Surge is the register, the floor plan, the kitchen display, the menu, the stock, the schedule and the reports &mdash; free while our pilot runs, no term, and it works beside whatever processor you keep.</p>
         <LandingPoints items={tiles} />
       </LandingSection>
 
       <LandingSection title="How Surge compares to Moneris" tint>
-        <p>Every business&rsquo;s Moneris agreement is different, so treat the right-hand column as the patterns small merchants commonly report &mdash; not a quote.</p>
+        <p>These are two different kinds of product, which is exactly what the first row says. Every business&rsquo;s Moneris agreement is different, so treat the right-hand column as the patterns small merchants commonly report &mdash; not a quote.</p>
         <LandingCompare
           competitor="Moneris (typical)"
           rows={compareRows}
@@ -63,23 +80,24 @@ export default function MonerisAlternativePage() {
         />
       </LandingSection>
 
-      <LandingSection title="See what you'd save vs your Moneris rate">
-        <p>Drag the sliders to your real monthly card volume and average ticket. If you know your Moneris effective rate, compare it to Surge&rsquo;s 2.5% + 15¢ &mdash; the gap, times your annual volume, is real money.</p>
-        <div className="mt-6"><SavingsEstimator /></div>
-        <p className="text-sm text-slate-500">Not sure what you&rsquo;re actually paying Moneris now? That&rsquo;s the point of a blended rate. <Link href="/book" className="font-semibold text-blue-600 hover:text-blue-700">Send us your last statement</Link> and we&rsquo;ll compute your real effective rate on a free 15-minute call &mdash; here&rsquo;s <Link href="/guides/how-to-read-your-merchant-statement" className="font-semibold text-blue-600 hover:text-blue-700">how to read it yourself</Link>.</p>
+      <LandingSection title="When we will be a real alternative">
+        <p>We are building our own processing. We are not quoting a rate or a date, because a rate we cannot honour and a date we miss are both worse than saying nothing.</p>
+        <div className="mt-6"><PaymentsComingSoon /></div>
+        <p className="text-sm text-[#7A8CA0]">Not sure what you are actually paying Moneris now? That is the point of a blended rate &mdash; here is <Link href="/guides/how-to-read-your-merchant-statement" className="font-semibold text-blue-600 hover:text-blue-700">how to read the statement yourself</Link>, and we are happy to go through it with you on a <Link href="/book" className="font-semibold text-blue-600 hover:text-blue-700">free call</Link> even though we cannot quote against it.</p>
       </LandingSection>
 
-      <LandingSection title="Switching is easier than staying" tint>
-        <p>You don&rsquo;t have to wait for a contract to end to get a quote. We&rsquo;ll read your current Moneris statement with you, show you the exact difference, set up your terminal in person across the GTA and Durham, and get you taking tap, chip, Interac, Apple Pay and Google Pay from day one. If there&rsquo;s an early-termination cost, we&rsquo;ll factor it into the math honestly so you know the real break-even.</p>
+      <LandingSection title="You can move the till first" tint>
+        <p>Nothing about your merchant account has to change to run Surge on the counter. Put the <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link> in today, keep Moneris taking the card, and when our processing is live it becomes one more tender type on a register your staff already know. Restaurants start with <Link href="/pos-for-restaurants" className="font-semibold text-blue-600 hover:text-blue-700">POS for restaurants</Link>; shops with <Link href="/pos-for-retail" className="font-semibold text-blue-600 hover:text-blue-700">POS for retail</Link>.</p>
       </LandingSection>
 
       <LandingGuides slugs={["how-to-read-your-merchant-statement", "flat-rate-vs-interchange-plus-pricing", "what-is-a-junk-fee-on-a-merchant-account"]} />
 
       <LandingCTA
-        heading="See exactly what you'd save vs Moneris"
-        sub="A free 15-minute call, a clear quote, and the real dollar difference — no pressure, no jargon."
+        heading="See the till you'd be moving to"
+        sub="A free 15-minute demo on your own menu — no pressure, no jargon."
       />
 
+      {/* Legal text, left exactly as it was. */}
       <LandingDisclaimer>
         This page is general information, not financial or legal advice, and is not affiliated with or endorsed by Moneris. Moneris is a trademark of its owner. Competitor terms and fees change and vary by merchant &mdash; confirm your own agreement before switching.
       </LandingDisclaimer>

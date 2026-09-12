@@ -86,7 +86,7 @@ export function LineItemsSection({
 
   return (
     <div className="space-y-3">
-      <div className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">
+      <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold">
         Line items
       </div>
 
@@ -159,7 +159,7 @@ export function LineItemsSection({
             <div className="space-y-2 border border-border rounded-md p-3 bg-muted/30">
               <div className="grid grid-cols-12 gap-2">
                 <div className="col-span-6">
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
                     Description
                   </label>
                   <input
@@ -172,7 +172,7 @@ export function LineItemsSection({
                   />
                 </div>
                 <div className="col-span-4">
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
                     Amount ($)
                   </label>
                   <input
@@ -186,7 +186,7 @@ export function LineItemsSection({
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
                     Qty
                   </label>
                   <input

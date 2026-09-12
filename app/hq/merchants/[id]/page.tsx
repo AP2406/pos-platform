@@ -94,7 +94,7 @@ export default async function MerchantDetailPage({ params }: { params: Promise<{
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
-      <div className="text-[12px] uppercase tracking-wide text-zinc-500">{label}</div>
+      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</div>
       <div className="text-lg font-semibold mt-0.5 tabular-nums">{value}</div>
     </div>
   );

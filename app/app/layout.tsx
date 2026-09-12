@@ -1,11 +1,16 @@
-import { requireBusiness, listBusinesses } from "@/lib/services/tenancy";
+import { requireBusiness, listBusinesses, requireUser } from "@/lib/services/tenancy";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "./_components/app-shell";
 import { AssistantWidget } from "./_components/assistant-widget";
 import { VocabProvider } from "./_components/vocab-provider";
 import { resolveNav, getVocab, getFields } from "@/lib/modules/resolve";
 import { buildNav } from "@/lib/modules/nav";
-import { canAccess, roleKeyForWebRole } from "@/lib/services/route-access";
+import {
+  canAccess,
+  roleKeyForWebRole,
+  WEB_ROLE_LABELS,
+  type WebRole,
+} from "@/lib/services/route-access";
 import { hasFloorService } from "@/lib/modules/modes";
 
 export default async function AppLayout({
@@ -15,6 +20,14 @@ export default async function AppLayout({
 }) {
   const { business, role } = await requireBusiness();
   const businesses = await listBusinesses();
+
+  // The top bar's user chip shows the person, not a placeholder. Supabase puts
+  // whatever the account set at sign-up in user_metadata; when that's empty the
+  // address they sign in with is the truest name we hold, so it is what shows.
+  const user = await requireUser();
+  const meta = (user.user_metadata ?? {}) as { full_name?: string; name?: string };
+  const userName =
+    (meta.full_name || meta.name || "").trim() || user.email || "Signed in";
 
   const businessConfig = {
     industry: business.industry,
@@ -61,9 +74,32 @@ export default async function AppLayout({
     }
   } catch { /* pre-0070 or no role row — show everything */ }
 
+  // Reaches into the second level too. Every href the role editor offers
+  // (lib/nav-modules.ts) is a secondary destination, so before the rail nested
+  // them this filter happened to see all of them at depth 1 — after nesting, a
+  // top-level-only filter would silently stop hiding anything.
+  //
+  // Hiding a PRIMARY must not take its children with it, either: the role
+  // editor hides one destination, and each child is a destination in its own
+  // right, so survivors are promoted into the hidden parent's slot — the same
+  // rule buildNav() uses when a parent fails the permission filter.
+  type NavItems = typeof sections[number]["items"];
+  const hide = (items: NavItems): NavItems => {
+    const out: NavItems = [];
+    for (const item of items) {
+      const kids = item.children ? hide(item.children) : undefined;
+      if (hiddenNav.includes(item.href)) {
+        if (kids) out.push(...kids);
+        continue;
+      }
+      out.push(kids ? { ...item, children: kids } : item);
+    }
+    return out;
+  };
+
   const finalNav = hiddenNav.length
     ? sections
-        .map((s) => ({ ...s, items: s.items.filter((i) => !hiddenNav.includes(i.href)) }))
+        .map((s) => ({ ...s, items: hide(s.items) }))
         .filter((s) => s.items.length > 0)
     : sections;
 
@@ -90,6 +126,8 @@ export default async function AppLayout({
         businessName={business.name}
         industry={business.industry}
         role={role}
+        roleLabel={WEB_ROLE_LABELS[role as WebRole] ?? "Member"}
+        userName={userName}
         businesses={businesses}
         activeBusinessId={business.id}
         nav={finalNav}

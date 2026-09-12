@@ -73,29 +73,15 @@ export function enterAt(step: number): React.CSSProperties {
  *        reference: you come to them on purpose, they do not hail you.
  *
  * The step has to survive a squint, so it is carried by three things at once —
- * size, weight and contrast — rather than by size alone. 16 → 14 is a step you
- * can measure and not one you can see; 16/semibold/ink → 14/medium/muted is.
- *
- * The sizes are one step up from the grotesque's (17/15/13) because Times has
- * a small x-height and 13px of it reads like 11px of the face it replaced —
- * see the ladder note in globals.css.
- *
- * The weight half of the step is now doing LESS work than it reads as doing,
- * and that is worth knowing before someone tunes it. Times New Roman ships two
- * weights, so 400 and 500 render identically and 600 and 700 both render as
- * its Bold: `font-medium` on the sm tier is, in practice, regular. The tier
- * still separates cleanly — 14/regular/muted against 16/bold/ink is a wider
- * gap than the grotesque's 13/medium/muted against 15/semibold/ink ever was —
- * but it is separating on size and contrast, with weight now a two-position
- * switch rather than a three-position one. Anything that needs a middle step
- * has to buy it with colour or size; there is no half-bold to reach for.
+ * size, weight and contrast — rather than by size alone. 15 → 13 is a step you
+ * can measure and not one you can see; 15/semibold/ink → 13/medium/muted is.
  */
 type PanelSize = "lg" | "md" | "sm"
 
 const TITLE_TYPE: Record<PanelSize, string> = {
-  lg: "text-[18px] font-semibold leading-6 tracking-tight",
-  md: "text-[16px] font-semibold leading-5 tracking-tight",
-  sm: "text-[14px] font-medium leading-5 tracking-tight text-muted-foreground",
+  lg: "text-[17px] font-semibold leading-6 tracking-tight",
+  md: "text-[15px] font-semibold leading-5 tracking-tight",
+  sm: "text-[13px] font-medium leading-5 tracking-tight text-muted-foreground",
 }
 
 const HEADER_PAD: Record<PanelSize, string> = {
@@ -131,13 +117,13 @@ const BODY_PAD: Record<PanelSize, string> = {
  * passes `shadow-elevation` back in through className — the primary one — and
  * it does so because being lifted is part of how it says it is primary.
  *
- * `lit` replaces the uniform top hairline with one that has a light source:
- * brightest at the left, gone by two thirds across. It is a prop rather than
- * the default because the effect is only legible while it is rare — on every
- * card it stops being light falling on a surface and becomes a stripe, which
- * is precisely the kind of nameable decoration this page is not allowed. Two
- * cards carry it: the hero, and the rail. They are the two that lead their
- * columns, so the page opens with light in the top-left of each.
+ * `lit` puts a brand-tinted 1px rule along the top edge. It used to be a
+ * gradient — brightest at the left, gone by two thirds across — and is now a
+ * FLAT hairline at a lower alpha, because a full-width rule at the gradient's
+ * peak value is roughly twice the ink. It stays a prop rather than the default
+ * for the same reason it always was: on every card a coloured top edge stops
+ * reading as an accent and becomes a stripe. Two cards carry it — the hero and
+ * the rail — the two that lead their columns.
  */
 function Panel({
   className,

@@ -88,7 +88,11 @@ export async function createAvailabilityWindow(input: {
     .select("id")
     .single();
   if (error || !data) { console.error("createAvailabilityWindow:", error); return { error: "Could not save the window." }; }
+  // Menu hours are now edited from two places (Settings and the menu builder),
+  // so both caches have to be dropped. Cache hint only — the guards above are
+  // untouched.
   revalidatePath("/app/settings");
+  revalidatePath("/app/catalog");
   return { ok: true, id: data.id as string };
 }
 
@@ -99,6 +103,10 @@ export async function deleteAvailabilityWindow(id: string): Promise<{ ok: true }
   const supabase = await createClient();
   const { error } = await supabase.from("availability_windows").delete().eq("id", id).eq("business_id", business.id);
   if (error) { console.error("deleteAvailabilityWindow:", error); return { error: "Could not remove the window." }; }
+  // Menu hours are now edited from two places (Settings and the menu builder),
+  // so both caches have to be dropped. Cache hint only — the guards above are
+  // untouched.
   revalidatePath("/app/settings");
+  revalidatePath("/app/catalog");
   return { ok: true };
 }

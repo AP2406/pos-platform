@@ -4,10 +4,12 @@ import { color, fontSize, fontFamily } from "@surge/design-tokens";
 // Shared text styles built from the design tokens. Re-export tokens so screens
 // import everything design-related from one place (`@/design`).
 export {
+  // `color` now carries TWO blues — `color.brand` is the literal kit value
+  // (#008CFF, identity, tints, the mark) and `color.blue` is the AA-safe fill
+  // that white labels sit on. See the note in @surge/design-tokens.
   color,
   floor,
   sectionPalette,
-  gradient,
   fontSize,
   fontFamily,
   space,

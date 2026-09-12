@@ -197,7 +197,7 @@ export default async function AccountingPage({
         </div>
         <Line label="Net sales (pre-tax)" value={money(s.netSales)} />
         {cmpS && (
-          <p className={"text-[12px] -mt-1 mb-1 " + (s.netSales - cmpS.netSales >= 0 ? "text-emerald-600" : "text-red-600")}>{delta(s.netSales, cmpS.netSales)}</p>
+          <p className={"text-[11px] -mt-1 mb-1 " + (s.netSales - cmpS.netSales >= 0 ? "text-emerald-600" : "text-red-600")}>{delta(s.netSales, cmpS.netSales)}</p>
         )}
         <Line label="Food cost (COGS)" sub={pc.foodCostPct != null ? pc.foodCostPct + "% of sales" : "set recipes to track"} value={pc.cogs > 0 ? "-" + money(pc.cogs) : money(0)} />
         <Line label="Gross profit" value={money(pc.grossProfit)} strong />
@@ -205,9 +205,9 @@ export default async function AccountingPage({
         <div className="border-t border-border my-1" />
         <Line label="Prime cost (food + labor)" value={money(pc.primeCost)} strong />
         {cmpPc && (
-          <p className={"text-[12px] " + (pc.primeCost - cmpPc.primeCost <= 0 ? "text-emerald-600" : "text-red-600")}>{delta(pc.primeCost, cmpPc.primeCost)}</p>
+          <p className={"text-[11px] " + (pc.primeCost - cmpPc.primeCost <= 0 ? "text-emerald-600" : "text-red-600")}>{delta(pc.primeCost, cmpPc.primeCost)}</p>
         )}
-        <p className="text-[12px] text-muted-foreground mt-2">
+        <p className="text-[11px] text-muted-foreground mt-2">
           {pc.coveragePct != null && pc.coveragePct < 99
             ? "Food cost covers " + pc.coveragePct + "% of sales — items without a recipe count as $0 COGS. Add recipes under Catalog → Recipes for a complete figure."
             : "Food cost is theoretical (recipe plate cost × units sold). Labor is clocked hours × pay rate for the period."}
@@ -267,11 +267,11 @@ export default async function AccountingPage({
               {opexRows.map((r) => <Line key={r.cat} label={r.cat} value={"(" + money(r.amt) + ")"} />)}
             </div>
           ) : (
-            <p className="text-[12px] text-muted-foreground mt-1">No vendor bills {basis === "cash" ? "paid" : "dated"} in this period — record bills under Purchasing → Invoices with an expense category.</p>
+            <p className="text-[11px] text-muted-foreground mt-1">No vendor bills {basis === "cash" ? "paid" : "dated"} in this period — record bills under Purchasing → Invoices with an expense category.</p>
           )}
           <div className="border-t border-border my-1" />
           <Line label="Operating income" value={money(operatingIncome)} strong />
-          <p className="text-[12px] text-muted-foreground mt-2">Before labor/payroll, depreciation, interest &amp; tax. Labor is in the prime-cost card. Switch basis under Settings → Accounting basis.</p>
+          <p className="text-[11px] text-muted-foreground mt-2">Before labor/payroll, depreciation, interest &amp; tax. Labor is in the prime-cost card. Switch basis under Settings → Accounting basis.</p>
         </div>
 
         {/* F5: GST34 remittance worksheet */}
@@ -282,7 +282,7 @@ export default async function AccountingPage({
           <Line label="Line 108 — Input tax credits (ITCs)" sub={itcCount + " bill" + (itcCount === 1 ? "" : "s") + " · " + money(purchaseTotal) + " purchases"} value={"(" + money(itcTotal) + ")"} />
           <div className="border-t border-border my-1" />
           <Line label="Line 109 — Net tax" value={money(netTax)} strong />
-          <p className="text-[12px] text-muted-foreground mt-2">
+          <p className="text-[11px] text-muted-foreground mt-2">
             {netTax >= 0 ? "Amount to remit to CRA." : "Refund expected from CRA."} ITCs are the recoverable GST/HST on vendor bills dated in this period (toggle a bill&apos;s ITC eligibility under Purchasing → Invoices). Worksheet only — confirm against your filing.
           </p>
         </div>
@@ -340,7 +340,7 @@ export default async function AccountingPage({
               ))}
             </div>
           )}
-          <p className="text-[12px] text-muted-foreground mt-2">
+          <p className="text-[11px] text-muted-foreground mt-2">
             Theoretical = recipe ingredients consumed by what sold. Variance is logged waste; an actual count beyond this needs inventory counts. Log waste under Catalog → Waste.
           </p>
         </div>

@@ -1,3 +1,5 @@
+import { SurgeSymbol } from "@/components/brand/surge-logo";
+
 export default function Loading() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] gap-5">
@@ -18,8 +20,12 @@ export default function Loading() {
             strokeDasharray="72 220"
           />
         </svg>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/surge-appicon.svg" alt="Surge" className="relative w-12 h-12 rounded-xl shadow-lg" />
+        {/* The symbol alone inside the ring — a lockup would not fit a circle,
+            and at 48px this is the largest size the kit still calls a symbol
+            rather than an icon. No rounded-xl/shadow-lg any more: the mark now
+            has transparent background and the kit forbids adding shadows to
+            it, so the drop shadow went with the old opaque tile. */}
+        <SurgeSymbol className="relative w-12 h-12" title={null} />
       </div>
       <p className="text-sm text-muted-foreground animate-pulse">
         Loading your workspace…

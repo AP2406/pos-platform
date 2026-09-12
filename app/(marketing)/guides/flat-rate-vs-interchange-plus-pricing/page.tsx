@@ -23,7 +23,7 @@ export default function GuidePage() {
 
       <GuideH2>Which should you pick?</GuideH2>
       <GuideP>Rule of thumb: if you&rsquo;re a typical small business that values a predictable bill and no surprises, <strong>flat-rate</strong> usually wins &mdash; especially once you count the monthly junk fees that often ride along with &ldquo;cheap&rdquo; tiered or interchange-plus quotes. If you&rsquo;re high-volume with a finance person who&rsquo;ll actually audit statements, interchange-plus can edge it out.</GuideP>
-      <GuideP>Either way, compare on <em>effective rate</em>, not headline rate. Learn how in <Link href="/guides/how-to-read-your-merchant-statement" className="font-semibold text-blue-600 hover:text-blue-700">how to read your merchant statement</Link>, or see Surge&rsquo;s flat pricing on the <Link href="/pricing" className="font-semibold text-blue-600 hover:text-blue-700">pricing page</Link>.</GuideP>
+      <GuideP>Either way, compare on <em>effective rate</em>, not headline rate. Learn how in <Link href="/guides/how-to-read-your-merchant-statement" className="font-semibold text-blue-600 hover:text-blue-700">how to read your merchant statement</Link>, or see where Surge stands today on the <Link href="/pricing" className="font-semibold text-blue-600 hover:text-blue-700">pricing page</Link> &mdash; we do not process cards yet, so we publish no rate at all.</GuideP>
     </GuideArticle>
   );
 }

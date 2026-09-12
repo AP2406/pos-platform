@@ -3,12 +3,14 @@
 import { useEffect, useState, useTransition } from "react";
 import { usePathname } from "next/navigation";
 import { SidebarNav, type NavSection } from "./sidebar-nav";
+import { TopBar } from "./top-bar";
 import { SignOutButton } from "./sign-out";
 import { ThemeToggle } from "./theme-toggle";
 import { PageTransition } from "./page-transition";
 import { OnboardingNudge } from "./onboarding-nudge";
 import { switchBusiness } from "@/lib/services/switch-business";
 import { modeLabel } from "@/lib/modules/modes";
+import { SurgeIcon } from "@/components/brand/surge-logo";
 
 type BizSummary = {
   id: string;
@@ -61,7 +63,7 @@ function WorkspaceSwitcher({
         className="w-full flex items-center gap-2 text-left rounded-md p-1.5 -m-1.5 hover:bg-sidebar-accent transition-colors"
       >
         <span className="min-w-0 flex-1">
-          <span className="block text-[11px] uppercase tracking-[0.1em] text-sidebar-muted font-medium">
+          <span className="block text-[10px] uppercase tracking-[0.08em] text-sidebar-muted font-medium">
             Workspace
           </span>
           <span className="block font-medium text-sm mt-1 truncate">{name}</span>
@@ -160,6 +162,8 @@ export function AppShell({
   businessName,
   industry,
   role,
+  roleLabel,
+  userName,
   businesses,
   activeBusinessId,
   nav,
@@ -171,6 +175,10 @@ export function AppShell({
   businessName: string;
   industry: string;
   role: string;
+  /** "Shift lead", not "shift_lead" — for the top bar's user chip. */
+  roleLabel: string;
+  /** The signed-in person, from auth: display name if set, else their email. */
+  userName: string;
   businesses: BizSummary[];
   activeBusinessId: string;
   nav: NavSection[];
@@ -185,6 +193,20 @@ export function AppShell({
   // The register is a full-screen till: no static sidebar, menu button at every
   // size, and the content fills the screen instead of the centered page wrapper.
   const isTill = pathname === "/app/pos";
+
+  // Pages that are WORKING SURFACES rather than documents: they take the height
+  // the frame has and scroll inside their own panes.
+  //
+  // This has to be opt-in, and it has to be a definite height rather than
+  // `min-h-full`. A minimum is a floor — a flex child measured against it still
+  // sizes to its own content and simply refuses to shrink, which is exactly how
+  // the menu builder ended up 630px of panes inside a 603px slot with the last
+  // 30px clipped. `h-full` is a ceiling as well, so `flex-1 min-h-0` down the
+  // chain finally has something to divide up. Every other page keeps the floor,
+  // because a report that is 3000px long must still be 3000px long.
+  //
+  // Exact match, not prefix: /app/catalog/push is an ordinary document.
+  const isWorkSurface = pathname === "/app/catalog";
 
   useEffect(() => {
     setOpen(false);
@@ -201,13 +223,7 @@ export function AppShell({
   // register's own slim top bar provides the only way out (exit to dashboard).
   if (isTill) {
     return (
-      // u-serif is repeated here rather than hoisted: the till returns early
-      // and shares no wrapper with the shell below, and a register that keeps
-      // the old face while every other screen changed is the single most
-      // visible way this could go wrong.
-      <main className="u-serif h-[100dvh] overflow-hidden bg-background">
-        {children}
-      </main>
+      <main className="h-[100dvh] overflow-hidden bg-background">{children}</main>
     );
   }
 
@@ -218,16 +234,27 @@ export function AppShell({
     (open ? "translate-x-0" : "-translate-x-full");
 
   const headerClasses =
-    "fixed top-0 inset-x-0 z-30 h-14 flex items-center gap-3 px-4 bg-sidebar text-sidebar-foreground border-b border-sidebar-border " +
+    "h-14 shrink-0 flex items-center gap-3 px-4 bg-sidebar text-sidebar-foreground border-b border-sidebar-border " +
     (isTill ? "" : "md:hidden");
 
   const backdropClasses =
     "fixed inset-0 z-40 bg-black/60 backdrop-blur-sm " + (isTill ? "" : "md:hidden");
 
+  // THE FRAME IS THE VIEWPORT, not the document.
+  //
+  // It used to be `min-h-screen`, which made the shell as tall as whatever the
+  // page happened to be — so on a 1980px menu screen the sidebar rail ran the
+  // whole 1980px (its own `overflow-y-auto` never engaging), and any page that
+  // wanted to be a working surface rather than a scrolling document had nothing
+  // to measure itself against. Pinning the frame to 100dvh and making <main>
+  // the one scroll container gives the rail a fixed height, puts the top bar
+  // where it cannot scroll away, and lets a page opt into filling the screen by
+  // being `flex-1` — which is what the menu builder's three panes now do.
   return (
-    // The whole admin surface hangs off this one class — sidebar, header,
-    // page content and every route under /app.
-    <div className="u-serif min-h-screen flex bg-background">
+    // Column on a phone (bar over content), row from md (rail beside content).
+    // The bar is a flow item rather than `fixed` now, so nothing under it needs
+    // to reserve 56px of top padding and guess right.
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background md:flex-row">
       <header className={headerClasses}>
         <button
           type="button"
@@ -240,8 +267,15 @@ export function AppShell({
           </svg>
         </button>
         <div className="flex items-center gap-2 min-w-0">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/surge-appicon.svg" alt="Surge" className="w-9 h-9 rounded-lg shrink-0" />
+          {/* THE ONE PLACE THAT KEEPS ICON + TYPESET WORDMARK. The row is 36px
+              tall and, on a till, carries "· {businessName}" after the word
+              Surge — so the lockup would either be squeezed miles under the
+              kit's 220px floor or push the merchant's own name off the bar.
+              The README's answer to exactly this is the dedicated optical
+              icon, so that is what this is: the 32px grid, with its own stroke
+              weight, not the full mark scaled down. `tone="dark"` because the
+              header bar is the dark rail's colour in BOTH themes. */}
+          <SurgeIcon size={32} tone="dark" className="shrink-0" title={null} />
           <span className="font-semibold text-base tracking-tight">Surge</span>
           {isTill && (
             <span className="text-sm text-sidebar-foreground/70 truncate hidden sm:inline">
@@ -263,8 +297,11 @@ export function AppShell({
         <div className="px-4 pt-5 pb-4 border-b border-sidebar-border">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/brand/surge-appicon.svg" alt="Surge" className="w-9 h-9 rounded-lg shrink-0 shadow-sm" />
+              {/* Same reasoning as the header: 32px optical icon on the dark
+                  rail, with the close button sharing the row. The shadow-sm is
+                  gone — the mark is transparent now and the kit forbids
+                  shadows on it. */}
+              <SurgeIcon size={32} tone="dark" className="shrink-0" title={null} />
               <span className="font-semibold text-base tracking-tight">Surge</span>
             </div>
             <button
@@ -299,11 +336,27 @@ export function AppShell({
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto min-w-0">
-        {isTill ? (
-          <div className="h-[100dvh] pt-14 overflow-hidden">{children}</div>
-        ) : (
-          <div className="max-w-7xl mx-auto px-5 md:px-8 pt-20 md:pt-8 pb-10">
+      <div className="flex min-w-0 min-h-0 flex-1 flex-col">
+        <TopBar
+          workspaceName={businessName}
+          userName={userName}
+          roleLabel={roleLabel}
+          nav={nav}
+          className="hidden md:flex"
+        />
+
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          {/* The height contract: `min-h-full` so a short page still paints a
+              full canvas, plus `lg:h-full` on a work surface so its panes have
+              a real ceiling to divide. Below lg every page is a document —
+              three stacked panes each squashed to a third of a phone screen is
+              not a working surface, it is three slivers. */}
+          <div
+            className={
+              "mx-auto flex min-h-full w-full max-w-7xl flex-col px-5 pt-6 pb-10 md:px-8 md:pt-7 " +
+              (isWorkSurface ? "lg:h-full" : "")
+            }
+          >
             {isDemo && <DemoBanner />}
             {/* Not on /app — the dashboard runs its own launch-readiness panel
                 there, and a new merchant seeing both a checklist and a nudge to
@@ -313,10 +366,12 @@ export function AppShell({
                 orders, readiness on incomplete setup, so a fully-set-up shop
                 that hasn't rung a sale still gets nudged off the dashboard. */}
             {showOnboarding && pathname !== "/app" && <OnboardingNudge />}
-            <PageTransition>{children}</PageTransition>
+            <PageTransition className="flex min-h-0 flex-1 flex-col">
+              {children}
+            </PageTransition>
           </div>
-        )}
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

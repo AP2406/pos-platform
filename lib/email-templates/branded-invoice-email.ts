@@ -59,7 +59,14 @@ export function buildBrandedInvoiceEmail(
   branding: Branding,
   trip: TripDetails
 ): { subject: string; html: string } {
-  const brand = branding.brand_color || "#3B82F6";
+  // MERCHANT FIRST — branding.brand_color is whatever the merchant chose in
+  // Settings → Customization and is never overridden here. The fallback is the
+  // only Surge default in this file, and it moves with the brand: #006BDD is
+  // the kit blue walked down to the lightness that passes AA, the same value
+  // as the web's light-theme --primary. It is spent both as a heading colour
+  // on white (5.06:1) and as the Pay Invoice fill under white text (5.06:1);
+  // the #3B82F6 it replaces measured 3.68:1 as a button fill, i.e. it failed.
+  const brand = branding.brand_color || "#006BDD";
   const businessAddress = formatAddress(branding);
 
   const subject = `Invoice from ${branding.business_name} — ${formatScheduled(trip.scheduled_at)}`;

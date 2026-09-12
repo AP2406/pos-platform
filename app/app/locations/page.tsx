@@ -180,7 +180,7 @@ export default async function LocationsPage({
       </div>
 
       <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="grid grid-cols-12 gap-2 px-4 py-2 text-[11px] uppercase tracking-wide text-muted-foreground border-b border-border">
+        <div className="grid grid-cols-12 gap-2 px-4 py-2 text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
           <div className="col-span-4">Location</div>
           <div className="col-span-2 text-right">Orders</div>
           <div className="col-span-2 text-right">Gross</div>
@@ -219,7 +219,7 @@ export default async function LocationsPage({
             <Stat label="COGS + labor" value={money(round2(tCogs + tLabor), currency)} />
           </div>
           <div className="bg-card border border-border rounded-lg overflow-hidden">
-            <div className="grid grid-cols-12 gap-2 px-4 py-2 text-[11px] uppercase tracking-wide text-muted-foreground border-b border-border">
+            <div className="grid grid-cols-12 gap-2 px-4 py-2 text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
               <div className="col-span-4">Location</div>
               <div className="col-span-2 text-right">Food %</div>
               <div className="col-span-2 text-right">Labor %</div>
@@ -234,8 +234,8 @@ export default async function LocationsPage({
                   <div className="col-span-4 min-w-0">
                     <div className="font-medium truncate">
                       {r.name}
-                      {best && <span className="ml-2 text-[11px] uppercase tracking-wide text-emerald-600 font-semibold">best</span>}
-                      {worst && <span className="ml-2 text-[11px] uppercase tracking-wide text-amber-600 font-semibold">watch</span>}
+                      {best && <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-600 font-semibold">best</span>}
+                      {worst && <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-600 font-semibold">watch</span>}
                     </div>
                     <div className="text-xs text-muted-foreground">{money(r.sales, currency)} sales · {money(round2(r.cogs + r.labor), currency)} prime</div>
                   </div>
@@ -260,7 +260,7 @@ export default async function LocationsPage({
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "warning" }) {
   return (
     <div className="bg-card border border-border rounded-lg p-4">
-      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className={"text-xl font-semibold tabular-nums mt-0.5 " + (tone === "warning" ? "text-amber-600" : "")}>
         {value}
       </div>

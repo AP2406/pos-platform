@@ -5,8 +5,13 @@ import { JsonLd, breadcrumb } from "../jsonld";
 import { LandingEyebrow } from "../local-landing";
 import { GUIDES } from "./guides";
 
+// The guides are kept and demoted, not rewritten: they explain how card
+// processing is priced in Canada, they never claimed we do it (after the two
+// lines removed in the interac and lower-fees guides), and they are genuine
+// ranking assets. The framing here just stops implying a sales path that does
+// not exist yet.
 export const metadata: Metadata = {
-  title: { absolute: "Guides — Payments & POS for Local Business | Surge" },
+  title: { absolute: "Guides — Card Fees & POS for Local Business | Surge" },
   description: "Plain-English guides on card processing fees, Interac, merchant statements and point-of-sale for small businesses across Ontario and the GTA.",
   alternates: { canonical: "/guides" },
   openGraph: { ...OG_BASE, url: "/guides" },
@@ -16,11 +21,11 @@ export default function GuidesIndexPage() {
   return (
     <>
       <JsonLd data={breadcrumb("Guides", "/guides")} />
-      <section className="border-b border-[#D9E1EA] bg-[linear-gradient(180deg,#F4F7FA,#FFFFFF)]">
+      <section className="border-b border-[#D9E1EA] bg-[#F4F7FA]">
         <div className="mx-auto max-w-3xl px-6 pb-14 pt-40 text-center">
           <LandingEyebrow>Guides</LandingEyebrow>
-          <h1 className="mt-4 text-[38px] font-bold leading-[1.12] tracking-[-0.015em] text-[#0A2540] sm:text-[44px]">Straight answers on payments &amp; POS.</h1>
-          <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-[#42566B]">No jargon, no sales pitch — just how card fees, Interac and merchant statements actually work, so you can spot what you&rsquo;re overpaying.</p>
+          <h1 className="mt-4 text-[38px] font-bold leading-[1.12] tracking-[-0.015em] text-[#0A2540] sm:text-[44px]">Straight answers on card fees.</h1>
+          <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-[#42566B]">No jargon, and genuinely no sales pitch — we do not process cards, so nothing here is steering you toward a rate of ours. Just how fees, Interac and merchant statements actually work.</p>
         </div>
       </section>
 

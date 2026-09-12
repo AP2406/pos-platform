@@ -316,7 +316,7 @@ export function StaffCard({
                       <p className="text-xs font-medium mb-1">Dashboard access</p>
                       {s.user_id ? (
                         <div className="space-y-1.5">
-                          <p className="text-[12px] text-muted-foreground">
+                          <p className="text-[11px] text-muted-foreground">
                             Signs in as <span className="text-foreground">{s.login_email ?? "a linked account"}</span>
                             {s.web_role ? " · " + (WEB_ROLE_LABELS[s.web_role as WebRole] ?? s.web_role) : ""}.
                             Their PIN and this login are the same person.
@@ -332,7 +332,7 @@ export function StaffCard({
                         </div>
                       ) : (
                         <div className="space-y-1.5">
-                          <p className="text-[12px] text-muted-foreground">
+                          <p className="text-[11px] text-muted-foreground">
                             {s.name} works with a PIN only. Add an email to give them the dashboard too — most kitchen and floor staff never need one.
                           </p>
                           <div className="flex flex-wrap items-end gap-2">
@@ -352,10 +352,10 @@ export function StaffCard({
                               Grant access
                             </Button>
                           </div>
-                          <p className="text-[12px] text-muted-foreground">{WEB_ROLE_HINTS[linkRole]}</p>
+                          <p className="text-[11px] text-muted-foreground">{WEB_ROLE_HINTS[linkRole]}</p>
                         </div>
                       )}
-                      {linkNote && <p className="text-[12px] mt-1.5 text-emerald-600 dark:text-emerald-400">{linkNote}</p>}
+                      {linkNote && <p className="text-[11px] mt-1.5 text-emerald-600 dark:text-emerald-400">{linkNote}</p>}
                     </div>
 
                     {/* CUST-1: per-user permission overrides */}
@@ -365,16 +365,16 @@ export function StaffCard({
                       </button>
                       {showOverrides && (
                         <div className="mt-2 space-y-1">
-                          <p className="text-[12px] text-muted-foreground">Grant or revoke a single permission for {s.name} without changing their role. &ldquo;Inherit&rdquo; uses the role.</p>
+                          <p className="text-[11px] text-muted-foreground">Grant or revoke a single permission for {s.name} without changing their role. &ldquo;Inherit&rdquo; uses the role.</p>
                           {(PERMISSION_KEYS as readonly PermissionKey[]).map((k) => {
                             const ov = s.overrides[k]; // true | false | undefined
                             const base = roleGrants(s, k);
                             const btn = (label: string, active: boolean, on: () => void, tone?: string) => (
-                              <button type="button" onClick={on} disabled={pending} className={"text-[12px] rounded px-1.5 py-0.5 border " + (active ? (tone ?? "border-foreground bg-accent font-medium") : "border-border text-muted-foreground")}>{label}</button>
+                              <button type="button" onClick={on} disabled={pending} className={"text-[11px] rounded px-1.5 py-0.5 border " + (active ? (tone ?? "border-foreground bg-accent font-medium") : "border-border text-muted-foreground")}>{label}</button>
                             );
                             return (
                               <div key={k} className="flex items-center justify-between gap-2 py-0.5">
-                                <span className="text-xs">{PERMISSION_LABELS[k]} <span className="text-[11px] text-muted-foreground">(role: {base ? "✓" : "✗"})</span></span>
+                                <span className="text-xs">{PERMISSION_LABELS[k]} <span className="text-[10px] text-muted-foreground">(role: {base ? "✓" : "✗"})</span></span>
                                 <span className="flex gap-1 shrink-0">
                                   {btn("Inherit", ov === undefined, () => setOverride(s, k, null))}
                                   {btn("Grant", ov === true, () => setOverride(s, k, true), "border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-medium")}

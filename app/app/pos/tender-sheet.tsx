@@ -281,11 +281,11 @@ export function TenderSheet(props: Props) {
                       <div className="text-base font-medium mt-3">Card reader</div>
                       <div className="text-xs text-muted-foreground mt-0.5">Tap, insert, or swipe on the terminal</div>
                       {props.terminalReady === false ? (
-                        <div className="inline-block text-[12px] mt-3 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600">Terminal offline</div>
+                        <div className="inline-block text-[11px] mt-3 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600">Terminal offline</div>
                       ) : props.terminalReady ? (
-                        <div className="inline-block text-[12px] mt-3 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600">Ready</div>
+                        <div className="inline-block text-[11px] mt-3 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600">Ready</div>
                       ) : (
-                        <div className="inline-block text-[12px] mt-3 px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Checking…</div>
+                        <div className="inline-block text-[11px] mt-3 px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Checking…</div>
                       )}
                     </button>
                   ) : props.tapToPayEnabled ? (
@@ -293,21 +293,21 @@ export function TenderSheet(props: Props) {
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7"><path d="M5 12h.01M9 7a5 5 0 0 1 0 10M13 4a9 9 0 0 1 0 16" /></svg>
                       <div className="text-base font-medium mt-3">Tap to Pay</div>
                       <div className="text-xs text-muted-foreground mt-0.5">Contactless on this device</div>
-                      <div className="inline-block text-[12px] mt-3 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600">Ready</div>
+                      <div className="inline-block text-[11px] mt-3 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600">Ready</div>
                     </button>
                   ) : (
                     <div className="rounded-lg border border-border p-5 opacity-70">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7 text-muted-foreground"><path d="M5 12h.01M9 7a5 5 0 0 1 0 10M13 4a9 9 0 0 1 0 16" /></svg>
                       <div className="text-base font-medium mt-3">Card reader</div>
                       <div className="text-xs text-muted-foreground mt-0.5">Tap, insert, or swipe</div>
-                      <div className="inline-block text-[12px] mt-3 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600">Tap to Pay in the iPhone app</div>
+                      <div className="inline-block text-[11px] mt-3 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600">Tap to Pay in the iPhone app</div>
                     </div>
                   )}
                   <button type="button" onClick={props.onCardManual} className="text-left rounded-lg border-2 border-foreground/70 p-5 hover:bg-accent transition-colors">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7"><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M6 10h.01M10 10h.01M14 10h.01M6 14h8" /></svg>
                     <div className="text-base font-medium mt-3">Enter manually</div>
                     <div className="text-xs text-muted-foreground mt-0.5">Key in the card number</div>
-                    <div className="inline-block text-[12px] mt-3 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600">Ready</div>
+                    <div className="inline-block text-[11px] mt-3 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600">Ready</div>
                   </button>
                 </div>
               ) : (

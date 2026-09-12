@@ -27,7 +27,10 @@ export default function GuidePage() {
       <GuideP>When a customer taps a Visa Debit or Debit Mastercard, the transaction can sometimes route over the credit networks (as a percentage) instead of Interac (flat). Good setups prefer the cheaper Interac rail where possible. It&rsquo;s worth confirming your terminal and processor route debit the cheap way.</GuideP>
 
       <GuideH2>The bottom line</GuideH2>
-      <GuideP>Credit is a percentage; Interac is usually pennies. If you&rsquo;re paying a percentage on debit, you&rsquo;re leaving money on the counter every day. Surge prices Interac as Interac &mdash; see <Link href="/pricing" className="font-semibold text-blue-600 hover:text-blue-700">pricing</Link>, or read <Link href="/guides/lower-credit-card-processing-fees-ontario" className="font-semibold text-blue-600 hover:text-blue-700">how to lower your processing fees</Link>.</GuideP>
+      {/* Was "Surge prices Interac as Interac — see pricing". That is a
+          present-tense claim that we process cards, and we do not yet. The
+          guide's own conclusion is unchanged; only our claim came out. */}
+      <GuideP>Credit is a percentage; Interac is usually pennies. If you&rsquo;re paying a percentage on debit, you&rsquo;re leaving money on the counter every day. Ask your processor how debit is routed and priced, and read <Link href="/guides/lower-credit-card-processing-fees-ontario" className="font-semibold text-blue-600 hover:text-blue-700">how to lower your processing fees</Link>.</GuideP>
     </GuideArticle>
   );
 }

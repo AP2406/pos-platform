@@ -48,7 +48,7 @@ export default async function DriversPage() {
                   <div className="font-medium flex items-center gap-2">
                     {d.name}
                     {d.status === "inactive" && (
-                      <span className="text-[11px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
+                      <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
                         Inactive
                       </span>
                     )}

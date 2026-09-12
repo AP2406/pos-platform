@@ -603,7 +603,7 @@ function SectionHeader({
 }) {
   return (
     <h2
-      className={`text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold mb-3 ${
+      className={`text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold mb-3 ${
         noMargin ? "" : "mt-8"
       }`}
     >
@@ -633,7 +633,7 @@ function StatCard({
 }) {
   return (
     <div className="group bg-card border border-border rounded-lg p-5 transition-all duration-200 hover:border-foreground/15 hover:shadow-[0_2px_8px_rgb(0_0_0_/_0.04)]">
-      <div className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">
+      <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-semibold">
         {label}
       </div>
       <div

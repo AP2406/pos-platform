@@ -1,14 +1,18 @@
+import { SurgeIcon } from "@/components/brand/surge-logo";
+
+// The marketing nav's mark. Kept as a named export at this path because the nav
+// and the layout both already import it from here.
+//
+// WHY THIS IS THE ICON AND NOT THE LOCKUP: the nav bar is 68px tall and the
+// mark sits beside a typeset "Surge" and six nav links on a 1152px rail. The
+// kit's floor for the horizontal lockup is 220px wide; there is nowhere near
+// that much room, and the README is explicit that below 48px you reach for the
+// dedicated optical icon rather than shrinking the full logo. So: the 32px
+// grid, which is the one drawn for this size.
+//
+// The old component inlined a bespoke card-and-lightning-bolt drawing with
+// #2563EB and #06B6D4 hard-coded. That artwork is retired; this delegates to
+// the one shared mark so the marketing site and the product can never drift.
 export function SurgeMark({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="4 17 50 30" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <line x1="10" y1="34" x2="19" y2="34" stroke="#06B6D4" strokeWidth="3" strokeLinecap="round" />
-      <line x1="6" y1="39" x2="19" y2="39" stroke="#06B6D4" strokeWidth="3" strokeLinecap="round" />
-      <line x1="10" y1="44" x2="19" y2="44" stroke="#06B6D4" strokeWidth="3" strokeLinecap="round" />
-      <g transform="rotate(-16 35 32)">
-        <rect x="20" y="22" width="30" height="20" rx="4" fill="#2563EB" />
-        <rect x="21.5" y="25.5" width="27" height="3.2" fill="#9CC2FF" />
-        <path d="M37 13 L21 35 L31 35 L27 51 L45 29 L34 29 Z" fill="#ffffff" transform="translate(35 35) scale(0.33) translate(-33 -32)" />
-      </g>
-    </svg>
-  );
+  return <SurgeIcon size={32} className={className} title={null} />;
 }

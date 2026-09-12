@@ -1,13 +1,13 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness, listBusinesses } from "@/lib/services/tenancy";
-import { CatalogClient } from "./catalog-client";
-import { ImportMenu } from "./import-menu";
-import { MenuBoardLink } from "./menu-board-link";
-import { CoursesCard } from "./courses-card";
+import { MenuBuilder } from "./menu-builder";
 import { hasFloorService } from "@/lib/modules/modes";
+import { getPreset, resolveLabel } from "@/lib/modules/resolve";
+import { MODULES } from "@/lib/modules/registry";
 import { listCourses } from "../pos/courses-actions";
 import { listKitchenStations } from "../kitchen/stations-actions";
+import { listAvailabilityWindows } from "../settings/availability-actions";
+import type { Item } from "./item-model";
 
 export default async function CatalogPage() {
   const { business, role } = await requireBusiness();
@@ -18,6 +18,15 @@ export default async function CatalogPage() {
       (b) => (b.role === "owner" || b.role === "manager") && b.id !== business.id
     );
   const supabase = await createClient();
+
+  // The page's own title follows the vertical's vocabulary — "Menu" for a
+  // restaurant, "Products" for retail, "Services" for a salon — instead of
+  // saying "Catalog" to a barber. Same resolver the sidebar link uses, so the
+  // two can never disagree.
+  const moduleLabel = resolveLabel(
+    MODULES.catalog,
+    getPreset({ industry: business.industry, config: (business as { config?: unknown }).config })
+  );
 
   const { data: itemsData } = await supabase
     .from("catalog_items")
@@ -113,7 +122,7 @@ export default async function CatalogPage() {
     });
   }
 
-  const items = (itemsData ?? []).map((i) => ({
+  const items: Item[] = (itemsData ?? []).map((i) => ({
     id: i.id as string,
     name: i.name as string,
     price: Number(i.price),
@@ -148,74 +157,39 @@ export default async function CatalogPage() {
     rate: Number(r.rate),
   }));
 
+  const floorService = hasFloorService(business);
+
   // Courses (full-service only): drive both the per-item "default course" picker
-  // and the Courses management card on this page.
-  const courseRows = hasFloorService(business) ? await listCourses() : [];
+  // and the Courses tab. Fetched whenever the business HAS courses as a concept,
+  // not only when it already has rows — the old page hid the editor behind
+  // `courseRows.length > 0`, which meant a restaurant with none could never add
+  // its first one.
+  const courseRows = floorService ? await listCourses() : [];
   const courses = courseRows.map((c) => ({ id: c.id, name: c.name }));
 
   // Prep stations (full-service only): drive the per-item station picker.
-  const stationRows = hasFloorService(business) ? await listKitchenStations() : [];
+  const stationRows = floorService ? await listKitchenStations() : [];
   const stations = stationRows.map((s) => ({ id: s.id, name: s.name }));
 
+  // Menu hours. Same rows and same actions as the Settings card — this screen is
+  // just where a person editing the menu expects to find them.
+  const availabilityWindows = await listAvailabilityWindows();
+
   return (
-    <div>
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Catalog</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            The products and services you sell at checkout.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {canManage && (
-            <Link
-              href="/app/recipes"
-              className="text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent"
-            >
-              Recipes &amp; costing
-            </Link>
-          )}
-          {canManage && (
-            <Link
-              href="/app/purchasing"
-              className="text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent"
-            >
-              Purchasing
-            </Link>
-          )}
-          {canManage && (
-            <Link
-              href="/app/waste"
-              className="text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent"
-            >
-              Waste
-            </Link>
-          )}
-          {hasOtherLocations && (
-            <Link
-              href="/app/catalog/push"
-              className="text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent"
-            >
-              Push to locations
-            </Link>
-          )}
-          <MenuBoardLink businessId={business.id} />
-          <ImportMenu />
-        </div>
-      </div>
-      {courseRows.length > 0 && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-6">
-          <h2 className="text-sm font-semibold mb-3">Courses</h2>
-          <CoursesCard initial={courseRows} />
-        </div>
-      )}
-      <CatalogClient
-        initialItems={items}
-        taxRates={taxRates}
-        initialCategoryColors={categoryColors}
-        courses={courses}
-        stations={stations}
-      />
-    </div>
+    <MenuBuilder
+      businessId={business.id}
+      moduleLabel={moduleLabel}
+      currency={business.currency}
+      initialItems={items}
+      taxRates={taxRates}
+      initialCategoryColors={categoryColors}
+      courses={courses}
+      stations={stations}
+      availabilityWindows={availabilityWindows}
+      courseRows={courseRows}
+      hasFloorService={floorService}
+      canManage={canManage}
+      hasOtherLocations={hasOtherLocations}
+    />
   );
 }

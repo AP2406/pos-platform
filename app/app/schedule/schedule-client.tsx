@@ -209,7 +209,7 @@ export function ScheduleClient({
             >
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{d.label}</div>
               {timeOff.filter((t) => t.date === d.key).map((t) => (
-                <div key={t.id} className="text-[12px] text-amber-600 mb-1 flex items-center justify-between gap-1">
+                <div key={t.id} className="text-[11px] text-amber-600 mb-1 flex items-center justify-between gap-1">
                   <span>{t.staffName} — off</span>
                   <button type="button" onClick={() => removeOff(t.id)} className="underline hover:text-red-600">✕</button>
                 </div>
@@ -266,7 +266,7 @@ export function ScheduleClient({
             </div>
           )}
         </div>
-        <p className="text-[12px] text-muted-foreground mt-2">Applying adds the template&apos;s assigned shifts to this week as unpublished drafts (unassigned slots are skipped).</p>
+        <p className="text-[11px] text-muted-foreground mt-2">Applying adds the template&apos;s assigned shifts to this week as unpublished drafts (unassigned slots are skipped).</p>
       </div>
 
       <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4 mb-4">
@@ -300,7 +300,7 @@ export function ScheduleClient({
             {swapMsg && <span className="text-xs text-emerald-600 pb-2">{swapMsg}</span>}
           </div>
         </div>
-        <p className="text-[12px] text-muted-foreground mt-2">Scheduling a shift on someone&apos;s day off is blocked. Swap requests go to Approvals; on approve the shift is reassigned.</p>
+        <p className="text-[11px] text-muted-foreground mt-2">Scheduling a shift on someone&apos;s day off is blocked. Swap requests go to Approvals; on approve the shift is reassigned.</p>
       </div>
 
       {forecast.hours > 0 && (
@@ -312,7 +312,7 @@ export function ScheduleClient({
             <div><div className="text-muted-foreground text-xs">Forecast sales</div><div className="text-lg font-semibold tabular-nums">{forecast.sales > 0 ? "$" + forecast.sales.toFixed(0) : "—"}</div></div>
             <div><div className="text-muted-foreground text-xs">Projected labor %</div><div className={"text-lg font-semibold tabular-nums " + (forecast.laborPct != null && forecast.laborPct > 30 ? "text-amber-600" : "")}>{forecast.laborPct != null ? forecast.laborPct + "%" : "—"}</div></div>
           </div>
-          <p className="text-[12px] text-muted-foreground mt-2">
+          <p className="text-[11px] text-muted-foreground mt-2">
             Sales forecast = trailing 4-week average. {forecast.coverage < 100 ? forecast.coverage + "% of scheduled hours have a pay rate set (others count as $0)." : "Set pay rates under Team."}
           </p>
         </div>

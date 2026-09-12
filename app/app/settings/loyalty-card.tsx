@@ -48,7 +48,7 @@ export function LoyaltyCard({ initial }: { initial: LoyaltySettings }) {
         <div className="space-y-1">
           <Label className="text-xs">Points to redeem $1</Label>
           <Input value={redeem} onChange={(e) => { setRedeem(e.target.value); setSaved(false); }} inputMode="numeric" className="h-9" />
-          <p className="text-[12px] text-muted-foreground">100 points = ${dollarPer100} off</p>
+          <p className="text-[11px] text-muted-foreground">100 points = ${dollarPer100} off</p>
         </div>
       </div>
       <div className="flex items-center gap-3">

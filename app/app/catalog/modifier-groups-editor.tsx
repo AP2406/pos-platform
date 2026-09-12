@@ -12,6 +12,7 @@ import {
   deleteModifierGroup,
   setModifierChildGroup,
 } from "./actions";
+import { describeGroup } from "./item-model";
 
 export type ModOption = { id: string; name: string; price: number; child_group_id: string | null };
 export type ModGroup = {
@@ -118,18 +119,26 @@ export function ModifierGroupsEditor({ itemId, initial, catalogItems = [] }: { i
   }
 
   return (
-    <div className="space-y-3 pt-3 border-t border-border">
-      <p className="text-xs text-muted-foreground pl-3">
-        Modifier groups &mdash; e.g. a required &quot;Temperature&quot; (choose 1) or optional &quot;Add-ons.&quot; Mark a group required and set how many a guest must pick; the POS enforces it.
-      </p>
+    <div className="space-y-3 border-t border-line-soft pt-4">
+      <div>
+        <h3 className="text-[13px] font-medium">Modifier groups</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          A required &quot;Temperature&quot; (choose 1) or an optional &quot;Add-ons.&quot;
+          Mark a group required and set how many a guest must pick; the register
+          enforces it.
+        </p>
+      </div>
 
-      <div className="pl-3 space-y-3">
+      <div className="space-y-3">
         {groups.map((g) => (
-          <div key={g.id} className="rounded-md border border-border p-3 space-y-2">
+          <div key={g.id} className="rounded-lg bg-raised p-3 space-y-2 ring-1 ring-line-soft">
             <div className="flex items-center gap-2">
               <Input value={g.name} onChange={(e) => patch(g.id, { name: e.target.value })} onBlur={(e) => saveGroup(g.id, { name: e.target.value })} className="h-8 flex-1" />
               <button type="button" onClick={() => removeGroup(g.id)} disabled={pending} className="text-xs text-muted-foreground underline hover:text-red-600">Remove group</button>
             </div>
+            {/* The mockup's "Required · Select 1" line, generated from the real
+                required / min_select / max_select columns rather than typed out. */}
+            <p className="text-xs text-muted-foreground">{describeGroup(g)}</p>
             <div className="flex flex-wrap items-center gap-3 text-xs">
               <label className="flex items-center gap-1.5">
                 <input type="checkbox" checked={g.required} onChange={(e) => saveGroup(g.id, { required: e.target.checked, min_select: e.target.checked ? Math.max(1, g.min_select) : g.min_select })} className="h-4 w-4" />
@@ -207,14 +216,14 @@ export function ModifierGroupsEditor({ itemId, initial, catalogItems = [] }: { i
         ))}
       </div>
 
-      <div className="pl-3 flex items-end gap-2">
+      <div className="flex items-end gap-2">
         <div className="space-y-1">
           <Label className="text-xs">New group</Label>
           <Input value={newGroup} onChange={(e) => setNewGroup(e.target.value)} placeholder="Temperature" className="h-9 w-40" onKeyDown={(e) => { if (e.key === "Enter") addGroup(); }} />
         </div>
         <Button size="sm" onClick={addGroup} disabled={pending || !newGroup.trim()}>Add group</Button>
       </div>
-      {err && <p className="text-sm text-red-600 pl-3">{err}</p>}
+      {err && <p role="alert" className="text-sm text-destructive">{err}</p>}
     </div>
   );
 }
