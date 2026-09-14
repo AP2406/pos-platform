@@ -1,244 +1,472 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
-import { Reveal } from "./reveal";
 import { OG_BASE } from "./shared-metadata";
-import { Crumb, Tick, ComingSoonBadge, PaymentsComingSoon, btnPrimary, btnOutline } from "./ui";
+import { JsonLd } from "./jsonld";
+import {
+  Band,
+  Container,
+  Eyebrow,
+  Heading,
+  ArrowRight,
+  btnPrimary,
+  btnOutline,
+  btnOutlineAccent,
+  linkAction,
+} from "./_components/primitives";
+import { ImageSlot, HOME_IMAGE_SLOTS } from "./_components/image-slot";
+import { TerminalImageFrame, ComingSoonBadge } from "./_components/coming-soon-badge";
+import { SolutionCard } from "./_components/solution-card";
+import { ProductPreviewFrame } from "./_components/product-preview";
+import { PreviewTabs, type PreviewTab } from "./_components/preview-tabs";
+import { FloorPlanPanel, KitchenPanel, OrdersPanel, ReportsPanel } from "./_components/preview-panels";
+import { FaqAccordion, type FaqItem } from "./_components/faq-accordion";
+import { CtaBand } from "./_components/cta-band";
+import { TERMINAL_COPY, TERMINAL_CTA, TERMINAL_CTA_HREF } from "@/lib/services/terminal-availability";
 
-// THE PAGE NOW LEADS WITH THE PRODUCT WE SHIP.
+// THE HOME PAGE, REBUILT AGAINST mockups/01-home.jpg.
 //
-// It used to open "Stop overpaying to get paid." with a savings calculator
-// beside it — a payments pitch, for a rail we are not live on. The restaurant
-// owner who lands here has to understand in one screen that this is a
-// point-of-sale system; the processing story is a labelled "coming soon" band
-// further down, not the headline and not a number.
+// Section order is the mockup's: hero → three value props → the charcoal
+// product band with tabbed previews → solutions pair → pricing and planned
+// terminal → three onboarding steps → FAQ → closing CTA.
 //
-// Section order, and why: register first (what it is) → what it replaces
-// (the stack of subscriptions) → the rooms it runs (floor, kitchen, counter)
-// → guests (online/QR/kiosk) → back office → payments, coming soon → CTA.
-// Payments sit after the product is understood and before the ask, which is
-// where a caveat belongs: late enough not to be the pitch, early enough that
-// nobody books a demo without having read it.
+// WHERE THE COPY DEPARTS FROM THE MOCKUP, AND WHY. START-HERE.md is explicit
+// that "small raster text … is not production copy. Use the written rules …
+// when they differ", and CONTENT-AND-LAUNCH-RULES.md is the written rule. Four
+// lines in 01-home.jpg would have published a claim we cannot stand behind:
+//
+//   1. "Straightforward rates for card payments." → a published-rate promise on
+//      a page that has no rates. Replaced with the approved market caveat.
+//   2. "See our pricing / Transparent and easy to understand." + "View all
+//      rates and fees" → both imply a rate card exists. Replaced with the
+//      approved "Request pricing" enquiry flow.
+//   3. "On-site or remote training" → onsite service is not something we can
+//      promise in an unconfirmed market. Now "Remote training".
+//   4. The FAQ answers are written here rather than lifted from the raster,
+//      because two of the three questions are about price and setup time and
+//      the mockup's answers are not legible at 971px anyway.
+//
+// Everything else — headings, eyebrows, CTA labels, section order — is the
+// mockup's, verbatim.
+
 export const metadata: Metadata = {
-  // "in the GTA" came out of the title and "GTA" out of both descriptions. The
-  // slot it freed goes to "Cafes" rather than to a replacement geography —
-  // there is no market claim to make here, and a title reading "worldwide"
-  // would be a bigger claim than the one we just removed.
-  title: { absolute: "Point of Sale for Restaurants, Cafes & Retail | Surge" },
-  description: "Surge is a point-of-sale system for restaurants, cafes and shops — register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports. Card processing coming soon. Book a free demo.",
+  // No geography, no competitor, no price. "Point of sale + payments" mirrors
+  // the hero eyebrow; "payments" is safe because the terminal's state is stated
+  // in the description itself.
+  title: { absolute: "Point of Sale & Payments for Restaurants and Local Business | Surge" },
+  description:
+    "Surge is a point-of-sale system for restaurants, cafés, shops and service counters — orders, floor plan, kitchen display, inventory and reports in one place. Payment terminal coming soon; request pricing for your market.",
   alternates: { canonical: "/" },
-  openGraph: { ...OG_BASE, title: "Point of Sale for Restaurants, Cafes & Retail | Surge", description: "A point-of-sale system for restaurants, cafes and shops — register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports.", url: "/" },
+  openGraph: {
+    ...OG_BASE,
+    title: "Point of Sale & Payments for Restaurants and Local Business | Surge",
+    description:
+      "Orders, floor plan, kitchen display, inventory and reports in one point-of-sale system. Payment terminal coming soon.",
+    url: "/",
+  },
 };
 
-// Every item here is a screen that exists in the product. Verified in
-// app/app/pos, app/app/floor, app/app/kitchen, app/app/catalog, app/app/orders,
-// app/app/inventory, app/app/staff + schedule + clock, app/app/reports,
-// app/app/reservations and app/order/[businessId]. Nothing aspirational.
-const rooms = [
+/* ------------------------------------------------------------- section data */
+
+const VALUE_PROPS = [
   {
-    title: "The floor",
-    body: "Map your room, open a table, fire by seat and course, split a cheque, and hand a table between servers without losing the order.",
-    href: "/pos-for-restaurants",
-    linkText: "POS for restaurants",
+    title: "Built-in POS",
+    body: "Everything you need to take orders, manage operations and grow.",
+    icon: (
+      <>
+        <rect x="3" y="7" width="18" height="12" rx="2" />
+        <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M7 13h3M14 13h3" />
+      </>
+    ),
   },
   {
-    title: "The line",
-    body: "Tickets land on the kitchen display the moment they are sent, routed to the station that cooks them. No handwriting, no lost dupes.",
-    href: "/pos-for-restaurants",
-    linkText: "See the kitchen display",
+    title: "Clear payment pricing",
+    // Mockup: "Simple, transparent rates with no surprises." That is a rate
+    // claim on a page with no rates, so the promise becomes the thing we can
+    // actually keep — a written quote with nothing hidden under it.
+    body: "One written quote for your market, with nothing hidden underneath it.",
+    icon: (
+      <>
+        <rect x="2.5" y="6" width="19" height="12" rx="2" />
+        <path d="M2.5 10h19M6 14.5h3" />
+      </>
+    ),
   },
   {
-    title: "The counter",
-    body: "Ring up, apply a discount, take a return, print or email the receipt. Stock moves as you sell, so counts stay honest.",
-    href: "/pos-for-retail",
-    linkText: "POS for retail",
+    title: "Local setup & support",
+    body: "Real people who know your business and are here to help.",
+    icon: (
+      <>
+        <path d="M4 13a8 8 0 0 1 16 0" />
+        <rect x="2.5" y="13" width="4" height="6" rx="1.6" />
+        <rect x="17.5" y="13" width="4" height="6" rx="1.6" />
+        <path d="M19.5 19v.5a2.5 2.5 0 0 1-2.5 2.5h-2" />
+      </>
+    ),
   },
 ];
 
-const guestWays = [
-  "Online ordering from your own menu page",
-  "QR ordering and pay-at-table",
-  "Self-serve kiosk",
-  "Customer-facing display and digital menu board",
+// EACH TAB SHOWS THE SCREEN IT NAMES AND THE SCREEN IT HANDS WORK TO.
+// 01-home.jpg draws two frames side by side under the "Floor plan" tab — the
+// floor and the kitchen — because that is the handoff a service actually makes.
+// The other tabs follow the same rule: an order goes floor → kitchen, a ticket
+// goes kitchen → orders. Reports is where work ends, so it shows alone.
+const PREVIEW_TABS: PreviewTab[] = [
+  {
+    id: "floor-plan",
+    label: "Floor plan",
+    panel: (
+      <div className="grid gap-[var(--surge-space-5)] sm:grid-cols-2">
+        <ProductPreviewFrame screenLabel="Floor plan">
+          <FloorPlanPanel />
+        </ProductPreviewFrame>
+        <ProductPreviewFrame screenLabel="Kitchen display">
+          <KitchenPanel />
+        </ProductPreviewFrame>
+      </div>
+    ),
+  },
+  {
+    id: "orders",
+    label: "Orders",
+    panel: (
+      <div className="grid gap-[var(--surge-space-5)] sm:grid-cols-2">
+        <ProductPreviewFrame screenLabel="Orders">
+          <OrdersPanel />
+        </ProductPreviewFrame>
+        <ProductPreviewFrame screenLabel="Floor plan">
+          <FloorPlanPanel />
+        </ProductPreviewFrame>
+      </div>
+    ),
+  },
+  {
+    id: "kitchen",
+    label: "Kitchen",
+    panel: (
+      <div className="grid gap-[var(--surge-space-5)] sm:grid-cols-2">
+        <ProductPreviewFrame screenLabel="Kitchen display">
+          <KitchenPanel />
+        </ProductPreviewFrame>
+        <ProductPreviewFrame screenLabel="Orders">
+          <OrdersPanel />
+        </ProductPreviewFrame>
+      </div>
+    ),
+  },
+  {
+    id: "reports",
+    label: "Reports",
+    panel: (
+      <div className="sm:max-w-[60%]">
+        <ProductPreviewFrame screenLabel="Reports">
+          <ReportsPanel />
+        </ProductPreviewFrame>
+      </div>
+    ),
+  },
 ];
 
-const backOffice = [
-  { title: "Menu and catalog", body: "Build the menu once — items, modifiers, prices, availability. 86 something and it clears every screen at the same time." },
-  { title: "Inventory and cost", body: "Stock counts, purchasing, recipes and waste, so you can see what a plate costs you and not just what it sells for." },
-  { title: "Staff and time clock", body: "Roles and permissions, scheduling, clock-in, attendance and a labour view against sales." },
-  { title: "Reports", body: "Daily totals, best sellers, busiest hours, and exports for whoever does your books." },
+// Four planned capabilities. Every one is written in future tense and the list
+// carries its own heading saying so, because this is hardware that does not
+// exist yet and a present-tense feature list is a specification.
+const TERMINAL_POINTS = [
+  "Accept tap, insert and swipe (planned)",
+  "Works with Surge POS (planned)",
+  "Designed for busy counters (planned)",
+  "More details coming soon",
 ];
+
+const STEPS = [
+  { n: "01", title: "Plan your setup", body: "We'll learn about your business and recommend the right setup." },
+  { n: "02", title: "Bring your menu", body: "We'll help you get your items, modifiers and settings just right." },
+  // Mockup: "On-site or remote training…". Onsite service is not confirmed for
+  // any market, and the rules forbid advertising it without confirmation.
+  { n: "03", title: "Train your team", body: "Remote training to get everyone confident and ready." },
+];
+
+const FAQS: FaqItem[] = [
+  {
+    q: "How does pricing work?",
+    a: "Plans, currencies and payment options vary by market, so there is no published rate card. Tell us where you are and how your business runs, and we will put a written quote together for you.",
+  },
+  {
+    q: "How long does setup take?",
+    a: "It depends on the size of your menu or catalogue and how many devices you are running. We plan it with you on a call first, so you know what is involved before you commit to a date.",
+  },
+  {
+    q: "Do you offer training and support?",
+    a: "Yes. We set the system up with you, walk your staff through the screens they will actually use, and stay reachable afterwards at info@surgetechpos.com or +1 888 648 8097.",
+  },
+];
+
+// FAQPage structured data built from the same array the accordion renders, so
+// the markup and the rich result cannot disagree — a mismatch between the two
+// is a manual action waiting to happen.
+const FAQ_JSONLD = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: FAQS.map((f) => ({
+    "@type": "Question",
+    name: f.q,
+    acceptedAnswer: { "@type": "Answer", text: f.a },
+  })),
+};
+
+/* -------------------------------------------------------------------- page */
 
 export default function HomePage() {
   return (
     <>
-      <section className="border-b border-[#D9E1EA] bg-[#F4F7FA]">
-        <div className="mx-auto max-w-6xl px-6 pb-20 pt-40">
-          <div className="grid items-center gap-14 lg:grid-cols-2">
-            <div>
-              <Crumb>Point of sale</Crumb>
-              <h1 className="mt-4 text-[44px] font-bold leading-[1.12] tracking-[-0.015em] text-[#0A2540] sm:text-[50px]">The till that runs the whole room.</h1>
-              <p className="mt-5 max-w-lg text-lg leading-relaxed text-[#42566B]">Surge is a point-of-sale system for restaurants, cafes and shops &mdash; register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports, in one place.</p>
-              {/* THE HERO PAIR NOW LEADS WITH THE PILOT. "Book a free demo" was
-                  primary and is now the outline button beside it; "See the point
-                  of sale" moved out of this row because three buttons is not a
-                  choice, it is a menu — /pos is still one click away in the nav,
-                  in the footer, and from "Explore the point of sale" further
-                  down this page. */}
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Link href="/pricing#apply" className={btnPrimary}>Join the free pilot</Link>
-                <Link href="/book" className={btnOutline}>Book a free demo</Link>
-              </div>
-              <div className="mt-8 grid gap-2.5">
-                {/* First line is the offer, stated plainly and without a number
-                    of spots, a duration or a deadline attached to it. */}
-                <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Free for a limited time while the pilot runs</div>
-                <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Runs on the tablet you already own</div>
-                <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Floor, kitchen and counter on one system</div>
-                {/* Was "Set up with you in person across the GTA". In-person
-                    setup is not something we can deliver outside driving
-                    distance, so the promise changes rather than disappearing:
-                    the onboarding call is real, it is the same work, and it
-                    says "over a call" so nobody expects a van. */}
-                <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Set up with you over a call, wherever you are</div>
-              </div>
+      <JsonLd data={FAQ_JSONLD} />
+
+      {/* ------------------------------------------------------------ hero -- */}
+      {/* The header is `overlay` on this route, so the hero owns the top of the
+          viewport and has to clear 72px of nav itself. On mobile the text comes
+          FIRST in the DOM and the photograph after it — DESIGN-SYSTEM.md asks
+          for exactly that, and it is source order rather than a CSS reorder, so
+          a screen reader gets the same sequence. */}
+      <section aria-labelledby="hero-title" className="relative overflow-hidden bg-[var(--surge-surface)]">
+        {/* 44%, where the mockup gives the photograph roughly 52%. Inter needs
+            the extra width on the left to hold "Grow your business." on one
+            line at the design's H1 size; the alternative was a third line in
+            the headline, which is a bigger change to the hero than four
+            percentage points of picture. */}
+        <div className="absolute inset-y-0 right-0 hidden w-[44%] lg:block">
+          <TerminalImageFrame className="h-full" position="bottom-right">
+            <ImageSlot spec={HOME_IMAGE_SLOTS.hero} rounded={false} fill />
+          </TerminalImageFrame>
+        </div>
+
+        <Container className="relative">
+          <div className="pb-[var(--surge-space-7)] pt-[calc(72px+var(--surge-space-7))] lg:w-[56%] lg:pb-[var(--surge-space-9)] lg:pr-[var(--surge-space-5)] lg:pt-[calc(72px+var(--surge-space-8))]">
+            <Eyebrow>Point of sale + payments</Eyebrow>
+            <Heading as="h1" size="display" id="hero-title" className="mt-[var(--surge-space-4)] text-[var(--surge-ink)]">
+              Run the rush.
+              <br />
+              Grow your business.
+            </Heading>
+            <p className="mt-[var(--surge-space-5)] max-w-[34ch] text-[length:var(--surge-body-lg)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">
+              Point of sale, payments and everyday operations, together. Built for restaurants and local businesses.
+            </p>
+            <div className="mt-[var(--surge-space-6)] flex flex-col gap-[var(--surge-space-3)] sm:flex-row">
+              <Link href="/book" className={btnPrimary}>
+                Book a demo <ArrowRight />
+              </Link>
+              {/* Anchors the planned-terminal band further down this page — the
+                  mockup's second hero button, with a destination that exists. */}
+              <a href="#payment-terminal" className={btnOutline}>
+                Explore the planned terminal
+              </a>
             </div>
-            <div className="overflow-hidden rounded-md border border-[#D9E1EA] bg-white shadow-[0_10px_30px_-18px_rgba(10,37,64,0.35)]">
-              <div className="relative aspect-[4/3] w-full">
-                <Image src="/jpg18.png" alt="A bar owner taking an order on a Surge point-of-sale tablet" fill priority sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover" />
-              </div>
-              {/* This strip used to read "Your rate with Surge — 2.5% + 15¢".
-                  A rate badge in the hero was the site's loudest payments
-                  claim; it is now the coming-soon note, in the same slot. */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#D9E1EA] px-5 py-3.5">
-                <span className="text-xs font-bold uppercase tracking-[0.05em] text-[#7A8CA0]">Card processing</span>
-                <ComingSoonBadge />
-              </div>
-            </div>
+            <p className="mt-[var(--surge-space-5)] text-[length:var(--surge-small)] text-[var(--surge-muted)]">
+              {TERMINAL_COPY.note}
+            </p>
           </div>
-        </div>
+
+          {/* The mobile photograph. Same slot, same label, after the copy. */}
+          <div className="pb-[var(--surge-space-7)] lg:hidden">
+            <TerminalImageFrame position="bottom-right">
+              <ImageSlot spec={HOME_IMAGE_SLOTS.hero} />
+            </TerminalImageFrame>
+          </div>
+        </Container>
       </section>
 
-      <section className="border-b border-[#D9E1EA] bg-white py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal>
-            <div className="mx-auto max-w-2xl text-center">
-              <Crumb>What it replaces</Crumb>
-              <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">One system instead of five subscriptions</h2>
-              <p className="mt-4 leading-relaxed text-[#42566B]">Most independents end up with a till, a separate kitchen screen, a booking tool, a spreadsheet for stock and another for the schedule. Surge is all of it, and the pieces already know about each other.</p>
-            </div>
-            <div className="mt-12 grid gap-6 md:grid-cols-3">
-              {rooms.map((r) => (
-                <div key={r.title} className="rounded-md border border-[#D9E1EA] border-t-[3px] border-t-[#0A2540] p-7">
-                  <h3 className="text-lg font-bold text-[#0A2540]">{r.title}</h3>
-                  <p className="mt-2 text-[14.5px] leading-relaxed text-[#42566B]">{r.body}</p>
-                  <Link href={r.href} className="mt-4 inline-block text-[14.5px] font-bold text-[#1B6DC1] hover:underline">{r.linkText} &rarr;</Link>
+      {/* ----------------------------------------------------- value props -- */}
+      <Band tone="canvas" className="border-y border-[var(--surge-border)]">
+        <Container>
+          <ul className="grid gap-[var(--surge-space-6)] py-[var(--surge-space-6)] md:grid-cols-3 md:divide-x md:divide-[var(--surge-border)]">
+            {VALUE_PROPS.map((v, i) => (
+              <li key={v.title} className={"flex gap-[var(--surge-space-4)] " + (i > 0 ? "md:pl-[var(--surge-space-6)]" : "")}>
+                {/* The accent is 3.40:1 on this surface — under AA for text,
+                    over WCAG's 3:1 for a meaningful graphic, which is what an
+                    icon beside its own label is. */}
+                <svg viewBox="0 0 24 24" aria-hidden="true" className="h-8 w-8 flex-none text-[var(--surge-accent)]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  {v.icon}
+                </svg>
+                <div>
+                  <h2 className="text-[length:var(--surge-h4)] font-bold text-[var(--surge-ink)]">{v.title}</h2>
+                  <p className="mt-1 max-w-[34ch] text-[length:var(--surge-small)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">{v.body}</p>
                 </div>
-              ))}
-            </div>
-          </Reveal>
-        </div>
-      </section>
+              </li>
+            ))}
+          </ul>
+        </Container>
+      </Band>
 
-      <section className="border-b border-[#D9E1EA] bg-[#F4F7FA] py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal>
-            <div className="grid items-center gap-12 lg:grid-cols-2">
+      {/* --------------------------------------------- charcoal product band */}
+      <Band tone="dark" labelledBy="product-band-title">
+        <Container className="py-[var(--surge-space-9)]">
+          <PreviewTabs
+            label="Product previews"
+            tabs={PREVIEW_TABS}
+            aside={
               <div>
-                <Crumb>Guests order themselves</Crumb>
-                <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">Four more ways an order gets in</h2>
-                <p className="mt-4 leading-relaxed text-[#42566B]">Every one of these lands in the same ticket queue your servers use, so nobody is re-keying an order from a tablet on the pass.</p>
-                <div className="mt-6 grid gap-3">
-                  {guestWays.map((g) => (
-                    <div key={g} className="flex items-start gap-2.5 text-[15px] font-medium text-[#42566B]"><Tick />{g}</div>
+                <Heading as="h2" size="bandDisplay" id="product-band-title">
+                  From first order
+                  <br />
+                  to final payment.
+                </Heading>
+                <p className="mt-[var(--surge-space-5)] max-w-[40ch] text-[length:var(--surge-body)] leading-[var(--surge-leading-body)] text-[var(--surge-on-dark-muted)]">
+                  A modern POS built for the pace of your business. Take orders, send to the kitchen, accept payments and keep everything in sync.
+                </p>
+              </div>
+            }
+          />
+        </Container>
+      </Band>
+
+      {/* --------------------------------------------------------- solutions */}
+      <Band tone="surface" labelledBy="solutions-title">
+        <Container className="py-[var(--surge-space-8)]">
+          <Eyebrow>
+            <span id="solutions-title">Solutions for your business</span>
+          </Eyebrow>
+          <div className="mt-[var(--surge-space-5)] grid gap-[var(--surge-space-5)] md:grid-cols-2">
+            <SolutionCard
+              href="/pos-for-restaurants"
+              title="Restaurants & cafés"
+              body="Table service, quick service and everything in between."
+              image={HOME_IMAGE_SLOTS.restaurants}
+            />
+            <SolutionCard
+              href="/pos-for-retail"
+              title="Retail & service counters"
+              body="Simple, powerful tools for everyday sales."
+              image={HOME_IMAGE_SLOTS.retail}
+              // The retail photograph contains the reader, so the label is
+              // mandatory here — including at 375px, where it renders as a row
+              // under the picture rather than floating over it.
+              showTerminalLabel
+            />
+          </div>
+        </Container>
+      </Band>
+
+      {/* ------------------------------------- pricing / planned terminal --- */}
+      <Band tone="canvas" className="border-y border-[var(--surge-border)]">
+        <Container className="grid gap-[var(--surge-space-7)] py-[var(--surge-space-8)] lg:grid-cols-2 lg:gap-0">
+          <div className="lg:pr-[var(--surge-space-8)]">
+            <Eyebrow>Simple, transparent pricing</Eyebrow>
+            <Heading as="h2" size="h2" className="mt-3 text-[var(--surge-ink)]">
+              Know what you pay.
+            </Heading>
+            {/* Mockup: "Straightforward rates for card payments." Replaced with
+                the approved market caveat — there is no published rate. */}
+            <p className="mt-3 max-w-[42ch] text-[length:var(--surge-body)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">
+              {TERMINAL_COPY.marketNote}
+            </p>
+            <div className="mt-[var(--surge-space-5)] rounded-[var(--surge-radius-card)] border border-[var(--surge-border)] bg-[var(--surge-surface)] p-[var(--surge-space-5)]">
+              <h3 className="text-[length:var(--surge-h3)] font-bold text-[var(--surge-ink)]">Request pricing</h3>
+              <p className="mt-1.5 max-w-[40ch] text-[length:var(--surge-small)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">
+                Tell us where you are and how your business runs, and we will put a written quote together.
+              </p>
+            </div>
+            {/* Mockup: "View all rates and fees →". There is no rates page and
+                there are no fees to list, so the link goes to the enquiry. */}
+            <Link href="/pricing" className={linkAction + " mt-[var(--surge-space-5)] inline-flex items-center gap-2 text-[length:var(--surge-small)]"}>
+              See plans and request a quote <ArrowRight />
+            </Link>
+          </div>
+
+          <div id="payment-terminal" className="scroll-mt-[96px] lg:border-l lg:border-[var(--surge-border)] lg:pl-[var(--surge-space-8)]">
+            <div className="flex flex-wrap items-center gap-3">
+              <Eyebrow>Payment terminal</Eyebrow>
+              <ComingSoonBadge />
+            </div>
+            <Heading as="h2" size="h2" className="mt-3 text-[var(--surge-ink)]">
+              Explore the planned terminal.
+            </Heading>
+            <p className="mt-3 max-w-[44ch] text-[length:var(--surge-body)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">
+              A compact card reader designed for your business. {TERMINAL_COPY.note}
+            </p>
+
+            <div className="mt-[var(--surge-space-5)] grid items-center gap-[var(--surge-space-5)] sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+              {/* `below`, not a floated corner: a 220px square is too small to
+                  carry the pill over the picture without covering the reader
+                  itself, which is the one thing the shot is of. */}
+              <TerminalImageFrame position="below">
+                <ImageSlot spec={HOME_IMAGE_SLOTS.terminal} />
+              </TerminalImageFrame>
+              <div>
+                <h3 className="text-[length:var(--surge-micro)] font-bold uppercase tracking-[0.08em] text-[var(--surge-muted)]">
+                  Planned — not yet available
+                </h3>
+                <ul className="mt-2 space-y-2 text-[length:var(--surge-small)] text-[var(--surge-ink)]">
+                  {TERMINAL_POINTS.map((p) => (
+                    <li key={p} className="flex gap-2.5">
+                      <svg viewBox="0 0 20 20" aria-hidden="true" className="mt-0.5 h-4 w-4 flex-none text-[var(--surge-action)]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="10" cy="10" r="8" />
+                        <path d="M6.5 10.2l2.4 2.4 4.6-5" />
+                      </svg>
+                      <span>{p}</span>
+                    </li>
                   ))}
-                </div>
-                <Link href="/pos" className="mt-7 inline-block text-[15px] font-bold text-[#1B6DC1] hover:underline">Explore the point of sale &rarr;</Link>
-              </div>
-              <div className="relative aspect-[4/3] overflow-hidden rounded-md border border-[#D9E1EA]">
-                <Image src="/jpg16.png" alt="A cafe owner checking an incoming order on a Surge POS tablet" fill sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover" />
+                </ul>
               </div>
             </div>
-          </Reveal>
-        </div>
-      </section>
 
-      <section className="border-b border-[#D9E1EA] bg-white py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal>
-            <div className="mx-auto max-w-2xl text-center">
-              <Crumb>After close</Crumb>
-              <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">The back office is part of the till</h2>
-              <p className="mt-4 leading-relaxed text-[#42566B]">Because the register already knows what sold, the rest of the paperwork mostly fills itself in.</p>
-            </div>
-            <div className="mt-12 grid gap-6 sm:grid-cols-2">
-              {backOffice.map((b) => (
-                <div key={b.title} className="rounded-md border border-[#D9E1EA] p-7">
-                  <h3 className="text-lg font-bold text-[#0A2540]">{b.title}</h3>
-                  <p className="mt-2 text-[14.5px] leading-relaxed text-[#42566B]">{b.body}</p>
-                </div>
-              ))}
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
-      <section className="border-b border-[#D9E1EA] bg-white pb-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal>
-            <div className="mx-auto max-w-2xl text-center">
-              <Crumb>Industries served</Crumb>
-              <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">Built for businesses like yours</h2>
-              <p className="mt-4 leading-relaxed text-[#42566B]">From the counter to the pass, Surge runs real-world rooms.</p>
-            </div>
-            <div className="mt-12 grid gap-6 sm:grid-cols-3">
-              <figure className="overflow-hidden rounded-md border border-[#D9E1EA]">
-                <div className="relative aspect-[16/10]"><Image src="/jpg9.jpg" alt="A busy local coffee shop counter at the morning rush" fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover" /></div>
-                <figcaption className="px-5 py-4"><div className="font-bold text-[#0A2540]">Cafes &amp; quick-serve</div><div className="mt-1 text-sm leading-relaxed text-[#42566B]">Fast tickets, modifiers that stick, a line that keeps moving.</div></figcaption>
-              </figure>
-              <figure className="overflow-hidden rounded-md border border-[#D9E1EA]">
-                <div className="relative aspect-[16/10]"><Image src="/jpg17.png" alt="A shop owner checking stock levels at a Surge POS terminal" fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover" /></div>
-                <figcaption className="px-5 py-4"><div className="font-bold text-[#0A2540]">Retail &amp; service counters</div><div className="mt-1 text-sm leading-relaxed text-[#42566B]">Stock, receipts and reports on the device you already own.</div></figcaption>
-              </figure>
-              <figure className="overflow-hidden rounded-md border border-[#D9E1EA]">
-                <div className="relative aspect-[16/10]"><Image src="/jpg3.jpg" alt="A stylist checking a client out at a salon front desk" fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover" /></div>
-                <figcaption className="px-5 py-4"><div className="font-bold text-[#0A2540]">Salons &amp; service shops</div><div className="mt-1 text-sm leading-relaxed text-[#42566B]">Tips, split tender and a register your staff can be trusted with.</div></figcaption>
-              </figure>
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
-      <section id="payments" className="border-b border-[#D9E1EA] bg-[#F4F7FA] py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal>
-            <div className="grid items-start gap-12 lg:grid-cols-2">
-              <div>
-                <Crumb>Payments</Crumb>
-                <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">We are not your processor yet</h2>
-                <p className="mt-4 leading-relaxed text-[#42566B]">Surge is the point of sale. Card processing and terminals are being built, and we would rather say so here than let you find out on the call.</p>
-                <p className="mt-3 leading-relaxed text-[#42566B]">Nothing about that blocks you. The POS runs the room today alongside whatever processor you already use, and when ours is live it becomes one more tender type on a register your staff already know.</p>
-              </div>
-              <PaymentsComingSoon />
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
-      <section className="bg-[#0A2540] py-20 text-white">
-        <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-8 px-6 lg:flex-row lg:items-center">
-          <div>
-            <h2 className="max-w-xl text-[32px] font-bold leading-[1.18] tracking-[-0.01em] sm:text-[34px]">Run the whole till for nothing.</h2>
-            <p className="mt-4 max-w-xl leading-relaxed text-[#B9C8D8]">We are piloting Surge with independent shops: full access, free for a limited time, set up with you on a call. All we want back is blunt feedback.</p>
-            {/* The demo survives as a text link rather than a second button —
-                the band has one job and the softer path should not compete with
-                it for the same eye. #B9C8D8 on #0A2540 is 8.3:1; the underline
-                carries the affordance without needing a second colour. */}
-            <p className="mt-3 text-sm text-[#B9C8D8]">Rather look first? <Link href="/book" className="font-bold text-white underline underline-offset-4 hover:no-underline">Book a free 15-minute demo</Link>.</p>
+            {/* "Get terminal updates" — one of the two CTA labels the launch
+                rules allow. It goes to the existing /contact form, which posts
+                to `submitContact` (zod, honeypot, shared 5-per-IP-per-hour
+                throttle, checked send). No new endpoint: a second unauthenticated
+                mail path on the domain that carries merchant receipts is an open
+                relay with a friendlier name. */}
+            <Link href={TERMINAL_CTA_HREF} className={btnOutlineAccent + " mt-[var(--surge-space-5)]"}>
+              {TERMINAL_CTA.updates} <ArrowRight />
+            </Link>
           </div>
-          <Link href="/pricing#apply" className="whitespace-nowrap rounded-[4px] bg-white px-7 py-3.5 text-[15.5px] font-bold text-[#0A2540] transition-colors hover:bg-[#F4F7FA]">Join the free pilot</Link>
-        </div>
-      </section>
+        </Container>
+      </Band>
+
+      {/* ------------------------------------------------- onboarding steps */}
+      <Band tone="surface" labelledBy="get-started-title">
+        <Container className="grid gap-[var(--surge-space-7)] py-[var(--surge-space-8)] lg:grid-cols-4 lg:gap-0">
+          <div className="lg:pr-[var(--surge-space-6)]">
+            <Eyebrow>Get started</Eyebrow>
+            <Heading as="h2" size="h2" id="get-started-title" className="mt-3 text-[var(--surge-ink)]">
+              A smoother switch starts here.
+            </Heading>
+            <p className="mt-3 max-w-[34ch] text-[length:var(--surge-small)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">
+              We make it simple to get up and running, with hands-on support at every step.
+            </p>
+          </div>
+          {STEPS.map((s) => (
+            <div key={s.n} className="lg:border-l lg:border-[var(--surge-border)] lg:pl-[var(--surge-space-6)]">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--surge-accent)] text-[length:var(--surge-small)] font-bold text-[var(--surge-action)]">
+                {s.n}
+              </span>
+              <h3 className="mt-[var(--surge-space-4)] text-[length:var(--surge-h3)] font-bold text-[var(--surge-ink)]">{s.title}</h3>
+              <p className="mt-2 max-w-[32ch] text-[length:var(--surge-small)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">{s.body}</p>
+            </div>
+          ))}
+        </Container>
+      </Band>
+
+      {/* --------------------------------------------------------------- FAQ */}
+      <Band tone="canvas" className="border-t border-[var(--surge-border)]" labelledBy="faq-title">
+        <Container className="grid gap-[var(--surge-space-6)] py-[var(--surge-space-8)] lg:grid-cols-[minmax(0,34%)_minmax(0,1fr)] lg:gap-[var(--surge-space-8)]">
+          <div>
+            <Eyebrow>Frequently asked questions</Eyebrow>
+            <Heading as="h2" size="h2" id="faq-title" className="mt-3 text-[var(--surge-ink)]">
+              Quick answers.
+              <br />
+              Real support.
+            </Heading>
+          </div>
+          <FaqAccordion items={FAQS} />
+        </Container>
+      </Band>
+
+      {/* -------------------------------------------------------- closing CTA */}
+      <CtaBand
+        id="see-surge"
+        title="See Surge at your counter."
+        sub="A modern POS, built for real businesses."
+        cta="Book a demo"
+        href="/book"
+        image={HOME_IMAGE_SLOTS.closing}
+      />
     </>
   );
 }

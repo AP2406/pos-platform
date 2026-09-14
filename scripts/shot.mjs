@@ -81,7 +81,13 @@ await send("Emulation.setDeviceMetricsOverride", {
 });
 
 for (const pair of pairs) {
-  const [name, path] = pair.split("=");
+  // Split on the FIRST "=" only. `split("=")` dropped everything after the
+  // second one, so a path with a query string ("x=/contact?topic=terminal")
+  // silently photographed "/contact?topic" instead — the page loaded, the
+  // parameter did not, and the proof showed the wrong state.
+  const eq = pair.indexOf("=");
+  const name = pair.slice(0, eq);
+  const path = pair.slice(eq + 1);
   await send("Page.navigate", { url: base + path });
   await sleep(1800);
   // captureBeyondViewport renders the whole document WITHOUT scrolling, so the

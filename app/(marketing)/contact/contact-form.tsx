@@ -1,14 +1,30 @@
 "use client";
 
 import { useState, useRef, useEffect, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import { submitContact } from "../actions";
 import { HoneypotField } from "../honeypot";
+import { TERMINAL_TOPIC, TERMINAL_TOPIC_MESSAGE } from "@/lib/services/terminal-availability";
 
 export function ContactForm() {
+  // THE TERMINAL-UPDATES ENTRY POINT.
+  //
+  // "Get terminal updates" on the home page links to /contact?topic=terminal.
+  // Rather than stand up a second form — a second unauthenticated mail path on
+  // the domain that carries merchant receipts, which is an open relay with a
+  // friendlier label — the existing contact form recognises the topic and
+  // prefills the message box. The server ignores the query string entirely:
+  // this is a typing convenience, and the visitor can edit or clear it.
+  //
+  // Read in a lazy useState initialiser rather than in an effect, so the
+  // textarea is correct on its first paint and nothing has to be re-set after
+  // mount. The page stays statically prerendered — the Suspense boundary in
+  // page.tsx is what useSearchParams needs for that.
+  const topic = useSearchParams().get("topic");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(() => (topic === TERMINAL_TOPIC ? TERMINAL_TOPIC_MESSAGE : ""));
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
   const honeypotRef = useRef<HTMLInputElement | null>(null);

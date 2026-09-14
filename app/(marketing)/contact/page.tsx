@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { ContactForm } from "./contact-form";
 import { OG_BASE } from "../shared-metadata";
 import { JsonLd, breadcrumb } from "../jsonld";
@@ -59,7 +60,13 @@ export default function ContactPage() {
               </div>
             </div>
             <div className="lg:col-span-3">
-              <ContactForm />
+              {/* ContactForm reads ?topic= to prefill the terminal-updates
+                  enquiry. useSearchParams needs a Suspense boundary for the
+                  page to stay statically prerendered; without it Next would
+                  make the whole route dynamic. */}
+              <Suspense fallback={null}>
+                <ContactForm />
+              </Suspense>
             </div>
           </div>
         </div>
