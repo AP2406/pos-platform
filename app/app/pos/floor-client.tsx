@@ -20,6 +20,9 @@ import {
   unsplitTicket,
   mergeTickets,
   transferTables,
+  listTableMoveTargets,
+  moveTicketToTable,
+  setTicketServer,
   type TableCart,
   type TableTicketSummary,
   type TogoTicketSummary,
@@ -48,6 +51,9 @@ type RegisterProps = {
 };
 
 type StaffMember = { id: string; name: string };
+// Turn-time status, named once so the tile class, the dot class and the
+// screen-reader label can't drift apart.
+type TableStatus = "available" | "noorder" | "seated" | "warn" | "late";
 type Selected = { elementId: string; ticketId: string; tableLabel: string; cart: TableCart; serverName: string | null; seatCount: number | null; guestCount: number | null; ticketType?: "tab"; heldAuthCents?: number | null };
 
 // Elements a server can ring up (open a ticket on). Walls/rooms/labels/chairs
@@ -133,6 +139,26 @@ export function FloorClient({
   const [handoffNeedsPin, setHandoffNeedsPin] = useState(false);
   const [handoffErr, setHandoffErr] = useState<string | null>(null);
   const [handoffBusy, setHandoffBusy] = useState(false);
+  // THE TABLE ACTION STRIP (UI handoff, screen 01).
+  //
+  // The handoff's own implementation note is "Table actions should require a
+  // selected table", and this screen had no notion of a selected table: tapping
+  // a table opens its check in the register, which is the gesture every server
+  // already has in their hands and is not something a restyle gets to change.
+  // So selection is an explicit control of its own — the first thing in the
+  // strip — and every action is disabled, with the reason spelled out, until it
+  // holds a table. Only OPEN tables are offered: both wired actions operate on
+  // a ticket, and a table with no check has nothing to transfer or reassign.
+  const [actionTableId, setActionTableId] = useState("");
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveTargets, setMoveTargets] = useState<{ elementId: string; label: string; occupied: boolean }[]>([]);
+  const [moveErr, setMoveErr] = useState<string | null>(null);
+  const [moveBusy, setMoveBusy] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignPin, setAssignPin] = useState("");
+  const [assignNeedsPin, setAssignNeedsPin] = useState(false);
+  const [assignErr, setAssignErr] = useState<string | null>(null);
+  const [assignBusy, setAssignBusy] = useState(false);
   // P0-5: merge two open checks into one.
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeFrom, setMergeFrom] = useState("");
@@ -394,6 +420,62 @@ export function FloorClient({
     .filter((e) => openByElement[e.id] && (openByElement[e.id].child_count ?? 0) === 0)
     .map((e) => ({ ticketId: openByElement[e.id].id, label: e.label ?? "Table" }));
 
+  // --- table action strip: transfer table ------------------------------------
+  // Straight onto the same pair of server actions the register's "Move table"
+  // uses (P0-7). Nothing new server-side, and no money math: moving a check
+  // re-points it at another element, or merges it into that element's check.
+  function openMoveTable(ticketId: string) {
+    setMoveErr(null);
+    setMoveTargets([]);
+    setMoveOpen(true);
+    startTransition(async () => {
+      setMoveTargets(await listTableMoveTargets(ticketId));
+    });
+  }
+  function doMoveTable(ticketId: string, elementId: string) {
+    setMoveErr(null);
+    setMoveBusy(true);
+    startTransition(async () => {
+      const res = await moveTicketToTable(ticketId, elementId);
+      setMoveBusy(false);
+      if ("error" in res) { setMoveErr(res.error); return; }
+      setMoveOpen(false);
+      setActionTableId(""); // the check no longer lives on the table that was picked
+      await refreshOpen();
+    });
+  }
+
+  // --- table action strip: assign server -------------------------------------
+  // setTicketServer() is the permission gate, not this component: taking a
+  // table that belongs to someone else, as staff or a trainee, comes back
+  // `needs_approval` and the manager PIN is collected here exactly as the
+  // handoff dialog already does it. The change is reason-coded into the audit
+  // trail server-side either way.
+  function openAssign() {
+    setAssignErr(null);
+    setAssignPin("");
+    setAssignNeedsPin(false);
+    setAssignOpen(true);
+  }
+  function doAssign(ticketId: string, staffId: string) {
+    setAssignErr(null);
+    setAssignBusy(true);
+    startTransition(async () => {
+      const res = await setTicketServer(ticketId, staffId, assignPin || undefined);
+      setAssignBusy(false);
+      if ("needs_approval" in res) {
+        setAssignNeedsPin(true);
+        setAssignErr("A manager PIN is needed to take another server's table.");
+        return;
+      }
+      if ("error" in res) { setAssignErr(res.error); return; }
+      setAssignOpen(false);
+      setAssignPin("");
+      setAssignNeedsPin(false);
+      await refreshOpen();
+    });
+  }
+
   function openMerge() {
     setMergeFrom("");
     setMergeInto("");
@@ -491,7 +573,7 @@ export function FloorClient({
 
   // Turn-time status: seated → warn (yellow) → late (red). Thresholds are
   // configurable in Settings (businesses.settings.table_aging).
-  function tableStatus(open: TableTicketSummary | undefined): "available" | "noorder" | "seated" | "warn" | "late" {
+  function tableStatus(open: TableTicketSummary | undefined): TableStatus {
     if (!open) return "available";
     const m = minutesOpen(open.opened_at);
     // Elapsed time wins: a genuinely stale check escalates to Warning/Late no
@@ -502,7 +584,7 @@ export function FloorClient({
     if (open.item_count <= 0 || open.subtotal <= 0) return "noorder";
     return "seated";
   }
-  function statusClass(s: "available" | "noorder" | "seated" | "warn" | "late"): string {
+  function statusClass(s: TableStatus): string {
     switch (s) {
       // Occupied, no order: neutral fill + teal outline — clearly seated, never critical.
       case "noorder": return "bg-table-available-bg border-table-seated-border text-foreground shadow-elevation-sm";
@@ -510,6 +592,35 @@ export function FloorClient({
       case "warn": return "bg-table-warn-bg border-table-warn-border text-table-warn-fg shadow-elevation-sm";
       case "late": return "bg-table-late-bg border-table-late-border text-table-late-fg shadow-elevation-sm";
       default: return "bg-table-available-bg border-table-available-border text-foreground shadow-elevation-sm hover:border-foreground/40 hover:shadow-elevation";
+    }
+  }
+  // The status DOT — the handoff's one structural change to this screen.
+  // In dark, every occupied tile is now the same subdued slate (see the
+  // --table-* tokens in globals.css) and this badge is the only thing carrying
+  // the status colour, so a floor full of stale checks reads as a floor with
+  // dots on it instead of a wall of red you can't read a table number off.
+  // Light still tints the tile as well; the dot is drawn in both themes so the
+  // component doesn't have to know which one it is in.
+  // `available` returns null on purpose: an empty table is not a condition.
+  function statusDotClass(s: TableStatus): string | null {
+    switch (s) {
+      case "noorder":
+      case "seated": return "bg-table-dot-occupied";
+      case "warn": return "bg-table-dot-warn";
+      case "late": return "bg-table-dot-late";
+      default: return null;
+    }
+  }
+  // Colour is now the primary carrier of status on this screen, so every tile
+  // also says it in words for a screen reader (and for anyone who can't tell
+  // the amber dot from the red one).
+  function statusLabel(s: TableStatus): string {
+    switch (s) {
+      case "noorder":
+      case "seated": return "Occupied";
+      case "warn": return "Warning — over " + aging.yellowMin + " minutes";
+      case "late": return "Late — over " + aging.redMin + " minutes";
+      default: return "Available";
     }
   }
 
@@ -532,6 +643,32 @@ export function FloorClient({
     return o && o.item_count > 0 && minutesOpen(o.opened_at) >= aging.redMin;
   }).length;
 
+  // The tables the action strip can act on, and the one currently picked.
+  const actionTargets = ringEls
+    .filter((e) => openByElement[e.id])
+    .map((e) => ({
+      elementId: e.id,
+      ticketId: openByElement[e.id].id,
+      label: e.label ?? "Table",
+      childCount: openByElement[e.id].child_count ?? 0,
+      serverName: openByElement[e.id].server_name,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+  const actionTarget = actionTargets.find((t) => t.elementId === actionTableId) ?? null;
+  // Why a control is off, in the words the operator needs. A disabled button
+  // with no reason is the same problem as a dead one.
+  const actionReason = actionTargets.length === 0
+    ? "No open checks on this floor yet."
+    : !actionTarget
+      ? "Pick a table first."
+      : null;
+  // moveTicketToTable() refuses a split parent server-side; say so up front
+  // rather than letting the operator find out in a dialog.
+  const moveReason = actionReason ?? (actionTarget && actionTarget.childCount > 0
+    ? "Un-split " + actionTarget.label + " before moving it."
+    : null);
+  const assignReason = actionReason ?? (staff.length === 0 ? "No staff on file to assign." : null);
+
   return (
     <div className="h-full flex flex-col">
       {/* B8: live kitchen → server messages */}
@@ -546,40 +683,49 @@ export function FloorClient({
           ))}
         </div>
       )}
-      {/* One toolbar */}
-      <div className="shrink-0 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 border-b border-border bg-card">
-        <span className="font-semibold truncate">{register.businessName}</span>
+      {/* One toolbar.
+          Restyled to the handoff: the workspace name is the page's heading
+          rather than another line of body text, the two segmented controls get
+          the blue active state the mockup uses for "you are here", and every
+          control in the row is the same 44px tall so the row reads as one
+          object. The gutter opens up on wide screens (the handoff asks for 40px
+          and the mockup is 2048 wide) and stays tight on a handheld. */}
+      <div className="shrink-0 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 sm:px-6 lg:px-10 py-3 border-b border-border bg-card">
+        <h1 className="text-lg sm:text-xl font-semibold tracking-tight truncate">{register.businessName}</h1>
         {plans.length > 1 && (
-          <div className="flex items-center gap-0.5 rounded-lg bg-muted p-0.5">
+          <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
             {plans.map((pl) => (
-              <button key={pl.id} type="button" onClick={() => switchPlan(pl.id)} disabled={planLoading} className={"text-xs rounded-md px-2.5 py-1 transition-colors " + (pl.id === activePlan ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground")}>
+              <button key={pl.id} type="button" onClick={() => switchPlan(pl.id)} disabled={planLoading} aria-pressed={pl.id === activePlan} className={"u-tx text-sm rounded-md px-3 h-9 font-medium " + (pl.id === activePlan ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>
                 {pl.name}
               </button>
             ))}
           </div>
         )}
         {ringEls.length > 0 && (
-          <span className="text-xs text-muted-foreground hidden md:inline tabular-nums">
+          <span className="text-sm text-muted-foreground hidden md:inline tabular-nums">
             {seatedCount + " of " + ringEls.length + " seated" + (overdue > 0 ? "  ·  " + overdue + " over " + aging.redMin + "m" : "")}
           </span>
         )}
-        <div className="ml-auto flex items-center gap-2">
-          <div className="flex items-center gap-0.5 rounded-lg bg-muted p-0.5">
+        {/* Wraps on a handheld. The outer row already wrapped but this cluster
+            did not, so at 375 the trailing buttons ran off the right edge and
+            took the whole screen into horizontal scroll. */}
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
             {(["map", "list"] as const).map((v) => (
-              <button key={v} type="button" onClick={() => setView(v)} className={"text-xs rounded-md px-2.5 py-1 capitalize transition-colors " + (view === v ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground")}>
+              <button key={v} type="button" onClick={() => setView(v)} aria-pressed={view === v} className={"u-tx text-sm rounded-md px-3 h-9 capitalize font-medium " + (view === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>
                 {v}
               </button>
             ))}
           </div>
-          <Input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a check" className="h-9 w-40 sm:w-48" />
+          <Input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a check" className="h-11 w-40 sm:w-48" />
           {serversWithOpen.length > 0 && staff.length > 1 && (
-            <Button variant="outline" className="h-9 hidden sm:inline-flex" onClick={openHandoff}>Handoff</Button>
+            <Button variant="outline" className="h-11 hidden sm:inline-flex" onClick={openHandoff}>Handoff</Button>
           )}
           {mergeableTables.length >= 2 && (
-            <Button variant="outline" className="h-9 hidden sm:inline-flex" onClick={openMerge}>Merge</Button>
+            <Button variant="outline" className="h-11 hidden sm:inline-flex" onClick={openMerge}>Merge</Button>
           )}
           {(reservationSummary.waitlist > 0 || reservationSummary.next) && (
-            <Link href="/app/reservations" className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-border text-sm hover:bg-accent">
+            <Link href="/app/reservations" className="u-tx flex items-center gap-1.5 h-11 px-3 rounded-md border border-border text-sm hover:bg-accent">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
               {reservationSummary.waitlist > 0 && (
                 <span className="tabular-nums">Waitlist {reservationSummary.waitlist}</span>
@@ -591,13 +737,61 @@ export function FloorClient({
               )}
             </Link>
           )}
-          <Button variant="outline" className="h-9" onClick={() => { setTogoName(""); setTogoPhone(""); setTogoOpen(true); }}>New to-go</Button>
-          <Button variant="outline" className="h-9" onClick={() => { setTabName(""); setTabOpen(true); }}>New tab</Button>
-          <Link href="/app" className="flex items-center gap-1.5 text-sm rounded-md border border-border px-2.5 py-1.5 hover:bg-accent">
+          <Button variant="outline" className="h-11" onClick={() => { setTogoName(""); setTogoPhone(""); setTogoOpen(true); }}>New to-go</Button>
+          <Button variant="outline" className="h-11" onClick={() => { setTabName(""); setTabOpen(true); }}>New tab</Button>
+          <Link href="/app" className="u-tx flex items-center gap-1.5 h-11 px-3 text-sm rounded-md border border-border hover:bg-accent">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
             Exit
           </Link>
         </div>
+      </div>
+
+      {/* THE TABLE ACTION STRIP — the one net-new piece on this screen.
+          Two of the handoff's four actions are here because two of them are
+          reachable from the floor without re-implementing money handling:
+          Transfer table and Assign server both take a ticket id and nothing
+          else. Split bill and Print check are NOT here and are not stubbed —
+          both need the live cart (a split has to partition to the cent; a bill
+          has to price discounts, comps, service charge and tax), which only the
+          register holds. A control that looks like a button and isn't one is
+          worse than no control.
+          Hidden below `sm`: on a handheld the floor is the list view and both
+          actions are already in the register, one tap away. */}
+      <div className="shrink-0 hidden sm:flex flex-wrap items-center gap-2 px-3 sm:px-6 lg:px-10 py-2 border-b border-border bg-card/60">
+        <label htmlFor="floor-action-table" className="text-xs uppercase tracking-wide text-muted-foreground">Table</label>
+        <select
+          id="floor-action-table"
+          value={actionTableId}
+          onChange={(e) => setActionTableId(e.target.value)}
+          disabled={actionTargets.length === 0}
+          className="u-tx u-focus h-11 min-w-[9rem] rounded-md border border-border bg-transparent text-foreground px-2 text-sm disabled:opacity-50"
+        >
+          <option value="">{actionTargets.length === 0 ? "No open checks" : "Select a table…"}</option>
+          {actionTargets.map((t) => (
+            <option key={t.elementId} value={t.elementId}>{t.label + (t.serverName ? " · " + t.serverName : "")}</option>
+          ))}
+        </select>
+        <Button
+          variant="outline"
+          className="h-11"
+          disabled={!!moveReason || pending}
+          title={moveReason ?? "Move this check to another table"}
+          onClick={() => { if (actionTarget) openMoveTable(actionTarget.ticketId); }}
+        >
+          Transfer table
+        </Button>
+        <Button
+          variant="outline"
+          className="h-11"
+          disabled={!!assignReason || pending}
+          title={assignReason ?? "Change who owns this check"}
+          onClick={openAssign}
+        >
+          Assign server
+        </Button>
+        {(moveReason || assignReason) && (
+          <span className="text-xs text-muted-foreground">{moveReason ?? assignReason}</span>
+        )}
       </div>
 
       {/* Floor + takeout column */}
@@ -622,10 +816,15 @@ export function FloorClient({
                       type="button"
                       disabled={pending}
                       onClick={() => tapElement(el)}
-                      className={"rounded-xl border p-3.5 min-h-[68px] text-left active:scale-[0.98] transition-transform disabled:opacity-60 " + statusClass(status)}
+                      className={"rounded-lg border p-3.5 min-h-[68px] text-left active:scale-[0.98] transition-transform disabled:opacity-60 " + statusClass(status)}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-base truncate">{el.label ?? "Table"}</span>
+                        <span className="flex items-center gap-2 min-w-0">
+                          {/* Same badge as the map tile, same reason. */}
+                          {(() => { const dot = statusDotClass(status); return dot ? <span className={"shrink-0 w-2 h-2 rounded-full " + dot} aria-hidden="true" /> : null; })()}
+                          <span className="font-semibold text-base truncate">{el.label ?? "Table"}</span>
+                          <span className="sr-only">{statusLabel(status)}</span>
+                        </span>
                         {open && <span className="tabular-nums text-sm font-medium">{"$" + open.subtotal.toFixed(2)}</span>}
                       </div>
                       <div className="text-[11px] mt-0.5 truncate opacity-80">
@@ -659,12 +858,22 @@ export function FloorClient({
                 transform: "translate(-50%, -50%) scale(" + scale + ")", transformOrigin: "center",
               }}
             >
-              {/* Chairs are designed in Settings; the live floor stays clean. */}
-              {ordered.filter((el) => el.kind !== "seat").map((el) => {
+              {/* CHAIRS ARE DRAWN NOW. They used to be filtered out here —
+                  "the live floor stays clean" — and the handoff's floor plan is
+                  the argument against that: a rectangle labelled "Table 4" is a
+                  diagram, a round top with six chairs around it is the room. It
+                  is also how a server finds the right table at a glance without
+                  reading a single label. They cost nothing to render (they are
+                  already in `elements`, already positioned, already below the
+                  tables in z-order) and they are not interactive. Floors whose
+                  designer never placed chairs look exactly as they did. */}
+              {ordered.map((el) => {
                 const ring = isRingable(el.kind);
                 const open = ring ? openByElement[el.id] : undefined;
                 const dim = q && ring && !matchesFind(el);
-                const radius = el.shape === "round" ? 9999 : el.kind === "wall" ? 2 : 12;
+                // 8px corners, per the handoff. Chairs get a tighter 6 so a seat
+                // pad doesn't read as a small table.
+                const radius = el.shape === "round" ? 9999 : el.kind === "wall" ? 2 : el.kind === "seat" ? 6 : 8;
                 const baseStyle = {
                   left: el.x, top: el.y, width: el.w, height: el.h, borderRadius: radius,
                   transform: el.rotation ? "rotate(" + el.rotation + "deg)" : undefined,
@@ -702,9 +911,18 @@ export function FloorClient({
                     className={"absolute overflow-hidden border p-1.5 flex flex-col items-center text-center leading-tight gap-0.5 active:scale-[0.97] transition-all " + (isTable || short ? "justify-center " : "justify-start ") + statusClass(status)}
                     style={tileStyle}
                   >
-                    {/* Section color = a corner dot (a tag), never a status edge. */}
+                    {/* Status badge, top-left — see statusDotClass(). Paired
+                        with an off-screen word, because on a dark floor the
+                        tile no longer carries the status itself and a dot on
+                        its own is a colour-only signal. */}
+                    {(() => { const dot = statusDotClass(status); return dot ? <span className={"absolute top-1.5 left-1.5 w-2 h-2 rounded-full " + dot} aria-hidden="true" /> : null; })()}
+                    <span className="sr-only">{statusLabel(status)}</span>
+                    {/* Section color = a corner dot (a tag), never a status edge.
+                        Moved to the bottom-left now that the status badge holds
+                        the top-left corner: two dots in one corner would be two
+                        readings of two different things in the same place. */}
                     {secColor && (
-                      <span className="absolute top-1 left-1 w-2 h-2 rounded-full ring-1 ring-black/30" style={{ backgroundColor: secColor }} aria-hidden="true" />
+                      <span className="absolute bottom-1.5 left-1.5 w-2 h-2 rounded-full ring-1 ring-black/30" style={{ backgroundColor: secColor }} aria-hidden="true" />
                     )}
                     {/* P2-27: a guest placed a new order via QR awaiting the server.
                         Auto-expire the badge after a few minutes so it can't go stale
@@ -736,13 +954,16 @@ export function FloorClient({
             </div>
           )}
           {error && <p className="text-sm text-red-600 absolute bottom-2 left-3 z-10">{error}</p>}
-          {/* Status-color legend key — one unambiguous mapping; section is a dot. */}
-          <div className="absolute bottom-2 right-2 z-10 hidden sm:flex items-center gap-3 rounded-lg border border-border bg-card/90 backdrop-blur px-3 py-1.5 text-[10px] text-muted-foreground shadow-elevation-sm">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm border bg-table-available-bg border-table-available-border" />Available</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm border bg-table-seated-bg border-table-seated-border" />Occupied</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm border bg-table-warn-bg border-table-warn-border" />Warning</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm border bg-table-late-bg border-table-late-border" />Late</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-foreground/40" />Section</span>
+          {/* Legend. Now that the tile no longer carries the status in dark, the
+              legend has to teach the BADGE, not the fill — so each swatch is
+              the dot the operator will actually be looking for. Available is
+              the one hollow ring, because it is the absence of a badge. */}
+          <div className="absolute bottom-3 right-3 z-10 hidden sm:flex items-center gap-3 rounded-lg border border-border bg-card/90 backdrop-blur px-3 py-2 text-[11px] text-muted-foreground shadow-elevation-sm">
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full border border-table-available-border" />Available</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-table-dot-occupied" />Occupied</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-table-dot-warn" />Warning</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-table-dot-late" />Late</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm border border-dashed border-muted-foreground" />Section</span>
           </div>
         </div>
         )}
@@ -816,6 +1037,61 @@ export function FloorClient({
               </Button>
               {handoffErr && <p className="text-sm text-red-600">{handoffErr}</p>}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action strip: transfer the selected table's check to another table. */}
+      {moveOpen && actionTarget && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setMoveOpen(false)}>
+          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-xs max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-medium">{"Transfer " + actionTarget.label}</h3>
+              <button type="button" onClick={() => setMoveOpen(false)} className="text-xs text-muted-foreground underline">Cancel</button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">An occupied table merges the two checks.</p>
+            <div className="space-y-1">
+              {moveTargets.length === 0 ? (
+                <p className="text-xs text-muted-foreground">{pending ? "Loading tables…" : "No other tables."}</p>
+              ) : (
+                moveTargets.map((t) => (
+                  <button key={t.elementId} type="button" disabled={moveBusy || pending} onClick={() => doMoveTable(actionTarget.ticketId, t.elementId)} className="u-tx w-full flex items-center justify-between px-3 h-11 rounded-md text-sm border border-border hover:bg-accent disabled:opacity-60">
+                    <span>{t.label}</span>
+                    {t.occupied && <span className="text-[10px] text-muted-foreground">occupied · merge</span>}
+                  </button>
+                ))
+              )}
+            </div>
+            {moveErr && <p className="text-sm text-red-600 mt-2">{moveErr}</p>}
+          </div>
+        </div>
+      )}
+
+      {/* Action strip: reassign the selected table's server. */}
+      {assignOpen && actionTarget && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setAssignOpen(false)}>
+          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-xs max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-medium">{"Assign " + actionTarget.label}</h3>
+              <button type="button" onClick={() => setAssignOpen(false)} className="text-xs text-muted-foreground underline">Cancel</button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              {actionTarget.serverName ? "Currently " + actionTarget.serverName + "." : "This check has no server yet."}
+            </p>
+            {assignNeedsPin && (
+              <div className="space-y-1 mb-3">
+                <Label className="text-xs">Manager PIN</Label>
+                <Input type="password" inputMode="numeric" value={assignPin} onChange={(e) => setAssignPin(e.target.value)} placeholder="4-6 digits" className="h-11" />
+              </div>
+            )}
+            <div className="space-y-1">
+              {staff.map((s) => (
+                <button key={s.id} type="button" disabled={assignBusy || pending} onClick={() => doAssign(actionTarget.ticketId, s.id)} className="u-tx w-full text-left px-3 h-11 rounded-md text-sm border border-border hover:bg-accent disabled:opacity-60">
+                  {s.name}
+                </button>
+              ))}
+            </div>
+            {assignErr && <p className="text-sm text-red-600 mt-2">{assignErr}</p>}
           </div>
         </div>
       )}
