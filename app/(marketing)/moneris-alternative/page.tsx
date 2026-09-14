@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
-import { JsonLd, localService, breadcrumb } from "../jsonld";
+import { JsonLd, softwareService, breadcrumb } from "../jsonld";
 import { PaymentsComingSoon } from "../ui";
 import { LandingHero, LandingSection, LandingPoints, LandingCompare, LandingGuides, LandingCTA, LandingDisclaimer } from "../local-landing";
 
@@ -16,9 +16,21 @@ import { LandingHero, LandingSection, LandingPoints, LandingCompare, LandingGuid
 // Off: the 2.5% + 15¢ rate, the "$10 one-time setup", the savings estimator,
 // the rate/monthly-fee comparison rows, and the "get you taking tap, chip,
 // Interac, Apple Pay and Google Pay from day one" promise.
+//
+// OWNER DECISION PENDING — THIS PAGE IS ABOUT A CANADA-ONLY BRAND.
+// Moneris is a Canadian acquirer and does not operate outside Canada, so
+// "moneris alternative" is a query only Canadian merchants type. That is not
+// automatically wrong for an international product — Surge is software and a
+// Canadian shop can run it like anyone else, and this page never promised a
+// merchant account. But it is the narrowest page on the site, and if Canada
+// stops being a priority market it is the first candidate for a 308 to /pos,
+// the same treatment the three city pages got. Left live and de-localised for
+// now; the geography claims about US, not about Moneris, have been removed.
+// Same applies to /td-merchant-solutions-alternative. Square, Clover and
+// Stripe are global brands and need no such note.
 export const metadata: Metadata = {
   title: { absolute: "Moneris Alternative — The POS Side, No Lock-In | Surge" },
-  description: "Leaving Moneris? Surge is the point-of-sale half: a register, floor plan, kitchen display, reservations and ordering channels, with no term contract and local setup across the GTA. Card processing coming soon.",
+  description: "Leaving Moneris? Surge is the point-of-sale half: a register, floor plan, kitchen display, reservations and ordering channels, with no term contract and a guided remote setup. Card processing coming soon.",
   alternates: { canonical: "/moneris-alternative", },
   openGraph: { ...OG_BASE, url: "/moneris-alternative", type: "website" },
 };
@@ -29,8 +41,8 @@ const tiles = [
   // Was "Free tier that is a real register — Basic costs nothing… Advanced
   // adds…". The tiers are gone with the pricing page; what replaces them is the
   // pilot, stated without a duration or a number of places.
-  { title: "Free while the pilot runs", body: "We are piloting Surge with GTA and Durham independents: the whole system, free for a limited time, in exchange for honest feedback." },
-  { title: "Local, real support", body: "Set up in person across the GTA and Durham, with a human on the phone rather than a call-centre queue." },
+  { title: "Free while the pilot runs", body: "We are piloting Surge with independent shops: the whole system, free for a limited time, in exchange for honest feedback." },
+  { title: "Real support, not a queue", body: "Set up with you on a call, with a human on the phone afterwards rather than a call-centre queue." },
 ];
 
 // Rate and monthly-fee rows are gone: we have no rate to put in the left column.
@@ -46,10 +58,9 @@ const compareRows: [string, string, string][] = [
   ["Support", "Local, real human", "Call centre"],
 ];
 
-const service = localService({
+const service = softwareService({
   name: "Point of sale (Moneris alternative)",
-  description: "For businesses leaving Moneris — a point-of-sale with floor plan, kitchen display, reservations and ordering channels, no term contract, and local setup across the GTA and Durham.",
-  areaServed: ["Greater Toronto Area", "Toronto", "Durham Region", "Ontario"],
+  description: "For businesses leaving Moneris — a point-of-sale with floor plan, kitchen display, reservations and ordering channels, no term contract, and a guided remote setup.",
   path: "/moneris-alternative",
 });
 

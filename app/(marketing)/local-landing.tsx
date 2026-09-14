@@ -2,9 +2,14 @@ import Link from "next/link";
 import { getGuide } from "./guides/guides";
 import { Crumb, btnPrimary, btnOutline, btnWhite } from "./ui";
 
-// Shared building blocks for the local/industry landing pages. Layout stays
-// consistent; each page supplies its own unique H1, intro and body copy so the
-// pages aren't thin/duplicated doorway pages.
+// Shared building blocks for the industry and competitor landing pages. Layout
+// stays consistent; each page supplies its own unique H1, intro and body copy
+// so the pages aren't thin/duplicated doorway pages.
+//
+// The filename still says "local". It is kept because renaming it would touch
+// seven import statements for no behavioural gain, but nothing in here is
+// local any more: the three city pages that gave it the name are now 308s to
+// /pos, and no component in this file takes a place as a prop.
 
 export function LandingEyebrow({ children }: { children: React.ReactNode }) {
   return <Crumb>{children}</Crumb>;

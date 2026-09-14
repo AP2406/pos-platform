@@ -10,11 +10,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
   const core: MetadataRoute.Sitemap = [
     { url: SITE_URL + "/", lastModified: now, changeFrequency: "weekly", priority: 1.0 },
-    // PRIORITY IS THIS SITE'S OWN RANKING OF ITSELF, and it now reads POS-first.
-    // /pos and the two industry pages go up; the three location pages and the
-    // five competitor pages go down to 0.6. Every URL is still here — a landing
-    // page that ranks is worth more demoted than deleted, and dropping one from
-    // the sitemap is the slow way of deleting it.
+    // PRIORITY IS THIS SITE'S OWN RANKING OF ITSELF, and it reads POS-first:
+    // /pos and the two industry pages at the top, the five competitor pages
+    // demoted to 0.6.
+    //
+    // THE THREE LOCATION PAGES ARE GONE FROM THIS LIST, and that is not the
+    // same as demoting them. /payment-processing-toronto,
+    // /payment-processing-mississauga and /merchant-services-durham are now
+    // permanent (308) redirects to /pos — see next.config.ts for the full
+    // reasoning. A sitemap is a list of URLs you want indexed AS THEY ARE, and
+    // a URL that answers with a redirect is not one of those: listing it asks
+    // a crawler to fetch a hop and then tells it the page moved. The redirect
+    // is what preserves their equity; keeping them here would only muddy it.
     { url: SITE_URL + "/pos", lastModified: now, changeFrequency: "weekly", priority: 0.9 },
     { url: SITE_URL + "/pos-for-restaurants", lastModified: now, changeFrequency: "monthly", priority: 0.9 },
     { url: SITE_URL + "/pos-for-retail", lastModified: now, changeFrequency: "monthly", priority: 0.9 },
@@ -24,9 +31,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     // industry pages. Weekly because a live offer changes more often than a
     // feature page does — and when the pilot ends this page changes first.
     { url: SITE_URL + "/pricing", lastModified: now, changeFrequency: "weekly", priority: 0.9 },
-    { url: SITE_URL + "/payment-processing-toronto", lastModified: now, changeFrequency: "monthly", priority: 0.6 },
-    { url: SITE_URL + "/payment-processing-mississauga", lastModified: now, changeFrequency: "monthly", priority: 0.6 },
-    { url: SITE_URL + "/merchant-services-durham", lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: SITE_URL + "/moneris-alternative", lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: SITE_URL + "/square-alternative", lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: SITE_URL + "/clover-alternative", lastModified: now, changeFrequency: "monthly", priority: 0.6 },

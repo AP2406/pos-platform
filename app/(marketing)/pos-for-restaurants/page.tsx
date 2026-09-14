@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
-import { JsonLd, localService, breadcrumb } from "../jsonld";
+import { JsonLd, softwareService, breadcrumb } from "../jsonld";
 import { PaymentsComingSoon } from "../ui";
 import { LandingHero, LandingSection, LandingPoints, LandingGuides, LandingCTA } from "../local-landing";
 
@@ -10,8 +10,8 @@ import { LandingHero, LandingSection, LandingPoints, LandingGuides, LandingCTA }
 // "built into your payments", the 2.5% + 15¢ paragraph, and a CTA that sold a
 // savings call rather than a demo.
 export const metadata: Metadata = {
-  title: { absolute: "POS for Restaurants (GTA) — Free Point of Sale | Surge" },
-  description: "A restaurant point-of-sale for GTA cafes, quick-serve and full-service: tabs, tips, table service, coursing, a kitchen display, reservations and online ordering. Free during our pilot program. Book a free demo.",
+  title: { absolute: "POS for Restaurants — Free Point of Sale | Surge" },
+  description: "A restaurant point-of-sale for cafes, quick-serve and full-service: tabs, tips, table service, coursing, a kitchen display, reservations and online ordering. Free during our pilot program. Book a free demo.",
   alternates: { canonical: "/pos-for-restaurants" },
   openGraph: { ...OG_BASE, url: "/pos-for-restaurants" },
 };
@@ -25,10 +25,9 @@ const points = [
   { title: "Orders from everywhere", body: "Online ordering, a QR code on the table and a self-serve kiosk, all landing in the one ticket queue." },
 ];
 
-const service = localService({
+const service = softwareService({
   name: "Restaurant point of sale",
-  description: "A full restaurant point-of-sale for GTA cafes, quick-serve and full-service — tabs, tips, table service, coursing, a kitchen display, reservations and online ordering.",
-  areaServed: ["Greater Toronto Area", "Toronto", "Durham Region", "Mississauga", "Markham", "Vaughan"],
+  description: "A full restaurant point-of-sale for cafes, quick-serve and full-service — tabs, tips, table service, coursing, a kitchen display, reservations and online ordering.",
   path: "/pos-for-restaurants",
 });
 
@@ -41,7 +40,7 @@ export default function PosForRestaurantsPage() {
       <LandingHero
         eyebrow="For restaurants"
         h1={<>A restaurant POS that keeps up with the <span className="text-blue-600">rush</span>.</>}
-        intro="Cafés, quick-serve and full-service across the GTA run Surge: tabs, tips, table service, coursing and a kitchen display — free for a limited time while our pilot runs."
+        intro="Cafés, quick-serve and full-service rooms run Surge: tabs, tips, table service, coursing and a kitchen display — free for a limited time while our pilot runs."
       />
 
       <LandingSection title="Built for the floor and the line">

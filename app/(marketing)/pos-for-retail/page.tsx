@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
-import { JsonLd, localService, breadcrumb } from "../jsonld";
+import { JsonLd, softwareService, breadcrumb } from "../jsonld";
 import { PaymentsComingSoon } from "../ui";
 import { LandingHero, LandingSection, LandingPoints, LandingGuides, LandingCTA } from "../local-landing";
 
@@ -11,8 +11,8 @@ import { LandingHero, LandingSection, LandingPoints, LandingGuides, LandingCTA }
 // APPOINTMENTS came off: lib/modules/modes.ts marks that mode `status: "soon"`,
 // so the product already calls it unbuilt and only this page disagreed.
 export const metadata: Metadata = {
-  title: { absolute: "POS for Retail (GTA) — Free Point of Sale & Inventory | Surge" },
-  description: "A retail point-of-sale for GTA shops: fast checkout, barcode inventory, low-stock warnings, purchasing, receipts and reports, with staff roles and a time clock. Free during our pilot program. Book a free demo.",
+  title: { absolute: "POS for Retail — Free Point of Sale & Inventory | Surge" },
+  description: "A retail point-of-sale for independent shops: fast checkout, barcode inventory, low-stock warnings, purchasing, receipts and reports, with staff roles and a time clock. Free during our pilot program. Book a free demo.",
   alternates: { canonical: "/pos-for-retail" },
   openGraph: { ...OG_BASE, url: "/pos-for-retail" },
 };
@@ -24,10 +24,9 @@ const points = [
   { title: "Reports that help", body: "Best sellers, busiest hours and daily totals, without doing the math by hand." },
 ];
 
-const service = localService({
+const service = softwareService({
   name: "Retail point of sale",
-  description: "A retail point-of-sale for GTA shops — checkout, barcode inventory, low-stock warnings, purchasing, receipts, staff roles and reporting, free during our pilot program.",
-  areaServed: ["Greater Toronto Area", "Toronto", "Mississauga", "Durham Region", "Markham", "Vaughan"],
+  description: "A retail point-of-sale for independent shops — checkout, barcode inventory, low-stock warnings, purchasing, receipts, staff roles and reporting, free during our pilot program.",
   path: "/pos-for-retail",
 });
 
@@ -40,7 +39,7 @@ export default function PosForRetailPage() {
       <LandingHero
         eyebrow="For retail"
         h1={<>A retail POS that keeps your <span className="text-blue-600">shelves honest</span>.</>}
-        intro="Boutiques, grocers, convenience and specialty shops across the GTA run Surge: barcode checkout, stock that stays honest and reports you will actually open — free for a limited time while our pilot runs, on the device you already own."
+        intro="Boutiques, grocers, convenience and specialty shops run Surge: barcode checkout, stock that stays honest and reports you will actually open — free for a limited time while our pilot runs, on the device you already own."
       />
 
       <LandingSection title="Inventory that keeps up with the floor">

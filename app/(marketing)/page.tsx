@@ -20,10 +20,14 @@ import { Crumb, Tick, ComingSoonBadge, PaymentsComingSoon, btnPrimary, btnOutlin
 // where a caveat belongs: late enough not to be the pitch, early enough that
 // nobody books a demo without having read it.
 export const metadata: Metadata = {
-  title: { absolute: "Point of Sale for Restaurants & Retail in the GTA | Surge" },
-  description: "Surge is a point-of-sale system for GTA restaurants, cafes and shops — register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports. Card processing coming soon. Book a free demo.",
+  // "in the GTA" came out of the title and "GTA" out of both descriptions. The
+  // slot it freed goes to "Cafes" rather than to a replacement geography —
+  // there is no market claim to make here, and a title reading "worldwide"
+  // would be a bigger claim than the one we just removed.
+  title: { absolute: "Point of Sale for Restaurants, Cafes & Retail | Surge" },
+  description: "Surge is a point-of-sale system for restaurants, cafes and shops — register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports. Card processing coming soon. Book a free demo.",
   alternates: { canonical: "/" },
-  openGraph: { ...OG_BASE, title: "Point of Sale for Restaurants & Retail in the GTA | Surge", description: "A point-of-sale system for GTA restaurants, cafes and shops — register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports.", url: "/" },
+  openGraph: { ...OG_BASE, title: "Point of Sale for Restaurants, Cafes & Retail | Surge", description: "A point-of-sale system for restaurants, cafes and shops — register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports.", url: "/" },
 };
 
 // Every item here is a screen that exists in the product. Verified in
@@ -74,7 +78,7 @@ export default function HomePage() {
             <div>
               <Crumb>Point of sale</Crumb>
               <h1 className="mt-4 text-[44px] font-bold leading-[1.12] tracking-[-0.015em] text-[#0A2540] sm:text-[50px]">The till that runs the whole room.</h1>
-              <p className="mt-5 max-w-lg text-lg leading-relaxed text-[#42566B]">Surge is a point-of-sale system for restaurants, cafes and shops across the GTA &mdash; register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports, in one place.</p>
+              <p className="mt-5 max-w-lg text-lg leading-relaxed text-[#42566B]">Surge is a point-of-sale system for restaurants, cafes and shops &mdash; register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports, in one place.</p>
               {/* THE HERO PAIR NOW LEADS WITH THE PILOT. "Book a free demo" was
                   primary and is now the outline button beside it; "See the point
                   of sale" moved out of this row because three buttons is not a
@@ -91,7 +95,12 @@ export default function HomePage() {
                 <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Free for a limited time while the pilot runs</div>
                 <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Runs on the tablet you already own</div>
                 <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Floor, kitchen and counter on one system</div>
-                <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Set up with you in person across the GTA</div>
+                {/* Was "Set up with you in person across the GTA". In-person
+                    setup is not something we can deliver outside driving
+                    distance, so the promise changes rather than disappearing:
+                    the onboarding call is real, it is the same work, and it
+                    says "over a call" so nobody expects a van. */}
+                <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Set up with you over a call, wherever you are</div>
               </div>
             </div>
             <div className="overflow-hidden rounded-md border border-[#D9E1EA] bg-white shadow-[0_10px_30px_-18px_rgba(10,37,64,0.35)]">
@@ -180,7 +189,7 @@ export default function HomePage() {
             <div className="mx-auto max-w-2xl text-center">
               <Crumb>Industries served</Crumb>
               <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">Built for businesses like yours</h2>
-              <p className="mt-4 leading-relaxed text-[#42566B]">From the counter to the pass, Surge runs real-world rooms across the GTA.</p>
+              <p className="mt-4 leading-relaxed text-[#42566B]">From the counter to the pass, Surge runs real-world rooms.</p>
             </div>
             <div className="mt-12 grid gap-6 sm:grid-cols-3">
               <figure className="overflow-hidden rounded-md border border-[#D9E1EA]">
@@ -220,7 +229,7 @@ export default function HomePage() {
         <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-8 px-6 lg:flex-row lg:items-center">
           <div>
             <h2 className="max-w-xl text-[32px] font-bold leading-[1.18] tracking-[-0.01em] sm:text-[34px]">Run the whole till for nothing.</h2>
-            <p className="mt-4 max-w-xl leading-relaxed text-[#B9C8D8]">We are piloting Surge with GTA and Durham independents: full access, free for a limited time, set up in person. All we want back is blunt feedback.</p>
+            <p className="mt-4 max-w-xl leading-relaxed text-[#B9C8D8]">We are piloting Surge with independent shops: full access, free for a limited time, set up with you on a call. All we want back is blunt feedback.</p>
             {/* The demo survives as a text link rather than a second button —
                 the band has one job and the softer path should not compete with
                 it for the same eye. #B9C8D8 on #0A2540 is 8.3:1; the underline

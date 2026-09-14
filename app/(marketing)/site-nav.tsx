@@ -35,7 +35,13 @@ export function SiteNav() {
     <header className="fixed inset-x-0 top-0 z-50">
       <div className="bg-[#0A2540] text-[#B9C8D8]">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-1.5 text-xs">
-          <span>Point of sale for the GTA &amp; Durham Region &middot; card processing coming soon</span>
+          {/* Was "Point of sale for the GTA & Durham Region · card processing
+              coming soon" — the site's most-repeated sentence, on every page,
+              and it opened with a geography. The strip has room for two facts;
+              the first one is now what the product is rather than where it is,
+              and the second (the payments caveat) is unchanged because it is
+              still the thing a visitor most needs told early. */}
+          <span>Point of sale for restaurants, cafes and shops &middot; card processing coming soon</span>
           {/* THE PAIR, AND WHY THIS WAY ROUND. The pilot is now the primary
               ask — it is the button — and the demo keeps this strip slot as the
               softer, lower-commitment path. An owner who is not ready to run

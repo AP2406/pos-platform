@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
-import { JsonLd, localService, breadcrumb } from "../jsonld";
+import { JsonLd, softwareService, breadcrumb } from "../jsonld";
 import { PaymentsComingSoon } from "../ui";
 import { LandingHero, LandingSection, LandingPoints, LandingCompare, LandingGuides, LandingCTA, LandingDisclaimer } from "../local-landing";
 
@@ -21,7 +21,7 @@ const tiles = [
   { title: "No app subscriptions", body: "Clover software plans and add-on apps commonly carry their own monthly fees. Surge is one system and everything in it is in it." },
   { title: "No locked-in hardware", body: "Clover hardware is often tied to the processor that sold it and hard to reuse elsewhere. Surge runs on the device you already have." },
   { title: "One system, not a plan matrix", body: "Floor plan, kitchen display, reservations, ordering channels, stock and staff — on one tier, not assembled from a catalogue." },
-  { title: "Local, real support", body: "In-person setup across the GTA and Durham and a human on the phone — not a hand-off to whichever reseller signed you up." },
+  { title: "Real support, not a reseller", body: "A guided setup call with us and a human on the phone afterwards — not a hand-off to whichever reseller signed you up." },
 ];
 
 const compareRows: [string, string, string][] = [
@@ -35,10 +35,9 @@ const compareRows: [string, string, string][] = [
   ["Support", "Local, real human", "Depends on the reseller"],
 ];
 
-const service = localService({
+const service = softwareService({
   name: "Point of sale (Clover alternative)",
-  description: "A Clover alternative for local businesses — a point-of-sale with no app subscriptions and no hardware lock-in, with local setup across the GTA and Durham.",
-  areaServed: ["Greater Toronto Area", "Toronto", "Durham Region", "Ontario"],
+  description: "A Clover alternative for local businesses — a point-of-sale with no app subscriptions and no hardware lock-in, set up with you on a remote onboarding call.",
   path: "/clover-alternative",
 });
 

@@ -54,7 +54,14 @@ export function PageHero({ crumb, title, sub }: { crumb: string; title: string; 
 // capability in future tense, and it does not carry a price, a date or a
 // "join the waitlist" form we have nothing behind. `tone="dark"` is for pages
 // whose surrounding sections are already tinted.
-const PAY_METHODS = ["Tap", "Chip & swipe", "Apple Pay", "Google Pay", "Interac", "Visa", "Mastercard"];
+// "Interac" came out of this list. It is a Canada-only debit network, and this
+// panel renders on nine marketing pages as a site-wide statement of what the
+// unbuilt processing will accept — so naming one country's domestic rail in it
+// was a market claim, not a feature list. "Debit" covers the same ground
+// without picking a country, and nothing here has been added.
+// FLAGGED: if Canada is the first processing market, put Interac back — it is
+// the single most recognisable thing on this list to a Canadian merchant.
+const PAY_METHODS = ["Tap", "Chip & swipe", "Debit", "Apple Pay", "Google Pay", "Visa", "Mastercard"];
 
 export function ComingSoonBadge({ children = "Coming soon" }: { children?: React.ReactNode }) {
   // #1B6DC1 on #E8F1FB measures 4.60:1 — over AA's 4.5:1 for the 12.5px this

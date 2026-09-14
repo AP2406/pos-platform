@@ -32,16 +32,27 @@ import { PilotForm } from "./pilot-form";
 // NO PLACEHOLDER CONSTANTS. The copy below was written so that it needs none —
 // there is no SPOTS_REMAINING or PILOT_ENDS waiting to be filled in, because a
 // blank constant tends to ship as a zero.
+//
+// ONBOARDING IS NOW REMOTE, AND THAT IS A REAL CHANGE TO THE OFFER.
+// This page promised "we come to you, load your menu, draw your floor plan and
+// walk your staff through it, anywhere across the GTA and Durham Region", and
+// said in the pillars that "in-person setup is part of the offer". A company
+// selling software internationally cannot drive to a shop, so that promise had
+// to change or be dropped. It is changed, not dropped: the onboarding session
+// still happens, it is still us doing the menu and the floor plan with the
+// owner watching, and it is now explicitly a video call. Every other honesty
+// constraint on this page is untouched — no duration, no number of spots, no
+// end date, no post-pilot price, no processing rate.
 export const metadata: Metadata = {
-  title: { absolute: "Surge POS Pricing — Free During the Pilot (GTA) | Surge" },
-  description: "What Surge POS costs right now: nothing. We are running a pilot — the full point of sale, free for a limited time, for independent shops across the GTA and Durham Region, set up in person. Card processing is not part of it yet.",
+  title: { absolute: "Surge POS Pricing — Free During the Pilot | Surge" },
+  description: "What Surge POS costs right now: nothing. We are running a pilot — the full point of sale, free for a limited time, for independent shops, set up with you on a video call. Card processing is not part of it yet.",
   alternates: { canonical: "/pricing" },
   // OG copy is set explicitly here rather than inherited, because the share card
   // is the one place the offer has to land in a single line.
   openGraph: {
     ...OG_BASE,
     title: "Free during the Surge pilot — the full point of sale, no charge",
-    description: "We are looking for GTA and Durham independents to run Surge for real. Full POS, free for a limited time, set up in person. In exchange we want blunt feedback.",
+    description: "We are looking for independent shops to run Surge for real. Full POS, free for a limited time, set up with you on a call. In exchange we want blunt feedback.",
     url: "/pricing",
   },
 };
@@ -51,11 +62,11 @@ export const metadata: Metadata = {
 const pillars = [
   {
     title: "What you get",
-    body: "The whole point of sale, not a cut-down trial version: the register, the floor plan, the kitchen display, the menu builder, online / QR / kiosk ordering, inventory, staff and reports. Free while the pilot runs, and we come out and set it up with you.",
+    body: "The whole point of sale, not a cut-down trial version: the register, the floor plan, the kitchen display, the menu builder, online / QR / kiosk ordering, inventory, staff and reports. Free while the pilot runs, and we set it up with you on a call.",
   },
   {
     title: "Who it is for",
-    body: "Independent restaurants, cafes, shops and salons across the GTA and Durham Region. In-person setup is part of the offer, not an extra — so you need to be somewhere we can drive to and a day we can turn up on.",
+    body: "Independent restaurants, cafes, shops and salons. Onboarding is remote — we do it over a video call, screen shared, so where you are does not decide whether you can take part. What you do need is an hour with the person who knows the menu.",
   },
   {
     title: "What we want back",
@@ -91,7 +102,11 @@ const included = [
 const reassurances = ["No card asked for", "No contract to sign", "No setup fee", "Stop whenever you like"];
 
 const faqs = [
-  { q: "So what does Surge cost?", a: "During the pilot, nothing. You get the full point of sale free for a limited time, and we set it up with you in person. We have not set the price for afterwards, and we are not going to invent one on this page." },
+  { q: "So what does Surge cost?", a: "During the pilot, nothing. You get the full point of sale free for a limited time, and we set it up with you on a video call. We have not set the price for afterwards, and we are not going to invent one on this page." },
+  // New question, and it belongs here rather than buried: the previous version
+  // of this page promised somebody would turn up, and anyone who read it then
+  // deserves a direct answer now.
+  { q: "Do you come out and set it up?", a: "No &mdash; setup is remote. We book a video call, share screens, and build it with you: your menu and modifiers loaded, your floor plan drawn, your staff roles set, and a walk through the register before you run a shift on it. It is the same work, done over a call instead of at your counter, which is what lets us run the pilot with shops anywhere rather than only the ones we can drive to." },
   { q: "How long does the pilot run?", a: "A limited time &mdash; and that is as precise as we can honestly be today. There is no date on this page because we would rather not publish one and then have to move it. What we will commit to is telling you before anything changes." },
   { q: "What happens when the pilot ends?", a: "We contact you first and tell you where things stand. If you want to carry on, we will talk about it then. If you do not, you stop &mdash; there is no contract and nothing to cancel. We are not promising early joiners a set price or a locked-in rate, because we do not have one to promise." },
   { q: "Is there a catch?", a: "The catch is that it is early software and you are being asked to say so out loud. Things will be rough in places, and we want to hear about it in detail rather than have you quietly go back to what you had." },
@@ -118,14 +133,17 @@ const faqSchema = {
 // as far as a crawler is concerned, which is the precise promise this page is
 // written to avoid making. The free-during-the-pilot line belongs in prose,
 // where it can carry its own qualifier.
+// `areaServed: ["Greater Toronto Area", "Durham Region", "Ontario"]` and the
+// LocalBusiness provider are gone for the same reason as everywhere else — see
+// the note on `softwareService` in ../jsonld.tsx. This one is written out
+// longhand rather than using that helper because it carries the pilot framing.
 const serviceSchema = {
   "@context": "https://schema.org",
   "@type": "Service",
   name: "Point of sale software",
   serviceType: "Point of sale software",
-  description: "Point-of-sale software for restaurants, cafes, shops and salons across the Greater Toronto Area, currently in a pilot program: full access free for a limited time, set up in person, in exchange for feedback.",
-  provider: { "@type": "LocalBusiness", name: "Surge", url: "https://www.surgetechpos.com" },
-  areaServed: ["Greater Toronto Area", "Durham Region", "Ontario"],
+  description: "Point-of-sale software for restaurants, cafes, shops and salons, currently in a pilot program: full access free for a limited time, set up over a remote onboarding call, in exchange for feedback.",
+  provider: { "@id": "https://www.surgetechpos.com/#organization" },
   url: "https://www.surgetechpos.com/pricing",
 };
 
@@ -141,7 +159,7 @@ export default function PricingPage() {
       <PageHero
         crumb="Pricing"
         title="Right now it is free, and here is the catch."
-        sub="We are not selling the point of sale yet &mdash; we are running a pilot. Full access to the till for a limited time at no charge, for GTA and Durham independents willing to use it for real and tell us where it hurts."
+        sub="We are not selling the point of sale yet &mdash; we are running a pilot. Full access to the till for a limited time at no charge, for independent shops willing to use it for real and tell us where it hurts."
       />
 
       <section className="bg-white py-16">
@@ -184,7 +202,12 @@ export default function PricingPage() {
               <Crumb>What is included</Crumb>
               <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">All of it. There is no smaller version.</h2>
               <p className="mt-4 leading-relaxed text-[#42566B]">There are no tiers during the pilot and nothing is held back behind an upgrade, because the point is to find out what breaks when a shop uses the whole thing.</p>
-              <p className="mt-3 leading-relaxed text-[#42566B]">Setup is part of it: we come to you, load your menu, draw your floor and walk your staff through it, across the GTA and Durham Region.</p>
+              {/* THE ONBOARDING PROMISE, REWRITTEN NOT REMOVED. Was: "we come
+                  to you, load your menu, draw your floor and walk your staff
+                  through it, across the GTA and Durham Region." The work is
+                  the same work; the delivery is a call, and the sentence says
+                  so in its first three words so nobody has to infer it. */}
+              <p className="mt-3 leading-relaxed text-[#42566B]">Setup is part of it, and it is done remotely: we book a video call, share screens, load your menu, draw your floor plan and walk your staff through the register before you run a shift on it.</p>
             </div>
             <div className="rounded-md border border-[#D9E1EA] bg-white p-7">
               <div className="space-y-3">
@@ -226,7 +249,7 @@ export default function PricingPage() {
             <div className="lg:col-span-2">
               <Crumb>Join the pilot</Crumb>
               <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">Tell us about your shop</h2>
-              <p className="mt-4 leading-relaxed text-[#42566B]">This goes straight to us, not to a queue. We read it, we reply, and if it looks like a fit we will arrange a day to come out and set you up.</p>
+              <p className="mt-4 leading-relaxed text-[#42566B]">This goes straight to us, not to a queue. We read it, we reply, and if it looks like a fit we will book a time to set you up over a call.</p>
               <p className="mt-3 leading-relaxed text-[#42566B]">If you would rather see it before you commit an hour of your week to it, <Link href="/book" className="font-bold text-[#1B6DC1] hover:underline">book a 15-minute demo</Link> instead &mdash; the pilot will still be here afterwards.</p>
             </div>
             <div className="lg:col-span-3">
@@ -259,7 +282,7 @@ export default function PricingPage() {
         <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-8 px-6 lg:flex-row lg:items-center">
           <div>
             <h2 className="max-w-xl text-[32px] font-bold leading-[1.18] tracking-[-0.01em] sm:text-[34px]">Run the whole till for nothing, and tell us where it hurts.</h2>
-            <p className="mt-4 max-w-xl leading-relaxed text-[#B9C8D8]">Free for a limited time, set up in person across the GTA and Durham. No card, no contract, and you can stop whenever you like.</p>
+            <p className="mt-4 max-w-xl leading-relaxed text-[#B9C8D8]">Free for a limited time, set up with you on a call. No card, no contract, and you can stop whenever you like.</p>
           </div>
           <a href="#apply" className="whitespace-nowrap rounded-[4px] bg-white px-7 py-3.5 text-[15.5px] font-bold text-[#0A2540] transition-colors hover:bg-[#F4F7FA]">Join the pilot</a>
         </div>

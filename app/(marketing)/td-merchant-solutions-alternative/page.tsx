@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
-import { JsonLd, localService, breadcrumb } from "../jsonld";
+import { JsonLd, softwareService, breadcrumb } from "../jsonld";
 import { PaymentsComingSoon } from "../ui";
 import { LandingHero, LandingSection, LandingPoints, LandingCompare, LandingGuides, LandingCTA, LandingDisclaimer } from "../local-landing";
 
@@ -18,7 +18,7 @@ import { LandingHero, LandingSection, LandingPoints, LandingCompare, LandingGuid
 // comparison rows.
 export const metadata: Metadata = {
   title: { absolute: "TD Merchant Solutions Alternative — The POS Half | Surge" },
-  description: "Leaving a bank merchant account? Surge is the point-of-sale half: register, floor plan, kitchen display, reservations and ordering channels, with no term contract and local setup across the GTA. Card processing coming soon.",
+  description: "Leaving a bank merchant account? Surge is the point-of-sale half: register, floor plan, kitchen display, reservations and ordering channels, with no term contract and a guided remote setup. Card processing coming soon.",
   alternates: { canonical: "/td-merchant-solutions-alternative", },
   openGraph: { ...OG_BASE, url: "/td-merchant-solutions-alternative", type: "website" },
 };
@@ -27,7 +27,7 @@ const tiles = [
   { title: "No term contract", body: "Bank merchant agreements are commonly multi-year with an early-termination fee. There is no term on Surge software and no cancellation fee." },
   { title: "Nothing rented", body: "No monthly terminal rental, because there is no terminal — the POS runs on the tablet or phone you already own." },
   { title: "The business, not just the sale", body: "A bank gives you a card machine. Surge gives you the floor plan, the kitchen display, the menu, the stock, the schedule and the reports." },
-  { title: "Local, real support", body: "In-person setup across the GTA and Durham and a human on the phone rather than a call-centre queue." },
+  { title: "Real support, not a queue", body: "A guided setup call with us and a human on the phone afterwards rather than a call-centre queue." },
 ];
 
 const compareRows: [string, string, string][] = [
@@ -41,10 +41,9 @@ const compareRows: [string, string, string][] = [
   ["Support", "Local, real human", "Call centre"],
 ];
 
-const service = localService({
+const service = softwareService({
   name: "Point of sale (bank merchant services alternative)",
-  description: "For businesses leaving a bank merchant account — a point-of-sale with floor plan, kitchen display, reservations and ordering channels, no term contract, and local setup across the GTA and Durham.",
-  areaServed: ["Greater Toronto Area", "Toronto", "Durham Region", "Ontario"],
+  description: "For businesses leaving a bank merchant account — a point-of-sale with floor plan, kitchen display, reservations and ordering channels, no term contract, and a guided remote setup.",
   path: "/td-merchant-solutions-alternative",
 });
 

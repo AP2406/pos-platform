@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
-import { JsonLd, localService, breadcrumb } from "../jsonld";
+import { JsonLd, softwareService, breadcrumb } from "../jsonld";
 import { PaymentsComingSoon } from "../ui";
 import { LandingHero, LandingSection, LandingPoints, LandingCompare, LandingGuides, LandingCTA, LandingDisclaimer } from "../local-landing";
 
@@ -13,14 +13,14 @@ import { LandingHero, LandingSection, LandingPoints, LandingCompare, LandingGuid
 // footer and the sitemap. See docs/site-pos-first-audit.md §3.
 export const metadata: Metadata = {
   title: { absolute: "Stripe Alternative for In-Person Business — A Real POS | Surge" },
-  description: "Looking for a Stripe alternative for the counter? Surge is a point-of-sale you can run without writing code — register, floor plan, kitchen display, ordering channels — set up in person across the GTA. Card processing coming soon.",
+  description: "Looking for a Stripe alternative for the counter? Surge is a point-of-sale you can run without writing code — register, floor plan, kitchen display, ordering channels — set up with you on a call. Card processing coming soon.",
   alternates: { canonical: "/stripe-alternative", },
   openGraph: { ...OG_BASE, url: "/stripe-alternative", type: "website" },
 };
 
 const tiles = [
   { title: "Built for the counter, not the codebase", body: "Stripe is developer- and online-first. Surge is a finished register — you open it and ring up a sale." },
-  { title: "Local setup, no code", body: "No integration, no API keys, no webhook to debug at 7am. We set the system up with you across the GTA and Durham." },
+  { title: "Guided setup, no code", body: "No integration, no API keys, no webhook to debug at 7am. We set the system up with you on a shared-screen call." },
   { title: "The room, not just the transaction", body: "Floor plan, coursing, kitchen display, reservations, stock and staff — the parts a toolkit expects you to build yourself." },
   { title: "A real human", body: "A local person on the phone rather than docs, a dashboard and an email queue." },
 ];
@@ -36,10 +36,9 @@ const compareRows: [string, string, string][] = [
   ["Contract", "None — cancel anytime", "None"],
 ];
 
-const service = localService({
+const service = softwareService({
   name: "Point of sale (Stripe alternative)",
-  description: "A Stripe alternative for in-person local business — a finished point-of-sale with floor plan, kitchen display and ordering channels, set up with no code across the GTA and Durham.",
-  areaServed: ["Greater Toronto Area", "Toronto", "Durham Region", "Ontario"],
+  description: "A Stripe alternative for in-person local business — a finished point-of-sale with floor plan, kitchen display and ordering channels, set up with no code on a guided remote call.",
   path: "/stripe-alternative",
 });
 

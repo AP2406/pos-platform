@@ -6,8 +6,8 @@ import { JsonLd, breadcrumb } from "../jsonld";
 import { PageHero } from "../ui";
 
 export const metadata: Metadata = {
-  title: { absolute: "Contact Surge — Point of Sale in the GTA" },
-  description: "Get in touch with Surge about the point-of-sale or a custom software build in the GTA. Send a message and we will get back to you, or book a free demo.",
+  title: { absolute: "Contact Surge — Point of Sale Software" },
+  description: "Get in touch with Surge about the point-of-sale or a custom software build. Send a message and we will get back to you, or book a free demo.",
   alternates: { canonical: "/contact" },
   openGraph: { ...OG_BASE, url: "/contact" },
 };
@@ -37,13 +37,22 @@ export default function ContactPage() {
                     <div className="text-xs font-bold uppercase tracking-[0.05em] text-[#7A8CA0]">Phone</div>
                     <a href={"tel:" + CONTACT_PHONE.replace(/[^0-9+]/g, "")} className="mt-1 inline-block font-semibold text-[#0A2540] hover:text-[#1B6DC1]">{CONTACT_PHONE}</a>
                   </div>
+                  {/* "Area served: Greater Toronto Area & Durham Region" was
+                      the row here. What replaces it answers the question that
+                      row was really being asked — "can you actually help me
+                      where I am?" — without naming a territory. */}
                   <div>
-                    <div className="text-xs font-bold uppercase tracking-[0.05em] text-[#7A8CA0]">Area served</div>
-                    <div className="mt-1 text-[#42566B]">Greater Toronto Area & Durham Region</div>
+                    <div className="text-xs font-bold uppercase tracking-[0.05em] text-[#7A8CA0]">Setup</div>
+                    <div className="mt-1 text-[#42566B]">Remote &mdash; we onboard you over a video call</div>
                   </div>
                   <div>
                     <div className="text-xs font-bold uppercase tracking-[0.05em] text-[#7A8CA0]">Hours</div>
-                    <div className="mt-1 text-[#42566B]">Mon&ndash;Fri, 9am&ndash;6pm ET</div>
+                    {/* The timezone stays. It is not a claim about who we sell
+                        to — it is when the phone is answered, and removing it
+                        would make the row less useful to someone abroad, not
+                        more. FLAGGED for the owner: if support hours widen,
+                        this line is the one to change. */}
+                    <div className="mt-1 text-[#42566B]">Mon&ndash;Fri, 9am&ndash;6pm Eastern Time (UTC&minus;5)</div>
                   </div>
                 </div>
                 <div className="mt-6 rounded-[4px] border border-[#D9E1EA] bg-[#F4F7FA] p-4 text-sm text-[#42566B]">Want to see it first? <Link href="/book" className="font-bold text-[#1B6DC1] hover:underline">Book a free demo &rarr;</Link></div>

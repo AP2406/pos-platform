@@ -20,7 +20,7 @@ import { Crumb, btnPrimary, btnOutline, CtaBand, PaymentsComingSoon } from "../u
 // product's card path but not of us as a processor, so it now lives in the
 // coming-soon band at the bottom of the page, in future tense.
 export const metadata: Metadata = {
-  title: { absolute: "POS System for Restaurants, Cafes & Retail (GTA) | Surge" },
+  title: { absolute: "POS System for Restaurants, Cafes & Retail | Surge" },
   description: "Surge POS: register, floor plan and table service, kitchen display, menu builder, online and QR ordering, kiosk, barcode inventory, staff and time clock, and reports. Free during our pilot program, on the device you already have.",
   alternates: { canonical: "/pos" },
   openGraph: { ...OG_BASE, url: "/pos" },
@@ -93,6 +93,9 @@ const softwareSchema = {
   description:
     "A point-of-sale system for restaurants, cafes and retail — register, floor plan and table service, kitchen display, menu builder, online and QR ordering, kiosk, inventory, staff and time clock, and reporting.",
   brand: { "@type": "Brand", name: "Surge" },
+  // Points at the site-wide Organization node by @id rather than re-declaring
+  // the company here, so the graph has one publisher and not twenty-one.
+  publisher: { "@id": "https://www.surgetechpos.com/#organization" },
   url: "https://www.surgetechpos.com/pos",
 };
 
@@ -168,7 +171,7 @@ export default function PosPage() {
           <div className="mx-auto mb-12 max-w-2xl text-center">
             <Crumb>Real counters</Crumb>
             <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">Built for every kind of counter</h2>
-            <p className="mx-auto mt-4 leading-relaxed text-[#42566B]">From the morning rush to last call, Surge runs the real-world spots across the GTA.</p>
+            <p className="mx-auto mt-4 leading-relaxed text-[#42566B]">From the morning rush to last call, Surge runs real-world rooms.</p>
           </div>
           <div className="grid gap-6 sm:grid-cols-2">
             {gallery.map((g) => (
@@ -193,7 +196,11 @@ export default function PosPage() {
                   We can supply those too" — we do not sell hardware, so the
                   offer to supply it is gone. Setting up the devices a shop
                   already has is a service we can actually do. */}
-              <p className="mt-3 leading-relaxed text-[#42566B]">Bring the devices you have and we will get them set up with you in person across the GTA &mdash; menu loaded, floor drawn, staff shown around.</p>
+              {/* Was "...set up with you in person across the GTA". Setting up
+                  a shop's own devices is still a service we do; it is done on
+                  a shared-screen call, which is what makes it available to a
+                  shop we could never have driven to. */}
+              <p className="mt-3 leading-relaxed text-[#42566B]">Bring the devices you have and we will get them set up with you on a call &mdash; menu loaded, floor drawn, staff shown around.</p>
             </div>
             <div className="flex flex-wrap gap-2.5 md:justify-end">
               {["Tablet", "Phone", "Kitchen screen", "Menu board"].map((h) => (<span key={h} className="rounded-[4px] border border-[#D9E1EA] px-3.5 py-1.5 text-[13px] font-semibold text-[#42566B]">{h}</span>))}

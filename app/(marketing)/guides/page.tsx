@@ -10,9 +10,17 @@ import { GUIDES } from "./guides";
 // lines removed in the interac and lower-fees guides), and they are genuine
 // ranking assets. The framing here just stops implying a sales path that does
 // not exist yet.
+//
+// THE ARTICLES KEEP THEIR GEOGRAPHY, THIS INDEX DOES NOT.
+// Two of the five are explicitly about Canadian card economics (Interac
+// pricing, Ontario interchange). That is what the articles ARE — an article
+// about a national payment network has to name the nation or it is about
+// nothing — and an article is not a positioning claim. The meta description
+// on this index page was different: "for small businesses across Ontario and
+// the GTA" described US, not the subject matter, so it came off.
 export const metadata: Metadata = {
   title: { absolute: "Guides — Card Fees & POS for Local Business | Surge" },
-  description: "Plain-English guides on card processing fees, Interac, merchant statements and point-of-sale for small businesses across Ontario and the GTA.",
+  description: "Plain-English guides on card processing fees, Interac, merchant statements and point-of-sale for small businesses.",
   alternates: { canonical: "/guides" },
   openGraph: { ...OG_BASE, url: "/guides" },
 };

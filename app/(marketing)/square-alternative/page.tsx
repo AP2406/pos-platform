@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_BASE } from "../shared-metadata";
-import { JsonLd, localService, breadcrumb } from "../jsonld";
+import { JsonLd, softwareService, breadcrumb } from "../jsonld";
 import { PaymentsComingSoon } from "../ui";
 import { LandingHero, LandingSection, LandingPoints, LandingCompare, LandingGuides, LandingCTA, LandingDisclaimer } from "../local-landing";
 
@@ -14,7 +14,7 @@ import { LandingHero, LandingSection, LandingPoints, LandingCompare, LandingGuid
 // a merchant account.
 export const metadata: Metadata = {
   title: { absolute: "Square Alternative — A Deeper POS With Local Setup | Surge" },
-  description: "Looking for a Square alternative? Surge is a point-of-sale with a floor plan, kitchen display, reservations and ordering channels included, set up in person across the GTA. Card processing coming soon.",
+  description: "Looking for a Square alternative? Surge is a point-of-sale with a floor plan, kitchen display, reservations and ordering channels included, set up with you on a remote onboarding call. Card processing coming soon.",
   alternates: { canonical: "/square-alternative", },
   openGraph: { ...OG_BASE, url: "/square-alternative", type: "website" },
 };
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 const tiles = [
   { title: "A floor, not just a counter", body: "Square's till is built around a queue. Surge has a floor plan, coursing, seat numbers and table transfers, which is what a dining room actually needs." },
   { title: "The kitchen is included", body: "Tickets route to the station that cooks them as part of the same system, rather than being a separate product you bolt on." },
-  { title: "Local, in-person setup", body: "Square ships you a reader and leaves the rest to you. We come to your room across the GTA and Durham, load the menu and train your staff." },
+  { title: "Set up with you, not shipped to you", body: "Square sends a reader and leaves the rest to you. We book a call, share screens, load the menu, draw the floor and train your staff." },
   { title: "Real human support", body: "Trade chat threads and callback queues for a local person who answers the phone and knows your account." },
 ];
 
@@ -36,14 +36,13 @@ const compareRows: [string, string, string][] = [
   ["Online, QR & kiosk ordering", "Included", "Varies by product and tier"],
   ["Free tier", "A real register, one till", "Free tier basic; upgrades are paid"],
   ["Contract", "None — cancel anytime", "None"],
-  ["Setup", "Local, in person (GTA & Durham)", "Self-serve; ship-a-reader"],
+  ["Setup", "Guided, on a call with us", "Self-serve; ship-a-reader"],
   ["Support", "Local, real human", "Chat / callback"],
 ];
 
-const service = localService({
+const service = softwareService({
   name: "Point of sale (Square alternative)",
-  description: "A Square alternative for local businesses — a point-of-sale with floor plan, kitchen display, reservations and ordering channels, set up in person across the GTA and Durham.",
-  areaServed: ["Greater Toronto Area", "Toronto", "Durham Region", "Ontario"],
+  description: "A Square alternative for local businesses — a point-of-sale with floor plan, kitchen display, reservations and ordering channels, set up with you on a remote onboarding call.",
   path: "/square-alternative",
 });
 
@@ -81,7 +80,7 @@ export default function SquareAlternativePage() {
       </LandingSection>
 
       <LandingSection title="More than a card reader" tint>
-        <p>Where Square hands you a reader, Surge gives you a business system: the full <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link>, with in-person setup and local support across the GTA and Durham. Run a restaurant or a shop? See <Link href="/pos-for-restaurants" className="font-semibold text-blue-600 hover:text-blue-700">POS for restaurants</Link> or <Link href="/pos-for-retail" className="font-semibold text-blue-600 hover:text-blue-700">POS for retail</Link>.</p>
+        <p>Where Square hands you a reader, Surge gives you a business system: the full <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">point-of-sale</Link>, with a guided remote setup and a human on the phone afterwards. Run a restaurant or a shop? See <Link href="/pos-for-restaurants" className="font-semibold text-blue-600 hover:text-blue-700">POS for restaurants</Link> or <Link href="/pos-for-retail" className="font-semibold text-blue-600 hover:text-blue-700">POS for retail</Link>.</p>
       </LandingSection>
 
       <LandingGuides slugs={["flat-rate-vs-interchange-plus-pricing", "how-to-read-your-merchant-statement", "what-is-a-junk-fee-on-a-merchant-account"]} />

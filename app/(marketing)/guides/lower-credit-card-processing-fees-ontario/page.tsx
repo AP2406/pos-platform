@@ -42,7 +42,7 @@ export default function GuidePage() {
           statement with an owner is a thing we can still genuinely do, so the
           offer stays and the number goes. */}
       <GuideH2>The shortcut</GuideH2>
-      <GuideP>You can do all seven yourself. Or you can hand us last month&rsquo;s statement and we&rsquo;ll compute your effective rate and flag the junk fees with you &mdash; free, in about fifteen minutes. We are not a processor yet, so there is nothing for us to sell you at the end of it. If you&rsquo;re in the city, see <Link href="/payment-processing-toronto" className="font-semibold text-blue-600 hover:text-blue-700">what we do for Toronto businesses</Link>, or just <Link href="/book" className="font-semibold text-blue-600 hover:text-blue-700">book a call</Link>.</GuideP>
+      <GuideP>You can do all seven yourself. Or you can hand us last month&rsquo;s statement and we&rsquo;ll compute your effective rate and flag the junk fees with you &mdash; free, in about fifteen minutes. We are not a processor yet, so there is nothing for us to sell you at the end of it. If you want to see the till while you are here, see <Link href="/pos" className="font-semibold text-blue-600 hover:text-blue-700">the point of sale</Link>, or just <Link href="/book" className="font-semibold text-blue-600 hover:text-blue-700">book a call</Link>.</GuideP>
     </GuideArticle>
   );
 }

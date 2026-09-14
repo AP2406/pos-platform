@@ -4,14 +4,14 @@ import { Public_Sans } from "next/font/google";
 import { SiteNav } from "./site-nav";
 import { SurgeLogo } from "@/components/brand/surge-logo";
 import { OG_BASE } from "./shared-metadata";
-import { JsonLd, LOCAL_BUSINESS } from "./jsonld";
+import { JsonLd, ORGANIZATION } from "./jsonld";
 
 const publicSans = Public_Sans({ subsets: ["latin"], display: "swap", variable: "--font-marketing" });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.surgetechpos.com"),
   title: { default: "Surge — Point of sale for local business", template: "%s — Surge" },
-  description: "Surge is a point-of-sale system for GTA restaurants, cafes and shops — register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports. Card processing coming soon.",
+  description: "Surge is a point-of-sale system for restaurants, cafes and shops — register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports. Card processing coming soon.",
   icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }], apple: "/icon-192.png" },
   openGraph: { ...OG_BASE, url: "/" },
   // No title/description — Twitter tags inherit each page's own title/description.
@@ -24,12 +24,16 @@ const keyframes = "@keyframes surge-rise{from{opacity:0;transform:translateY(26p
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className={publicSans.variable + " relative min-h-screen bg-white font-[family-name:var(--font-marketing),'Public_Sans',Arial,sans-serif] text-[#1A2B3C] antialiased selection:bg-[#CFE3F7]"}>
-      <JsonLd data={LOCAL_BUSINESS} />
+      <JsonLd data={ORGANIZATION} />
       <style dangerouslySetInnerHTML={{ __html: keyframes }} />
       <SiteNav />
       <main className="relative">{children}</main>
       <footer className="bg-[#0B1E33] text-white">
-        <div className="mx-auto grid max-w-6xl gap-10 px-6 py-14 sm:grid-cols-2 lg:grid-cols-6">
+        {/* SIX COLUMNS -> FIVE. The column that came out was "Across the GTA"
+            (Toronto / Mississauga / Durham Region). Dropping it and leaving the
+            grid at six would have left a hole in the last cell at lg; the brand
+            column still spans two, so 2+1+1+1 fills five exactly. */}
+        <div className="mx-auto grid max-w-6xl gap-10 px-6 py-14 sm:grid-cols-2 lg:grid-cols-5">
           <div className="lg:col-span-2">
             {/* The footer takes the full lockup where the nav takes the icon:
                 this column is ~370px wide with nothing beside the mark, which
@@ -43,11 +47,13 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
           {/* FOOTER GROUPS ARE THE SITE'S OWN RANKING OF ITSELF.
               Product used to be Pricing-then-POS; the POS is now first and the
               two industry pages joined it, because those are the pages we want
-              crawled and clicked. The location pages moved out of "Solutions"
-              (which read as a list of things we sell) into a plainly-labelled
-              local group, and the five competitor pages moved BELOW them —
-              those are the demoted set. Nothing was unlinked: a landing page
-              that loses its last internal link loses its crawl path too. */}
+              crawled and clicked. The five competitor pages sit below them —
+              that is the demoted set.
+              The "Across the GTA" group is GONE, not demoted: its three links
+              pointed at /payment-processing-toronto, -mississauga and
+              /merchant-services-durham, which are now permanent redirects to
+              /pos. Linking a 308 from every page in the site is a crawl budget
+              spent on a hop, and the anchor text was three city names. */}
           <div>
             <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#6C8199]">Point of sale</div>
             <ul className="mt-4 space-y-2.5 text-sm text-[#C2D0DE]">
@@ -59,14 +65,6 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                   on — while still saying what the page now offers. */}
               <li><Link href="/pricing" className="hover:text-white">Pricing &mdash; free pilot</Link></li>
               <li><Link href="/contact" className="hover:text-white">Contact</Link></li>
-            </ul>
-          </div>
-          <div>
-            <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#6C8199]">Across the GTA</div>
-            <ul className="mt-4 space-y-2.5 text-sm text-[#C2D0DE]">
-              <li><Link href="/payment-processing-toronto" className="hover:text-white">Toronto</Link></li>
-              <li><Link href="/payment-processing-mississauga" className="hover:text-white">Mississauga</Link></li>
-              <li><Link href="/merchant-services-durham" className="hover:text-white">Durham Region</Link></li>
             </ul>
           </div>
           <div>
@@ -94,7 +92,11 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
         </div>
         <div className="mx-auto flex max-w-6xl flex-col gap-2 border-t border-[#1C3550] px-6 py-6 text-xs text-[#6C8199] sm:flex-row sm:justify-between">
           <span>&copy; 2026 Surge. Point of sale for local business.</span>
-          <span>Toronto &middot; Mississauga &middot; Durham Region</span>
+          {/* Was "Toronto · Mississauga · Durham Region" — a three-city
+              signature on every page. What replaces it is the one thing about
+              geography that is still true and still worth saying: the software
+              runs anywhere and we set it up over a call. No country list. */}
+          <span>Software that runs anywhere &middot; onboarding is remote</span>
         </div>
       </footer>
     </div>
