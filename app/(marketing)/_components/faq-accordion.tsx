@@ -20,7 +20,7 @@ export function FaqAccordion({ items }: { items: FaqItem[] }) {
     <div className="border-t border-[var(--surge-border)]">
       {items.map((item) => (
         <details key={item.q} className="group border-b border-[var(--surge-border)]">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-[var(--surge-space-4)] text-[length:var(--surge-body)] font-semibold text-[var(--surge-ink)] [&::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-[var(--surge-space-3)] text-[length:var(--surge-body)] font-semibold text-[var(--surge-ink)] [&::-webkit-details-marker]:hidden">
             {item.q}
             <span
               aria-hidden="true"
@@ -31,7 +31,7 @@ export function FaqAccordion({ items }: { items: FaqItem[] }) {
               </svg>
             </span>
           </summary>
-          <p className="max-w-[var(--surge-measure)] pb-[var(--surge-space-5)] text-[length:var(--surge-body)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">
+          <p className="max-w-[var(--surge-measure)] pb-[var(--surge-space-4)] text-[length:var(--surge-body)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">
             {item.a}
           </p>
         </details>

@@ -1,70 +1,83 @@
 import Link from "next/link";
-import { ImageSlot, type ImageSlotSpec } from "./image-slot";
-import { TerminalComingSoonPill } from "./coming-soon-badge";
+import { SurgePhoto, type SurgePhotoSpec } from "./photo";
 import { ArrowRight } from "./primitives";
 
 // A SOLUTIONS CARD — the pair under "Solutions for your business".
+//
+// THE CAPTION OVERLAYS THE PHOTOGRAPH. 01-home.jpg puts the title and sub over
+// the bottom-left of the picture with the circular arrow at the bottom right,
+// and the card is exactly as tall as the photograph. Earlier this pass the
+// caption sat in a bar UNDER the image, which made each card ~100px taller than
+// the mockup and changed the shape of the whole band.
+//
+// A FLAT INK PANEL, NOT A SCRIM. The mockup fades the photograph to black
+// behind the text. Gradients are out across this site, and the handoff
+// independently bans "glow, rainbow gradients or exaggerated shadows", so the
+// legibility comes from a flat panel at the opacity the mockup reaches behind
+// its text. The side benefit is that it is measurable: white on 70% ink over
+// any photograph is ≥11:1, where a scrim's contrast depends on the picture.
+//
+// NO COMING-SOON PILL ON THIS CARD ANY MORE. The mockup's retail photograph
+// contained a keypad reader, so it carried the terminal label. The supplied
+// 05-retail-owner.jpg does not contain one, and ASSET-CATALOG.md is explicit:
+// "Do not add Coming soon to 01, 02, 04, 05, 06 or 08: they show tablets or
+// staff, not the unreleased payment terminal." A status label on a photograph
+// with no terminal in it points at the tablet, which is not the thing that is
+// unavailable.
 //
 // THE WHOLE CARD IS ONE LINK, not a link plus a separately-clickable arrow.
 // Two focusable things pointing at the same URL is a duplicate tab stop and a
 // screen reader reading the destination twice; the circular arrow is decoration
 // on top of the single anchor.
-//
-// THE CAPTION SITS ON A SOLID BAR, NOT A GRADIENT SCRIM. The mockup fades the
-// photograph to black behind the text. Gradients are out (see cta-band.tsx), so
-// legibility comes from a flat 88%-opacity ink panel — which has the side
-// benefit of being measurable: white on it is ≥15:1 whatever the photograph
-// underneath turns out to be, where a scrim's contrast depends on the picture.
-//
-// `showTerminalLabel` is not optional styling. CONTENT-AND-LAUNCH-RULES.md
-// requires the coming-soon label beside every reader image including small
-// cards and mobile, so any card whose photograph contains the reader must set
-// it, and the label renders inside the image wrapper so it cannot be dropped by
-// a responsive rule.
+
+/** The mockup's card crop: 578 × 200 at a 1280 viewport. */
+const CARD_RATIO = "289 / 100";
 
 export function SolutionCard({
   href,
   title,
   body,
   image,
-  showTerminalLabel = false,
 }: {
   href: string;
   title: string;
   body: string;
-  image: ImageSlotSpec;
-  showTerminalLabel?: boolean;
+  image: SurgePhotoSpec & { requiresTerminalStatus: false };
 }) {
   return (
     <Link
       href={href}
-      className="group relative block overflow-hidden rounded-[var(--surge-radius-card)] border border-[var(--surge-border)] transition-shadow duration-[var(--surge-motion)] hover:shadow-[0_8px_24px_-16px_rgba(23,25,29,0.45)]"
+      className="group relative block overflow-hidden rounded-[var(--surge-radius-card)] transition-shadow duration-[var(--surge-motion)] hover:shadow-[0_8px_24px_-16px_rgba(23,25,29,0.45)]"
     >
-      <div className="relative">
-        <ImageSlot spec={image} rounded={false} labelAlign="top" />
-        {showTerminalLabel ? (
-          // Inside the image wrapper, and visible at every width: floated over
-          // the picture on sm and up, a centred row under it below that.
-          <div className="flex justify-center px-3 pb-3 sm:absolute sm:right-4 sm:top-1/2 sm:-translate-y-1/2 sm:p-0">
-            <TerminalComingSoonPill />
-          </div>
-        ) : null}
+      <SurgePhoto
+        photo={image}
+        ratio={CARD_RATIO}
+        rounded={false}
+        // Two cards side by side inside a 1240px rail from md up; one full
+        // card below that. The widest box is ~596px, so at 2× the browser asks
+        // for ~1192px against a 1536px source — inside native, never upscaled.
+        sizes="(min-width: 768px) 46vw, 92vw"
+      />
 
-        {/* The caption sits ON the photograph, as the design draws it, rather
-            than in a bar beneath — but on a flat 88% ink panel instead of the
-            mockup's fade to black, because gradients are out. */}
-        <div className="flex items-end justify-between gap-4 bg-[rgb(23_25_29_/_0.88)] p-[var(--surge-space-5)] sm:absolute sm:inset-x-0 sm:bottom-0">
-          <div>
-            <h3 className="text-[length:var(--surge-h3)] font-bold text-white">{title}</h3>
-            <p className="mt-1 text-[length:var(--surge-small)] leading-snug text-[var(--surge-on-dark-muted)]">{body}</p>
-          </div>
-          <span
-            aria-hidden="true"
-            className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-white text-[var(--surge-ink)] transition-transform duration-[var(--surge-motion)] group-hover:translate-x-0.5"
-          >
-            <ArrowRight className="h-4 w-4" />
-          </span>
+      {/* 78% INK, AND BOTH LINES IN WHITE. The opacity is the floor the
+          contrast maths allows, not a taste call: worst case is a photograph
+          that is pure white behind the panel, which puts the panel at
+          rgb(74,76,79) and white text on it at 8.66:1. The sub used
+          --surge-on-dark-muted, which is 9.29:1 on solid ink but only 2.07:1
+          on the same panel over a white photograph — a real AA failure that a
+          darker photograph was hiding. White at 85% keeps the two lines
+          visually distinct and still measures 6.8:1 in that worst case. */}
+      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 bg-[rgb(23_25_29_/_0.78)] px-[var(--surge-space-5)] pb-[var(--surge-space-4)] pt-[var(--surge-space-4)]">
+        <div>
+          <h3 className="text-[length:var(--surge-h3)] font-bold text-white">{title}</h3>
+          <p className="mt-0.5 text-[length:var(--surge-small)] leading-snug text-white/85">{body}</p>
         </div>
+        <span
+          aria-hidden="true"
+          className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-white text-[var(--surge-ink)] transition-transform duration-[var(--surge-motion)] group-hover:translate-x-0.5"
+        >
+          <ArrowRight className="h-4 w-4" />
+        </span>
       </div>
     </Link>
   );

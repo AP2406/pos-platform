@@ -33,11 +33,20 @@ const TABLES: Table[] = [
 
 const AREAS = ["All", "Dining", "Patio", "Bar"];
 
-function PanelHeader({ title, trailing }: { title: string; trailing: string }) {
+// THE SCOPE CONTROL IS BORDERLESS TEXT PLUS A CHEVRON, as 01-home.jpg draws
+// it — not a bordered pill. A boxed control inside an illustrative screen reads
+// as a button a visitor can press; the mockup's is plainly a label.
+//
+// `title` IS OPTIONAL because the mockup's floor-plan screen has no title in
+// it: the area tabs (All / Dining / Patio / Bar) are the first thing in the
+// frame. The screen is still named for assistive tech by the frame's own
+// aria-label in product-preview.tsx, so dropping the visible heading loses
+// nothing but the duplicate.
+function PanelHeader({ title, trailing }: { title?: string; trailing: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 pb-3">
-      <span className="text-[length:var(--surge-h4)] font-bold">{title}</span>
-      <span className="inline-flex items-center gap-1.5 rounded-[var(--surge-radius-control)] border border-[var(--surge-border)] px-2.5 py-1.5 text-[length:var(--surge-micro)] font-semibold text-[var(--surge-muted)]">
+    <div className={"flex items-center gap-3 pb-2 " + (title ? "justify-between" : "justify-end")}>
+      {title ? <span className="text-[length:var(--surge-h4)] font-bold">{title}</span> : null}
+      <span className="inline-flex items-center gap-1.5 text-[length:var(--surge-micro)] font-semibold text-[var(--surge-muted)]">
         {trailing}
         <svg viewBox="0 0 20 20" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M5 8l5 5 5-5" />
@@ -50,7 +59,7 @@ function PanelHeader({ title, trailing }: { title: string; trailing: string }) {
 export function FloorPlanPanel() {
   return (
     <div>
-      <PanelHeader title="Floor plan" trailing="Main Dining" />
+      <PanelHeader trailing="Main Dining" />
       <div className="flex flex-wrap gap-4 border-b border-[var(--surge-border)] pb-2 text-[length:var(--surge-micro)]">
         {AREAS.map((a, i) => (
           <span
@@ -80,8 +89,14 @@ export function FloorPlanPanel() {
             >
               <div className="text-[length:var(--surge-micro)] font-bold">{t.id}</div>
               <div className="text-[11px] opacity-90">{t.covers}</div>
-              {/* The seated table says so in words as well as in blue. */}
-              {t.elapsed ? <div className="text-[10px] font-semibold">Seated {t.elapsed}</div> : null}
+              {/* THE ELAPSED TIME IS THE STATE, AND IT IS NOT A COLOUR.
+                  The mockup shows the occupied table as "T3 / 4 / 12m" and the
+                  free ones with no timer at all, so the difference survives
+                  greyscale on its own — a table with a clock on it is running.
+                  The word "Seated" was added here earlier as belt-and-braces
+                  against status-by-colour; it is not in the mockup and the
+                  timer already carries the distinction, so it is gone. */}
+              {t.elapsed ? <div className="text-[10px] font-semibold">{t.elapsed}</div> : null}
             </div>
           );
         })}
@@ -110,19 +125,27 @@ export function KitchenPanel() {
   return (
     <div>
       <PanelHeader title="Kitchen" trailing="All tickets" />
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-1.5">
         {TICKETS.map((t) => (
           <div key={t.id} className="flex flex-col rounded-[var(--surge-radius-control)] border border-[var(--surge-border)]">
-            <div className="flex items-baseline justify-between gap-1 border-b border-[var(--surge-border)] px-2 py-1.5">
+            <div className="flex items-baseline justify-between gap-1 border-b border-[var(--surge-border)] px-1.5 py-1.5">
               <span className="text-[length:var(--surge-micro)] font-bold">{t.id}</span>
               <span className={"text-[11px] font-semibold " + (t.late ? "text-[var(--surge-danger)]" : "text-[var(--surge-muted)]")}>{t.age}</span>
             </div>
-            <div className="px-2 pb-2 pt-1.5">
+            <div className="px-1.5 pb-2 pt-1.5">
               <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--surge-muted)]">{t.channel}</div>
               {/* THE LATE MARKER IN WORDS. The mockup signals it with a red
                   number only, which is status by colour alone. */}
               {t.late ? <div className="text-[10px] font-bold text-[var(--surge-danger)]">Over target</div> : null}
-              <ul className="mt-1.5 space-y-1 text-[11px] leading-snug">
+              {/* EACH ITEM HOLDS ONE LINE, which is how the mockup sets a
+                  kitchen ticket and what the fidelity review asked for. A
+                  wrapped line in a ticket list reads as a second item. The
+                  room came from giving the kitchen frame the wider of the two
+                  columns, which is what the mockup draws (308px / 405px, not a
+                  50/50 split) — see PREVIEW_TABS in page.tsx. This is
+                  decorative detail inside an aria-hidden illustrative screen,
+                  at the scale the mockup sets it. */}
+              <ul className="mt-1.5 space-y-1 text-[10px] leading-snug">
                 {t.items.map((it) => (
                   <li key={it.name}>
                     <span className="font-semibold">{it.qty}</span> {it.name}
@@ -131,7 +154,7 @@ export function KitchenPanel() {
                 ))}
               </ul>
             </div>
-            <div className={"mt-auto rounded-b-[var(--surge-radius-control)] px-2 py-1.5 text-center text-[11px] font-semibold " + (t.status === "In progress" ? "bg-[var(--surge-accent-soft)] text-[var(--surge-action)]" : "bg-[var(--surge-canvas)] text-[var(--surge-muted)]")}>
+            <div className={"mt-auto rounded-b-[var(--surge-radius-control)] px-1.5 py-1.5 text-center text-[11px] font-semibold " + (t.status === "In progress" ? "bg-[var(--surge-accent-soft)] text-[var(--surge-action)]" : "bg-[var(--surge-canvas)] text-[var(--surge-muted)]")}>
               {t.status}
             </div>
           </div>

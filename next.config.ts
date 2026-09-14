@@ -3,6 +3,15 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Dev only: lets a temporary public tunnel (reviewer link) load dev assets.
   allowedDevOrigins: ["*.trycloudflare.com", "*.loca.lt", "*.lhr.life"],
+  images: {
+    // The marketing photography ships as JPG originals in public/images/surge/
+    // and the optimizer serves AVIF first, WebP second, JPG to anything that
+    // takes neither. Order matters: Next picks the first entry the browser
+    // accepts. The sources are 1024–1536px; every `sizes` on the site is
+    // written so the widest derivative requested stays inside that, because
+    // the optimizer will happily upscale if you ask it to.
+    formats: ["image/avif", "image/webp"],
+  },
   async redirects() {
     return [
       // THE THREE CITY LANDING PAGES, RETIRED AS 308s.

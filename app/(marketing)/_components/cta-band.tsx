@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Container, Heading, btnPrimary, ArrowRight } from "./primitives";
-import { ImageSlot, type ImageSlotSpec } from "./image-slot";
+import { SurgePhoto, type SurgePhotoSpec } from "./photo";
 
 // THE CLOSING CTA BAND.
 //
@@ -28,7 +28,7 @@ export function CtaBand({
   cta: string;
   href: string;
   /** Optional bleed photograph on the right. Omitted, the band is text + button only. */
-  image?: ImageSlotSpec;
+  image?: SurgePhotoSpec & { requiresTerminalStatus: false };
   id?: string;
 }) {
   const headingId = (id ?? "cta") + "-title";
@@ -41,10 +41,12 @@ export function CtaBand({
         // 38%, not the mockup's ~42%: at 42% the picture's left edge crossed
         // the CTA button on a 1280 viewport. The band's job is the button.
         <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[38%] lg:block">
-          <ImageSlot spec={image} rounded={false} fill />
+          {/* 38% of a 1440 viewport is ~547px; at 2× that asks for ~1094px
+              against a 1536px source, so the bleed is never upscaled. */}
+          <SurgePhoto photo={image} fill rounded={false} sizes="(min-width: 1024px) 38vw, 0px" />
         </div>
       ) : null}
-      <Container className="relative flex flex-col gap-[var(--surge-space-5)] py-[var(--surge-space-7)] lg:flex-row lg:items-center lg:gap-[var(--surge-space-8)] lg:py-[var(--surge-space-8)]">
+      <Container className="relative flex flex-col gap-[var(--surge-space-5)] py-[var(--surge-space-5)] lg:flex-row lg:items-center lg:gap-[var(--surge-space-8)] lg:py-[var(--surge-space-5)]">
         <div className="lg:max-w-[46%]">
           <Heading as="h2" size="h2" id={headingId} className="text-[var(--surge-ink)]">
             {title}

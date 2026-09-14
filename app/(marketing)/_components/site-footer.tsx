@@ -58,20 +58,31 @@ const COLUMNS: { heading: string; links: { href: string; label: string }[] }[] =
 export function SiteFooter() {
   return (
     <footer className="surge-on-dark bg-[var(--surge-ink)] text-[var(--surge-on-dark-muted)]">
-      <Container className="grid gap-10 py-[var(--surge-space-8)] sm:grid-cols-2 lg:grid-cols-6">
-        <div className="lg:col-span-2">
+      {/* COLUMN START POSITION IS THE MOCKUP'S. 01-home.jpg opens the link
+          columns at ~21% of the content rail, not at the halfway point a
+          six-equal-column grid produced. A fixed brand cell followed by four
+          equal columns puts "Product" at ~24% and keeps the four evenly
+          spaced, which is what the mockup draws. */}
+      <Container className="grid gap-x-8 gap-y-8 py-[var(--surge-space-4)] sm:grid-cols-2 lg:grid-cols-[minmax(0,240px)_repeat(4,minmax(0,1fr))]">
+        <div>
           {/* The footer is the one place with room for the real horizontal
               lockup at the kit's 220px floor; the header uses the icon. */}
           <SurgeLogo tone="dark" title="Surge" className="h-[65px] w-[220px]" />
-          <p className="mt-3 max-w-[32ch] text-[length:var(--surge-small)] leading-[var(--surge-leading-body)]">
+          {/* Two lines, as the mockup sets it — the measure is capped so the
+              break lands after "business" rather than wherever the column ends. */}
+          <p className="mt-3 max-w-[22ch] text-[length:var(--surge-small)] leading-snug">
             Powering local business every day.
           </p>
         </div>
 
         {COLUMNS.map((col) => (
           <nav key={col.heading} aria-label={col.heading}>
-            <h2 className="text-[length:var(--surge-micro)] font-bold uppercase tracking-[0.08em] text-white">{col.heading}</h2>
-            <ul className="mt-4 space-y-2.5 text-[length:var(--surge-small)]">
+            {/* TITLE CASE, NOT UPPERCASE LETTERSPACED. The mockup sets these as
+                ordinary sentence-weight headings at body size; the uppercase
+                micro treatment belongs to the page eyebrows, and borrowing it
+                here made the footer read as four more eyebrows. */}
+            <h2 className="text-[length:var(--surge-small)] font-bold text-white">{col.heading}</h2>
+            <ul className="mt-3 space-y-1.5 text-[length:var(--surge-small)]">
               {col.links.map((l) => (
                 <li key={l.href + l.label}>
                   <Link
@@ -87,7 +98,7 @@ export function SiteFooter() {
         ))}
       </Container>
 
-      <Container className="flex flex-col gap-3 border-t border-[var(--surge-on-dark-line)] py-[var(--surge-space-5)] text-[length:var(--surge-micro)] sm:flex-row sm:items-center sm:justify-between">
+      <Container className="flex flex-col gap-3 border-t border-[var(--surge-on-dark-line)] py-[var(--surge-space-2)] text-[length:var(--surge-micro)] sm:flex-row sm:items-center sm:justify-between">
         <span>&copy; 2026 Surge. All rights reserved.</span>
         {/* The mockup's bottom-right slot carries Privacy and Terms. Until those
             routes exist it carries the two statements that are true on every

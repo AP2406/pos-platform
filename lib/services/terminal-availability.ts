@@ -58,6 +58,21 @@ export const TERMINAL_COPY = {
   noteWithContact: "Terminal hardware is not yet available. Contact us for updates.",
   /** Market caveat — plans, currencies and payment options are not universal. */
   marketNote: "Plans, currencies and payment options vary by market. Contact us to confirm availability.",
+  /**
+   * The caption that sits UNDER the terminal photograph, in the same <figure>.
+   *
+   * ASSET-CATALOG.md makes this mandatory beside every use of
+   * 07-terminal-concept.jpg: the label says the product is unreleased, and this
+   * says the picture itself is not the product. Nothing is burned into the JPG,
+   * so if this string is missing the page is making a hardware claim.
+   */
+  conceptCaption: "Concept image. Terminal hardware is not yet available.",
+  /**
+   * The caption for 03-tablet-counter.jpg. Its on-screen menu is a rendered
+   * concept, not a capture of Surge, so a reader must not take the screen as a
+   * screenshot of shipping software.
+   */
+  illustrativePreview: "Illustrative product preview",
 } as const;
 
 /**

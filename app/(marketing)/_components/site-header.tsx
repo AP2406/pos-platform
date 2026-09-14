@@ -101,18 +101,24 @@ export function SiteHeader({ variant }: { variant?: Variant }) {
 
       <Container className="flex h-[72px] items-center justify-between gap-4">
         <Link href="/" className="flex shrink-0 items-center gap-2" aria-label="Surge — home">
-          {/* THE MARK, NOT THE LOCKUP, AND THAT IS A DELIBERATE DEPARTURE FROM
-              THE MOCKUP. 01-home.jpg draws the horizontal lockup here; measured
-              against its canvas it is ~168px wide. The logo kit's floor for
-              that artwork is 220px, below which its README says to reach for
-              the dedicated optical icon rather than shrink the wordmark, and a
-              72px header rail has nowhere near 220px to give. So: the 32px
-              icon the kit draws for this size, with the wordmark typeset beside
-              it in the page's own Inter — visually the same lockup, without
-              breaking the kit's one hard rule. The footer, which has the room,
-              uses the real lockup at its full 220px. */}
-          <SurgeIcon size={32} title={null} className="h-8 w-8" />
-          <span className="text-[length:var(--surge-h3)] font-bold tracking-[-0.02em] text-[var(--surge-ink)]">Surge</span>
+          {/* THE MARK, NOT THE LOCKUP. 01-home.jpg draws the horizontal lockup
+              here at ~152px wide; the kit's README sets a 220px floor for that
+              artwork and says to use "the dedicated optical icon at 16–48
+              pixels instead of shrinking the full logo". A 72px rail has
+              nowhere near 220px, so this is the kit's own 48px optical icon
+              with the wordmark typeset beside it in the page's Inter. The
+              footer, which has the room, uses the real lockup at 220px.
+
+              tone="light" IS LOAD-BEARING, NOT DECORATION. The default tone
+              reads --logo-ink, which app/globals.css flips to WHITE in the
+              product's dark theme. The marketing tree has no dark mode and this
+              header sits on a white hero, so under a dark OS theme the
+              bracket — the screen outline that makes the mark a till and not
+              three stripes — was drawn white on white and disappeared. Every
+              marketing surface therefore names the kit variant it wants
+              outright instead of inheriting the app's. */}
+          <SurgeIcon size={48} tone="light" title={null} className="h-10 w-10" />
+          <span className="text-[22px] font-bold leading-none tracking-[-0.02em] text-[var(--surge-ink)]">Surge</span>
         </Link>
 
         <nav aria-label="Main" className="hidden items-center gap-8 lg:flex">

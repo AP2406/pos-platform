@@ -31,10 +31,14 @@
   --surge-radius-card: 12px;
   --surge-radius-control: 8px;
   --surge-content-width: 1240px;
-  /* --font-marketing is the next/font variable set on the marketing wrapper in
-     layout.tsx. It resolves at the element that uses var(--surge-font), so the
-     real Inter asset wins and the handoff's stack is the fallback chain. */
-  --surge-font: var(--font-marketing), Inter, ui-sans-serif, system-ui, sans-serif;
+  /* --surge-font IS DECLARED ON .surge-scope, NOT HERE. See the block after
+     this one. Declaring it at :root looked equivalent and was not: a custom
+     property is substituted where it is DECLARED, not where it is used, so
+     `--surge-font: var(--font-marketing), …` resolved against a :root that has
+     no --font-marketing, became invalid-at-computed-value-time, and inherited
+     down as nothing. `font-family: var(--surge-font)` then fell back to
+     inherit, and every marketing page quietly rendered in the product's body
+     face instead of Inter. */
   --surge-motion: 180ms;
 
   /* ---- derived, and why each one exists ---- */
@@ -89,16 +93,25 @@
      heading ("From first order to final payment.") and the H1 are drawn at
      almost the same size — both measure ~60px once the 971px mockup is scaled
      to its ~1456px canvas. Rendering that band at the 44px H2 ceiling loses
-     the hierarchy the design is built on, so the two band headings get their
-     own step, capped at 52px so the 1240px grid still holds two lines. */
+     the hierarchy the design is built on, so it gets its own step. */
   /* 36 -> 56px. The bottom of DESIGN-SYSTEM.md's 56–72px desktop range rather
      than the middle, because Inter is a wider face than the one drawn in the
      mockup: at 60px "Grow your business." broke onto a third line in the hero
      column, which changes the shape of the whole hero. 56 keeps the design's
      two lines and stays inside the stated range. */
   --surge-display: clamp(2.25rem, 4.4vw, 3.5rem);
-  --surge-h2-display: clamp(2.125rem, 4.4vw, 3.25rem);  /* 34 -> 52px */
-  --surge-h2: clamp(1.75rem, 3.2vw, 2.75rem);           /* 28 -> 44px */
+  /* 32 -> 46px. 01-home.jpg sets the charcoal heading at roughly 60px, but it
+     draws it in a narrower face than Inter inside a copy column of the same
+     width: at 52px "to final payment." took a third line here, and the two
+     lines the design draws are more of the design than the point size is. */
+  --surge-h2-display: clamp(2rem, 3.6vw, 2.875rem);     /* 32 -> 46px */
+  /* 28 -> 36px. Was 28 -> 44px, which overshot every section heading in
+     01-home.jpg by six to eight points and cost the page real height across
+     four bands. At 44px "Explore the planned terminal." could not hold one
+     line in its half of the pricing row, which is one of the line-break
+     mismatches the fidelity review picked up; at 2.7vw it renders ~35px at
+     1280, which is where the mockup sets it, and the heading fits. */
+  --surge-h2: clamp(1.75rem, 2.7vw, 2.25rem);           /* 28 -> 36px */
   --surge-h3: 1.25rem;                                  /* 20px */
   --surge-h4: 1.0625rem;                                /* 17px */
   --surge-body-lg: 1.125rem;                            /* 18px */
@@ -132,6 +145,16 @@
   :root {
     --surge-gutter: var(--surge-space-7); /* 48px */
   }
+}
+
+/* THE FONT STACK, DECLARED WHERE next/font'S VARIABLE ACTUALLY EXISTS.
+   layout.tsx puts both `inter.variable` (which defines --font-marketing) and
+   `surge-scope` on the same element, so this declaration resolves against an
+   element that has --font-marketing — which is the whole point. The literal
+   `Inter` after it is the handoff's stack, kept as the fallback chain for the
+   case where the self-hosted asset has not arrived yet. */
+.surge-scope {
+  --surge-font: var(--font-marketing), Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
 /* ---- primitives that are cleaner as CSS than as a class string ---- */

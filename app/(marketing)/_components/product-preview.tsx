@@ -16,8 +16,12 @@ import { PRODUCT_PREVIEW_NOTE } from "@/lib/services/terminal-availability";
 // it. The note under the frame carries the second half of the rule — that the
 // numbers inside are illustrative and are not an offer or a result.
 //
-// The bezel is a flat charcoal border with a 12px radius, not a photographed
-// device and not a drop-shadowed slab: "no exaggerated shadows".
+// THE BEZEL IS A DEVICE FRAME, NOT A CARD EDGE. 01-home.jpg draws each screen
+// inside a tablet: an 8px near-black band with a 22px outer radius, with a
+// single hairline ring around it so the black body separates from the charcoal
+// band behind it. The earlier 6px #2c3037 border read as a slightly darker card
+// on a dark surface — the shapes stopped looking like hardware. The ring is one
+// flat 2px line, not a glow and not a drop shadow.
 
 export function ProductPreviewFrame({
   children,
@@ -31,19 +35,19 @@ export function ProductPreviewFrame({
 }) {
   return (
     <figure className={"relative " + className}>
-      <div className="absolute -top-3 left-4 z-10">
+      <div className="absolute -top-3 left-6 z-10">
         <ProductPreviewBadge />
       </div>
       <div
         role="img"
         aria-label={screenLabel + " — " + PRODUCT_PREVIEW_NOTE}
-        className="overflow-hidden rounded-[16px] border-[6px] border-[#2c3037] bg-[var(--surge-surface)]"
+        className="overflow-hidden rounded-[22px] border-[8px] border-[#0b0d10] bg-[var(--surge-surface)] shadow-[0_0_0_2px_rgba(255,255,255,0.20)]"
       >
         {/* aria-hidden on the inner tree: the frame already carries one
             accessible name, and announcing forty table numbers from an
             illustrative screenshot is noise, not information. The text stays
             real DOM for selection, zoom and translation. */}
-        <div aria-hidden="true" className="p-3 text-[var(--surge-ink)] sm:p-4">
+        <div aria-hidden="true" className="p-2.5 text-[var(--surge-ink)]">
           {children}
         </div>
       </div>
