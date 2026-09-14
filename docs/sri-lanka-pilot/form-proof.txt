@@ -1,0 +1,48 @@
+==============================================================
+1. INVALID SUBMISSION - rejected server-side
+   businessName empty, email malformed. The client never saw it;
+   this is the action's own zod parse.
+--------------------------------------------------------------
+{"ok":false,"error":"Please check the highlighted fields and try again.","fieldErrors":{"businessName":"Tell us the business name","contactName":"Tell us who you are","email":"Enter a valid email","businessType":"Pick the closest match"}
+
+==============================================================
+2. HONEYPOT - silent success, nothing sent
+   The hidden 'website' field is filled, as a bot would. Expect
+   {"ok":true} identical to a real sign-up, and NO mail.
+--------------------------------------------------------------
+{"ok":true}
+
+==============================================================
+3. TOO FAST - submitted 0ms after mount, also silent success
+--------------------------------------------------------------
+{"ok":true}
+
+==============================================================
+4-8. FIVE VALID SUBMISSIONS - each should succeed and send
+     Quota is MAX_SENDS_PER_WINDOW = 5 per IP per hour, and it is
+     shared with /contact and /book.
+--------------------------------------------------------------
+  valid #1 -> {"ok":true}
+
+  valid #2 -> {"ok":true}
+
+  valid #3 -> {"ok":true}
+
+  valid #4 -> {"ok":true}
+
+  valid #5 -> {"ok":true}
+
+
+==============================================================
+9. SIXTH VALID SUBMISSION - the rate limit must trip
+   Expect ok:false and a sentence naming the fallback inbox.
+--------------------------------------------------------------
+{"ok":false,"error":"That is 5 submissions from this connection in the last hour. Please try again in 60 minutes, or email us directly at info@surgetechpos.com."}
+
+==============================================================
+10. HONEYPOT AGAIN, AFTER THE LIMIT - still silent success
+    Proves the honeypot short-circuits BEFORE the throttle, so a
+    bot can never learn the limit exists.
+--------------------------------------------------------------
+{"ok":true}
+

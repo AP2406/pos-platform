@@ -31,6 +31,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
     // industry pages. Weekly because a live offer changes more often than a
     // feature page does — and when the pilot ends this page changes first.
     { url: SITE_URL + "/pricing", lastModified: now, changeFrequency: "weekly", priority: 0.9 },
+    // The Sri Lanka pilot page. Indexable and listed on purpose: it is a
+    // recruitment page for a named audience and the whole point is that someone
+    // searching for a POS in Sri Lanka can find it and read the gaps before
+    // they talk to us. Weekly and 0.8 — one rung under /pricing, which is still
+    // the site's general pilot page, because this one serves a narrower
+    // audience. It is NOT a location landing page: the three of those that used
+    // to be in this list are 308s now, and this page carries no service area,
+    // no address and no offer (see the notes in its own file).
+    { url: SITE_URL + "/pilot/sri-lanka", lastModified: now, changeFrequency: "weekly", priority: 0.8 },
     { url: SITE_URL + "/moneris-alternative", lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: SITE_URL + "/square-alternative", lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: SITE_URL + "/clover-alternative", lastModified: now, changeFrequency: "monthly", priority: 0.6 },

@@ -292,6 +292,38 @@ const pilotSchema = z.object({
   locations: z.string().trim().max(30).optional().or(z.literal("")),
   currentPos: z.string().trim().max(120).optional().or(z.literal("")),
   painPoint: z.string().trim().max(4000).optional().or(z.literal("")),
+
+  // ----- ADDED FOR /pilot/sri-lanka. ALL OPTIONAL, SO /pricing IS UNCHANGED. -----
+  //
+  // WHY THESE LIVE ON THE EXISTING SCHEMA RATHER THAN IN A SECOND ACTION.
+  // The draft of the Sri Lanka page posted to a new `/api/pilot-signup` route of
+  // its own. That route would have been the fourth unauthenticated write path on
+  // the site and the only one outside this file — which is to say outside the
+  // honeypot, outside `isTooFast`, and outside the shared five-per-IP-per-hour
+  // bucket in lib/services/form-throttle.ts. Those controls exist because these
+  // forms send mail to a user-supplied address from the same domain that carries
+  // merchant receipts (see the block comment at the top of this file). A second,
+  // unprotected door onto that domain is an open relay no matter how careful the
+  // page in front of it is. Widening the shape of the one protected action is
+  // the entire fix; there is no new endpoint.
+  city: z.string().trim().max(80).optional().or(z.literal("")),
+  // Kept separate from `phone` because in Sri Lanka these are routinely different
+  // numbers and WhatsApp is the one that gets answered. Still optional — same
+  // drop-off reasoning as `phone` above.
+  whatsapp: z.string().trim().max(40).optional().or(z.literal("")),
+
+  // PROVENANCE TAGS — ENUMS, NOT STRINGS, AND THAT IS A SECURITY DECISION.
+  // These values are interpolated into the outbound subject line. A free-text
+  // `segment` on an unauthenticated form would hand an anonymous caller control
+  // of the subject of mail sent from our own sending domain; a closed set cannot
+  // be used that way. Optional so the /pricing form, which sends none of them,
+  // parses exactly as it did before this change.
+  country: z.enum(["CA", "LK"]).optional(),
+  segment: z.enum(["general", "sri-lanka-pilot"]).optional(),
+  // One legal value today. An enum rather than a literal so that if a second
+  // onboarding mode is ever offered the widening happens here, in the validated
+  // schema, rather than by a page inventing a string.
+  onboarding: z.enum(["remote"]).optional(),
 });
 
 export type PilotInput = z.infer<typeof pilotSchema> & BotFields;
@@ -321,12 +353,27 @@ export async function submitPilot(input: PilotInput): Promise<PilotResult> {
   const throttled = await spendSendQuota();
   if (throttled) return { ok: false, error: throttled };
   const d = parsed.data;
+
+  // The Sri Lanka page is the only caller that sends these, so the whole block
+  // is omitted for a /pricing lead rather than rendered as a row of dashes.
+  const isLk = d.segment === "sri-lanka-pilot";
+  const provenanceHtml = d.segment
+    ? "<hr>" +
+      "<p><strong>Source:</strong> " + esc(d.segment) + "</p>" +
+      "<p><strong>Country:</strong> " + esc(d.country || "-") + "</p>" +
+      "<p><strong>Onboarding:</strong> " + esc(d.onboarding || "-") + "</p>"
+    : "";
+
   const html =
     "<h2>New pilot program sign-up</h2>" +
     "<p><strong>Business:</strong> " + esc(d.businessName) + "</p>" +
     "<p><strong>Contact:</strong> " + esc(d.contactName) + "</p>" +
     "<p><strong>Email:</strong> " + esc(d.email) + "</p>" +
     "<p><strong>Phone:</strong> " + esc(d.phone || "Not provided") + "</p>" +
+    // Rendered only when supplied, so the Canadian lead email is byte-identical
+    // to what it was before this change.
+    (d.whatsapp ? "<p><strong>WhatsApp:</strong> " + esc(d.whatsapp) + "</p>" : "") +
+    (d.city ? "<p><strong>City:</strong> " + esc(d.city) + "</p>" : "") +
     "<hr>" +
     "<p><strong>Business type:</strong> " + esc(d.businessType) + "</p>" +
     "<p><strong>Locations:</strong> " + esc(d.locations || "-") + "</p>" +
@@ -334,10 +381,22 @@ export async function submitPilot(input: PilotInput): Promise<PilotResult> {
     "<hr>" +
     "<p><strong>What is not working today:</strong></p>" +
     "<p>" + nl2br(d.painPoint || "Not said") + "</p>" +
+    provenanceHtml +
     "<hr>" +
-    "<p style='color:#888;font-size:12px'>Lead capture only &mdash; no account, business or entitlement was created. Set them up by hand.</p>";
+    "<p style='color:#888;font-size:12px'>Lead capture only &mdash; no account, business or entitlement was created. Set them up by hand.</p>" +
+    // A reply to a Sri Lanka lead is written at a ten-hour offset, and the two
+    // things most likely to be got wrong in it are the ones this page was
+    // written to avoid promising. The reminder rides with the lead so it is in
+    // front of whoever answers, not in a document nobody opens.
+    (isLk
+      ? "<p style='color:#888;font-size:12px'>Sri Lanka pilot lead. Onboarding is remote. Do not quote a rate, a post-pilot price, a discount, or a staffed support window &mdash; none of those are decided.</p>"
+      : "");
 
-  const subject = "Surge pilot sign-up: " + d.businessName + " (" + d.businessType + ")";
+  // The tag goes in the subject rather than only the body so the owner can
+  // filter the inbox on it. `segment` is an enum, so nothing user-controlled
+  // reaches this string.
+  const subject =
+    "Surge pilot sign-up" + (isLk ? " [Sri Lanka]" : "") + ": " + d.businessName + " (" + d.businessType + ")";
 
   try {
     const res = await sendEmail({ to: LEADS_TO, from: LEADS_FROM, replyTo: d.email, subject: subject, html: html });

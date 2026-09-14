@@ -1,0 +1,67 @@
+=== SITEMAP contains the new route? ===
+6:https://www.surgetechpos.com/pilot/sri-lanka
+
+=== sitemap entry count:       19 ===
+
+=== EVERY SITEMAP URL, fetched locally ===
+200  /
+200  /pos
+200  /pos-for-restaurants
+200  /pos-for-retail
+200  /pricing
+200  /pilot/sri-lanka
+200  /moneris-alternative
+200  /square-alternative
+200  /clover-alternative
+200  /stripe-alternative
+200  /td-merchant-solutions-alternative
+200  /contact
+200  /book
+200  /guides
+200  /guides/lower-credit-card-processing-fees-ontario
+200  /guides/interac-vs-credit-card-fees
+200  /guides/how-to-read-your-merchant-statement
+200  /guides/what-is-a-junk-fee-on-a-merchant-account
+200  /guides/flat-rate-vs-interchange-plus-pricing
+
+=== EVERY INTERNAL LINK ON /pilot/sri-lanka (incl. nav + footer) ===
+OK   in-page anchor #apply -> id present
+OK   in-page anchor #honest -> id present
+200  /
+200  /_next/static/chunks/%5Bnext%5D_internal_font_google_public_sans_59ae55a4_module_0~odsau.css
+200  /_next/static/chunks/%5Broot-of-the-server%5D__088_ejz._.css
+200  /_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_10z625~._.js
+200  /book
+200  /clover-alternative
+200  /contact
+200  /favicon.ico?favicon.0-lx-_.rjlcvn.ico
+200  /guides
+200  /icon-192.png
+200  /icon.svg
+200  /login
+200  /manifest.webmanifest
+200  /moneris-alternative
+200  /pos
+200  /pos-for-restaurants
+200  /pos-for-retail
+200  /pricing
+200  /square-alternative
+200  /stripe-alternative
+200  /td-merchant-solutions-alternative
+
+=== canonical + og:locale on the new page ===
+<title>POS for restaurants in Sri Lanka — free pilot | Surge</title>
+<link rel="canonical" href="https://www.surgetechpos.com/pilot/sri-lanka"/>
+<meta property="og:url" content="https://www.surgetechpos.com/pilot/sri-lanka"/>
+<meta property="og:locale" content="en_LK"/>
+
+=== structured data: any offers/price/areaServed? ===
+=== json-ld @types present ===
+"@type":"Answer"
+"@type":"BreadcrumbList"
+"@type":"ContactPoint"
+"@type":"FAQPage"
+"@type":"ListItem"
+"@type":"Organization"
+"@type":"Question"
+"@type":"Service"
