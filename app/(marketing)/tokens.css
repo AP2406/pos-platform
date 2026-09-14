@@ -84,6 +84,12 @@
   /* Minimum height for a main button or any tap target. */
   --surge-control-min: 44px;
 
+  /* The header rail's height. Named rather than repeated as a literal because
+     the home hero has to clear it twice — once as top padding on the copy
+     column, once as the top edge of the bleeding photograph — and those two
+     numbers going out of step is how the picture ends up over the nav. */
+  --surge-header-h: 72px;
+
   /* ---- type scale ----
      Desktop H1 56–72px at 1.03; mobile 36–44. H2 32–44. Body 16–18 at 1.55.
      Article measure near 68 characters.
@@ -165,6 +171,83 @@
   width: 100%;
   max-width: var(--surge-content-width);
   padding-inline: var(--surge-gutter);
+}
+
+/* ==========================================================================
+   FULL-BLEED PICTURES THAT ARE STILL MEASURED FROM THE RAIL
+   ==========================================================================
+
+   THE BUG THIS EXISTS TO KILL. A picture that bleeds off the right edge of a
+   band used to be written as `absolute; right:0; width:52%` on a child of the
+   full-width <section>. A percentage on an absolutely positioned box resolves
+   against its CONTAINING BLOCK, and the containing block there is the section,
+   which is the VIEWPORT. So the picture's left edge sat at 48% of the viewport
+   while the text column sat inside a rail capped at 1240px: the two moved apart
+   at 1280 and towards each other everywhere else. At 1920 the photograph's left
+   edge landed at 922px, over the hero copy (which ends at 983) and over the
+   "Pricing" and "Guides" items in the header. At 2560 it ate 1331px of the
+   page. The layout was only ever correct at the one width it was checked at.
+
+   THE RULE THESE CLASSES ENFORCE. The right edge is the viewport (that is what
+   "bleed" means). The LEFT edge is computed from the rail, never from the
+   viewport:
+
+       left = (rail's content-box right edge) − share × (rail's content width)
+
+   `min(100%, 50% + var(--surge-content-width) / 2)` is the rail's right edge
+   expressed against the section: 50% is the viewport's midpoint, half the rail
+   is added to it, and the min() clamps it to the viewport on screens narrower
+   than 1240 where the rail is the viewport. Percentages here resolve against
+   the containing block's width — the section — so this is the CLIENT width and
+   carries no scrollbar error, which a `100vw` formulation would.
+
+   `--surge-bleed-share` is the fraction of the rail's CONTENT width the picture
+   occupies inside the rail; the rest of it is the bleed. Set it beside the
+   class (`[--surge-bleed-share:0.42]`) so one number places the picture and the
+   text column that abuts it.
+
+   ONLY THE TWO OFFSETS ARE SET HERE. `width` and `max-width` are deliberately
+   left alone: this sheet is unlayered and would otherwise beat the `w-full
+   max-w-[…]` utilities the same element needs for its in-flow mobile layout.
+   An absolutely positioned box with both offsets set and `width:auto` sizes
+   itself from the offsets, which is exactly what is wanted. */
+.surge-rail-bleed-right {
+  --surge-rail-inner: calc(min(100%, var(--surge-content-width)) - 2 * var(--surge-gutter));
+  right: 0;
+  left: calc(
+    min(100%, 50% + var(--surge-content-width) / 2) - var(--surge-gutter) -
+      var(--surge-rail-inner) * var(--surge-bleed-share, 0.42)
+  );
+}
+
+/* THE HOME HERO'S PHOTOGRAPH.
+   Below `lg` it is an ordinary block inside the rail, under the copy, and this
+   rule does nothing — DESIGN-SYSTEM.md asks for text before imagery on a narrow
+   screen and that is the source order. From `lg` it leaves the flow and bleeds.
+
+   IT STARTS BELOW THE HEADER RAIL, NOT AT y=0. 01-home.jpg runs the room up
+   past the nav and floats the nav on it, and that is what this used to do. It
+   cannot survive a wide display: the header's own items ("Pricing", "Guides",
+   "Sign in", "Book a demo") are laid out inside the 1240px rail while the
+   picture's left edge marches left as the viewport grows, so from about 1500px
+   up the nav is drawn on top of a photograph and stops being readable. Clearing
+   the 72px rail is the only way the nav is legible AND the picture still bleeds.
+   Recorded as a deviation from the mockup in the fidelity notes.
+
+   Declared here rather than as `lg:` utilities because this sheet is unlayered
+   and therefore beats Tailwind's utility layer — the same cascade fact that
+   made the previous attempt spell the rail out in utilities. Owning the whole
+   rule in one place is what stops the two halves disagreeing again. */
+@media (min-width: 1024px) {
+  .surge-hero-media {
+    position: absolute;
+    top: var(--surge-header-h);
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
 }
 
 /* THE FOCUS RING IS DECLARED ONCE, HERE, FOR THE WHOLE MARKETING TREE.

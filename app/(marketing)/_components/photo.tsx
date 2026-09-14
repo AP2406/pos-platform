@@ -269,39 +269,67 @@ export function SurgePhoto({
 export function TerminalFigure({
   sizes,
   className = "",
+  mediaClassName = "",
   ratio = "3 / 2",
+  aside,
   children,
 }: {
   sizes: string;
   className?: string;
+  /** Grid template for the picture-plus-`aside` row, when an `aside` is given. */
+  mediaClassName?: string;
   ratio?: string;
+  /**
+   * Content that belongs BESIDE the picture — the planned-capability list on
+   * the home page. It goes inside this <figure> rather than next to it so the
+   * picture, the status line and the caption stay one indivisible block: the
+   * rule is that 07-terminal-concept.jpg may not be rendered without its two
+   * strings, and a sibling element is a thing a later edit can move away.
+   */
+  aside?: ReactNode;
   /** Optional CTA or extra copy, kept inside the figure with the caption. */
   children?: ReactNode;
 }) {
   const spec = SURGE_PHOTOS.terminalConcept;
+  const media = (
+    <div
+      data-photo={spec.id}
+      style={{ aspectRatio: ratio }}
+      className="relative w-full self-center overflow-hidden rounded-[var(--surge-radius-card)] bg-[var(--surge-warm)]"
+    >
+      <Image
+        src={spec.src}
+        alt={spec.alt}
+        fill
+        sizes={sizes}
+        loading="lazy"
+        style={{ objectPosition: spec.position }}
+        className="object-contain"
+      />
+    </div>
+  );
   return (
     <figure className={"m-0 " + className}>
-      <div
-        data-photo={spec.id}
-        style={{ aspectRatio: ratio }}
-        className="relative w-full overflow-hidden rounded-[var(--surge-radius-card)] bg-[var(--surge-warm)]"
-      >
-        <Image
-          src={spec.src}
-          alt={spec.alt}
-          fill
-          sizes={sizes}
-          loading="lazy"
-          style={{ objectPosition: spec.position }}
-          className="object-contain"
-        />
-      </div>
+      {aside ? (
+        // THE PICTURE AND THE LIST ARE A ROW; THE TWO STRINGS ARE A FULL-WIDTH
+        // BLOCK UNDER IT. Stacking picture → status → caption inside one narrow
+        // 180px track, which is what this used to do on the home page, wrapped
+        // the caption onto three lines and made the whole thing read as three
+        // cramped blocks in a gutter. Given the width of the band, both strings
+        // set on one line each.
+        <div className={"grid items-center gap-[var(--surge-space-5)] " + mediaClassName}>
+          {media}
+          <div>{aside}</div>
+        </div>
+      ) : (
+        media
+      )}
       {/* BELOW the image — ASSET-CATALOG.md allows either side, and below puts
           the status and the caption together as one block a reader takes in at
           once, instead of two caveats with a picture between them. Not a
           floated pill: at 375 a pill over a 3:2 product shot covers the reader,
           which is the only thing in the frame. */}
-      <p className="mt-2 inline-flex items-center rounded-[var(--surge-radius-control)] border border-[var(--surge-accent)] bg-[var(--surge-surface)] px-2.5 py-1 text-center text-[length:var(--surge-micro)] font-semibold leading-tight text-[var(--surge-ink)]">
+      <p className="mt-[var(--surge-space-4)] inline-flex items-center rounded-[var(--surge-radius-control)] border border-[var(--surge-accent)] bg-[var(--surge-surface)] px-2.5 py-1 text-center text-[length:var(--surge-micro)] font-semibold leading-tight text-[var(--surge-ink)]">
         {TERMINAL_COPY.imageLabel}
       </p>
       <figcaption className="mt-1 text-[length:var(--surge-micro)] leading-snug text-[var(--surge-muted)]">

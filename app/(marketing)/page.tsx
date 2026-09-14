@@ -272,19 +272,25 @@ export default function HomePage() {
           for exactly that, and it is source order rather than a CSS reorder, so
           a screen reader gets the same sequence. */}
       <section aria-labelledby="hero-title" className="relative overflow-hidden bg-[var(--surge-surface)]">
-        {/* THE PHOTOGRAPH BLEEDS TO y=0, BEHIND THE HEADER. `inset-y-0` on a
-            section that is the first thing in <main>, with an absolutely
-            positioned header over it, is what the mockup draws: the room runs
-            up past the nav to the top of the viewport and the nav floats on it.
+        {/* THE HERO IS ONE CONTAINER: A TEXT COLUMN AND A MEDIA COLUMN, BOTH
+            MEASURED FROM THE 1240px RAIL.
             No terminal label on this picture — 01-home-owner.jpg has a tablet
             in it and no card reader, and ASSET-CATALOG.md forbids the
             coming-soon label on the photographs that do not show the terminal.
             The hardware caveat is still on this screen, in live text, directly
             under the CTAs.
 
-            52%, the mockup's split. It was 44% while the headline had to hold
-            two lines at a larger H1; the type scale now matches the mockup's,
-            so the four points go back to the picture.
+            58/42, AND THE 58 IS WHAT THE HEADLINE NEEDS, NOT A TASTE CALL.
+            "Grow your business." sets to 622px at the 56px H1; the column also
+            owes a 24px gap to the photograph, so the text column cannot be
+            under ~646px of the rail's 1144px content width without the headline
+            breaking onto a third line — which is what it had been doing at
+            EVERY width from 1273 up, including the 1280 the last pass checked.
+            58% is 663px, the first clean step that holds the mockup's two lines
+            and still leaves the picture 42% of the rail plus the whole bleed.
+            --surge-bleed-share below is the same split from the other side:
+            0.42 is 1 − 0.58, so the photograph's left edge lands exactly on
+            this column's right edge at every width, and cannot cross it.
 
             ONE <Image>, TWO LAYOUTS. It sits after the copy in the DOM — which
             is the order DESIGN-SYSTEM.md asks for on a narrow screen and the
@@ -293,17 +299,20 @@ export default function HomePage() {
             breakpoint, would mean two eager preloads for one above-the-fold
             picture, and the rule is to eager-load the hero, singular. */}
         <Container className="relative z-10">
-          <div className="pb-[var(--surge-space-6)] pt-[calc(72px+var(--surge-space-6))] lg:w-[52%] lg:pb-[var(--surge-space-7)] lg:pr-[var(--surge-space-5)] lg:pt-[calc(72px+var(--surge-space-6))]">
+          <div className="pb-[var(--surge-space-6)] pt-[calc(var(--surge-header-h)+var(--surge-space-6))] lg:w-[58%] lg:pb-[var(--surge-space-7)] lg:pr-[var(--surge-space-5)] lg:pt-[calc(var(--surge-header-h)+var(--surge-space-7))]">
             <Eyebrow>Point of sale + payments</Eyebrow>
             <Heading as="h1" size="display" id="hero-title" className="mt-[var(--surge-space-4)] text-[var(--surge-ink)]">
               Run the rush.
               <br />
               Grow your business.
             </Heading>
-            {/* TWO LINES, as the mockup sets it, breaking after "operations,".
-                The measure was 34ch, which forced a third line. 46ch is the
-                width the mockup's sub actually occupies. */}
-            <p className="mt-[var(--surge-space-4)] max-w-[46ch] text-[length:var(--surge-body-lg)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">
+            {/* TWO LINES, as the mockup sets it. 480px, in px and not in ch:
+                a `ch` measure is a multiple of the font's zero-advance, so it
+                moves with the type scale and with whatever face actually loads,
+                and the number that matters here is a fixed one — the sentence
+                sets to 918px, so any measure between 460 and 918 is two lines
+                and 480 is comfortably inside that at every width from 1024 up. */}
+            <p className="mt-[var(--surge-space-4)] max-w-[480px] text-[length:var(--surge-body-lg)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">
               Point of sale, payments and everyday operations, together. Built for restaurants and local businesses.
             </p>
             <div className="mt-[var(--surge-space-5)] flex flex-col gap-[var(--surge-space-3)] sm:flex-row">
@@ -322,31 +331,37 @@ export default function HomePage() {
           </div>
         </Container>
 
-        {/* The photograph. In flow and inside the rail below `lg`; absolute and
-            bleeding to all four edges of the section from `lg` up.
+        {/* The photograph. In flow and inside the rail below `lg`; from `lg` it
+            goes absolute, clears the 72px header rail, and bleeds right.
+
+            THE GEOMETRY IS IN tokens.css, under `.surge-rail-bleed-right` and
+            `.surge-hero-media`, with the long explanation of why. The short
+            version: the left edge is (rail content-box right) − 0.42 × (rail
+            content width), which is the text column's right edge, so the
+            picture cannot cross into the copy at any viewport width; the right
+            edge is the viewport, which is the bleed. What it replaced was
+            `right:0; width:52%` against the full-width <section>, i.e. 52% of
+            the VIEWPORT, which put the photograph over the copy and over the
+            header nav on every display wider than about 1500px.
 
             THE ANCHOR MOVES WITH THE BREAKPOINT. The catalog's 65% 50% holds
-            her face and the tablet inside a tall 52%-wide column, but the same
-            anchor on a full-width 3:2 crop at 375 pushed her to the left edge
-            and filled the frame with the room behind her. 55% centres her
-            there. One custom property, two values, no second <img>. */}
-        {/* The rail is spelled out in utilities rather than reusing
-            `.surge-wrap`: that class lives in tokens.css, which is imported
-            after Tailwind's utility layer, so its `width:100%; max-width:1240px`
-            beat `lg:w-[52%]` and the picture silently rendered full-width behind
-            the copy. Same declarations, one cascade layer, responsive overrides
-            that actually win. */}
-        <div className="mx-auto w-full max-w-[var(--surge-content-width)] px-[var(--surge-gutter)] pb-[var(--surge-space-6)] [--hero-pos:55%_50%] lg:absolute lg:inset-y-0 lg:right-0 lg:z-0 lg:mx-0 lg:w-[52%] lg:max-w-none lg:px-0 lg:pb-0 lg:[--hero-pos:65%_50%]">
+            her face and the tablet inside a tall column, but the same anchor on
+            a full-width 3:2 crop at 375 pushed her to the left edge and filled
+            the frame with the room behind her. 55% centres her there. One
+            custom property, two values, no second <img>. */}
+        <div className="surge-hero-media surge-rail-bleed-right mx-auto w-full max-w-[var(--surge-content-width)] px-[var(--surge-gutter)] pb-[var(--surge-space-6)] [--hero-pos:55%_50%] [--surge-bleed-share:0.42] lg:z-0 lg:[--hero-pos:65%_50%]">
           <div className="aspect-[3/2] lg:aspect-auto lg:h-full">
-            {/* 52vw at 1440 is ~749px; at 2× that asks for ~1498px against a
-                1536px source — the widest derivative on the page, and still
-                inside native. */}
+            {/* The box is 42% of the 1240 rail plus everything to the right of
+                it, i.e. about `50vw − 92px`. 55vw is the honest bracket for
+                that from 1024 up; above 2000 it is pinned to 1280 because the
+                source is 1536px wide and asking the optimizer for more than
+                that is asking it to upscale. */}
             <SurgePhoto
               photo={SURGE_PHOTOS.homeOwner}
               fill
               rounded={false}
               priority
-              sizes="(min-width: 1024px) 52vw, 100vw"
+              sizes="(min-width: 2000px) 1280px, (min-width: 1024px) 55vw, 100vw"
               position="var(--hero-pos)"
               className="rounded-[var(--surge-radius-card)] lg:rounded-none"
             />
@@ -357,9 +372,18 @@ export default function HomePage() {
       {/* ----------------------------------------------------- value props -- */}
       <Band tone="canvas" className="border-y border-[var(--surge-border)]">
         <Container>
-          <ul className="grid gap-[var(--surge-space-5)] py-[var(--surge-space-4)] md:grid-cols-3 md:divide-x md:divide-[var(--surge-border)]">
+          {/* THREE EQUAL COLUMNS ACROSS THE WHOLE RAIL — FROM `lg`, NOT `md`.
+              At `md` (768) three columns leave each description about 168px,
+              and the three sentences here set to 499, 529 and 439px: every one
+              of them ran to four or five lines, and two of the three HEADINGS
+              wrapped as well. DESIGN-SYSTEM.md's own instruction for a narrow
+              screen is to "turn multi-column cards into a single column", so
+              they are one column until there is room for three. From 1024 the
+              narrowest description column is 197px, which is three lines; from
+              1280 it is 269px, which is two. */}
+          <ul className="grid gap-[var(--surge-space-5)] py-[var(--surge-space-4)] lg:grid-cols-3 lg:divide-x lg:divide-[var(--surge-border)]">
             {VALUE_PROPS.map((v, i) => (
-              <li key={v.title} className={"flex gap-[var(--surge-space-4)] " + (i > 0 ? "md:pl-[var(--surge-space-6)]" : "")}>
+              <li key={v.title} className={"flex gap-[var(--surge-space-4)] " + (i > 0 ? "lg:pl-[var(--surge-space-6)]" : "")}>
                 {/* 48px, which is the size the mockup draws these at — they
                     were 32px, about half the drawn area, and read as bullets
                     rather than as the three things the band is about.
@@ -371,7 +395,10 @@ export default function HomePage() {
                 </svg>
                 <div>
                   <h2 className="text-[length:var(--surge-h4)] font-bold text-[var(--surge-ink)]">{v.title}</h2>
-                  <p className="mt-1 max-w-[34ch] text-[length:var(--surge-small)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">{v.body}</p>
+                  {/* NO MEASURE CAP. The grid column IS the measure here, and
+                      a 34ch cap on top of it only ever made the line shorter
+                      than the column it sits in. */}
+                  <p className="mt-1 text-[length:var(--surge-small)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">{v.body}</p>
                 </div>
               </li>
             ))}
@@ -392,7 +419,14 @@ export default function HomePage() {
                   <br />
                   to final payment.
                 </Heading>
-                <p className="mt-[var(--surge-space-4)] max-w-[40ch] text-[length:var(--surge-body)] leading-[var(--surge-leading-body)] text-[var(--surge-on-dark-muted)]">
+                {/* THREE LINES. The sentence sets to 1112px, so three lines
+                    need a measure of at least 371px and fewer than 556px. 420px
+                    sits in the middle of that window and — unlike the 40ch it
+                    replaces — does not move when the type scale does. The grid
+                    track it lives in has a 380px floor for the same reason: at
+                    1024 a pure 38% track was 353px and the paragraph fell to
+                    four lines. */}
+                <p className="mt-[var(--surge-space-4)] max-w-[420px] text-[length:var(--surge-body)] leading-[var(--surge-leading-body)] text-[var(--surge-on-dark-muted)]">
                   A modern POS built for the pace of your business. Take orders, send to the kitchen, accept payments and keep everything in sync.
                 </p>
               </div>
@@ -430,18 +464,37 @@ export default function HomePage() {
 
       {/* ------------------------------------- pricing / planned terminal --- */}
       <Band tone="canvas" className="border-y border-[var(--surge-border)]">
-        <Container className="grid gap-[var(--surge-space-6)] py-[var(--surge-space-4)] lg:grid-cols-2 lg:gap-0">
-          <div className="lg:pr-[var(--surge-space-7)]">
+        {/* 45/55, NOT 50/50. The terminal half carries a picture, a list of
+            four planned capabilities and two mandatory strings; the pricing
+            half carries a heading, a two-line paragraph, a small card and a
+            link. An even split gave the terminal side 524px of usable width,
+            which was not enough for a picture worth looking at AND a tick list
+            whose longest line sets to 291px. Five points of the rail moved
+            across buys the list 327px and the pricing side still has 455px,
+            comfortably more than "Know what you pay." needs at 393px.
+            AND IT STARTS AT `xl`. Below 1280 the rail is the viewport, so the
+            terminal half was 510px at 1024 and the capability list beside the
+            picture had 181px — every one of the four lines wrapped. Stacked,
+            it has the whole rail and every line sets once. */}
+        <Container className="grid gap-[var(--surge-space-6)] py-[var(--surge-space-4)] xl:grid-cols-[minmax(0,45fr)_minmax(0,55fr)] xl:gap-0">
+          <div className="xl:pr-[var(--surge-space-7)]">
             <Eyebrow>Simple, transparent pricing</Eyebrow>
             <Heading as="h2" size="h2" className="mt-3 text-[var(--surge-ink)]">
               Know what you pay.
             </Heading>
             {/* Mockup: "Straightforward rates for card payments." Replaced with
                 the approved market caveat — there is no published rate. */}
-            <p className="mt-3 max-w-[42ch] text-[length:var(--surge-body)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">
+            {/* TWO LINES. The sentence sets to 761px, so anything from 381px
+                up is two lines; 420px holds that from 1024 through 2560 and,
+                being px rather than the 42ch it replaces, does not shrink with
+                the type scale. */}
+            <p className="mt-3 max-w-[420px] text-[length:var(--surge-body)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">
               {TERMINAL_COPY.marketNote}
             </p>
-            <div className="mt-[var(--surge-space-5)] rounded-[var(--surge-radius-card)] border border-[var(--surge-border)] bg-[var(--surge-surface)] p-[var(--surge-space-5)]">
+            {/* Capped below `xl` for the same reason as the terminal figure:
+                with the band stacked the card would otherwise stretch the full
+                928px rail around two short lines. */}
+            <div className="mt-[var(--surge-space-5)] max-w-[620px] rounded-[var(--surge-radius-card)] border border-[var(--surge-border)] bg-[var(--surge-surface)] p-[var(--surge-space-5)] xl:max-w-none">
               <h3 className="text-[length:var(--surge-h3)] font-bold text-[var(--surge-ink)]">Request pricing</h3>
               <p className="mt-1.5 max-w-[40ch] text-[length:var(--surge-small)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">
                 Tell us where you are and how your business runs, and we will put a written quote together.
@@ -454,7 +507,7 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <div id="payment-terminal" className="scroll-mt-[96px] lg:border-l lg:border-[var(--surge-border)] lg:pl-[var(--surge-space-7)]">
+          <div id="payment-terminal" className="scroll-mt-[96px] xl:border-l xl:border-[var(--surge-border)] xl:pl-[var(--surge-space-7)]">
             {/* NO SHORT "COMING SOON" CHIP BESIDE THE EYEBROW ANY MORE. The
                 mockup has no chip here, and the figure below now carries the
                 full approved string — "Payment terminal · Coming soon" — right
@@ -472,33 +525,46 @@ export default function HomePage() {
               A compact, reliable card reader designed for your business.
             </p>
 
-            <div className="mt-[var(--surge-space-4)] grid gap-[var(--surge-space-5)] sm:grid-cols-[minmax(0,180px)_minmax(0,1fr)]">
-              {/* THE ONE SANCTIONED WRAPPER FOR 07-terminal-concept.jpg. It
-                  renders the photograph, then the live status line, then the
-                  concept caption — all three inside this <figure>, as real text
-                  in the served HTML, at every width and with no hover. */}
-              <TerminalFigure sizes="(min-width: 640px) 180px, 100vw" />
-              <div>
-                <h3 className="text-[length:var(--surge-micro)] font-bold uppercase tracking-[0.08em] text-[var(--surge-muted)]">
-                  Planned — not yet available
-                </h3>
-                <ul className="mt-2 space-y-2 text-[length:var(--surge-small)] text-[var(--surge-ink)]">
-                  {TERMINAL_POINTS.map((p) => (
-                    <li key={p.text} className="flex gap-2.5">
-                      {/* TWO CIRCLED, TWO BARE — the mockup's own split, and
-                          the thing that makes the "(planned)" pair read as a
-                          pair. Decorative either way: the meaning is in the
-                          words beside them and in the heading above. */}
-                      <svg viewBox="0 0 20 20" aria-hidden="true" className="mt-0.5 h-4 w-4 flex-none text-[var(--surge-action)]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        {p.circled ? <circle cx="10" cy="10" r="8" /> : null}
-                        <path d={p.circled ? "M6.5 10.2l2.4 2.4 4.6-5" : "M4 10.6l3.6 3.6 8.4-8.4"} />
-                      </svg>
-                      <span>{p.text}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+            {/* THE ONE SANCTIONED WRAPPER FOR 07-terminal-concept.jpg. It
+                renders the photograph, then the live status line, then the
+                concept caption — all three inside one <figure>, as real text in
+                the served HTML, at every width and with no hover. The planned
+                capabilities go in as its `aside`, so the picture and the list
+                are a row and the two mandatory strings are a full-width block
+                beneath, each on a single line. */}
+            <TerminalFigure
+              // Capped while the band is stacked: below `xl` the figure has the
+              // whole 928px rail, and a 210px picture beside a 694px list is
+              // not a pair, it is a picture with a margin.
+              className="mt-[var(--surge-space-4)] max-w-[620px] xl:max-w-none"
+              // 210px, not 230: at 230 the capability list came out at exactly
+              // 291px against a longest line of exactly 291px, which is not a
+              // margin, it is a coincidence. 210 leaves it 20px of slack.
+              mediaClassName="sm:grid-cols-[minmax(0,210px)_minmax(0,1fr)]"
+              sizes="(min-width: 640px) 210px, 100vw"
+              aside={
+                <>
+                  <h3 className="text-[length:var(--surge-micro)] font-bold uppercase tracking-[0.08em] text-[var(--surge-muted)]">
+                    Planned — not yet available
+                  </h3>
+                  <ul className="mt-2 space-y-2 text-[length:var(--surge-small)] text-[var(--surge-ink)]">
+                    {TERMINAL_POINTS.map((p) => (
+                      <li key={p.text} className="flex gap-2.5">
+                        {/* TWO CIRCLED, TWO BARE — the mockup's own split, and
+                            the thing that makes the "(planned)" pair read as a
+                            pair. Decorative either way: the meaning is in the
+                            words beside them and in the heading above. */}
+                        <svg viewBox="0 0 20 20" aria-hidden="true" className="mt-0.5 h-4 w-4 flex-none text-[var(--surge-action)]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          {p.circled ? <circle cx="10" cy="10" r="8" /> : null}
+                          <path d={p.circled ? "M6.5 10.2l2.4 2.4 4.6-5" : "M4 10.6l3.6 3.6 8.4-8.4"} />
+                        </svg>
+                        <span>{p.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              }
+            />
 
             {/* "Get terminal updates" — one of the two CTA labels the launch
                 rules allow. Never Buy, Preorder, Available now or a date. It
@@ -516,23 +582,32 @@ export default function HomePage() {
 
       {/* ------------------------------------------------- onboarding steps */}
       <Band tone="surface" labelledBy="get-started-title">
-        {/* The heading column is a shade wider than a quarter, which is what
-            lets "A smoother switch / starts here." sit on the mockup's two
-            lines instead of three. */}
-        <Container className="grid gap-[var(--surge-space-6)] py-[var(--surge-space-5)] lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))] lg:gap-0">
-          <div className="lg:pr-[var(--surge-space-6)]">
+        {/* 1.7fr, NOT 1.4. "A smoother switch" sets to 365px at the 36px H2 and
+            the column owes 32px of right padding, so the track has to clear
+            397px — 1.4fr gave it 364px and the heading took the third line the
+            mockup does not draw. 1.7fr is 414px.
+            FOUR ACROSS ONLY FROM `xl`. At 1024 the same four tracks left each
+            step 165px and all three step titles wrapped, so between 1024 and
+            1279 the heading takes the full rail and the three steps sit three
+            across underneath it — the rules move to `xl` with them, because a
+            left rule on the first of three columns is a rule down the edge of
+            the page. */}
+        <Container className="grid gap-x-[var(--surge-space-6)] gap-y-[var(--surge-space-6)] py-[var(--surge-space-5)] lg:grid-cols-3 xl:grid-cols-[minmax(0,1.7fr)_repeat(3,minmax(0,1fr))] xl:gap-x-0">
+          <div className="lg:col-span-3 xl:col-span-1 xl:pr-[var(--surge-space-6)]">
             <Eyebrow>Get started</Eyebrow>
             <Heading as="h2" size="h2" id="get-started-title" className="mt-3 text-[var(--surge-ink)]">
               A smoother switch
               <br />
               starts here.
             </Heading>
-            <p className="mt-3 max-w-[34ch] text-[length:var(--surge-small)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">
+            {/* 360px: the sentence sets to 594px, so two lines need 297px or
+                more, and the track above is 414px wide. */}
+            <p className="mt-3 max-w-[360px] text-[length:var(--surge-small)] leading-[var(--surge-leading-body)] text-[var(--surge-muted)]">
               We make it simple to get up and running, with hands-on support at every step.
             </p>
           </div>
           {STEPS.map((s) => (
-            <div key={s.n} className="lg:border-l lg:border-[var(--surge-border)] lg:pl-[var(--surge-space-6)]">
+            <div key={s.n} className="xl:border-l xl:border-[var(--surge-border)] xl:pl-[var(--surge-space-6)]">
               <span className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--surge-accent)] text-[length:var(--surge-small)] font-bold text-[var(--surge-action)]">
                 {s.n}
               </span>

@@ -59,10 +59,27 @@ Deviations:
 1. **H1 is 56px, not the ~60px the mockup measures.** Inter is a wider face
    than the one drawn; at 60px "Grow your business." broke to a third line.
    56px is the bottom of DESIGN-SYSTEM.md's 56–72px range.
-2. **The photograph takes 44% of the width, the mockup gives it ~52%.** The
-   four points went to the text column so the headline holds two lines.
-3. **The photograph is a placeholder** (see "Image slots" below).
-4. `Explore the planned terminal` scrolls to the planned-terminal band on this
+2. **The photograph takes 42% of the 1240px rail plus the bleed, measured from
+   the rail and not the viewport.** It was `right:0; width:52%` against the
+   full-width `<section>`, i.e. 52% of the VIEWPORT, which is only in the right
+   place at about 1280: at 1920 its left edge landed at 922px, over the hero
+   copy and over "Pricing" and "Guides", and at 2560 it was 1331px wide. The
+   left edge is now `(rail content-box right) − 0.42 × (rail content width)`,
+   which is the text column's right edge at every width. See
+   `.surge-rail-bleed-right` in tokens.css.
+3. **The photograph starts below the 72px header rail, not at y=0.** The mockup
+   runs the room up past the nav and floats the nav on it. That cannot survive a
+   wide display — the header's items are laid out inside the 1240px rail while
+   the picture's left edge moves left as the viewport grows, so from roughly
+   1500px up the nav is drawn on a photograph. Clearing the rail is the only way
+   the nav stays legible at every width AND the picture still bleeds.
+4. **The text column is 58% of the rail, the mockup's is about 41%.** "Grow
+   your business." sets to 622px at the 56px H1 and the column owes a 24px gap
+   to the picture, so anything under ~646px of the 1144px content width breaks
+   the headline onto a third line — which it had been doing at every width from
+   1273 up, 1280 included.
+5. **The photograph is a placeholder** (see "Image slots" below).
+6. `Explore the planned terminal` scrolls to the planned-terminal band on this
    page rather than to a `/pos-hardware` route, which does not exist yet.
 
 ### Three value props

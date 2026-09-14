@@ -61,11 +61,18 @@ export function PreviewTabs({ tabs, label, aside }: { tabs: PreviewTab[]; label:
   }
 
   return (
-    // 36/64 with a 24px gutter, which is where 01-home.jpg puts the split: the
-    // copy column runs to ~35% of the rail and the two device frames fill the
-    // whole right-hand side of the band. At 40/60 with a 64px gutter the frames
-    // were ~90px narrower than the mockup's and the band grew to compensate.
-    <div className="grid items-start gap-[var(--surge-space-5)] lg:grid-cols-[minmax(0,36%)_minmax(0,1fr)]">
+    // 38/62 with a 24px gutter, which is about where 01-home.jpg puts the
+    // split: the copy column runs to roughly a third of the rail and the device
+    // frames fill the whole right-hand side of the band.
+    //
+    // THE SPLIT STARTS AT `xl`, NOT `lg`. Below 1280 the rail IS the viewport,
+    // so a 38% track is 353px at 1024 — narrow enough that the band's intro ran
+    // to four lines and the four-item tab rail wrapped onto two rows, while the
+    // two device frames shared 524px between them. There is no percentage that
+    // fixes that; there is only not splitting the band until the rail is at its
+    // full 1240. Below that the copy, the rail and the frames each take the
+    // whole width, one under the other.
+    <div className="grid items-start gap-[var(--surge-space-5)] xl:grid-cols-[minmax(0,38%)_minmax(0,1fr)]">
       <div>
       {aside}
       <div role="tablist" aria-label={label} className="mt-[var(--surge-space-6)] flex flex-wrap gap-[var(--surge-space-6)] border-b border-[var(--surge-on-dark-line)]">

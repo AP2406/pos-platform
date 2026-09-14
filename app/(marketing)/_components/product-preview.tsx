@@ -33,15 +33,24 @@ export function ProductPreviewFrame({
   screenLabel: string;
   className?: string;
 }) {
+  // THE FIGURE FILLS ITS GRID ROW. Two of these sit side by side under a tab
+  // and they hold different amounts of content — a floor plan of twelve table
+  // chips beside three kitchen tickets — so laid out as plain blocks the
+  // shorter frame ended a hundred-odd pixels above the taller one and left a
+  // dead rectangle in the middle of the charcoal band. `h-full` plus a column
+  // flex makes both device bodies the height of the taller pair, and the
+  // caption still sits on the baseline under both. Outside a stretched grid
+  // row `h-full` resolves to `auto`, so the single-frame Reports tab and every
+  // other page that uses this component are untouched.
   return (
-    <figure className={"relative " + className}>
+    <figure className={"relative flex h-full flex-col " + className}>
       <div className="absolute -top-3 left-6 z-10">
         <ProductPreviewBadge />
       </div>
       <div
         role="img"
         aria-label={screenLabel + " — " + PRODUCT_PREVIEW_NOTE}
-        className="overflow-hidden rounded-[22px] border-[8px] border-[#0b0d10] bg-[var(--surge-surface)] shadow-[0_0_0_2px_rgba(255,255,255,0.20)]"
+        className="flex-1 overflow-hidden rounded-[22px] border-[8px] border-[#0b0d10] bg-[var(--surge-surface)] shadow-[0_0_0_2px_rgba(255,255,255,0.20)]"
       >
         {/* aria-hidden on the inner tree: the frame already carries one
             accessible name, and announcing forty table numbers from an
