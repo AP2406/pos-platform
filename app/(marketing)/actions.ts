@@ -108,6 +108,89 @@ async function spendSendQuota(): Promise<string | null> {
   );
 }
 
+// ----- LEAD DELIVERY, SHARED BY ALL THREE FORMS -----
+//
+// `sendEmail` DOES NOT THROW. On failure it returns `{ error }` and logs
+// (lib/services/email.ts). Wrapping it in a bare try/catch and returning
+// `{ ok: true }` afterwards is therefore not a safety net, it is dead code
+// wrapped around an unchecked result — and it is how a real client received a
+// "we got your request" receipt for a booking the owner never saw. Every caller
+// must branch on the RESULT. These two helpers are the only sanctioned way to
+// send from this file so that cannot drift back apart.
+
+/**
+ * The owner's copy. Returns true only when Resend has accepted the message.
+ *
+ * The log lines are the deliverable, not a nicety. Vercel Hobby keeps runtime
+ * logs for one hour, so when a lead goes missing this is the only evidence that
+ * will ever exist, and it has to stand on its own an hour later: which form,
+ * the address the message was actually addressed to (LEADS_TO is env-driven —
+ * never assume it is the default), and verbatim what Resend said.
+ *
+ * Success is logged at info with the Resend id for the opposite reason. A lead
+ * the owner never received is either one we failed to send or one Resend
+ * accepted and the mailbox dropped; those have completely different fixes, and
+ * the id is what settles it against the Resend dashboard in one lookup.
+ */
+async function sendLeadEmail(
+  form: string,
+  args: { to: string; from: string; replyTo: string; subject: string; html: string },
+): Promise<boolean> {
+  let res: Awaited<ReturnType<typeof sendEmail>>;
+  try {
+    res = await sendEmail(args);
+  } catch (err) {
+    // sendEmail catches its own exceptions today, but "does not throw" is not a
+    // guarantee we control. Treat a throw as a failed lead, never a sent one.
+    console.error("[" + form + "] lead email to " + args.to + " threw: " + String(err));
+    return false;
+  }
+  if ("error" in res) {
+    console.error("[" + form + "] lead email to " + args.to + " failed: " + res.error);
+    return false;
+  }
+  console.info(
+    "[" + form + "] lead email accepted by Resend for delivery to " + args.to + ", id " + res.id,
+  );
+  return true;
+}
+
+/**
+ * The visitor's receipt. Best-effort by design — the lead is already in the
+ * owner's inbox by the time this runs, and failing the whole submission over a
+ * receipt would throw away the thing we actually wanted. Call it ONLY after
+ * sendLeadEmail has returned true.
+ *
+ * Failure is still logged: a visitor who is not getting receipts is a support
+ * question the owner should not have to reverse-engineer.
+ */
+async function sendConfirmationEmail(
+  form: string,
+  args: { to: string; from: string; replyTo: string; subject: string; html: string },
+): Promise<void> {
+  try {
+    const res = await sendEmail(args);
+    if ("error" in res) {
+      console.error("[" + form + "] confirmation email to " + args.to + " failed: " + res.error);
+      return;
+    }
+    console.info(
+      "[" + form + "] confirmation email accepted by Resend for delivery to " + args.to + ", id " + res.id,
+    );
+  } catch (err) {
+    console.error("[" + form + "] confirmation email to " + args.to + " threw: " + String(err));
+  }
+}
+
+/**
+ * What the visitor is told when their lead did not leave the building. One
+ * sentence for all three forms so none of them can quietly stop naming the
+ * inbox that always works; `noun` is the only part that varies.
+ */
+function leadSendFailureMessage(noun: string): string {
+  return "We could not send your " + noun + ". Please try again, or email us at " + SUPPORT_EMAIL + ".";
+}
+
 function esc(s: string): string {
   return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -247,16 +330,13 @@ export async function submitContact(input: ContactInput): Promise<{ ok: boolean;
     "<hr>" +
     "<p><strong>Message:</strong></p>" +
     "<p>" + nl2br(d.message) + "</p>";
-  try {
-    await sendEmail({ to: LEADS_TO, from: LEADS_FROM, replyTo: d.email, subject: "Surge contact: " + d.name, html: html });
-  } catch (err) {
-    return { ok: false, error: "Something went wrong sending your message. Please try again or email us." };
+  const leadSent = await sendLeadEmail("submitContact", { to: LEADS_TO, from: LEADS_FROM, replyTo: d.email, subject: "Surge contact: " + d.name, html: html });
+  if (!leadSent) {
+    // No receipt. Telling someone "we got your message" when nobody did is
+    // worse than telling them it failed, because it stops them following up.
+    return { ok: false, error: leadSendFailureMessage("message") };
   }
-  try {
-    await sendEmail({ to: d.email, from: LEADS_FROM, replyTo: SUPPORT_EMAIL, subject: "Thanks for reaching out \u2014 Surge", html: confirmationHtml(d.name, "message") });
-  } catch (err2) {
-    // confirmation is best-effort; the lead already went through
-  }
+  await sendConfirmationEmail("submitContact", { to: d.email, from: LEADS_FROM, replyTo: SUPPORT_EMAIL, subject: "Thanks for reaching out \u2014 Surge", html: confirmationHtml(d.name, "message") });
   return { ok: true };
 }
 // ----- PILOT PROGRAM SIGNUP -----
@@ -269,11 +349,11 @@ export async function submitContact(input: ContactInput): Promise<{ ok: boolean;
 // the schema for a DB write to reuse. A second, different submission path would
 // be a second thing to keep alive; this is the same one with a different shape.
 //
-// The one deliberate difference from its two siblings: this action checks the
-// RESULT of sendEmail. `sendEmail` returns `{ error }` instead of throwing when
-// Resend rejects a message, so a try/catch alone reports success for a lead that
-// never left the building. A pilot signup is the only form on the site where the
-// visitor has committed to something, so silent loss is the worst failure mode.
+// This action used to be the only one of the three that checked the RESULT of
+// sendEmail rather than relying on a try/catch that could never fire. Its two
+// siblings have been brought in line — all three now go through sendLeadEmail /
+// sendConfirmationEmail above, and none of them can report success for a lead
+// that never left the building.
 const pilotSchema = z.object({
   businessName: z.string().trim().min(1, "Tell us the business name").max(160),
   contactName: z.string().trim().min(1, "Tell us who you are").max(120),
@@ -333,20 +413,11 @@ export async function submitPilot(input: PilotInput): Promise<PilotResult> {
 
   const subject = "Surge pilot sign-up: " + d.businessName + " (" + d.businessType + ")";
 
-  try {
-    const res = await sendEmail({ to: LEADS_TO, from: LEADS_FROM, replyTo: d.email, subject: subject, html: html });
-    if ("error" in res) {
-      return { ok: false, error: "We could not send your sign-up. Please try again, or email us at " + SUPPORT_EMAIL + "." };
-    }
-  } catch {
-    return { ok: false, error: "We could not send your sign-up. Please try again, or email us at " + SUPPORT_EMAIL + "." };
+  const leadSent = await sendLeadEmail("submitPilot", { to: LEADS_TO, from: LEADS_FROM, replyTo: d.email, subject: subject, html: html });
+  if (!leadSent) {
+    return { ok: false, error: leadSendFailureMessage("sign-up") };
   }
-  try {
-    await sendEmail({ to: d.email, from: LEADS_FROM, replyTo: SUPPORT_EMAIL, subject: "You are on the Surge pilot list", html: confirmationHtml(d.contactName, "pilot") });
-  } catch {
-    // Confirmation is best-effort — the lead is already in the owner's inbox and
-    // failing the whole submission over a receipt would lose it.
-  }
+  await sendConfirmationEmail("submitPilot", { to: d.email, from: LEADS_FROM, replyTo: SUPPORT_EMAIL, subject: "You are on the Surge pilot list", html: confirmationHtml(d.contactName, "pilot") });
   return { ok: true };
 }
 
@@ -438,15 +509,12 @@ export async function submitBooking(input: BookingInput): Promise<{ ok: boolean;
 
   const subject = "Surge call request: " + d.name + (d.volume ? " (" + d.volume + "/mo" + (volume > 0 ? ", ~" + money(netMonthly) + "/mo profit" : "") + ")" : "");
 
-  try {
-    await sendEmail({ to: LEADS_TO, from: LEADS_FROM, replyTo: d.email, subject: subject, html: html });
-  } catch (err) {
-    return { ok: false, error: "Something went wrong. Please try again or email us." };
+  const leadSent = await sendLeadEmail("submitBooking", { to: LEADS_TO, from: LEADS_FROM, replyTo: d.email, subject: subject, html: html });
+  if (!leadSent) {
+    // The exact failure this hotfix exists for: a client got "your free call is
+    // booked" for a request that never reached the owner. No lead, no receipt.
+    return { ok: false, error: leadSendFailureMessage("request") };
   }
-  try {
-    await sendEmail({ to: d.email, from: LEADS_FROM, replyTo: SUPPORT_EMAIL, subject: "We got your request \u2014 Surge", html: confirmationHtml(d.name, "call") });
-  } catch (err2) {
-    // confirmation is best-effort; the lead already went through
-  }
+  await sendConfirmationEmail("submitBooking", { to: d.email, from: LEADS_FROM, replyTo: SUPPORT_EMAIL, subject: "We got your request \u2014 Surge", html: confirmationHtml(d.name, "call") });
   return { ok: true };
 }
