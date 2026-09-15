@@ -1,74 +1,132 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { OG_BASE } from "../shared-metadata";
 import { JsonLd, article, breadcrumbTrail } from "../jsonld";
-import { LandingEyebrow, LandingCTA } from "../local-landing";
-import { getGuide, GUIDES } from "./guides";
-
-// Shared chrome for every /guides post: metadata, Article + breadcrumb JSON-LD,
-// the header, and the closing CTA. Each guide page only writes its own body.
-
+import { Photo, pageMetadata, ClosingCta } from "../design";
+import { GUIDES, getGuide } from "./guides";
 export function guideMetadata(slug: string): Metadata {
-  const g = getGuide(slug)!;
-  const path = "/guides/" + slug;
+  const guide = getGuide(slug)!;
+  const metadata = pageMetadata(
+    guide.title,
+    guide.description,
+    `/guides/${slug}`,
+  );
   return {
-    title: { absolute: g.title + " | Surge" },
-    description: g.description,
-    alternates: { canonical: path },
-    openGraph: { ...OG_BASE, url: path, type: "article" },
+    ...metadata,
+    openGraph: {
+      ...metadata.openGraph,
+      type: "article",
+      publishedTime: guide.datePublished,
+      modifiedTime: guide.dateModified,
+    },
   };
 }
-
-export function GuideH2({ children }: { children: React.ReactNode }) {
-  return <h2 className="mt-12 text-2xl font-bold tracking-[-0.01em] text-[#0A2540]">{children}</h2>;
-}
-export function GuideP({ children }: { children: React.ReactNode }) {
-  return <p className="mt-4 leading-relaxed text-[#42566B]">{children}</p>;
-}
-
-function RelatedGuides({ currentSlug }: { currentSlug: string }) {
-  const others = GUIDES.filter((g) => g.slug !== currentSlug).slice(0, 3);
-  if (!others.length) return null;
-  return (
-    <section className="border-t border-[#D9E1EA] bg-[#F4F7FA] py-14">
-      <div className="mx-auto max-w-2xl px-6">
-        <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-[#7A8CA0]">Keep reading</h2>
-        <ul className="mt-4 space-y-3">
-          {others.map((g) => (
-            <li key={g.slug}>
-              <Link href={"/guides/" + g.slug} className="group block rounded-md border border-[#D9E1EA] bg-white p-4 transition-colors hover:bg-[#F4F7FA]">
-                <span className="font-bold text-[#0A2540] group-hover:text-[#1B6DC1]">{g.title}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
+export function GuideArticle({ slug }: { slug: string }) {
+  const guide = getGuide(slug)!;
+  const path = `/guides/${slug}`;
+  const readingMinutes = Math.max(
+    1,
+    Math.ceil(guide.sections.flat().join(" ").split(/\s+/).length / 180),
   );
-}
-
-export function GuideArticle({ slug, lede, cta, children }: { slug: string; lede: React.ReactNode; cta: { heading: string; sub: string }; children: React.ReactNode }) {
-  const g = getGuide(slug)!;
-  const path = "/guides/" + slug;
   return (
     <>
-      <JsonLd data={article({ headline: g.title, description: g.description, path, datePublished: g.datePublished })} />
-      <JsonLd data={breadcrumbTrail([{ name: "Home", path: "" }, { name: "Guides", path: "/guides" }, { name: g.title, path }])} />
-
-      <article className="relative overflow-hidden pb-8 pt-36">
-        
-        <div className="relative mx-auto max-w-2xl px-6">
-          <Link href="/guides" className="text-sm font-bold text-[#1B6DC1] hover:underline">&larr; All guides</Link>
-          <div className="mt-4"><LandingEyebrow>Guide</LandingEyebrow></div>
-          <h1 className="mt-4 text-[36px] font-bold leading-[1.15] tracking-[-0.015em] text-[#0A2540] sm:text-[42px]">{g.title}</h1>
-          <p className="mt-5 text-lg leading-relaxed text-[#42566B]">{lede}</p>
-          {children}
-          <p className="mt-8 text-xs text-[#7A8CA0]">This guide is general information, not financial or legal advice. Card network rules and rates change &mdash; confirm the current details before acting.</p>
+      <JsonLd
+        data={{
+          ...article({
+            headline: guide.title,
+            description: guide.description,
+            path,
+            datePublished: guide.datePublished,
+          }),
+          dateModified: guide.dateModified,
+        }}
+      />
+      <JsonLd
+        data={breadcrumbTrail([
+          { name: "Home", path: "" },
+          { name: "Guides", path: "/guides" },
+          { name: guide.title, path },
+        ])}
+      />
+      <article className="s-article">
+        <Link className="s-text-link" href="/guides">
+          ← All guides
+        </Link>
+        <h1>{guide.title}</h1>
+        <p className="s-lede">{guide.excerpt}</p>
+        <div className="s-article-meta">
+          Surge guides · {readingMinutes} min read · Updated 14 September 2026
+        </div>
+        <Photo name="guides" eager sizes="(min-width: 760px) 720px, 100vw" />
+        <nav className="s-article-contents" aria-label="In this guide">
+          <span>IN THIS GUIDE</span>
+          <ol>
+            {guide.sections.map(([heading], index) => (
+              <li key={heading}>
+                <a href={`#guide-section-${index + 1}`}>
+                  {heading}
+                  <span aria-hidden="true">↗</span>
+                </a>
+              </li>
+            ))}
+          </ol>
+        </nav>
+        <div className="s-article-body">
+          {guide.sections.map(([heading, body], index) => (
+            <section key={heading} id={`guide-section-${index + 1}`}>
+              <h2>{heading}</h2>
+              <p>{body}</p>
+              {guide.source === "interchange" && index === 1 && (
+                <p className="s-small">
+                  Reference:{" "}
+                  <a href="https://usa.visa.com/support/small-business/regulations-fees.html">
+                    Card-network explanation of interchange and merchant pricing
+                  </a>
+                  .
+                </p>
+              )}
+              {guide.source === "debit" && index === 0 && (
+                <p className="s-small">
+                  Reference:{" "}
+                  <a href="https://www.consumerfinance.gov/ask-cfpb/how-are-prepaid-cards-debit-cards-and-credit-cards-different-en-433/">
+                    Consumer Financial Protection Bureau: how debit and credit
+                    differ
+                  </a>
+                  .
+                </p>
+              )}
+            </section>
+          ))}
+          <aside className="s-note">
+            <strong>Keep your own agreement in view.</strong>
+            <p>
+              These are general questions to help you review a processing
+              arrangement. Costs and terms depend on your provider, market and
+              contract. Confirm details with your provider.
+            </p>
+            <Link href="/payments-and-pos">
+              How payments work alongside Surge →
+            </Link>
+          </aside>
         </div>
       </article>
-
-      <RelatedGuides currentSlug={slug} />
-      <LandingCTA heading={cta.heading} sub={cta.sub} />
+      <section className="s-related">
+        <div className="s-wrap">
+          <h2>A little more clarity.</h2>
+          <div className="s-related-links">
+            {GUIDES.filter((item) => item.slug !== slug)
+              .slice(0, 3)
+              .map((item) => (
+                <Link key={item.slug} href={`/guides/${item.slug}`}>
+                  {item.title} ↗
+                </Link>
+              ))}
+          </div>
+        </div>
+      </section>
+      <ClosingCta
+        title="Good information. Better conversations."
+        description="Want to understand the POS side of your setup? We’ll walk you through Surge and answer your questions."
+      />
     </>
   );
 }

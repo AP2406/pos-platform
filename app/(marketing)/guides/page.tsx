@@ -1,49 +1,61 @@
-import type { Metadata } from "next";
 import Link from "next/link";
-import { OG_BASE } from "../shared-metadata";
-import { JsonLd, breadcrumb } from "../jsonld";
-import { LandingEyebrow } from "../local-landing";
+import { ArrowRight } from "lucide-react";
+import { Photo, pageMetadata, ClosingCta } from "../design";
 import { GUIDES } from "./guides";
-
-// The guides are kept and demoted, not rewritten: they explain how card
-// processing is priced in Canada, they never claimed we do it (after the two
-// lines removed in the interac and lower-fees guides), and they are genuine
-// ranking assets. The framing here just stops implying a sales path that does
-// not exist yet.
-export const metadata: Metadata = {
-  title: { absolute: "Guides — Card Fees & POS for Local Business | Surge" },
-  description: "Plain-English guides on card processing fees, Interac, merchant statements and point-of-sale for small businesses across Ontario and the GTA.",
-  alternates: { canonical: "/guides" },
-  openGraph: { ...OG_BASE, url: "/guides" },
-};
-
-export default function GuidesIndexPage() {
+export const metadata = pageMetadata(
+  "Practical business & POS guides",
+  "Clear, practical guides to POS decisions, card processing costs and merchant statements. Questions to help you understand your own business setup.",
+  "/guides",
+);
+export default function GuidesPage() {
   return (
     <>
-      <JsonLd data={breadcrumb("Guides", "/guides")} />
-      <section className="border-b border-[#D9E1EA] bg-[#F4F7FA]">
-        <div className="mx-auto max-w-3xl px-6 pb-14 pt-40 text-center">
-          <LandingEyebrow>Guides</LandingEyebrow>
-          <h1 className="mt-4 text-[38px] font-bold leading-[1.12] tracking-[-0.015em] text-[#0A2540] sm:text-[44px]">Straight answers on card fees.</h1>
-          <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-[#42566B]">No jargon, and genuinely no sales pitch — we do not process cards, so nothing here is steering you toward a rate of ours. Just how fees, Interac and merchant statements actually work.</p>
+      <section className="s-wrap s-hero">
+        <div className="s-hero-copy">
+          <p className="s-eyebrow">The Surge reading room</p>
+          <h1>A little clarity goes a long way.</h1>
+          <p className="s-lede">
+            Practical questions and plain-language guides for the decisions that
+            come with running a business.
+          </p>
+          <Link href="/choosing-a-pos" className="s-text-link">
+            Start with choosing your POS{" "}
+            <ArrowRight size={17} aria-hidden="true" />
+          </Link>
         </div>
+        <figure className="s-hero-figure">
+          <Photo name="guides" eager />
+        </figure>
       </section>
-
-      <section className="bg-white py-16">
-        <div className="mx-auto max-w-3xl px-6">
-          <ul className="space-y-4">
-            {GUIDES.map((g) => (
-              <li key={g.slug}>
-                <Link href={"/guides/" + g.slug} className="group block rounded-md border border-[#D9E1EA] bg-white p-6 transition-colors hover:bg-[#F4F7FA]">
-                  <h2 className="text-lg font-bold text-[#0A2540] group-hover:text-[#1B6DC1]">{g.title}</h2>
-                  <p className="mt-2 text-sm leading-relaxed text-[#42566B]">{g.excerpt}</p>
-                  <span className="mt-3 inline-block text-sm font-bold text-[#1B6DC1]">Read the guide &rarr;</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
+      <section aria-label="Business guides" className="s-wrap s-guide-list">
+        {GUIDES.map((guide, index) => (
+          <article key={guide.slug} className="s-guide-card">
+            <span className="s-guide-number">
+              GUIDE {String(index + 1).padStart(2, "0")} · BUSINESS ESSENTIALS
+            </span>
+            <h2>
+              <Link href={`/guides/${guide.slug}`}>{guide.title}</Link>
+            </h2>
+            <p>{guide.excerpt}</p>
+            <div className="s-guide-details">
+              <span>
+                {Math.max(
+                  1,
+                  Math.ceil(
+                    guide.sections.flat().join(" ").split(/\s+/).length / 180,
+                  ),
+                )}{" "}
+                min read
+              </span>
+              <span>{guide.sections.length} practical questions</span>
+            </div>
+            <Link href={`/guides/${guide.slug}`} className="s-text-link">
+              Read the guide <ArrowRight size={17} aria-hidden="true" />
+            </Link>
+          </article>
+        ))}
       </section>
+      <ClosingCta />
     </>
   );
 }

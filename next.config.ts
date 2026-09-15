@@ -1,10 +1,12 @@
 import type { NextConfig } from "next";
+import { MARKETING_REDIRECTS } from "./app/(marketing)/legacy-redirects";
 
 const nextConfig: NextConfig = {
   // Dev only: lets a temporary public tunnel (reviewer link) load dev assets.
   allowedDevOrigins: ["*.trycloudflare.com", "*.loca.lt", "*.lhr.life"],
   async redirects() {
     return [
+      ...MARKETING_REDIRECTS,
       // Canonical host: force non-www (apex) → www with a 301, preserving the path.
       // The host value is anchored so it matches ONLY the bare apex and never
       // www.surgetechpos.com — the destination is www, so no redirect loop.

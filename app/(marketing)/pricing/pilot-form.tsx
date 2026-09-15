@@ -74,6 +74,7 @@ export function PilotForm() {
     setStatus("sending");
     setError("");
     setFieldErrors({});
+    try {
     const res = await submitPilot({
       businessName: businessName,
       contactName: contactName,
@@ -93,6 +94,10 @@ export function PilotForm() {
       setError(res.error || "Something went wrong.");
       setFieldErrors(res.fieldErrors || {});
     }
+    } catch {
+      setStatus("error");
+      setError("We could not send your request. Please try again or email info@surgetechpos.com.");
+    }
   }
 
   if (status === "ok") {
@@ -101,37 +106,37 @@ export function PilotForm() {
         ref={doneRef}
         tabIndex={-1}
         role="status"
-        className="rounded-md border border-[#D9E1EA] bg-[#EDF7F1] p-8 text-center outline-none focus-visible:ring-2 focus-visible:ring-[#1B6DC1]"
+        className="rounded-xl border border-[#d9dddf] bg-[#EDF7F1] p-8 text-center outline-none focus-visible:ring-2 focus-visible:ring-[#1B6DC1]"
       >
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[4px] bg-[#1E7B4D] text-white">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[7px] bg-[#1E7B4D] text-white">
           <svg viewBox="0 0 20 20" className="h-6 w-6" fill="none" aria-hidden="true"><path d="M4 10l4 4 8-9" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </div>
-        <h3 className="mt-4 text-xl font-bold text-[#0A2540]">We have your details</h3>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#42566B]">
-          Thanks{contactName ? ", " + contactName : ""} &mdash; we have your details and a receipt is on its way to {email || "your inbox"}. We will be in touch to talk the pilot through and book a day to come and set the till up with you.
+        <h3 className="mt-4 text-xl font-bold text-[#171a1f]">We have your details</h3>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#59616b]">
+          Thanks{contactName ? ", " + contactName : ""} &mdash; we have your details and a receipt is on its way to {email || "your inbox"}. We will be in touch to talk the pilot through and confirm the right setup for your business.
         </p>
-        <p className="mx-auto mt-3 max-w-md text-xs leading-relaxed text-[#7A8CA0]">
+        <p className="mx-auto mt-3 max-w-md text-xs leading-relaxed text-[#626c77]">
           Nothing is committed on your side. You keep the processor you already have, and you can tell us to stop at any point.
         </p>
       </div>
     );
   }
 
-  const inputClass = "mt-1.5 w-full rounded-[4px] border border-[#D9E1EA] bg-white px-4 py-3 text-sm text-[#1A2B3C] outline-none transition focus:border-[#1B6DC1] focus:ring-2 focus:ring-[#CFE3F7]";
-  const errorClass = "mt-1.5 w-full rounded-[4px] border border-[#B42318] bg-white px-4 py-3 text-sm text-[#1A2B3C] outline-none transition focus:border-[#1B6DC1] focus:ring-2 focus:ring-[#CFE3F7]";
-  const labelClass = "text-sm font-semibold text-[#1A2B3C]";
-  const optional = <span className="font-normal text-[#7A8CA0]">(optional)</span>;
+  const inputClass = "mt-1.5 w-full rounded-[7px] border border-[#d9dddf] bg-white px-4 py-3 text-sm text-[#171a1f] outline-none transition focus:border-[#1B6DC1] focus:ring-2 focus:ring-[#CFE3F7]";
+  const errorClass = "mt-1.5 w-full rounded-[7px] border border-[#B42318] bg-white px-4 py-3 text-sm text-[#171a1f] outline-none transition focus:border-[#1B6DC1] focus:ring-2 focus:ring-[#CFE3F7]";
+  const labelClass = "text-sm font-semibold text-[#171a1f]";
+  const optional = <span className="font-normal text-[#626c77]">(optional)</span>;
 
   return (
-    <form onSubmit={onSubmit} className="rounded-md border border-[#D9E1EA] bg-white p-7 sm:p-8">
+    <form onSubmit={onSubmit} className="rounded-xl border border-[#d9dddf] bg-white p-7 sm:p-8">
       <HoneypotField formId="pilot" inputRef={honeypotRef} />
-      <h3 className="text-xl font-bold text-[#0A2540]">Join the pilot</h3>
-      <p className="mt-2 text-sm leading-relaxed text-[#42566B]">Tell us about the shop. We read every one of these ourselves and reply.</p>
+      <h3 className="text-xl font-bold text-[#171a1f]">Join the pilot</h3>
+      <p className="mt-2 text-sm leading-relaxed text-[#59616b]">Tell us about your business. We’ll follow up to discuss fit and setup.</p>
 
       {/* The summary sits ABOVE the fields and is a live region, so the failure is
           announced and readable before a keyboard user tabs back into the form. */}
       {status === "error" && error ? (
-        <p role="alert" className="mt-5 rounded-[4px] border border-[#B42318] bg-[#FDF3F2] px-4 py-3 text-sm font-semibold text-[#B42318]">{error}</p>
+        <p role="alert" className="mt-5 rounded-[7px] border border-[#B42318] bg-[#FDF3F2] px-4 py-3 text-sm font-semibold text-[#B42318]">{error}</p>
       ) : null}
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -180,19 +185,19 @@ export function PilotForm() {
 
       <div className="mt-4">
         <label htmlFor="p-current" className={labelClass}>What you run the till on today {optional}</label>
-        <input id="p-current" name="currentPos" type="text" value={currentPos} onChange={(e) => setCurrentPos(e.target.value)} placeholder="Square, Clover, a cash drawer, nothing yet&hellip;" aria-describedby="p-current-hint" className={inputClass} />
-        <p id="p-current-hint" className="mt-1.5 text-[13px] text-[#7A8CA0]">Helps us know what your staff are used to before we turn up.</p>
+        <input id="p-current" name="currentPos" type="text" value={currentPos} onChange={(e) => setCurrentPos(e.target.value)} placeholder="Your current till, a cash drawer, or nothing yet&hellip;" aria-describedby="p-current-hint" className={inputClass} />
+        <p id="p-current-hint" className="mt-1.5 text-[13px] text-[#626c77]">Helps us know what your staff are used to before we help you get started.</p>
       </div>
 
       <div className="mt-4">
-        <label htmlFor="p-pain" className={labelClass}>What is not working today {optional}</label>
+        <label htmlFor="p-pain" className={labelClass}>What would you like to improve? {optional}</label>
         <textarea id="p-pain" name="painPoint" rows={4} value={painPoint} onChange={(e) => setPainPoint(e.target.value)} className={inputClass} />
       </div>
 
-      <button type="submit" disabled={status === "sending"} className="mt-6 flex w-full items-center justify-center rounded-[4px] bg-[#0A2540] px-6 py-3.5 text-sm font-bold text-white transition-colors hover:bg-[#123456] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1B6DC1] disabled:opacity-60">
+      <button type="submit" disabled={status === "sending"} className="mt-6 flex w-full items-center justify-center rounded-[7px] bg-[#171a1f] px-6 py-3.5 text-sm font-bold text-white transition-colors hover:bg-[#343b45] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1B6DC1] disabled:opacity-60">
         {status === "sending" ? "Sending..." : "Join the pilot"}
       </button>
-      <p className="mt-3 text-center text-xs leading-relaxed text-[#7A8CA0]">
+      <p className="mt-3 text-center text-xs leading-relaxed text-[#626c77]">
         This is a request, not a purchase. Nothing is charged, no card is asked for, and we reply to every one.
       </p>
     </form>

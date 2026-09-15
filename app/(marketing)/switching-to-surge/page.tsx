@@ -1,7 +1,7 @@
 import { SolutionPage } from "../solution-page";
 import { SOLUTIONS } from "../solution-content";
 import { pageMetadata } from "../design";
-const content = SOLUTIONS.find((page) => page.path === "/pos-for-retail")!;
+const content = SOLUTIONS.find((page) => page.path === "/switching-to-surge")!;
 export const metadata = pageMetadata(
   content.eyebrow,
   content.description,
