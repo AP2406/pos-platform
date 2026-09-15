@@ -99,7 +99,15 @@ export default function DeviceSettings() {
           onAction={() => router.replace("/floor")}
         />
       ) : (
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          // This list is genuinely taller than the screen, so unlike sign-in it
+          // can scroll out from under the keyboard — it just was never told to.
+          // One inset prop is the whole fix here; no KeyboardAvoidingView, which
+          // would double-count against the inset.
+          automaticallyAdjustKeyboardInsets
+        >
           <View style={styles.card}>
             <Text style={styles.cardLabel}>Device name</Text>
             <Text style={styles.help}>How this iPad shows up in reports and on kitchen tickets.</Text>
