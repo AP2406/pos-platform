@@ -109,7 +109,7 @@ export function GuideArticle({ slug }: { slug: string }) {
           </aside>
         </div>
       </article>
-      <section className="s-related">
+      <section className="s-related" data-reveal>
         <div className="s-wrap">
           <h2>A little more clarity.</h2>
           <div className="s-related-links">

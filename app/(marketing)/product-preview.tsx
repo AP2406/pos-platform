@@ -359,7 +359,7 @@ export function ProductPreview() {
   return (
     <section className="s-workspace s-wrap s-section" id="workspace">
       <div className="s-heading-row">
-        <div className="s-section-heading">
+        <div className="s-section-heading" data-reveal>
           <p className="s-eyebrow">A closer look at the everyday</p>
           <h2>
             Busy behind the scenes.
@@ -372,7 +372,7 @@ export function ProductPreview() {
           See Surge in a demo <ArrowRight size={17} aria-hidden="true" />
         </Link>
       </div>
-      <div className="s-workspace-shell">
+      <div className="s-workspace-shell" data-reveal>
         <div
           className="s-tabs s-workspace-tabs"
           role="tablist"
@@ -404,7 +404,7 @@ export function ProductPreview() {
           aria-labelledby={`preview-tab-${active}`}
           tabIndex={0}
         >
-          <div className="s-workspace-layout">
+          <div className="s-workspace-layout" key={active}>
             <div className="s-workspace-copy">
               <span className="s-workspace-number">
                 0{active + 1} / THE WORKSPACE
