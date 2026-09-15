@@ -3004,3 +3004,116 @@
   content: "·";
   margin-right: 14px;
 }
+
+/* Motion adds no layout space and never gates access to content. */
+.s-scroll-progress {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.surge-site) {
+    scroll-behavior: smooth;
+  }
+
+  .s-hero-copy > * {
+    animation: s-hero-arrive 700ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  }
+  .s-hero-copy > :nth-child(2) { animation-delay: 45ms; }
+  .s-hero-copy > :nth-child(3) { animation-delay: 90ms; }
+  .s-hero-copy > :nth-child(4) { animation-delay: 135ms; }
+  .s-hero-copy > :nth-child(5) { animation-delay: 180ms; }
+  .s-hero-figure .s-photo img {
+    animation: s-photo-settle 1100ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .s-hero-detail {
+    animation: s-hero-arrive 750ms 180ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  }
+
+  .s-button {
+    transition: background 180ms, border-color 180ms, transform 220ms, box-shadow 220ms;
+  }
+  .s-button:active { transform: translateY(0) scale(0.985); }
+  .s-feature,
+  .s-resource-card,
+  .s-guide-card {
+    transition: border-color 220ms, background 220ms, box-shadow 220ms, transform 300ms;
+  }
+  .s-industry .s-photo img {
+    transition: transform 650ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .s-faq summary svg,
+  .s-nav-dropdown summary svg {
+    transition: transform 250ms ease;
+  }
+  .s-faq details[open] > p {
+    animation: s-panel-arrive 280ms ease-out;
+  }
+  .s-nav-dropdown[open] .s-dropdown-panel,
+  .s-mobile-nav:not([hidden]) {
+    animation: s-panel-arrive 220ms ease-out;
+  }
+  .s-workspace-layout {
+    animation: s-panel-arrive 360ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .s-bars i {
+    transform-origin: center bottom;
+    animation: s-chart-grow 600ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  }
+  .s-bars > :nth-child(2) i { animation-delay: 45ms; }
+  .s-bars > :nth-child(3) i { animation-delay: 90ms; }
+  .s-bars > :nth-child(4) i { animation-delay: 135ms; }
+  .s-bars > :nth-child(5) i { animation-delay: 180ms; }
+  .s-bars > :nth-child(6) i { animation-delay: 225ms; }
+
+  @media (hover: hover) and (pointer: fine) {
+    .s-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 14px #10151d14;
+    }
+    .s-button:active { transform: translateY(0) scale(0.985); }
+    .s-feature:hover,
+    .s-resource-card:hover,
+    .s-guide-card:hover {
+      transform: translateY(-4px);
+    }
+    .s-industry:hover .s-photo img { transform: scale(1.04); }
+  }
+
+  /* Native scroll timelines require no scroll listener or React renders.
+     Browsers without support simply omit this decorative indicator. */
+  @supports (animation-timeline: scroll()) {
+    .s-scroll-progress {
+      display: block;
+      position: fixed;
+      z-index: 80;
+      inset: 0 0 auto;
+      height: 2px;
+      background: var(--s-blue);
+      pointer-events: none;
+      transform-origin: left;
+      animation: s-scroll-progress linear both;
+      animation-timeline: scroll(root);
+    }
+  }
+}
+
+@keyframes s-hero-arrive {
+  from { translate: 0 14px; }
+  to { translate: 0 0; }
+}
+@keyframes s-photo-settle {
+  from { transform: scale(1.035); }
+  to { transform: scale(1); }
+}
+@keyframes s-panel-arrive {
+  from { opacity: 0.3; translate: 0 8px; }
+  to { opacity: 1; translate: 0 0; }
+}
+@keyframes s-chart-grow {
+  from { transform: scaleY(0.05); }
+  to { transform: scaleY(1); }
+}
+@keyframes s-scroll-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}

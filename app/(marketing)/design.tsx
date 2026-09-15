@@ -187,7 +187,7 @@ export function SectionHeading({
   description?: string;
 }) {
   return (
-    <div className="s-section-heading">
+    <div className="s-section-heading" data-reveal>
       <p className="s-eyebrow">{eyebrow}</p>
       <h2>{title}</h2>
       {description && <p>{description}</p>}
@@ -218,7 +218,7 @@ export function FeatureGrid({
       {items.map((item, index) => {
         const Icon = item.icon ? icons[item.icon] : null;
         return (
-          <article className="s-feature" key={item.title}>
+          <article className="s-feature" key={item.title} data-reveal>
             <div className="s-feature-top">
               <span className="s-feature-symbol">
                 {Icon ? (
@@ -271,7 +271,7 @@ export function Faq({ items }: { items: { q: string; a: string }[] }) {
       </div>
       <div>
         {items.map((item) => (
-          <details key={item.q}>
+          <details key={item.q} data-reveal>
             <summary>
               {item.q}
               <Plus size={18} aria-hidden="true" />
@@ -293,7 +293,7 @@ export function ClosingCta({
 }) {
   return (
     <section className="s-closing">
-      <div className="s-wrap">
+      <div className="s-wrap" data-reveal>
         <div>
           <p className="s-eyebrow">Made for the way you work</p>
           <h2>{title}</h2>
@@ -314,11 +314,11 @@ export function PaymentsPreview() {
   return (
     <section className="s-wrap s-section">
       <div className="s-payment">
-        <figure>
+        <figure data-reveal>
           <Photo name="terminal" />
           <figcaption>Concept image. Final hardware may differ.</figcaption>
         </figure>
-        <div>
+        <div data-reveal>
           <span className="s-badge">Coming soon</span>
           <h2>
             Payments.

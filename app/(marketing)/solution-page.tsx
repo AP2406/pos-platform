@@ -42,7 +42,7 @@ export function SolutionPage({ content: c }: { content: SolutionContent }) {
         </section>
       </div>
       {c.preview && <ProductPreview />}
-      <section className="s-wrap s-section s-split" id="your-setup">
+      <section className="s-wrap s-section s-split" id="your-setup" data-reveal>
         <figure>
           <Photo name={c.secondPhoto} />
           {c.secondCaption && (

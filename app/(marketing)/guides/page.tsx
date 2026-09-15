@@ -29,7 +29,7 @@ export default function GuidesPage() {
       </section>
       <section aria-label="Business guides" className="s-wrap s-guide-list">
         {GUIDES.map((guide, index) => (
-          <article key={guide.slug} className="s-guide-card">
+          <article key={guide.slug} className="s-guide-card" data-reveal>
             <span className="s-guide-number">
               GUIDE {String(index + 1).padStart(2, "0")} · BUSINESS ESSENTIALS
             </span>

@@ -39,7 +39,7 @@ export function GettingStarted() {
         </div>
         <ol className="s-onboarding-grid">
           {steps.map(({ title, body, detail, icon: Icon }, index) => (
-            <li key={title}>
+            <li key={title} data-reveal>
               <div className="s-step-top">
                 <span>0{index + 1}</span>
                 <Icon size={22} strokeWidth={1.4} aria-hidden="true" />
@@ -93,7 +93,7 @@ export function ExploreNext({ current }: { current?: string }) {
           {resources
             .filter((item) => item.href !== current)
             .map(({ href, label, title, body, icon: Icon }) => (
-              <Link className="s-resource-card" href={href} key={href}>
+              <Link className="s-resource-card" href={href} key={href} data-reveal>
                 <div className="s-resource-top">
                   <Icon size={23} strokeWidth={1.4} aria-hidden="true" />
                   <span>{label}</span>

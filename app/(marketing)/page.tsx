@@ -75,7 +75,7 @@ export default function Home() {
         />
         <div className="s-industry-grid">
           {industries.map((item) => (
-            <Link key={item.href} href={item.href} className="s-industry">
+            <Link key={item.href} href={item.href} className="s-industry" data-reveal>
               <Photo name={item.photo} sizes="(min-width: 900px) 33vw, 100vw" />
               <h3>
                 {item.title}
@@ -135,7 +135,7 @@ export default function Home() {
         </section>
       </div>
       <ProductPreview />
-      <section className="s-wrap s-section s-split">
+      <section className="s-wrap s-section s-split" data-reveal>
         <Photo name="team" />
         <div>
           <p className="s-eyebrow">Built for the team behind it all</p>

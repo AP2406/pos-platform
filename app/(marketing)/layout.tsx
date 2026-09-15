@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { Public_Sans } from "next/font/google";
 import { SiteNav } from "./site-nav";
+import { SiteMotion } from "./site-motion";
 import { SurgeLogo } from "@/components/brand/surge-logo";
 import { OG_BASE } from "./shared-metadata";
 import { JsonLd, ORGANIZATION } from "./jsonld";
@@ -78,6 +79,7 @@ export default function MarketingLayout({
         Skip to content
       </a>
       <SiteNav />
+      <SiteMotion />
       <main id="main-content" tabIndex={-1}>
         {children}
       </main>
