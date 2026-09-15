@@ -75,6 +75,16 @@
   --color-table-late-bg: var(--table-late-bg);
   --color-table-late-border: var(--table-late-border);
   --color-table-late-fg: var(--table-late-fg);
+  /* THE STATUS DOT. The floor used to say "this table is late" by painting the
+     whole tile red, which on a full floor is most of the screen shouting at
+     once — you can see that something is wrong but not read anything. The
+     handoff moves the signal to a small badge in the tile's corner and leaves
+     the tile a neutral surface, so the FLOOR stays readable and only the
+     badges carry colour. These are the badge fills; they are the only place
+     green/amber/red appear at full strength on this screen. */
+  --color-table-dot-occupied: var(--table-dot-occupied);
+  --color-table-dot-warn: var(--table-dot-warn);
+  --color-table-dot-late: var(--table-dot-late);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -299,6 +309,17 @@
   --table-late-bg: oklch(0.95 0.05 25);
   --table-late-border: oklch(0.7 0.18 25);
   --table-late-fg: oklch(0.5 0.18 25);
+  /* The status dot, light. NEW TOKEN, so light has to be given a value even
+     though the handoff is dark-only — and the value is the one light already
+     had: each dot is its status's existing *border* colour, which is the
+     saturated end of that status in this theme. Light keeps its tinted tile
+     fills (they work on white and nothing asked for them to change), so here
+     the dot is a second, redundant reading of the same fact rather than the
+     only one. That redundancy is deliberate: it means the component can draw
+     one dot in both themes without either theme losing a signal. */
+  --table-dot-occupied: oklch(0.64 0.14 255);
+  --table-dot-warn: oklch(0.74 0.13 75);
+  --table-dot-late: oklch(0.7 0.18 25);
 
   /* Elevation + surfaces (Daylight). Edges and shadows carry more weight here
      than in dark: a white card has no lightness left to rise by, so the border
@@ -455,54 +476,102 @@
 }
 
 .dark {
-  /* Midnight — deep ink, lifted cards, electric blue accent.
+  /* Midnight — charcoal surfaces, lifted cards, electric blue accent.
    *
-   * SURFACE LADDER. The canvas and the card used to sit 0.045 apart in
-   * lightness (0.17 vs 0.215) with 9%-opacity borders, so panels dissolved into
-   * the page — everything read as one flat black rectangle with text on it.
-   * Four rungs now, each a clear step, so a card looks like an object and a
-   * table header looks like part of that object:
+   * SURFACE LADDER, ALIGNED TO THE UI HANDOFF (Surge-UI-Polished, 2026-09).
+   * The handoff names four surfaces by hex and this theme now IS those four
+   * hexes, converted to OKLCH on the file's hue-265 neutral axis and verified
+   * to round-trip back to the exact sRGB value:
    *
-   *   canvas   0.145   the page behind everything
-   *   surface  0.205   cards, panels, the header bar
-   *   raised   0.245   inputs, table headers, chips — inside a card
-   *   overlay  0.275   popovers, dropdowns, sheets — above everything
+   *   canvas   0.181   #101215   the page behind everything
+   *   rail     0.204   #15171B   the sidebar
+   *   surface  0.230   #1A1D22   cards, panels, the header bar
+   *   hairline 0.308   #2C3037   every border
+   *
+   * TWO THINGS MOVED, not just the numbers.
+   *
+   * (1) The whole theme came UP. The page was #080A0F and the card #14171F —
+   *     about two thirds of a rung darker than the handoff at every step. On a
+   *     till under restaurant lighting that reads as a black screen with text
+   *     on it; charcoal reads as a surface. The canvas→card step narrows from
+   *     0.060 to 0.049, which is still a step you can see (1.11:1) and is the
+   *     step the handoff drew.
+   *
+   * (2) The rail is now LIGHTER than the canvas, where it used to be darker.
+   *     The old note here said "deeper than the canvas so the rail reads as a
+   *     distinct plane"; the plane was the point, not the direction, and the
+   *     handoff puts the rail between the canvas and a card — a wall the cards
+   *     are mounted on. Same idea, opposite sign.
+   *
+   * The rungs ABOVE the card (raised, overlay, accent) are not in the handoff,
+   * so they are re-derived rather than copied: each keeps roughly the gap it
+   * had from the card, because leaving raised at 0.245 while the card rose to
+   * 0.230 would have collapsed a 0.040 step to 0.015 and dissolved every input
+   * and table header back into the panel it sits in.
+   *
+   *   raised   0.270   #23262D   inputs, table headers, chips — inside a card
+   *   overlay  0.300   #2B2E35   popovers, dropdowns, sheets — above everything
    */
-  --background: oklch(0.145 0.012 265);
-  --foreground: oklch(0.98 0.004 265);
-  --card: oklch(0.205 0.016 265);
-  --card-foreground: oklch(0.98 0.004 265);
-  --popover: oklch(0.275 0.019 265);
-  --popover-foreground: oklch(0.98 0.004 265);
+  --background: oklch(0.181 0.007 265);
+  /* "White primary type", exactly: the handoff asks for white and this was a
+     cool near-white (#F7F8FB). 18.77:1 on the canvas, 16.89:1 on a card. */
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.23 0.011 265);
+  --card-foreground: oklch(1 0 0);
+  --popover: oklch(0.3 0.013 265);
+  --popover-foreground: oklch(1 0 0);
   /* DARK GETS THE LOGO BLUE UNCUT, because dark's primary button already
      carries DARK text (--primary-foreground below is 0.16, not white). Ink on
-     #008CFF measures 5.73:1 — comfortably AA — so there is nothing to trade
+     #008CFF measures 5.71:1 — comfortably AA — so there is nothing to trade
      away here and the button on ink is literally the mark's blue. Light mode
-     is the one that has to walk the fill down; see the note there. */
+     is the one that has to walk the fill down; see the note there.
+
+     THE HANDOFF ASKS FOR WHITE LABELS ON THIS BLUE AND WE ARE NOT SHIPPING
+     THAT. "Blue #008cff … primary actions with WHITE labels" measures 3.40:1,
+     which fails AA for any text at any size. The fix the light theme already
+     uses is to keep #008CFF as the identity colour and walk the FILL down for
+     buttons that carry a label; dark reaches the same place from the other
+     side by keeping the fill and walking the LABEL down to ink. Either way the
+     rule is the same one and it is the rule that survives: the mark's blue is
+     never altered, and no label is ever printed on it below 4.5:1.
+     The conflict is real and is called out in the report rather than quietly
+     resolved — if the owner wants white lettering on the key, the fill has to
+     become oklch(0.54 0.2 253) (#0069D9, 4.93:1) and stop being the logo. */
   --primary: oklch(0.64 0.2 253);
   --primary-foreground: oklch(0.16 0.02 265);
   /* --primary-2 is gone here too; see the note in :root. Dark's flat key is
      the logo blue under ink at 5.71:1, which was already the sweep's worst
      point, so the measurement does not move. */
-  --secondary: oklch(0.245 0.017 265);
-  --secondary-foreground: oklch(0.98 0.004 265);
-  --muted: oklch(0.245 0.016 265);
-  /* Was 0.7 — column headers, timestamps and helper text sat too close to the
-     card to scan a report quickly. */
-  --muted-foreground: oklch(0.75 0.022 265);
-  --accent: oklch(0.29 0.02 265);
-  --accent-foreground: oklch(0.98 0.004 265);
+  --secondary: oklch(0.27 0.013 265);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.27 0.013 265);
+  /* THE HANDOFF'S SECONDARY TYPE, exactly: #A5ACB8. It was 0.75 0.022 265
+     (#A7AEBC) — two points of lightness and a hair of chroma away, which is to
+     say the previous pass had already found this colour by eye. Snapping it to
+     the named value costs nothing and means the spec and the file agree.
+     7.37:1 on a card, 8.20:1 on the canvas. */
+  --muted-foreground: oklch(0.742 0.02 265);
+  --accent: oklch(0.315 0.013 265);
+  --accent-foreground: oklch(1 0 0);
   --destructive: oklch(0.62 0.2 22);
-  /* A hairline you can actually see. 9% vanished against the new canvas. */
-  --border: oklch(1 0 0 / 14%);
+  /* THE HAIRLINE IS NOW A COLOUR, NOT AN ALPHA. The handoff names one border,
+     #2C3037, and a white-at-14% border is only that colour over one particular
+     surface — over the popover rung it was a third brighter, over the canvas a
+     third dimmer. A named hairline is the same hairline everywhere, which is
+     what "thin #2c3037 borders" asks for. 1.27:1 on a card, 1.42:1 on the
+     canvas: a drawn edge, not a box.
+     --input stays an alpha on purpose. A field has to read as a field — it is
+     the one border in the system that is deliberately STRONGER than the rest,
+     and it was already stronger (20% against 14%) before this change. */
+  --border: oklch(0.308 0.014 265);
   --input: oklch(1 0 0 / 20%);
-  /* 5.84:1 against the dark canvas — the logo blue has all the contrast it
+  /* 5.52:1 against the dark canvas — the logo blue has all the contrast it
      needs on ink, so dark's ring is the brand blue itself. */
   --ring: oklch(0.64 0.2 253);
 
   /* Rung 3 of the ladder, for surfaces nested INSIDE a card: table headers,
      inputs, inline chips. Referenced as bg-raised / border-raised. */
-  --raised: oklch(0.245 0.017 265);
+  --raised: oklch(0.27 0.013 265);
   --raised-border: oklch(1 0 0 / 10%);
   --chart-1: oklch(0.64 0.2 253);
   --chart-2: oklch(0.72 0.14 200);
@@ -536,37 +605,69 @@
   /* The kit's `flat-dark` variant: white lettering and outline. */
   --logo-ink: oklch(1 0 0);
 
-  /* Deeper than the canvas (0.145) so the rail reads as a distinct plane
-     rather than merging into the page, which is what happened once the canvas
-     darkened. */
-  --sidebar: oklch(0.115 0.011 265);
-  --sidebar-foreground: oklch(0.98 0.004 265);
-  /* Group headings and inactive items were 0.6 — too dim to scan six sections. */
-  --sidebar-muted: oklch(0.68 0.02 265);
+  /* #15171B, the handoff's rail — and it is LIGHTER than the canvas now, not
+     deeper. The old value (0.115, #040509) was chosen to keep the rail a
+     distinct plane from the page; that still holds, only from above. Sitting
+     between the canvas (0.181) and a card (0.230) makes it read as the wall
+     the cards are mounted on, which is the relationship the mockups draw. */
+  --sidebar: oklch(0.204 0.009 265);
+  --sidebar-foreground: oklch(1 0 0);
+  /* One secondary grey for the whole dark theme: the handoff's #A5ACB8, same
+     value as --muted-foreground. The rail used to run its own, dimmer grey
+     (0.68); there was never a reason for the sidebar's inactive labels and the
+     page's helper text to be two different colours. 7.84:1 on the rail. */
+  --sidebar-muted: oklch(0.742 0.02 265);
   --sidebar-primary: oklch(0.64 0.2 253);
   --sidebar-primary-foreground: oklch(0.16 0.02 265);
   --sidebar-accent: oklch(0.64 0.2 253 / 0.18);
   --sidebar-accent-foreground: oklch(0.94 0.06 253);
-  --sidebar-border: oklch(1 0 0 / 12%);
+  /* The same named hairline as --border; see the note there. */
+  --sidebar-border: oklch(0.308 0.014 265);
   --sidebar-ring: oklch(0.64 0.2 253);
 
-  /* Floor table status — darker fills, brighter text for dark mode.
-     Available is a gray clearly lighter than the floor canvas so empty tables
-     read as solid objects (the canvas uses --background ≈ 0.145). */
-  --table-available-bg: oklch(0.27 0.01 265);
-  --table-available-border: oklch(0.42 0.02 265);
-  --table-seated-bg: oklch(0.33 0.08 255);
-  --table-seated-border: oklch(0.6 0.15 255);
-  --table-seated-fg: oklch(0.86 0.11 255);
-  --table-warn-bg: oklch(0.32 0.07 75);
-  --table-warn-border: oklch(0.55 0.11 75);
-  --table-warn-fg: oklch(0.88 0.1 75);
-  --table-late-bg: oklch(0.32 0.09 25);
-  --table-late-border: oklch(0.55 0.15 25);
-  --table-late-fg: oklch(0.85 0.13 25);
+  /* FLOOR TABLE STATUS, DARK — the colour comes off the tile and onto a dot.
+     This is the one place the handoff changes what the floor MEANS, not just
+     what it looks like. It used to paint the whole tile in its status hue: an
+     amber slab at 45 minutes, a red slab at 90. On a nine-top floor where
+     everything is stale that is most of the screen shouting at once — you can
+     see that something is wrong and you cannot read which table it is.
+     So every occupied tile is now the same subdued slate (#23262D, the raised
+     rung) with white type on it at 15.07:1, and the status rides in a small
+     corner dot. The tile borders keep a LOW-chroma tint of their status —
+     enough that a warning tile still differs from a calm one at arm's length,
+     not enough to be a colour field.
+     LIGHT IS UNTOUCHED: tinted fills work on white, nothing asked for them to
+     change, and the mockups are dark-only. The dot is drawn in both themes. */
+  --table-available-bg: oklch(0.23 0.011 265);
+  --table-available-border: oklch(0.308 0.014 265);
+  --table-seated-bg: oklch(0.27 0.013 265);
+  --table-seated-border: oklch(0.37 0.016 265);
+  --table-seated-fg: oklch(1 0 0);
+  --table-warn-bg: oklch(0.27 0.013 265);
+  --table-warn-border: oklch(0.42 0.06 75);
+  --table-warn-fg: oklch(1 0 0);
+  --table-late-bg: oklch(0.27 0.013 265);
+  --table-late-border: oklch(0.42 0.08 25);
+  --table-late-fg: oklch(1 0 0);
+  /* The dots. Now that the tile is neutral these are the ONLY saturated pixels
+     on the floor, which is the whole point of moving the signal here — and it
+     is why they are allowed to be bright where the borders above are not.
+     Measured on the slate tile: occupied 6.45:1, warning 8.28:1, late 4.41:1.
+     "Occupied" is deliberately a grey dot, not a colour: a seated table is not
+     a condition, and a legend where four of five entries are coloured teaches
+     nobody anything. */
+  --table-dot-occupied: oklch(0.7 0.016 265);
+  --table-dot-warn: oklch(0.78 0.14 75);
+  --table-dot-late: oklch(0.63 0.19 25);
 
-  /* Elevation + surfaces (Midnight) — lifted cards on deep ink */
-  --surface-2: oklch(0.265 0.02 265);
+  /* Elevation + surfaces (Midnight) — lifted cards on charcoal.
+     --line / --line-soft / --line-strong stay ALPHAS while --border becomes a
+     named colour, and that is on purpose: --border is the one hairline the
+     handoff names, where these three are a relative ladder (a card's own edge
+     is heavier than the dividers between its rows). Pinning all three to
+     #2C3037 would collapse a three-weight system into one weight and a card
+     would stop reading as one object. */
+  --surface-2: oklch(0.29 0.013 265);
   --line: oklch(1 0 0 / 0.15);
   --line-soft: oklch(1 0 0 / 0.07);
   --line-strong: oklch(1 0 0 / 0.24);
@@ -656,17 +757,25 @@
      chroma is invisible and lightness is the only axis with room left. Same
      intent — the split reads as two planes — via the axis that still works.
      The panel sits between the canvas and a card, so it reads as a wall the
-     card is mounted on rather than as another card. */
-  --auth-panel: oklch(0.185 0.015 265);
-  --auth-panel-foreground: oklch(0.98 0.004 265); /* 17.60:1 on the panel */
-  --auth-panel-muted: oklch(0.75 0.022 265); /*  8.38:1 on the panel */
+     card is mounted on rather than as another card.
+
+     RE-DERIVED, NOT LEFT ALONE. These were set against a 0.145 canvas. With
+     the canvas at the handoff's 0.181, the old panel (0.185) is the page — the
+     split it exists to draw would have vanished — so the whole /login ladder
+     steps up with everything else and keeps its gaps: panel between canvas and
+     card, card a clear rung above the panel. */
+  --auth-panel: oklch(0.215 0.012 265);
+  --auth-panel-foreground: oklch(1 0 0); /* 17.52:1 on the panel */
+  --auth-panel-muted: oklch(0.742 0.02 265); /*  7.65:1 on the panel */
   --auth-panel-line: oklch(1 0 0 / 0.1);
-  --auth-card: oklch(0.225 0.016 265);
+  --auth-card: oklch(0.26 0.013 265);
 
   /* Idle bars lift off the card instead of dropping toward it — on ink,
      "recessive" is darker in light mode and lighter here. The peak keeps the
-     logo blue uncut, as everything else in dark does: 5.03:1 on the card. */
-  --auth-bar: oklch(0.34 0.018 265);
+     logo blue uncut, as everything else in dark does: 4.57:1 on the card once
+     that card rose with the rest of the ladder. The idle bars step up by the
+     same amount the card did so they stay the texture they were. */
+  --auth-bar: oklch(0.37 0.016 265);
   --auth-bar-peak: oklch(0.64 0.2 253);
 
   /* One flat wash, as in light, and the ink under it is deeper because here

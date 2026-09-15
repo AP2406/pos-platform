@@ -380,11 +380,17 @@ export default async function PosPage() {
         </div>
       )}
 
+      {/* "The day is open" is a CONFIRMATION, not a warning, and the handoff
+          draws it as one: a small green indicator, ordinary type, and the link
+          picked out in the action blue. It used to be a full-width tinted green
+          bar — the same visual weight as the amber "you haven't started the
+          day" strip above, which is an actual warning and keeps its tint. Two
+          states that matter differently should not shout equally loudly. */}
       {!trainingMode && drawerOpen && (
-        <div className="shrink-0 flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-700 dark:text-emerald-500 font-medium">
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-          The day is open.
-          <Link href="/app/pos/drawer" className="underline underline-offset-2 hover:opacity-80">
+        <div className="shrink-0 flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-border bg-card px-3 sm:px-6 lg:px-10 py-2 text-sm">
+          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+          <span className="text-foreground">The day is open.</span>
+          <Link href="/app/pos/drawer" className="u-tx text-primary underline underline-offset-2 hover:opacity-80">
             End day / Z-report
           </Link>
         </div>
