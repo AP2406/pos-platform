@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 // Site-wide social card (section 2). Rendered at build by Next — no binary asset to
 // maintain — and the absolute www URL is derived automatically from metadataBase.
-export const alt = "Surge — point of sale for restaurants, cafes and retail in the GTA";
+export const alt = "Surge — point of sale for restaurants, cafes and retail";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -43,12 +43,34 @@ export default function OpengraphImage() {
             thing worth fixing here — but the wordmark is 5 long outline paths
             and Satori charges for every one, so the symbol carries it alone
             and the headline below says the name in context. */}
-        <div style={{ display: "flex", alignItems: "center", marginBottom: "44px" }}>
-          <svg width="108" height="108" viewBox="0 0 384 384" xmlns="http://www.w3.org/2000/svg">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            marginBottom: "44px",
+          }}
+        >
+          <svg
+            width="108"
+            height="108"
+            viewBox="0 0 384 384"
+            xmlns="http://www.w3.org/2000/svg"
+          >
             <g transform="translate(32 84)">
-              <g fill="none" strokeWidth="22" strokeLinecap="round" strokeLinejoin="round">
-                <path stroke="#FFFFFF" d="M132 12 H277 A31 31 0 0 1 308 43 V173 A31 31 0 0 1 277 204 H132" />
-                <path stroke="#008CFF" d="M66 60 H158 M12 108 H158 M66 156 H158" />
+              <g
+                fill="none"
+                strokeWidth="22"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path
+                  stroke="#FFFFFF"
+                  d="M132 12 H277 A31 31 0 0 1 308 43 V173 A31 31 0 0 1 277 204 H132"
+                />
+                <path
+                  stroke="#008CFF"
+                  d="M66 60 H158 M12 108 H158 M66 156 H158"
+                />
               </g>
             </g>
           </svg>
@@ -58,11 +80,26 @@ export default function OpengraphImage() {
             had to come off here too, not just on the pages. Shorter than the
             old one, and it has to stay short: Satori has no auto-fit, so a
             third line at 88px would run off a 630px-tall card. */}
-        <div style={{ fontSize: "88px", fontWeight: 800, lineHeight: 1.04, letterSpacing: "-2px", maxWidth: "920px" }}>
-          The till that runs the whole room.
+        <div
+          style={{
+            fontSize: "88px",
+            fontWeight: 800,
+            lineHeight: 1.04,
+            letterSpacing: "-2px",
+            maxWidth: "920px",
+          }}
+        >
+          Point of sale. Room to do more.
         </div>
-        <div style={{ fontSize: "34px", color: "#9fb2c8", marginTop: "34px", maxWidth: "820px" }}>
-          Point of sale for restaurants, cafes &amp; retail across the GTA.
+        <div
+          style={{
+            fontSize: "34px",
+            color: "#9fb2c8",
+            marginTop: "34px",
+            maxWidth: "820px",
+          }}
+        >
+          Point of sale for restaurants, cafes &amp; retail.
         </div>
       </div>
     ),

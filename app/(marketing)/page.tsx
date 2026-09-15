@@ -1,235 +1,188 @@
-import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
-import { Reveal } from "./reveal";
-import { OG_BASE } from "./shared-metadata";
-import { Crumb, Tick, ComingSoonBadge, PaymentsComingSoon, btnPrimary, btnOutline } from "./ui";
-
-// THE PAGE NOW LEADS WITH THE PRODUCT WE SHIP.
-//
-// It used to open "Stop overpaying to get paid." with a savings calculator
-// beside it — a payments pitch, for a rail we are not live on. The restaurant
-// owner who lands here has to understand in one screen that this is a
-// point-of-sale system; the processing story is a labelled "coming soon" band
-// further down, not the headline and not a number.
-//
-// Section order, and why: register first (what it is) → what it replaces
-// (the stack of subscriptions) → the rooms it runs (floor, kitchen, counter)
-// → guests (online/QR/kiosk) → back office → payments, coming soon → CTA.
-// Payments sit after the product is understood and before the ask, which is
-// where a caveat belongs: late enough not to be the pitch, early enough that
-// nobody books a demo without having read it.
-export const metadata: Metadata = {
-  title: { absolute: "Point of Sale for Restaurants & Retail in the GTA | Surge" },
-  description: "Surge is a point-of-sale system for GTA restaurants, cafes and shops — register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports. Card processing coming soon. Book a free demo.",
-  alternates: { canonical: "/" },
-  openGraph: { ...OG_BASE, title: "Point of Sale for Restaurants & Retail in the GTA | Surge", description: "A point-of-sale system for GTA restaurants, cafes and shops — register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports.", url: "/" },
-};
-
-// Every item here is a screen that exists in the product. Verified in
-// app/app/pos, app/app/floor, app/app/kitchen, app/app/catalog, app/app/orders,
-// app/app/inventory, app/app/staff + schedule + clock, app/app/reports,
-// app/app/reservations and app/order/[businessId]. Nothing aspirational.
-const rooms = [
+import { ArrowRight, Tablet, LayoutGrid, Utensils, Users } from "lucide-react";
+import {
+  Hero,
+  Photo,
+  SectionHeading,
+  FeatureGrid,
+  Checklist,
+  Faq,
+  ClosingCta,
+  PaymentsPreview,
+  Action,
+  pageMetadata,
+} from "./design";
+import { ProductPreview } from "./product-preview";
+import { GettingStarted, ExploreNext } from "./next-steps";
+export const metadata = pageMetadata(
+  "Point of sale. Room to do more.",
+  "A thoughtful POS for restaurants, cafes and retail. Bring your menu, orders, inventory and team together. Explore the free pilot.",
+  "/",
+);
+const industries = [
   {
-    title: "The floor",
-    body: "Map your room, open a table, fire by seat and course, split a cheque, and hand a table between servers without losing the order.",
+    title: "Restaurants",
+    photo: "service" as const,
     href: "/pos-for-restaurants",
-    linkText: "POS for restaurants",
+    body: "From the first table to the last ticket. Keep service moving.",
   },
   {
-    title: "The line",
-    body: "Tickets land on the kitchen display the moment they are sent, routed to the station that cooks them. No handwriting, no lost dupes.",
-    href: "/pos-for-restaurants",
-    linkText: "See the kitchen display",
+    title: "Cafes & quick service",
+    photo: "cafe" as const,
+    href: "/solutions/cafes",
+    body: "Your regulars, their usual, and a counter that keeps up.",
   },
   {
-    title: "The counter",
-    body: "Ring up, apply a discount, take a return, print or email the receipt. Stock moves as you sell, so counts stay honest.",
+    title: "Retail & shops",
+    photo: "retail" as const,
     href: "/pos-for-retail",
-    linkText: "POS for retail",
+    body: "Stay close to your customers. Stay on top of your stock.",
   },
 ];
-
-const guestWays = [
-  "Online ordering from your own menu page",
-  "QR ordering and pay-at-table",
-  "Self-serve kiosk",
-  "Customer-facing display and digital menu board",
-];
-
-const backOffice = [
-  { title: "Menu and catalog", body: "Build the menu once — items, modifiers, prices, availability. 86 something and it clears every screen at the same time." },
-  { title: "Inventory and cost", body: "Stock counts, purchasing, recipes and waste, so you can see what a plate costs you and not just what it sells for." },
-  { title: "Staff and time clock", body: "Roles and permissions, scheduling, clock-in, attendance and a labour view against sales." },
-  { title: "Reports", body: "Daily totals, best sellers, busiest hours, and exports for whoever does your books." },
-];
-
-export default function HomePage() {
+export default function Home() {
   return (
     <>
-      <section className="border-b border-[#D9E1EA] bg-[#F4F7FA]">
-        <div className="mx-auto max-w-6xl px-6 pb-20 pt-40">
-          <div className="grid items-center gap-14 lg:grid-cols-2">
-            <div>
-              <Crumb>Point of sale</Crumb>
-              <h1 className="mt-4 text-[44px] font-bold leading-[1.12] tracking-[-0.015em] text-[#0A2540] sm:text-[50px]">The till that runs the whole room.</h1>
-              <p className="mt-5 max-w-lg text-lg leading-relaxed text-[#42566B]">Surge is a point-of-sale system for restaurants, cafes and shops across the GTA &mdash; register, floor plan, kitchen display, online and QR ordering, inventory, staff and reports, in one place.</p>
-              {/* THE HERO PAIR NOW LEADS WITH THE PILOT. "Book a free demo" was
-                  primary and is now the outline button beside it; "See the point
-                  of sale" moved out of this row because three buttons is not a
-                  choice, it is a menu — /pos is still one click away in the nav,
-                  in the footer, and from "Explore the point of sale" further
-                  down this page. */}
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Link href="/pricing#apply" className={btnPrimary}>Join the free pilot</Link>
-                <Link href="/book" className={btnOutline}>Book a free demo</Link>
-              </div>
-              <div className="mt-8 grid gap-2.5">
-                {/* First line is the offer, stated plainly and without a number
-                    of spots, a duration or a deadline attached to it. */}
-                <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Free for a limited time while the pilot runs</div>
-                <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Runs on the tablet you already own</div>
-                <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Floor, kitchen and counter on one system</div>
-                <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1A2B3C]"><Tick />Set up with you in person across the GTA</div>
-              </div>
-            </div>
-            <div className="overflow-hidden rounded-md border border-[#D9E1EA] bg-white shadow-[0_10px_30px_-18px_rgba(10,37,64,0.35)]">
-              <div className="relative aspect-[4/3] w-full">
-                <Image src="/jpg18.png" alt="A bar owner taking an order on a Surge point-of-sale tablet" fill priority sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover" />
-              </div>
-              {/* This strip used to read "Your rate with Surge — 2.5% + 15¢".
-                  A rate badge in the hero was the site's loudest payments
-                  claim; it is now the coming-soon note, in the same slot. */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#D9E1EA] px-5 py-3.5">
-                <span className="text-xs font-bold uppercase tracking-[0.05em] text-[#7A8CA0]">Card processing</span>
-                <ComingSoonBadge />
-              </div>
-            </div>
+      <Hero
+        eyebrow="Point of sale, with people in mind"
+        title={"Your business.\nIn good hands."}
+        description="A thoughtfully simple POS for the people behind great restaurants, cafes and shops. Bring your counter, team and daily operations together."
+        photo="owner"
+        caption="Built around the people who make a business work."
+        showcase
+      />
+      <div className="s-wrap s-ribbon">
+        <span>
+          <Tablet size={18} aria-hidden="true" />A lighter setup
+        </span>
+        <span>
+          <LayoutGrid size={18} aria-hidden="true" />
+          Your menu, your way
+        </span>
+        <span>
+          <Utensils size={18} aria-hidden="true" />
+          Floor to kitchen
+        </span>
+        <span>
+          <Users size={18} aria-hidden="true" />
+          One connected team
+        </span>
+      </div>
+      <section className="s-wrap s-section">
+        <SectionHeading
+          eyebrow="However you serve"
+          title="Different businesses. The same attention to detail."
+          description="Choose the tools that fit your day, whether it starts with a morning rush or ends with a full dining room."
+        />
+        <div className="s-industry-grid">
+          {industries.map((item) => (
+            <Link key={item.href} href={item.href} className="s-industry">
+              <Photo name={item.photo} sizes="(min-width: 900px) 33vw, 100vw" />
+              <h3>
+                {item.title}
+                <ArrowRight size={20} aria-hidden="true" />
+              </h3>
+              <p>{item.body}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
+      <div className="s-surface">
+        <section className="s-wrap s-section">
+          <SectionHeading
+            eyebrow="The details, taken care of"
+            title="Less to juggle. More room to run."
+          />
+          <FeatureGrid
+            items={[
+              {
+                icon: "menu",
+                detail: "Categories · Modifiers · Availability",
+                title: "A menu that feels like yours",
+                body: "Organize categories, set modifiers and manage availability without rebuilding the whole menu.",
+              },
+              {
+                icon: "floor",
+                detail: "Tables · Seats · Kitchen tickets",
+                title: "A clear view of service",
+                body: "Keep tables, orders and kitchen tickets connected, with the context your team needs.",
+              },
+              {
+                icon: "stock",
+                detail: "Inventory · Purchasing · Adjustments",
+                title: "Know what’s on hand",
+                body: "Bring inventory, purchasing and stock adjustments into the same daily workflow.",
+              },
+              {
+                icon: "team",
+                detail: "Roles · Shifts · Time tracking",
+                title: "Give everyone their place",
+                body: "Set staff permissions and manage shifts, time tracking and responsibilities.",
+              },
+              {
+                icon: "reports",
+                detail: "Sales · Item performance · Exports",
+                title: "Look beyond the receipt",
+                body: "Use reports and exports to understand your sales, popular items and daily operations.",
+              },
+              {
+                icon: "locations",
+                detail: "Location access · Local workflows",
+                title: "Keep each location in view",
+                body: "Move between locations with the right permissions and keep each business’s work organized.",
+              },
+            ]}
+          />
+        </section>
+      </div>
+      <ProductPreview />
+      <section className="s-wrap s-section s-split">
+        <Photo name="team" />
+        <div>
+          <p className="s-eyebrow">Built for the team behind it all</p>
+          <h2>Good service starts on your side of the counter.</h2>
+          <p>
+            Give your team a clear place to work, from a compact tablet at the
+            counter to a handheld device on the floor. We’ll talk through your
+            devices and workflow before setup.
+          </p>
+          <Checklist
+            items={[
+              "A familiar place for everyday tasks",
+              "Roles and permissions for your team",
+              "Help planning your menu and setup",
+            ]}
+          />
+          <div className="s-actions">
+            <Action href="/setup-and-support" secondary>
+              Find your setup
+            </Action>
           </div>
         </div>
       </section>
-
-      <section className="border-b border-[#D9E1EA] bg-white py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal>
-            <div className="mx-auto max-w-2xl text-center">
-              <Crumb>What it replaces</Crumb>
-              <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">One system instead of five subscriptions</h2>
-              <p className="mt-4 leading-relaxed text-[#42566B]">Most independents end up with a till, a separate kitchen screen, a booking tool, a spreadsheet for stock and another for the schedule. Surge is all of it, and the pieces already know about each other.</p>
-            </div>
-            <div className="mt-12 grid gap-6 md:grid-cols-3">
-              {rooms.map((r) => (
-                <div key={r.title} className="rounded-md border border-[#D9E1EA] border-t-[3px] border-t-[#0A2540] p-7">
-                  <h3 className="text-lg font-bold text-[#0A2540]">{r.title}</h3>
-                  <p className="mt-2 text-[14.5px] leading-relaxed text-[#42566B]">{r.body}</p>
-                  <Link href={r.href} className="mt-4 inline-block text-[14.5px] font-bold text-[#1B6DC1] hover:underline">{r.linkText} &rarr;</Link>
-                </div>
-              ))}
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
-      <section className="border-b border-[#D9E1EA] bg-[#F4F7FA] py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal>
-            <div className="grid items-center gap-12 lg:grid-cols-2">
-              <div>
-                <Crumb>Guests order themselves</Crumb>
-                <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">Four more ways an order gets in</h2>
-                <p className="mt-4 leading-relaxed text-[#42566B]">Every one of these lands in the same ticket queue your servers use, so nobody is re-keying an order from a tablet on the pass.</p>
-                <div className="mt-6 grid gap-3">
-                  {guestWays.map((g) => (
-                    <div key={g} className="flex items-start gap-2.5 text-[15px] font-medium text-[#42566B]"><Tick />{g}</div>
-                  ))}
-                </div>
-                <Link href="/pos" className="mt-7 inline-block text-[15px] font-bold text-[#1B6DC1] hover:underline">Explore the point of sale &rarr;</Link>
-              </div>
-              <div className="relative aspect-[4/3] overflow-hidden rounded-md border border-[#D9E1EA]">
-                <Image src="/jpg16.png" alt="A cafe owner checking an incoming order on a Surge POS tablet" fill sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover" />
-              </div>
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
-      <section className="border-b border-[#D9E1EA] bg-white py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal>
-            <div className="mx-auto max-w-2xl text-center">
-              <Crumb>After close</Crumb>
-              <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">The back office is part of the till</h2>
-              <p className="mt-4 leading-relaxed text-[#42566B]">Because the register already knows what sold, the rest of the paperwork mostly fills itself in.</p>
-            </div>
-            <div className="mt-12 grid gap-6 sm:grid-cols-2">
-              {backOffice.map((b) => (
-                <div key={b.title} className="rounded-md border border-[#D9E1EA] p-7">
-                  <h3 className="text-lg font-bold text-[#0A2540]">{b.title}</h3>
-                  <p className="mt-2 text-[14.5px] leading-relaxed text-[#42566B]">{b.body}</p>
-                </div>
-              ))}
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
-      <section className="border-b border-[#D9E1EA] bg-white pb-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal>
-            <div className="mx-auto max-w-2xl text-center">
-              <Crumb>Industries served</Crumb>
-              <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">Built for businesses like yours</h2>
-              <p className="mt-4 leading-relaxed text-[#42566B]">From the counter to the pass, Surge runs real-world rooms across the GTA.</p>
-            </div>
-            <div className="mt-12 grid gap-6 sm:grid-cols-3">
-              <figure className="overflow-hidden rounded-md border border-[#D9E1EA]">
-                <div className="relative aspect-[16/10]"><Image src="/jpg9.jpg" alt="A busy local coffee shop counter at the morning rush" fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover" /></div>
-                <figcaption className="px-5 py-4"><div className="font-bold text-[#0A2540]">Cafes &amp; quick-serve</div><div className="mt-1 text-sm leading-relaxed text-[#42566B]">Fast tickets, modifiers that stick, a line that keeps moving.</div></figcaption>
-              </figure>
-              <figure className="overflow-hidden rounded-md border border-[#D9E1EA]">
-                <div className="relative aspect-[16/10]"><Image src="/jpg17.png" alt="A shop owner checking stock levels at a Surge POS terminal" fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover" /></div>
-                <figcaption className="px-5 py-4"><div className="font-bold text-[#0A2540]">Retail &amp; service counters</div><div className="mt-1 text-sm leading-relaxed text-[#42566B]">Stock, receipts and reports on the device you already own.</div></figcaption>
-              </figure>
-              <figure className="overflow-hidden rounded-md border border-[#D9E1EA]">
-                <div className="relative aspect-[16/10]"><Image src="/jpg3.jpg" alt="A stylist checking a client out at a salon front desk" fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover" /></div>
-                <figcaption className="px-5 py-4"><div className="font-bold text-[#0A2540]">Salons &amp; service shops</div><div className="mt-1 text-sm leading-relaxed text-[#42566B]">Tips, split tender and a register your staff can be trusted with.</div></figcaption>
-              </figure>
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
-      <section id="payments" className="border-b border-[#D9E1EA] bg-[#F4F7FA] py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal>
-            <div className="grid items-start gap-12 lg:grid-cols-2">
-              <div>
-                <Crumb>Payments</Crumb>
-                <h2 className="mt-3 text-[32px] font-bold leading-[1.18] tracking-[-0.01em] text-[#0A2540] sm:text-[34px]">We are not your processor yet</h2>
-                <p className="mt-4 leading-relaxed text-[#42566B]">Surge is the point of sale. Card processing and terminals are being built, and we would rather say so here than let you find out on the call.</p>
-                <p className="mt-3 leading-relaxed text-[#42566B]">Nothing about that blocks you. The POS runs the room today alongside whatever processor you already use, and when ours is live it becomes one more tender type on a register your staff already know.</p>
-              </div>
-              <PaymentsComingSoon />
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
-      <section className="bg-[#0A2540] py-20 text-white">
-        <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-8 px-6 lg:flex-row lg:items-center">
-          <div>
-            <h2 className="max-w-xl text-[32px] font-bold leading-[1.18] tracking-[-0.01em] sm:text-[34px]">Run the whole till for nothing.</h2>
-            <p className="mt-4 max-w-xl leading-relaxed text-[#B9C8D8]">We are piloting Surge with GTA and Durham independents: full access, free for a limited time, set up in person. All we want back is blunt feedback.</p>
-            {/* The demo survives as a text link rather than a second button —
-                the band has one job and the softer path should not compete with
-                it for the same eye. #B9C8D8 on #0A2540 is 8.3:1; the underline
-                carries the affordance without needing a second colour. */}
-            <p className="mt-3 text-sm text-[#B9C8D8]">Rather look first? <Link href="/book" className="font-bold text-white underline underline-offset-4 hover:no-underline">Book a free 15-minute demo</Link>.</p>
-          </div>
-          <Link href="/pricing#apply" className="whitespace-nowrap rounded-[4px] bg-white px-7 py-3.5 text-[15.5px] font-bold text-[#0A2540] transition-colors hover:bg-[#F4F7FA]">Join the free pilot</Link>
-        </div>
-      </section>
+      <GettingStarted />
+      <PaymentsPreview />
+      <Faq
+        items={[
+          {
+            q: "Can I try Surge with my business?",
+            a: "Yes. Apply for the free POS pilot and tell us about your business. We’ll confirm fit, device requirements and setup availability before you start.",
+          },
+          {
+            q: "Do I need to change my payment processor?",
+            a: "No. Your existing processor remains separate during the pilot. Surge card processing and payment terminals are coming soon and are not available today.",
+          },
+          {
+            q: "Can I use a tablet or iPad mini?",
+            a: "Surge is designed around a flexible tablet setup. Tell us the device model, operating system and peripherals you have so we can confirm compatibility before you buy or change anything.",
+          },
+          {
+            q: "Is Surge available in my country?",
+            a: "Surge serves an international audience. Share your country, time zone and business needs so we can confirm pilot and support availability for your setup.",
+          },
+        ]}
+      />
+      <ExploreNext />
+      <ClosingCta />
     </>
   );
 }

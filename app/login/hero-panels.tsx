@@ -20,56 +20,14 @@ export type LoginHero = "photo" | "stats";
 // both get the lockup, at exactly that floor.
 const LOCKUP = "h-[65px] w-[220px]";
 
-/* ===========================================================================
-   VARIANT A — "photo"
-
-   THE PHOTOGRAPH IS NOT THE MOCKUP'S. The mockup's restaurant interior is an
-   unlicensed comp; shipping it would put an asset we do not own on the one page
-   every operator sees. public/jpg9.jpg is the nearest thing we DO own that
-   means the same thing — a real hospitality counter mid-transaction, with the
-   terminal in frame — and it is already licensed and in production on the
-   marketing home page ("Cafes & coffee shops"). 1800x1200, which is enough for
-   a half-width column at 2x on a 1440 display.
-
-   It is also considerably brighter than the comp, which is why the scrim below
-   is sized against a blown-out white pixel rather than against this particular
-   frame. See --auth-scrim in globals.css.
-   =========================================================================== */
+// Campaign photo is a generated asset from the approved Surge website image pack.
+// The image is illustrative, not a customer endorsement.
 export function PhotoHero() {
-  return (
-    <div className="relative h-full w-full overflow-hidden bg-auth-panel">
-      <Image
-        src="/jpg9.jpg"
-        // Described, not labelled "hero image": a screen reader landing here
-        // should learn what the room is, or nothing at all.
-        alt="A customer paying at the counter of a local coffee shop"
-        fill
-        // The panel is display:none below lg, but a hidden <img> is still
-        // fetched. The 1px candidate below that breakpoint is what keeps a
-        // phone off the 250KB download for a panel it will never show.
-        sizes="(min-width: 1024px) 56vw, 1px"
-        // `priority` is deprecated in Next 16; eager + high is the documented
-        // replacement for "this is the LCP element".
-        loading="eager"
-        fetchPriority="high"
-        className="object-cover"
-      />
-      {/* ONE flat wash, and it is the only layer now. There used to be a
-          second one: a top-down fade that carried the lockup's contrast. That
-          fade is a gradient, so it is gone, and --auth-scrim has absorbed its
-          job by getting heavier (0.32 -> 0.56 light, 0.52 -> 0.62 dark). The
-          lockup still clears AA against the worst pixel the photograph can
-          present; the photograph is a stop darker than it was, which is the
-          honest cost of not having a falloff to hide the difference in. */}
-      <div className="absolute inset-0 bg-auth-scrim" />
-      <div className="relative z-10 flex h-full flex-col p-10 xl:p-14">
-        {/* `tone="dark"` is pinned rather than `auto`: this panel is ink in
-            BOTH themes, so the lettering must stay white even in light mode,
-            where --logo-ink would otherwise resolve to near-black. */}
-        <SurgeLogo tone="dark" className={LOCKUP} />
-      </div>
-    </div>
-  );
+  return <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#171a1f] text-white">
+    <div className="shrink-0 px-10 py-7 xl:px-14"><SurgeLogo tone="dark" className={LOCKUP} /></div>
+    <div className="relative min-h-0 flex-1"><Image src="/images/surge/02-team-tablet.webp" alt="Two restaurant team members reviewing an order on a compact tablet" fill sizes="(min-width: 1024px) 56vw, 1px" loading="eager" fetchPriority="high" className="object-cover object-[center_42%]" /></div>
+    <div className="shrink-0 px-10 py-8 xl:px-14"><h2 className="text-3xl font-medium tracking-tight">Good to have you back.</h2><p className="mt-3 text-sm text-[#c1c7ce]">Your menu, your team, your next service. All in one place.</p></div>
+  </div>;
 }
 
 /* ===========================================================================

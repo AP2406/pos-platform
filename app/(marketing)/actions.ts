@@ -124,16 +124,16 @@ function confirmationHtml(name: string, kind: string): string {
   // have your details" and "we will be in touch" commit us to a reply; they do
   // not promise a place, a start date, or a price after the pilot, none of which
   // we know. Anything stronger in a receipt is a promise in writing.
-  const heading = isPilot ? "We have your pilot sign-up" : isCall ? "Your free call is booked" : "We got your message";
+  const heading = isPilot ? "We have your pilot sign-up" : isCall ? "We have your demo request" : "We got your message";
   const intro = isPilot
-    ? "Thanks, " + safeName + ". We have your details and we will be in touch to talk through the pilot and book a time to come and set the till up with you."
+    ? "Thanks, " + safeName + ". We have your details and we will be in touch to talk through the pilot and confirm the right setup for your business."
     : isCall
     ? "Thanks for reaching out, " + safeName + ". We have your details and will contact you shortly to lock in a time that works &mdash; no pressure, no jargon."
-    : "Thanks for reaching out, " + safeName + ". We have your message and a real person will get back to you shortly, usually the same day.";
+    : "Thanks for reaching out, " + safeName + ". We have your message and a real person will get back to you as soon as possible.";
 
   let steps = "";
   if (isPilot) {
-    const items = ["We read what you told us about how your shop runs.", "We call or email you to talk it through and pick a setup day.", "We come out, load your menu and get you live on the pilot.", "You use it for real and tell us what is wrong with it."];
+    const items = ["We read what you told us about how your shop runs.", "We call or email you to discuss fit, your location and setup options.", "We agree on the setup plan and help you get started with the pilot.", "You use it for real and tell us what is wrong with it."];
     let rows = "";
     for (let i = 0; i < items.length; i++) {
       rows = rows +
@@ -208,7 +208,7 @@ function confirmationHtml(name: string, kind: string): string {
             // the same colour rather than #101318 above and #0e1a2b below.
             "<tr><td style='background-color:#101318;border-radius:0 0 18px 18px;padding:22px 32px;text-align:center;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'>" +
               "<div style='color:#ffffff;font-size:14px;font-weight:700;'>Surge</div>" +
-              "<div style='color:#94a3b8;font-size:12px;margin-top:6px;line-height:1.6;'>Smarter payments for local business<br/>Serving the GTA &amp; Durham Region<br/>" + esc(SUPPORT_EMAIL) + "</div>" +
+              "<div style='color:#94a3b8;font-size:12px;margin-top:6px;line-height:1.6;'>Point of sale for restaurants, cafes and retail<br/>" + esc(SUPPORT_EMAIL) + "</div>" +
               "<div style='color:#64748b;font-size:11px;margin-top:10px;'>&copy; 2026 Surge</div>" +
             "</td></tr>" +
           "</table>" +

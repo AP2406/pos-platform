@@ -1,37 +1,56 @@
-import type { Metadata } from "next";
 import { BookWizard } from "./book-wizard";
-import { OG_BASE } from "../shared-metadata";
+import { pageMetadata, Photo, Checklist } from "../design";
 import { JsonLd, breadcrumb } from "../jsonld";
-import { Crumb } from "../ui";
-
-// A SAVINGS CALL BECOMES A DEMO. The wizard's field keys and the server action
-// behind it are untouched — only the framing moved, because the thing being
-// booked is now "watch the POS run your menu" rather than "we quote you a rate".
-export const metadata: Metadata = {
-  title: { absolute: "Book a Free POS Demo | Surge" },
-  description: "Book a free 15-minute demo of Surge POS. We will load your menu, draw your floor, and show you the register, the kitchen display and the reports on your own business.",
-  alternates: { canonical: "/book" },
-  openGraph: { ...OG_BASE, url: "/book" },
-};
-
-const points = ["A walkthrough on your own menu", "Straight answers about what it does and does not do", "The right setup for your business"];
-
+export const metadata = pageMetadata(
+  "Book a free POS demo",
+  "Request a free 15-minute walkthrough of Surge POS, tailored to your business. Explore the menu, register, floor and kitchen workflows.",
+  "/book",
+);
 export default function BookPage() {
   return (
-    <section className="border-b border-[#D9E1EA] bg-[#F4F7FA] pb-28">
-      <JsonLd data={breadcrumb("Book a Call", "/book")} />
-      <div className="mx-auto max-w-2xl px-6 pt-40 text-center">
-        <Crumb>Book a demo</Crumb>
-        <h1 className="mt-4 text-[40px] font-bold leading-[1.12] tracking-[-0.015em] text-[#0A2540] sm:text-[46px]">Book your free POS demo.</h1>
-        <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-[#42566B]">Fifteen minutes, no pressure, no jargon. Answer a few quick questions and we will come prepared with a till set up like yours.</p>
-        <div className="mt-9 flex justify-center">
-          <BookWizard />
+    <section className="s-wrap">
+      <JsonLd data={breadcrumb("Book a demo", "/book")} />
+      <div className="s-page-intro">
+        <p className="s-eyebrow">See it for yourself</p>
+        <h1>
+          Your business.
+          <br />
+          Let’s walk through it.
+        </h1>
+        <p className="s-lede">
+          A free 15-minute demo, built around the way you work. Bring your
+          everyday questions and we’ll take you through the POS.
+        </p>
+      </div>
+      <div className="s-form-layout">
+        <div>
+          <Photo name="owner" eager />
+          <p className="s-small">
+            A practical conversation about your menu, team and setup.
+          </p>
         </div>
-        <p className="mt-4 text-xs font-semibold text-[#7A8CA0]">Takes about 30 seconds &bull; No commitment</p>
-        <div className="mx-auto mt-12 grid max-w-2xl gap-3 sm:grid-cols-3">
-          {points.map((p) => (
-            <div key={p} className="rounded-md border border-[#D9E1EA] bg-white p-4 text-sm font-semibold text-[#42566B]">{p}</div>
-          ))}
+        <div className="s-book-panel">
+          <p className="s-eyebrow">Your walkthrough</p>
+          <h2>Make those 15 minutes useful.</h2>
+          <Checklist
+            items={[
+              "Show us how your business runs",
+              "Explore the register and menu builder",
+              "Talk through your devices and workflow",
+              "Ask about pilot and support availability",
+            ]}
+          />
+          <BookWizard />
+          <p className="s-small">
+            No commitment. We’ll confirm a suitable time with you.
+          </p>
+          <div className="s-note">
+            <strong>POS today. Payments coming soon.</strong>
+            <p>
+              The demo covers the POS software. Surge card processing and
+              payment terminals are in development.
+            </p>
+          </div>
         </div>
       </div>
     </section>

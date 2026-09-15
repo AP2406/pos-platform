@@ -1,86 +1,281 @@
 "use client";
-
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { SurgeMark } from "./surge-mark";
+import { usePathname } from "next/navigation";
+import {
+  Menu,
+  X,
+  ChevronDown,
+  ArrowUpRight,
+  Utensils,
+  Coffee,
+  ShoppingBag,
+  MapPin,
+  Tablet,
+  ListChecks,
+  BookOpen,
+  MessagesSquare,
+} from "lucide-react";
+import { SurgeIcon } from "@/components/brand/surge-logo";
 
-// POS-FIRST ORDER. "Point of sale" was third behind Home and Pricing; it is now
-// the first thing after the logo, and the two industry pages sit beside it so a
-// restaurant owner can self-select in the nav instead of reading a home page
-// first. "Home" is dropped as a label — the logo is the home link on every site
-// and repeating it cost the slot that "Restaurants" now occupies.
-const LINKS = [
-  { href: "/pos", label: "Point of sale" },
-  { href: "/pos-for-restaurants", label: "Restaurants" },
-  { href: "/pos-for-retail", label: "Retail" },
-  // /pricing, still — the URL does not move. The LABEL does: the page is the
-  // pilot offer now, and "Free pilot" answers the cost question in the rail
-  // itself, which is the question the word "Pricing" was standing in for.
-  { href: "/pricing", label: "Free pilot" },
-  { href: "/contact", label: "Contact" },
+const groups = [
+  {
+    label: "Solutions",
+    items: [
+      {
+        label: "Restaurants",
+        href: "/pos-for-restaurants",
+        body: "From the floor to the kitchen.",
+        icon: Utensils,
+      },
+      {
+        label: "Cafes & quick service",
+        href: "/solutions/cafes",
+        body: "Keep the counter moving.",
+        icon: Coffee,
+      },
+      {
+        label: "Retail & shops",
+        href: "/pos-for-retail",
+        body: "Your products, stock and people.",
+        icon: ShoppingBag,
+      },
+      {
+        label: "Multiple locations",
+        href: "/solutions/multi-location",
+        body: "Keep each business in view.",
+        icon: MapPin,
+      },
+    ],
+  },
+  {
+    label: "Resources",
+    items: [
+      {
+        label: "Tablets & hardware",
+        href: "/pos-hardware",
+        body: "A setup that suits your space.",
+        icon: Tablet,
+      },
+      {
+        label: "Setup & support",
+        href: "/setup-and-support",
+        body: "Get the essentials in place.",
+        icon: ListChecks,
+      },
+      {
+        label: "Business guides",
+        href: "/guides",
+        body: "Clear answers to useful questions.",
+        icon: BookOpen,
+      },
+      {
+        label: "Contact us",
+        href: "/contact",
+        body: "Let’s talk about your business.",
+        icon: MessagesSquare,
+      },
+    ],
+  },
 ];
-
 export function SiteNav() {
-  const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
-
+  const pathname = usePathname();
+  const toggle = useRef<HTMLButtonElement>(null);
+  const header = useRef<HTMLElement>(null);
+  function closeDropdowns() {
+    header.current
+      ?.querySelectorAll("details[open]")
+      .forEach((item) => item.removeAttribute("open"));
+  }
+  function closeNavigation() {
+    setOpen(false);
+    closeDropdowns();
+  }
   useEffect(() => {
-    function onScroll() { setScrolled(window.scrollY > 12); }
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
+    function escape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      const dropdown =
+        header.current?.querySelector<HTMLDetailsElement>("details[open]");
+      if (dropdown) {
+        dropdown.open = false;
+        dropdown.querySelector("summary")?.focus();
+      }
+      if (open) {
+        setOpen(false);
+        toggle.current?.focus();
+      }
+    }
+    function outside(event: PointerEvent) {
+      if (
+        event.target instanceof Node &&
+        !header.current?.contains(event.target)
+      )
+        closeDropdowns();
+    }
+    document.addEventListener("keydown", escape);
+    document.addEventListener("pointerdown", outside);
+    return () => {
+      document.removeEventListener("keydown", escape);
+      document.removeEventListener("pointerdown", outside);
+    };
+  }, [open]);
   return (
-    <header className="fixed inset-x-0 top-0 z-50">
-      <div className="bg-[#0A2540] text-[#B9C8D8]">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-1.5 text-xs">
-          <span>Point of sale for the GTA &amp; Durham Region &middot; card processing coming soon</span>
-          {/* THE PAIR, AND WHY THIS WAY ROUND. The pilot is now the primary
-              ask — it is the button — and the demo keeps this strip slot as the
-              softer, lower-commitment path. An owner who is not ready to run
-              unfamiliar software through Friday service should still have a
-              one-click way to just look at it, and the demo is still the
-              primary CTA on /pos and on every industry page. */}
-          <Link href="/book" className="hidden font-semibold text-white hover:underline sm:block">Book a demo &rarr;</Link>
-        </div>
+    <header className="s-header" ref={header}>
+      <div className="s-announcement">
+        <span className="s-announcement-dot" aria-hidden="true" /> Meet your
+        next POS.{" "}
+        <Link href="/pricing" onClick={closeNavigation}>
+          Explore the free pilot
+        </Link>{" "}
+        <span aria-hidden="true">↗</span>
       </div>
-      <div className={"border-b border-[#D9E1EA] bg-white transition-shadow " + (scrolled ? "shadow-[0_2px_12px_rgba(10,37,64,0.08)]" : "")}>
-        <nav className="mx-auto flex h-[68px] max-w-6xl items-center justify-between gap-3 px-6">
-          <Link href="/" className="flex shrink-0 items-center gap-2">
-            {/* Square now, not 47x28: the old mark was a wide card-and-bolt
-                drawing; the new symbol is drawn on a square grid and would be
-                stretched by a non-square box, which the kit forbids. */}
-            <SurgeMark className="h-8 w-8 shrink-0" />
-            <span className="text-lg font-bold tracking-tight text-[#0A2540]">Surge</span>
+      <div className="s-wrap s-nav">
+        <Link
+          href="/"
+          aria-label="Surge home"
+          className="s-brand"
+          onClick={closeNavigation}
+        >
+          <SurgeIcon tone="light" size={32} title={null} />
+          Surge
+        </Link>
+        <nav aria-label="Main navigation" className="s-nav-links">
+          <Link
+            href="/pos"
+            aria-current={pathname === "/pos" ? "page" : undefined}
+            onClick={closeNavigation}
+          >
+            Product
           </Link>
-          {/* md -> lg. The rail carried four labels at 768px; it now carries
-              five, and "Restaurants"/"Retail" are longer than the "Home" they
-              replaced, so the row collided with the Sign in + Book pair at the
-              md breakpoint. The burger now covers tablet as well, and the gap
-              drops a notch so the five still sit comfortably at lg. */}
-          <div className="hidden items-center gap-6 lg:flex">
-            {LINKS.map((l) => (<Link key={l.href} href={l.href} className="text-[14.5px] font-semibold text-[#1A2B3C] transition-colors hover:text-[#1B6DC1]">{l.label}</Link>))}
-          </div>
-          <div className="hidden items-center gap-5 lg:flex">
-            <Link href="/login" className="text-[14.5px] font-semibold text-[#1B6DC1] hover:underline">Sign in</Link>
-            <Link href="/pricing#apply" className="rounded-[4px] bg-[#0A2540] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#123456]">Join the pilot</Link>
-          </div>
-          <button type="button" onClick={() => setOpen(!open)} className="rounded-[4px] border border-[#D9E1EA] px-3 py-2 text-sm font-semibold text-[#1A2B3C] lg:hidden" aria-label="Toggle menu">{open ? "Close" : "Menu"}</button>
+          {groups.map((group) => (
+            <details
+              className="s-nav-dropdown"
+              name="surge-navigation"
+              key={group.label}
+              onBlur={(event) => {
+                if (
+                  event.relatedTarget instanceof Node &&
+                  !event.currentTarget.contains(event.relatedTarget)
+                )
+                  event.currentTarget.open = false;
+              }}
+            >
+              <summary>
+                {group.label}
+                <ChevronDown size={13} aria-hidden="true" />
+              </summary>
+              <div className="s-dropdown-panel">
+                <span className="s-dropdown-heading">
+                  {group.label === "Solutions"
+                    ? "BUILT AROUND YOUR BUSINESS"
+                    : "PLAN YOUR NEXT STEP"}
+                </span>
+                <div>
+                  {group.items.map(({ label, href, body, icon: Icon }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      aria-current={pathname === href ? "page" : undefined}
+                      onClick={closeNavigation}
+                    >
+                      <span className="s-dropdown-icon">
+                        <Icon size={20} strokeWidth={1.5} aria-hidden="true" />
+                      </span>
+                      <span>
+                        <strong>{label}</strong>
+                        <small>{body}</small>
+                      </span>
+                      <ArrowUpRight size={15} aria-hidden="true" />
+                    </Link>
+                  ))}
+                </div>
+                <Link
+                  className="s-dropdown-footer"
+                  href={
+                    group.label === "Solutions" ? "/pos" : "/switching-to-surge"
+                  }
+                  onClick={closeNavigation}
+                >
+                  {group.label === "Solutions"
+                    ? "Explore the full POS"
+                    : "Thinking about switching?"}
+                  <ArrowUpRight size={14} aria-hidden="true" />
+                </Link>
+              </div>
+            </details>
+          ))}
+          <Link
+            href="/pricing"
+            aria-current={pathname === "/pricing" ? "page" : undefined}
+            onClick={closeNavigation}
+          >
+            Pricing
+          </Link>
         </nav>
-        {open && (
-          <div className="border-t border-[#D9E1EA] bg-white px-6 py-3 lg:hidden">
-            <div className="flex flex-col gap-1 text-sm font-semibold text-[#1A2B3C]">
-              {LINKS.map((l) => (<Link key={l.href} href={l.href} onClick={() => setOpen(false)} className="rounded-[4px] px-2 py-2.5 hover:bg-[#F4F7FA]">{l.label}</Link>))}
-              <Link href="/login" onClick={() => setOpen(false)} className="rounded-[4px] px-2 py-2.5 text-[#1B6DC1] hover:bg-[#F4F7FA]">Sign in</Link>
-              {/* The strip's "Book a demo" link is hidden below sm, so the
-                  burger has to carry both halves of the pair itself. */}
-              <Link href="/book" onClick={() => setOpen(false)} className="rounded-[4px] px-2 py-2.5 hover:bg-[#F4F7FA]">Book a demo</Link>
-              <Link href="/pricing#apply" onClick={() => setOpen(false)} className="mt-1 rounded-[4px] bg-[#0A2540] px-4 py-2.5 text-center font-bold text-white">Join the pilot</Link>
-            </div>
-          </div>
-        )}
+        <div className="s-nav-actions">
+          <Link href="/login">Sign in</Link>
+          <Link href="/book" className="s-button">
+            Book a demo <ArrowUpRight size={15} aria-hidden="true" />
+          </Link>
+        </div>
+        <button
+          ref={toggle}
+          type="button"
+          className="s-menu-toggle"
+          aria-label={open ? "Close menu" : "Open menu"}
+          aria-expanded={open}
+          aria-controls="mobile-navigation"
+          onClick={() => setOpen(!open)}
+        >
+          {open ? (
+            <X size={20} aria-hidden="true" />
+          ) : (
+            <Menu size={20} aria-hidden="true" />
+          )}
+        </button>
       </div>
+      <nav
+        id="mobile-navigation"
+        aria-label="Mobile navigation"
+        className="s-wrap s-mobile-nav"
+        hidden={!open}
+      >
+        <div className="s-mobile-primary">
+          {[
+            ["Product", "/pos"],
+            ["Pricing & free pilot", "/pricing"],
+          ].map(([label, href]) => (
+            <Link key={href} href={href} onClick={closeNavigation}>
+              {label}
+              <ArrowUpRight size={15} aria-hidden="true" />
+            </Link>
+          ))}
+        </div>
+        {groups.map((group) => (
+          <div className="s-mobile-group" key={group.label}>
+            <span>{group.label}</span>
+            {group.items.map(({ label, href }) => (
+              <Link
+                key={href}
+                href={href}
+                aria-current={pathname === href ? "page" : undefined}
+                onClick={closeNavigation}
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
+        ))}
+        <div className="s-mobile-actions">
+          <Link href="/login" onClick={closeNavigation}>
+            Sign in
+          </Link>
+          <Link className="s-button" href="/book" onClick={closeNavigation}>
+            Book a demo <ArrowUpRight size={15} aria-hidden="true" />
+          </Link>
+        </div>
+      </nav>
     </header>
   );
 }
