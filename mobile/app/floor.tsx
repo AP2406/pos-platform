@@ -433,6 +433,7 @@ export default function Floor() {
                       sectionName={t.sectionId ? sectionName[t.sectionId] ?? null : null}
                       stageLabel={otherServer ? "In use" : occupied ? STAGE_LABEL[stage] : null}
                       serverName={otherServer ? null : summary?.serverName ?? null}
+                      partyName={otherServer ? null : summary?.partyName ?? null}
                       covers={otherServer ? null : summary?.guests ?? null}
                       timer={otherServer ? null : summary ? formatDuration(summary.openedAt, now) : null}
                       total={otherServer ? null : summary && summary.subtotal > 0 ? money(summary.subtotal, "CAD") : null}

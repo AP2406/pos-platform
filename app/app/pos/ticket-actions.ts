@@ -6,6 +6,7 @@ import { getActiveStaff } from "./staff-session";
 import { verifyManagerPin } from "./approval-actions";
 import { z } from "zod";
 import { posAuthorize } from "@/lib/services/pos-action-guard";
+import { normalizeCheckName } from "@surge/api-contracts";
 
 // A chosen modifier kept structurally on the line (price already inside unit_price).
 const lineModifierSchema = z.object({
@@ -243,6 +244,10 @@ export type TableTicketSummary = {
   check_dropped_at: string | null;
   // Searchable guest names (check customer + per-seat names) for find-my-check.
   guests: string;
+  // What the host called this party when they sat it ("Johnson"). Stored in
+  // open_tickets.label, the same column a to-go order or a bar tab uses for its
+  // name — a check has one name, whatever kind of check it is.
+  party_name: string | null;
 };
 
 export type TogoTicketSummary = {
@@ -273,7 +278,8 @@ export type BarTabSummary = {
 // ticket (unique index race), return that one instead of erroring.
 export async function openTableTicket(
   elementId: string,
-  guestCount?: number | null
+  guestCount?: number | null,
+  partyName?: string | null
 ): Promise<{ ok: true; ticketId: string; cart: TableCart } | { error: string }> {
   if (!elementId) return { error: "Missing table." };
   const { business } = await requireBusiness();
@@ -286,6 +292,9 @@ export async function openTableTicket(
     guestCount && Number.isFinite(guestCount) && guestCount > 0
       ? Math.min(Math.round(guestCount), 999)
       : null;
+  // Optional by design. A host who is slammed sits the table and moves on; the
+  // name can be added later from the table's options menu.
+  const party = normalizeCheckName(partyName);
 
   const active = await getActiveStaff();
   // A2: a new check auto-attributes to the server assigned to this table's section
@@ -314,6 +323,7 @@ export async function openTableTicket(
       element_id: elementId,
       ticket_type: "table",
       guest_count: guests,
+      label: party,
       staff_id: attributedStaffId,
       cart: { items: [] },
       created_by: user ? user.id : null,
@@ -1276,7 +1286,7 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
 
   const { data, error } = await supabase
     .from("open_tickets")
-    .select("id, element_id, guest_count, opened_at, cart, staff_id, split_kind, check_dropped_at")
+    .select("id, element_id, guest_count, opened_at, cart, staff_id, split_kind, check_dropped_at, label")
     .eq("business_id", business.id)
     .not("element_id", "is", null);
   if (error) {
@@ -1333,8 +1343,34 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
       fired,
       check_dropped_at: (t.check_dropped_at as string | null) ?? null,
       guests,
+      party_name: (t.label as string | null) ?? null,
     };
   });
+}
+
+// Rename the party sitting at a table. Separate from openTableTicket because a
+// host almost always learns the name AFTER seating them — they sit a four-top
+// and the name arrives when the server greets them.
+export async function renameParty(
+  ticketId: string,
+  name: string | null
+): Promise<{ ok: true; name: string | null } | { error: string }> {
+  if (!ticketId) return { error: "Missing check." };
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+  // Clearing the name is a real intent, not a failed rename: a party pays, the
+  // table turns, and the next one is nameless until someone says otherwise.
+  const label = normalizeCheckName(name);
+  const { error } = await supabase
+    .from("open_tickets")
+    .update({ label })
+    .eq("id", ticketId)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("renameParty:", error);
+    return { error: "Could not rename the party. Please try again." };
+  }
+  return { ok: true, name: label };
 }
 
 // Open a takeout ticket — a check with no table. Name + phone are required so

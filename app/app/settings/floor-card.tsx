@@ -17,6 +17,7 @@ import {
   type ElementKind,
 } from "../floor/floor-actions";
 import { setFloorChairMode } from "./floor-chair-actions";
+import { setElementSection } from "../pos/sections-actions";
 import { createClient } from "@/lib/supabase/client";
 import { seatPositions, CHAIR_SIZE } from "../pos/floor-style";
 
@@ -34,6 +35,7 @@ type El = {
   shape: "rect" | "round";
   parent_id: string | null;
   seat_no: number | null;
+  section_id: string | null;
 };
 
 type PaletteItem = { kind: ElementKind; label: string; shape: "rect" | "round"; w: number; h: number; seats?: boolean };
@@ -55,6 +57,9 @@ const NAMEABLE: ElementKind[] = ["table", "booth", "counter", "station", "room",
 // already draw a counter's seats at their real positions and print the number —
 // until now the editor could not create any, so no bar ever had one.
 const SEATABLE: ElementKind[] = ["table", "booth", "counter"];
+// What a server section can contain. Walls, rooms and text labels are scenery;
+// a chair belongs to whatever it is pulled up to, not to a section of its own.
+const SECTIONABLE: ElementKind[] = ["table", "booth", "counter", "station"];
 const STOOL_PARENTS: ElementKind[] = ["counter", "station"];
 const STOOL_BASE = 100; // bar seats number from 101, clear of "Table 1".
 
@@ -98,16 +103,31 @@ export function FloorCard({
   initialElements,
   initialChairMode,
   businessId,
+  sections = [],
 }: {
   initialPlans: FloorPlan[];
   initialElements: FloorElement[];
   initialChairMode: "follow" | "editable";
   businessId: string;
+  sections?: { id: string; name: string; color: string | null }[];
 }) {
   const toEl = (e: FloorElement): El => ({
     id: e.id, kind: e.kind, label: e.label, x: e.x, y: e.y, w: e.w, h: e.h,
     rotation: e.rotation, shape: e.shape, parent_id: e.parent_id, seat_no: e.seat_no,
+    section_id: e.section_id,
   });
+
+  // What the server currently believes each element's section is.
+  //
+  // Sections are NOT part of saveFloorLayout's payload, on purpose: that save
+  // rewrites every element on the plan, so folding sections into it would let a
+  // floor editor left open in another tab quietly undo an assignment made in
+  // the Server sections card. They go through setElementSection instead, one
+  // element at a time — the same way the background already saves itself. This
+  // ref is how we know which ones actually changed.
+  const serverSection = useRef<Record<string, string | null>>(
+    Object.fromEntries(initialElements.map((e) => [e.id, e.section_id]))
+  );
 
   const [plans, setPlans] = useState<FloorPlan[]>(initialPlans);
   const [activePlan, setActivePlan] = useState<string>(initialPlans[0]?.id ?? "");
@@ -189,6 +209,19 @@ export function FloorCard({
       setError(res.error);
       return false;
     }
+    // Now that every element definitely exists server-side, push the section
+    // changes. A newly added or duplicated table has no row until this point,
+    // so its section could not have been assigned any earlier.
+    for (const e of elements) {
+      if (!SECTIONABLE.includes(e.kind)) continue;
+      if (serverSection.current[e.id] === e.section_id) continue;
+      const secRes = await setElementSection(e.id, e.section_id);
+      if ("error" in secRes) {
+        setError(secRes.error);
+        return false;
+      }
+      serverSection.current[e.id] = e.section_id;
+    }
     return true;
   }
 
@@ -202,6 +235,7 @@ export function FloorCard({
       }
       const { elements } = await listFloor(id);
       setEls(elements.map(toEl));
+      for (const e of elements) serverSection.current[e.id] = e.section_id;
       setActivePlan(id);
       setSelectedId(null);
       setDirty(false);
@@ -304,8 +338,39 @@ export function FloorCard({
       label: isBar ? String(base + i + 1) : null,
       x: pos.x, y: pos.y,
       w: CHAIR_SIZE, h: CHAIR_SIZE, rotation: 0, shape: "round" as const,
-      parent_id: parent.id, seat_no: i + 1,
+      parent_id: parent.id, seat_no: i + 1, section_id: null,
     }));
+  }
+
+  // Duplicate the selected element and its seats. A dining room is mostly the
+  // same table over and over — building the tenth four-top by hand is ten
+  // chances to get the size subtly wrong, and a floor whose tables are 78, 80
+  // and 82 wide looks like a bug even though nothing is broken.
+  function duplicateSelected() {
+    if (!selected) return;
+    const src = selected;
+    const id = crypto.randomUUID();
+    const copy: El = {
+      ...src,
+      id,
+      // Offset so the copy is visibly a second object rather than sitting
+      // exactly on top of the original.
+      x: snap(src.x + GRID * 2),
+      y: snap(src.y + GRID * 2),
+      // A duplicated table gets the next free number; names must be unique on a
+      // plan, so copying "Table 4" verbatim would fail on save.
+      label: src.kind === "table" ? nextTableName() : src.label,
+    };
+    const seats = els.filter((e) => e.kind === "seat" && e.parent_id === src.id).length;
+    setEls((prev) => [...prev, copy, ...makeSeats(copy, seats, prev)]);
+    setSelectedId(id);
+    setDirty(true);
+  }
+
+  function changeSection(sectionId: string | null) {
+    if (!selectedId) return;
+    setEls((prev) => prev.map((e) => (e.id === selectedId ? { ...e, section_id: sectionId } : e)));
+    setDirty(true);
   }
 
   function addElement(p: PaletteItem, seats: number) {
@@ -318,6 +383,7 @@ export function FloorCard({
       x: snap(60 + offset),
       y: snap(80 + offset),
       w: p.w, h: p.h, rotation: 0, shape: p.shape, parent_id: null, seat_no: null,
+      section_id: null,
     };
     setEls((prev) => [...prev, table, ...makeSeats(table, seats, prev)]);
     setSelectedId(id);
@@ -513,12 +579,33 @@ export function FloorCard({
               <Input type="number" min="0" max="20" value={selectedSeats} onChange={(e) => regenChairs(selected.id, Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))} className="h-9 w-20" />
             </div>
           )}
+          {/* Section lives on the element, where the decision is actually made.
+              It is still editable in bulk from the Server sections card below —
+              that view answers "who has the patio tonight", this one answers
+              "which section is this table in", and they are different questions
+              asked at different moments. */}
+          {SECTIONABLE.includes(selected.kind) && sections.length > 0 && (
+            <div className="space-y-1">
+              <Label className="text-xs">Section</Label>
+              <select
+                value={selected.section_id ?? ""}
+                onChange={(e) => changeSection(e.target.value || null)}
+                className="u-tx u-focus h-9 w-36 rounded-md border border-border bg-transparent text-foreground px-2 text-sm"
+              >
+                <option value="">No section</option>
+                {sections.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           {selected.kind === "table" && (
             <Button size="sm" variant="outline" onClick={() => updateSelected({ shape: selected.shape === "round" ? "rect" : "round" })}>
               {selected.shape === "round" ? "Make square" : "Make round"}
             </Button>
           )}
           <Button size="sm" variant="outline" onClick={() => updateSelected({ rotation: (selected.rotation + 15) % 360 })}>Rotate</Button>
+          <Button size="sm" variant="outline" onClick={duplicateSelected}>Duplicate</Button>
           <Button size="sm" variant="outline" className="text-red-600" onClick={deleteSelected}>Delete</Button>
         </div>
       )}

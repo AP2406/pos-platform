@@ -184,6 +184,8 @@ export type DemoCheck = {
   ticketType: string; // table | togo | bar | delivery
   channel: string; // dine_in | takeout | pickup | delivery
   guests: number;
+  // The name the host took at the door. Optional — a check can be nameless.
+  partyName?: string | null;
   openedAt: string;
   checkDropped: boolean;
   customerPhone: string | null;
@@ -517,6 +519,9 @@ export function assignTables(tables: { id: string; label: string }[]): void {
     const it = byName(name);
     return { catalogItemId: it.id, name: it.name, unitPrice: it.price, quantity: qty, note, seat, firedAt: firedMin == null ? null : ago(firedMin, base) };
   };
+  // Party names on the demo floor. A demo is a shop window: a board of
+  // anonymous four-tops is a diagram, and "Okafor · 4 guests" is a Wednesday.
+  const PARTY_NAMES = ["Okafor", "Silva", "Nakamura", "Bergström", "Rahman"];
   const mk = (t: { id: string; label: string }, srv: (typeof SERVERS)[number], guests: number, openedMin: number, lines: DemoLine[], checkDropped = false): DemoCheck => ({
     id: "demo-chk-" + t.id,
     number: s.nextCheck++,
@@ -524,6 +529,9 @@ export function assignTables(tables: { id: string; label: string }[]): void {
     ticketType: "table",
     channel: "dine_in",
     guests,
+    // One table is left unnamed on purpose, because that is also true of a real
+    // floor and the screen has to look right when the name is missing.
+    partyName: PARTY_NAMES[tables.findIndex((x) => x.id === t.id)] ?? null,
     openedAt: ago(openedMin, base),
     checkDropped,
     customerPhone: null,

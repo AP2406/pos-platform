@@ -107,6 +107,7 @@ export async function fetchTableSummaries(businessId: string): Promise<Record<st
       checkDropped: c.checkDropped,
       staffId: c.staffId,
       serverName: c.serverName,
+      partyName: c.partyName ?? null,
     };
   }
   return out;

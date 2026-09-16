@@ -1,6 +1,7 @@
 import { Pressable, View, Text, StyleSheet, type ViewStyle } from "react-native";
 import { Clock } from "lucide-react-native";
 import { color, floor, fontFamily, serviceStageColor, aging as agingColors, type ServiceStage } from "@surge/design-tokens";
+import { partySummary } from "@surge/api-contracts";
 
 // A positioned floor element. Tables/booths are DARK tiles with a state-colour
 // accent (left edge on rectangles, ring on rounds) and the state written out —
@@ -30,6 +31,7 @@ export function TableShape(props: {
   total?: string | null;
   stageLabel?: string | null; // "Open" / "Sent" / "Ready" / "Payment due"
   serverName?: string | null; // server's first name
+  partyName?: string | null; // what the host called this party ("Okafor")
   agingLabel?: string | null; // "Late 25m" — only over the red threshold
   timerColor?: string | null; // amber once over the yellow threshold
   onPress?: () => void;
@@ -82,8 +84,13 @@ export function TableShape(props: {
   const onSurface = solid ? "#FFFFFF" : color.text;
   const onSurfaceDim = solid ? "rgba(255,255,255,0.88)" : color.textDim;
   const stateColor = solid ? "#FFFFFF" : vacant ? color.textFaint : accent;
-  // server · N line (either part may be absent)
-  const who = [props.serverName ?? null, props.covers && props.covers > 0 ? props.covers + " guests" : null].filter(Boolean).join(" · ");
+  // who · N line (either part may be absent).
+  //
+  // The party's name wins over the server's when there is one. A server reading
+  // this tile is looking for a particular table of people — "where are the
+  // Okafors" — and on their own section they already know the check is theirs.
+  // With no party name this is byte-identical to what it has always shown.
+  const who = partySummary(props.partyName ?? props.serverName ?? null, props.covers);
   return (
     <Pressable
       onPress={props.onPress}

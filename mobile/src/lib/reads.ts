@@ -347,13 +347,16 @@ export type TableSummary = {
   checkDropped: boolean;
   staffId: string | null;
   serverName: string | null; // server's FIRST name, for the floor board
+  // What the host called this party ("Johnson"), from open_tickets.label.
+  // Null when nobody named them, which is normal on a busy door.
+  partyName: string | null;
 };
 
 export async function fetchTableSummaries(businessId: string): Promise<Record<string, TableSummary>> {
   if (demoOn()) return demo.fetchTableSummaries(businessId);
   const { data, error } = await supabase
     .from("open_tickets")
-    .select("id, element_id, opened_at, guest_count, cart, check_dropped_at, staff_id, server:staff_members(name)")
+    .select("id, element_id, opened_at, guest_count, cart, check_dropped_at, staff_id, label, server:staff_members(name)")
     .eq("business_id", businessId)
     .not("element_id", "is", null);
   if (error) throw error;
@@ -378,6 +381,7 @@ export async function fetchTableSummaries(businessId: string): Promise<Record<st
       checkDropped: t.check_dropped_at != null,
       staffId: (t.staff_id as string | null) ?? null,
       serverName: firstName((t.server as { name?: string | null } | { name?: string | null }[] | null) ?? null),
+      partyName: (t.label as string | null) ?? null,
     };
   }
   return byElement;

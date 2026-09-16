@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDuration } from "@/lib/format";
+import { partySummary } from "@surge/api-contracts";
 import { RegisterClient } from "./register-client";
 import {
   openTableTicket,
@@ -22,6 +23,7 @@ import {
   transferTables,
   listTableMoveTargets,
   moveTicketToTable,
+  renameParty,
   setTicketServer,
   type TableCart,
   type TableTicketSummary,
@@ -77,6 +79,11 @@ function zFor(kind: ElementKind): number {
   if (kind === "label") return 4;
   return 3;
 }
+// "Johnson · 4 guests", or whichever half we actually know. The iPad floor
+// draws the same line from the same helper.
+function partyLine(open: { party_name: string | null; guest_count: number | null }): string {
+  return partySummary(open.party_name, open.guest_count);
+}
 
 export function FloorClient({
   register,
@@ -118,6 +125,16 @@ export function FloorClient({
 
   const [promptTable, setPromptTable] = useState<FloorElement | null>(null);
   const [guests, setGuests] = useState("");
+  // The party's name, captured at the door and editable afterwards.
+  const [partyName, setPartyName] = useState("");
+  const [renameFor, setRenameFor] = useState<{ ticketId: string; label: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  // The table options menu. `at` is where the press landed, so the menu opens
+  // under the finger; null means "centre it", which is what the toolbar button
+  // and the keyboard path want.
+  const [menuFor, setMenuFor] = useState<
+    { el: FloorElement; open: TableTicketSummary; at: { x: number; y: number } | null } | null
+  >(null);
   // P0-4: a split table's child-check chooser.
   const [splitView, setSplitView] = useState<{ parentId: string; label: string; children: ChildTicket[] } | null>(null);
   const [togoOpen, setTogoOpen] = useState(false);
@@ -263,12 +280,12 @@ export function FloorClient({
     return elements.filter((e) => e.kind === "seat" && e.parent_id === elementId).length;
   }
 
-  function enterElement(el: FloorElement, guestCount: number | null) {
+  function enterElement(el: FloorElement, guestCount: number | null, party?: string | null) {
     setError(null);
     setPromptTable(null);
     const chairs = seatsOf(el.id);
     startTransition(async () => {
-      const res = await openTableTicket(el.id, guestCount);
+      const res = await openTableTicket(el.id, guestCount, party ?? null);
       if ("error" in res) {
         setError(res.error);
         return;
@@ -301,10 +318,78 @@ export function FloorClient({
       resumeElement(el, open.id, open.server_name);
     } else if (el.kind === "table" || el.kind === "booth") {
       setGuests("");
+      setPartyName("");
       setPromptTable(el);
     } else {
       enterElement(el, null);
     }
+  }
+
+  // --- the table options menu -------------------------------------------------
+  // Press and hold a table to act on it, instead of finding it again in a
+  // dropdown you have already pointed at with your finger. The menu does not
+  // own any behaviour: it sets the same `actionTableId` the strip sets and
+  // calls the same functions, so Transfer table and Assign server keep their
+  // existing dialogs, permission gates and audit trail.
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressFired = useRef(false);
+
+  function openTableMenu(el: FloorElement, open: TableTicketSummary, at: { x: number; y: number } | null) {
+    setError(null);
+    setActionTableId(el.id);
+    setMenuFor({ el, open, at });
+  }
+  function cancelPress() {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  }
+  // True when the click that follows was really the end of a long press, and
+  // should not also open the check.
+  function consumePress(): boolean {
+    if (!pressFired.current) return false;
+    pressFired.current = false;
+    return true;
+  }
+  function pressHandlers(el: FloorElement) {
+    const open = openByElement[el.id];
+    if (!open) return {}; // an empty table has nothing to act on yet
+    const start = (x: number, y: number) => {
+      pressFired.current = false;
+      cancelPress();
+      pressTimer.current = setTimeout(() => {
+        pressFired.current = true;
+        openTableMenu(el, open, { x, y });
+      }, 450);
+    };
+    return {
+      onPointerDown: (e: React.PointerEvent) => start(e.clientX, e.clientY),
+      onPointerUp: cancelPress,
+      onPointerLeave: cancelPress,
+      onPointerCancel: cancelPress,
+      onContextMenu: (e: React.MouseEvent) => {
+        e.preventDefault();
+        openTableMenu(el, open, { x: e.clientX, y: e.clientY });
+      },
+    };
+  }
+
+  // Rename the party at a table. The name lives on the check, so this is a
+  // check-level edit that happens to be reached from the floor.
+  function doRenameParty() {
+    const target = renameFor;
+    if (!target) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await renameParty(target.ticketId, renameValue);
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      setRenameFor(null);
+      await refreshOpen();
+    });
   }
 
   // P0-4: open the split-check chooser for a table that's been split.
@@ -545,6 +630,9 @@ export function FloorClient({
     const open = openByElement[el.id];
     return (el.label ?? "").toLowerCase().includes(q)
       || (open?.server_name ?? "").toLowerCase().includes(q)
+      // "Find a check" now finds it by the party's name, which is the thing a
+      // host is most likely to be asked for at the door: "where are the Johnsons?"
+      || (open?.party_name ?? "").toLowerCase().includes(q)
       || (open?.guests ?? "").toLowerCase().includes(q);
   }
   const visibleTogo = togo.filter(
@@ -662,12 +750,10 @@ export function FloorClient({
     : !actionTarget
       ? "Pick a table first."
       : null;
-  // moveTicketToTable() refuses a split parent server-side; say so up front
-  // rather than letting the operator find out in a dialog.
-  const moveReason = actionReason ?? (actionTarget && actionTarget.childCount > 0
-    ? "Un-split " + actionTarget.label + " before moving it."
-    : null);
-  const assignReason = actionReason ?? (staff.length === 0 ? "No staff on file to assign." : null);
+  // Per-action reasons ("un-split it first", "no staff on file") moved into the
+  // options menu, which is now the only place those actions are offered — they
+  // belong next to the row they disable, not in a strip the operator has to
+  // read separately.
 
   return (
     <div className="h-full flex flex-col">
@@ -771,27 +857,27 @@ export function FloorClient({
             <option key={t.elementId} value={t.elementId}>{t.label + (t.serverName ? " · " + t.serverName : "")}</option>
           ))}
         </select>
+        {/* One button, not one per action. The actions now live in the table's
+            own options menu — press and hold any table to get it under your
+            finger. This is the keyboard and mouse route to the same menu, and
+            the reason the strip still exists: a long press has no keyboard
+            equivalent. */}
         <Button
           variant="outline"
           className="h-11"
-          disabled={!!moveReason || pending}
-          title={moveReason ?? "Move this check to another table"}
-          onClick={() => { if (actionTarget) openMoveTable(actionTarget.ticketId); }}
+          disabled={!actionTarget || pending}
+          title={actionReason ?? "Actions for this table"}
+          onClick={() => {
+            const el = elements.find((e) => e.id === actionTableId);
+            const open = actionTableId ? openByElement[actionTableId] : undefined;
+            if (el && open) openTableMenu(el, open, null);
+          }}
         >
-          Transfer table
+          Table options
         </Button>
-        <Button
-          variant="outline"
-          className="h-11"
-          disabled={!!assignReason || pending}
-          title={assignReason ?? "Change who owns this check"}
-          onClick={openAssign}
-        >
-          Assign server
-        </Button>
-        {(moveReason || assignReason) && (
-          <span className="text-xs text-muted-foreground">{moveReason ?? assignReason}</span>
-        )}
+        <span className="text-xs text-muted-foreground">
+          {actionReason ?? "Tip: press and hold a table on the floor for the same menu."}
+        </span>
       </div>
 
       {/* Floor + takeout column */}
@@ -815,7 +901,8 @@ export function FloorClient({
                       key={el.id}
                       type="button"
                       disabled={pending}
-                      onClick={() => tapElement(el)}
+                      onClick={() => { if (consumePress()) return; tapElement(el); }}
+                      {...pressHandlers(el)}
                       className={"rounded-lg border p-3.5 min-h-[68px] text-left active:scale-[0.98] transition-transform disabled:opacity-60 " + statusClass(status)}
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -827,6 +914,9 @@ export function FloorClient({
                         </span>
                         {open && <span className="tabular-nums text-sm font-medium">{"$" + open.subtotal.toFixed(2)}</span>}
                       </div>
+                      {open && partyLine(open) && (
+                        <div className="text-[11px] mt-0.5 truncate font-medium">{partyLine(open)}</div>
+                      )}
                       <div className="text-[11px] mt-0.5 truncate opacity-80">
                         {open
                           ? formatDuration(minutesOpen(open.opened_at)) + (open.server_name ? " · " + open.server_name : "") + (open.child_count && open.child_count > 0 ? " · split" : "")
@@ -913,7 +1003,8 @@ export function FloorClient({
                     key={el.id}
                     type="button"
                     disabled={pending}
-                    onClick={() => tapElement(el)}
+                    onClick={() => { if (consumePress()) return; tapElement(el); }}
+                    {...pressHandlers(el)}
                     className={"absolute overflow-hidden border p-1.5 flex flex-col items-center text-center leading-tight gap-0.5 active:scale-[0.97] transition-all " + (isTable || short ? "justify-center " : "justify-start ") + statusClass(status)}
                     style={tileStyle}
                   >
@@ -941,6 +1032,14 @@ export function FloorClient({
                     )}
                     {secColor && !open && sec?.server && <span className="text-[10px] truncate max-w-full" style={{ color: secColor }}>{sec.server}</span>}
                     <span className="text-sm font-medium truncate max-w-full">{displayLabel}</span>
+                    {/* Who is sitting here, above what they owe. TouchBistro
+                        writes this "Johnson: 4"; we spell out the unit, for the
+                        same reason we print a legend and they don't — a colon
+                        between a name and a number is a convention you have to
+                        be taught. */}
+                    {open && !short && partyLine(open) && (
+                      <span className="text-[11px] opacity-90 truncate max-w-full">{partyLine(open)}</span>
+                    )}
                     {open ? (
                       <>
                         <span className="text-sm tabular-nums font-medium">{"$" + open.subtotal.toFixed(2)}</span>
@@ -1177,19 +1276,170 @@ export function FloorClient({
         </div>
       )}
 
+      {/* OPTIONS FOR A TABLE.
+          Anchored under the press when it came from a long press, centred when
+          it came from the toolbar button. Every row is 44px so it can be hit
+          without looking, and a row that cannot run says why on its own line
+          rather than being a dead grey rectangle — the same rule the action
+          strip already followed.
+
+          Printing a bill and closing a table are deliberately NOT here. Both
+          need the live cart — a bill has to price discounts, comps, service
+          charge and tax; closing has to know the check is settled — and the
+          register is what holds it. They are one tap away through Open check. */}
+      {menuFor && (() => {
+        const m = menuFor;
+        const isSplit = (m.open.child_count ?? 0) > 0;
+        const rows: { label: string; run: () => void; reason?: string | null; danger?: boolean }[] = [
+          {
+            label: isSplit ? "Open split checks" : "Open check",
+            run: () => (isSplit ? openSplitView(m.el, m.open) : resumeElement(m.el, m.open.id, m.open.server_name)),
+          },
+          {
+            label: m.open.party_name ? "Rename party…" : "Name this party…",
+            run: () => {
+              setRenameValue(m.open.party_name ?? "");
+              setRenameFor({ ticketId: m.open.id, label: m.el.label ?? "Table" });
+            },
+          },
+          {
+            label: "Transfer table…",
+            run: () => openMoveTable(m.open.id),
+            reason: isSplit ? "Un-split " + (m.el.label ?? "this table") + " before moving it." : null,
+          },
+          {
+            label: "Assign server…",
+            run: openAssign,
+            reason: staff.length === 0 ? "No staff on file to assign." : null,
+          },
+        ];
+        if (isSplit) {
+          rows.push({ label: "Un-split check", run: () => handleUnsplit(m.open.id), danger: true });
+        }
+        const W = 264;
+        const pos = m.at
+          ? {
+              left: Math.max(8, Math.min(m.at.x - W / 2, (typeof window === "undefined" ? 1024 : window.innerWidth) - W - 8)),
+              top: Math.max(8, Math.min(m.at.y + 12, (typeof window === "undefined" ? 768 : window.innerHeight) - 340)),
+            }
+          : null;
+        return (
+          <div className="fixed inset-0 z-[70] bg-black/40" onClick={() => setMenuFor(null)}>
+            <div
+              role="menu"
+              aria-label={"Options for " + (m.el.label ?? "table")}
+              onClick={(e) => e.stopPropagation()}
+              className={"bg-card border border-border rounded-xl shadow-elevation-lg overflow-hidden " + (pos ? "absolute" : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2")}
+              style={pos ? { ...pos, width: W } : { width: W }}
+            >
+              <div className="px-4 py-3 border-b border-border">
+                <div className="font-medium text-sm truncate">{"Options for " + (m.el.label ?? "table")}</div>
+                {partyLine(m.open) && (
+                  <div className="text-xs text-muted-foreground truncate">{partyLine(m.open)}</div>
+                )}
+              </div>
+              {rows.map((r) => (
+                <div key={r.label} className="border-b border-border last:border-b-0">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={!!r.reason || pending}
+                    onClick={() => { setMenuFor(null); r.run(); }}
+                    className={"u-tx w-full text-left px-4 h-12 text-sm hover:bg-accent disabled:opacity-50 " + (r.danger ? "text-red-600" : "")}
+                  >
+                    {r.label}
+                  </button>
+                  {r.reason && <p className="px-4 pb-2 -mt-1 text-[11px] text-muted-foreground">{r.reason}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* SEATING A TABLE.
+          Party size is a grid of tap targets, not a number field. A host seats
+          a table standing up, often holding menus, on a screen they are not
+          looking at closely — "4" should be one tap, not tap-field, summon
+          keyboard, type, dismiss keyboard, tap button. The grid runs to 24
+          because that is a large private party and anything past it is two
+          tables merged.
+
+          Party name is optional and above the size, because it is what the
+          host is being told at that moment ("Johnson, four"). It writes to the
+          check's label and shows on the tile as "Johnson · 4", so a server
+          crossing the room knows who is sitting there, not just how many. */}
       {promptTable && (
         <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setPromptTable(null)}>
-          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-xs" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-medium">{"Open " + (promptTable.label ?? "table")}</h3>
               <button type="button" onClick={() => setPromptTable(null)} className="text-xs text-muted-foreground underline">Cancel</button>
             </div>
             <div className="space-y-1 mb-3">
-              <Label className="text-xs">Guests (optional)</Label>
-              <Input type="number" min="1" max="99" value={guests} onChange={(e) => setGuests(e.target.value)} placeholder="2" className="h-11" />
+              <Label className="text-xs">Party name (optional)</Label>
+              <Input
+                value={partyName}
+                onChange={(e) => setPartyName(e.target.value)}
+                placeholder="Johnson"
+                maxLength={80}
+                className="h-11"
+              />
             </div>
-            <Button className="w-full h-12" disabled={pending} onClick={() => enterElement(promptTable, guests ? parseInt(guests) : null)}>
+            <div className="space-y-1.5 mb-4">
+              <Label className="text-xs">Party size</Label>
+              <div className="grid grid-cols-6 gap-1.5">
+                {Array.from({ length: 24 }, (_, i) => i + 1).map((n) => {
+                  const on = guests === String(n);
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setGuests(on ? "" : String(n))}
+                      aria-pressed={on}
+                      className={"u-tx u-focus h-11 rounded-md border text-sm tabular-nums " + (on ? "border-primary bg-primary text-primary-foreground font-semibold" : "border-border hover:bg-accent")}
+                    >
+                      {n}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <Button
+              className="w-full h-12"
+              disabled={pending}
+              onClick={() => enterElement(promptTable, guests ? parseInt(guests) : null, partyName)}
+            >
               Open table
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Renaming the party. The name usually arrives after seating — the host
+          sits them, the server greets them and gets a name — so this is its own
+          small dialog off the table's options menu rather than something you
+          can only set at the door. Clearing the field clears the name. */}
+      {renameFor && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setRenameFor(null)}>
+          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium">{"Rename party on " + renameFor.label}</h3>
+              <button type="button" onClick={() => setRenameFor(null)} className="text-xs text-muted-foreground underline">Cancel</button>
+            </div>
+            <div className="space-y-1 mb-4">
+              <Label className="text-xs">Party name</Label>
+              <Input
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                placeholder="Johnson"
+                maxLength={80}
+                autoFocus
+                className="h-11"
+              />
+            </div>
+            <Button className="w-full h-12" disabled={pending} onClick={doRenameParty}>
+              Save name
             </Button>
           </div>
         </div>

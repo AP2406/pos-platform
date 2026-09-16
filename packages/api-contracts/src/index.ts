@@ -217,3 +217,44 @@ export const DELIVERY_CHANNELS: readonly string[] = [
 export function isDeliveryChannel(channel: string | null | undefined): boolean {
   return DELIVERY_CHANNELS.includes((channel ?? "").toLowerCase().trim());
 }
+
+// ---- Check names (party name, to-go name, bar tab name) ---------------------
+// One column, open_tickets.label, holds all three, because a check has one name
+// whatever kind of check it is. The normalisation below was copy-pasted into
+// four call sites before it lived here; they had already started to drift.
+
+export const CHECK_NAME_MAX = 80;
+
+/**
+ * The name a check should be stored under, or null for "no name".
+ *
+ * Empty and whitespace-only both mean null rather than "": a host who opens the
+ * rename dialog and clears the field is removing the name, and a check whose
+ * name is the empty string would print a stray separator on every tile that
+ * shows it.
+ */
+export function normalizeCheckName(raw: string | null | undefined): string | null {
+  const s = (raw ?? "").trim();
+  return s ? s.slice(0, CHECK_NAME_MAX) : null;
+}
+
+/**
+ * The one-line "who is sitting here" for a table tile: "Okafor · 4 guests".
+ *
+ * Either half may be missing — an unnamed party, or a named one whose size was
+ * never entered — and the line is simply the half we know. With neither, it
+ * returns "", so the caller drops the line instead of rendering a separator
+ * with nothing on either side of it.
+ *
+ * Shared because the web floor and the iPad floor both draw this line, and the
+ * delivery-channel comment above is what happens when they don't share.
+ */
+export function partySummary(
+  name: string | null | undefined,
+  guests: number | null | undefined
+): string {
+  const n = typeof guests === "number" && Number.isFinite(guests) && guests > 0 ? guests : null;
+  return [normalizeCheckName(name), n === null ? null : n + (n === 1 ? " guest" : " guests")]
+    .filter(Boolean)
+    .join(" · ");
+}
