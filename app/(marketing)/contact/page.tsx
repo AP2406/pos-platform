@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { pageMetadata, Photo, Checklist } from "../design";
 import { ContactForm } from "./contact-form";
 import { JsonLd, breadcrumb } from "../jsonld";
@@ -46,7 +47,14 @@ export default function ContactPage() {
           <Photo name="team" />
         </div>
         <div className="s-form-shell">
-          <ContactForm />
+          {/* ContactForm reads ?topic= to prefill the terminal-updates
+              enquiry that the home page's "Get terminal updates" button links
+              to. useSearchParams needs a Suspense boundary for the route to
+              stay statically prerendered; without one Next makes the whole
+              page dynamic. */}
+          <Suspense fallback={null}>
+            <ContactForm />
+          </Suspense>
           <p className="s-form-help">
             Please include your country and time zone if you’d like us to
             arrange a call.

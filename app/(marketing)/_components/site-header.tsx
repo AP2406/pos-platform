@@ -1,0 +1,207 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { SurgeIcon } from "@/components/brand/surge-logo";
+import { Container, btnPrimary, ArrowRight } from "./primitives";
+
+// THE SITE HEADER.
+//
+// TWO VARIANTS, ONE COMPONENT.
+//   `overlay` — 01-home.jpg draws the header with no bar of its own, sitting
+//     directly on the hero, which bleeds to the top of the viewport. Used by /.
+//   `solid`  — a white bar with a hairline, for every page whose hero starts
+//     with a tinted band. This is the default.
+//
+// THERE IS NO ANNOUNCEMENT STRIP, ON EITHER VARIANT.
+// None of the twenty-two mockups draws one: every page opens on the lockup,
+// the four nav items, Sign in and Book a demo, and nothing above them. The
+// `solid` variant carried a charcoal strip for a while so the unrebuilt pages
+// would still state the hardware position somewhere — but the footer now
+// carries TERMINAL_COPY.note and .marketNote in its bottom bar on every route,
+// so the disclosure is site-wide without a band the design does not have. The
+// home page states it a third time in its own hero, under the CTAs.
+//
+// It also means the header's markup is identical on all twenty-two routes
+// apart from the positioning wrapper, which is the point of a reusable header.
+//
+// NAV LABELS ARE THE MOCKUP'S FOUR. "Solutions" is a disclosure rather than a
+// link because there is no /solutions index in this repo yet and the rules
+// forbid a nonworking navigation link; it opens onto the two industry pages
+// that do exist. Every other item is a route that resolves today.
+
+type Variant = "overlay" | "solid";
+
+const SOLUTIONS = [
+  { href: "/pos-for-restaurants", label: "Restaurants & cafés" },
+  { href: "/pos-for-retail", label: "Retail & service counters" },
+];
+
+const PRODUCT_LINK = { href: "/pos", label: "Product" };
+
+// The two labels that sit after the Solutions disclosure in the mockup's rail.
+const TRAILING_LINKS = [
+  { href: "/pricing", label: "Pricing" },
+  { href: "/guides", label: "Guides" },
+];
+
+export function SiteHeader({ variant }: { variant?: Variant }) {
+  // The variant is derived from the route rather than passed down, because the
+  // marketing layout is a server component and would otherwise have to learn
+  // the route just to forward it. Overlay is a property of a page that opens
+  // with a full-bleed hero, which today is exactly "/".
+  const pathname = usePathname();
+  const resolved: Variant = variant ?? (pathname === "/" ? "overlay" : "solid");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [solutionsOpen, setSolutionsOpen] = useState(false);
+  const solutionsRef = useRef<HTMLDivElement | null>(null);
+
+  // Escape closes whichever thing is open, and a click outside closes the
+  // disclosure. Both are listener-based rather than blur-based because a blur
+  // handler fires before the click inside the panel lands and eats the choice.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      setSolutionsOpen(false);
+      setMenuOpen(false);
+    }
+    function onClick(e: MouseEvent) {
+      if (!solutionsRef.current) return;
+      if (!solutionsRef.current.contains(e.target as Node)) setSolutionsOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onClick);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onClick);
+    };
+  }, []);
+
+  const navLink =
+    "rounded-[var(--surge-radius-control)] px-1 py-2 text-[length:var(--surge-small)] font-semibold text-[var(--surge-ink)] transition-colors duration-[var(--surge-motion)] hover:text-[var(--surge-action)]";
+
+  return (
+    <header
+      className={
+        resolved === "overlay"
+          ? // Absolute, not fixed: the hero photograph runs under it and there
+            // is nothing to keep pinned once the reader has scrolled past.
+            "absolute inset-x-0 top-0 z-40"
+          : "sticky top-0 z-40 border-b border-[var(--surge-border)] bg-[var(--surge-surface)]"
+      }
+    >
+      <Container className="flex h-[72px] items-center justify-between gap-4">
+        <Link href="/" className="flex shrink-0 items-center gap-2" aria-label="Surge — home">
+          {/* THE MARK, NOT THE LOCKUP. 01-home.jpg draws the horizontal lockup
+              here at ~152px wide; the kit's README sets a 220px floor for that
+              artwork and says to use "the dedicated optical icon at 16–48
+              pixels instead of shrinking the full logo". A 72px rail has
+              nowhere near 220px, so this is the kit's own 48px optical icon
+              with the wordmark typeset beside it in the page's Inter. The
+              footer, which has the room, uses the real lockup at 220px.
+
+              tone="light" IS LOAD-BEARING, NOT DECORATION. The default tone
+              reads --logo-ink, which app/globals.css flips to WHITE in the
+              product's dark theme. The marketing tree has no dark mode and this
+              header sits on a white hero, so under a dark OS theme the
+              bracket — the screen outline that makes the mark a till and not
+              three stripes — was drawn white on white and disappeared. Every
+              marketing surface therefore names the kit variant it wants
+              outright instead of inheriting the app's. */}
+          <SurgeIcon size={48} tone="light" title={null} className="h-10 w-10" />
+          <span className="text-[22px] font-bold leading-none tracking-[-0.02em] text-[var(--surge-ink)]">Surge</span>
+        </Link>
+
+        <nav aria-label="Main" className="hidden items-center gap-8 lg:flex">
+          <Link href={PRODUCT_LINK.href} className={navLink}>
+            {PRODUCT_LINK.label}
+          </Link>
+
+          <div className="relative" ref={solutionsRef}>
+            <button
+              type="button"
+              aria-expanded={solutionsOpen}
+              aria-controls="solutions-menu"
+              onClick={() => setSolutionsOpen((v) => !v)}
+              className={navLink + " inline-flex items-center gap-1"}
+            >
+              Solutions
+              <svg viewBox="0 0 20 20" aria-hidden="true" className={"h-3 w-3 transition-transform duration-[var(--surge-motion)] " + (solutionsOpen ? "rotate-180" : "")} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 8l5 5 5-5" />
+              </svg>
+            </button>
+            {solutionsOpen ? (
+              <div
+                id="solutions-menu"
+                className="absolute left-0 top-full z-10 mt-2 w-[260px] rounded-[var(--surge-radius-card)] border border-[var(--surge-border)] bg-[var(--surge-surface)] p-2 shadow-[0_8px_24px_-12px_rgba(23,25,29,0.3)]"
+              >
+                {SOLUTIONS.map((s) => (
+                  <Link
+                    key={s.href}
+                    href={s.href}
+                    onClick={() => setSolutionsOpen(false)}
+                    className="block rounded-[var(--surge-radius-control)] px-3 py-2.5 text-[length:var(--surge-small)] font-semibold text-[var(--surge-ink)] transition-colors duration-[var(--surge-motion)] hover:bg-[var(--surge-canvas)]"
+                  >
+                    {s.label}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {TRAILING_LINKS.map((l) => (
+            <Link key={l.href} href={l.href} className={navLink}>
+              {l.label}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="hidden items-center gap-5 lg:flex">
+          <Link href="/login" className="text-[length:var(--surge-small)] font-semibold text-[var(--surge-ink)] underline-offset-4 hover:underline">
+            Sign in
+          </Link>
+          <Link href="/book" className={btnPrimary + " rounded-full"}>
+            Book a demo <ArrowRight />
+          </Link>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setMenuOpen((v) => !v)}
+          aria-expanded={menuOpen}
+          aria-controls="mobile-menu"
+          className="surge-control inline-flex items-center justify-center border border-[var(--surge-border-control)] px-4 text-[length:var(--surge-small)] font-semibold text-[var(--surge-ink)] lg:hidden"
+        >
+          {menuOpen ? "Close" : "Menu"}
+        </button>
+      </Container>
+
+      {menuOpen ? (
+        <div id="mobile-menu" className="border-t border-[var(--surge-border)] bg-[var(--surge-surface)] lg:hidden">
+          <Container className="flex flex-col gap-1 py-3">
+            {[PRODUCT_LINK, ...SOLUTIONS, ...TRAILING_LINKS].map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                onClick={() => setMenuOpen(false)}
+                className="surge-control flex items-center justify-start px-2 text-[length:var(--surge-small)] font-semibold text-[var(--surge-ink)] hover:bg-[var(--surge-canvas)]"
+              >
+                {l.label}
+              </Link>
+            ))}
+            <Link href="/contact" onClick={() => setMenuOpen(false)} className="surge-control flex items-center justify-start px-2 text-[length:var(--surge-small)] font-semibold text-[var(--surge-ink)] hover:bg-[var(--surge-canvas)]">
+              Contact
+            </Link>
+            <Link href="/login" onClick={() => setMenuOpen(false)} className="surge-control flex items-center justify-start px-2 text-[length:var(--surge-small)] font-semibold text-[var(--surge-action)] hover:bg-[var(--surge-canvas)]">
+              Sign in
+            </Link>
+            <Link href="/book" onClick={() => setMenuOpen(false)} className={btnPrimary + " mt-1 rounded-full"}>
+              Book a demo <ArrowRight />
+            </Link>
+          </Container>
+        </div>
+      ) : null}
+    </header>
+  );
+}

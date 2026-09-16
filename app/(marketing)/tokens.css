@@ -1,0 +1,302 @@
+/* ==========================================================================
+   SURGE MARKETING DESIGN TOKENS
+   Ported from the design handoff: design-tokens.css (verbatim, first block)
+   plus the scales DESIGN-SYSTEM.md states in prose (second block).
+
+   WHY A SEPARATE SHEET AND NOT app/globals.css. globals.css is the PRODUCT's
+   token sheet: OKLCH, a light and a dark theme, the shadcn surface, chart
+   ramps. The marketing routes are a different design system — a fixed sRGB
+   palette, no dark mode, one accent — and merging the two is how a marketing
+   colour ends up on a till screen at 2am. This file is imported by
+   app/(marketing)/layout.tsx and nowhere else, so the tokens exist exactly
+   where the marketing tree renders and cannot leak into /app.
+
+   WHY PLAIN CUSTOM PROPERTIES AND NOT a Tailwind @theme block. Tailwind v4
+   only reads @theme from the sheet that owns `@import "tailwindcss"`, which is
+   globals.css — see above. Every token below is consumed from JSX as
+   `text-[var(--surge-ink)]`, which needs no registration and keeps the values
+   in one readable file.
+   ========================================================================== */
+
+:root {
+  /* ---- design-tokens.css, verbatim from the handoff ---- */
+  --surge-accent: #008cff;
+  --surge-action: #0069d9;
+  --surge-ink: #17191d;
+  --surge-muted: #56606c;
+  --surge-surface: #ffffff;
+  --surge-canvas: #fafafa;
+  --surge-warm: #f3f3ef;
+  --surge-border: #dce1e7;
+  --surge-radius-card: 12px;
+  --surge-radius-control: 8px;
+  --surge-content-width: 1240px;
+  /* --surge-font IS DECLARED ON .surge-scope, NOT HERE. See the block after
+     this one. Declaring it at :root looked equivalent and was not: a custom
+     property is substituted where it is DECLARED, not where it is used, so
+     `--surge-font: var(--font-marketing), …` resolved against a :root that has
+     no --font-marketing, became invalid-at-computed-value-time, and inherited
+     down as nothing. `font-family: var(--surge-font)` then fell back to
+     inherit, and every marketing page quietly rendered in the product's body
+     face instead of Inter. */
+  --surge-motion: 180ms;
+
+  /* ---- derived, and why each one exists ---- */
+
+  /* WHITE TEXT NEVER SITS ON --surge-accent. #008cff against white measures
+     3.40:1 — under AA for body text and under AA for white-on-blue. #0069d9
+     measures 5.22:1 both ways, so --surge-action is the fill for every control
+     that carries white text AND the colour of every blue word on a light
+     surface (eyebrows, links, the "Product preview" badge). --surge-accent is
+     reserved for NON-TEXT use on light (icon strokes, the active tab bar, a
+     rule) where 3:1 is the bar, and for text on the charcoal band, where it
+     measures 5.19:1. The two tokens agree with the brand: #008cff is the kit
+     blue, #0069d9 the accessible fill a prior pass already derived. */
+  --surge-accent-soft: #e6f3ff;   /* 8% accent over white — chip/rail fill */
+  --surge-on-dark: #ffffff;       /* 17.60:1 on --surge-ink */
+  --surge-on-dark-muted: #b6bdc6; /* 9.29:1 on --surge-ink */
+  --surge-on-dark-line: #2c3037;  /* hairline inside the charcoal band */
+
+  /* --surge-border is 1.31:1 against white. That is right for a card edge
+     (decorative) and wrong for an input edge, which WCAG 1.4.11 holds to 3:1.
+     #8b95a1 measures 3.04:1, so form controls take this one. */
+  --surge-border-control: #8b95a1;
+
+  /* Accessible error red. 7.10:1 on white; Tailwind's red-600 is 4.0:1 and
+     would fail at the 13px a field message renders. */
+  --surge-danger: #b42318;
+  --surge-danger-soft: #fdf3f2;
+
+  /* ---- spacing scale: 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64 / 96 ---- */
+  --surge-space-1: 4px;
+  --surge-space-2: 8px;
+  --surge-space-3: 12px;
+  --surge-space-4: 16px;
+  --surge-space-5: 24px;
+  --surge-space-6: 32px;
+  --surge-space-7: 48px;
+  --surge-space-8: 64px;
+  --surge-space-9: 96px;
+
+  /* Gutters: 24px small, 48–64px desktop (DESIGN-SYSTEM.md). */
+  --surge-gutter: var(--surge-space-5);
+
+  /* Minimum height for a main button or any tap target. */
+  --surge-control-min: 44px;
+
+  /* The header rail's height. Named rather than repeated as a literal because
+     the home hero has to clear it twice — once as top padding on the copy
+     column, once as the top edge of the bleeding photograph — and those two
+     numbers going out of step is how the picture ends up over the nav. */
+  --surge-header-h: 72px;
+
+  /* ---- type scale ----
+     Desktop H1 56–72px at 1.03; mobile 36–44. H2 32–44. Body 16–18 at 1.55.
+     Article measure near 68 characters.
+
+     --surge-h2-display IS AN ADDITION, and the one place this scale departs
+     from DESIGN-SYSTEM.md's stated H2 range. In 01-home.jpg the charcoal band
+     heading ("From first order to final payment.") and the H1 are drawn at
+     almost the same size — both measure ~60px once the 971px mockup is scaled
+     to its ~1456px canvas. Rendering that band at the 44px H2 ceiling loses
+     the hierarchy the design is built on, so it gets its own step. */
+  /* 36 -> 56px. The bottom of DESIGN-SYSTEM.md's 56–72px desktop range rather
+     than the middle, because Inter is a wider face than the one drawn in the
+     mockup: at 60px "Grow your business." broke onto a third line in the hero
+     column, which changes the shape of the whole hero. 56 keeps the design's
+     two lines and stays inside the stated range. */
+  --surge-display: clamp(2.25rem, 4.4vw, 3.5rem);
+  /* 32 -> 46px. 01-home.jpg sets the charcoal heading at roughly 60px, but it
+     draws it in a narrower face than Inter inside a copy column of the same
+     width: at 52px "to final payment." took a third line here, and the two
+     lines the design draws are more of the design than the point size is. */
+  --surge-h2-display: clamp(2rem, 3.6vw, 2.875rem);     /* 32 -> 46px */
+  /* 28 -> 36px. Was 28 -> 44px, which overshot every section heading in
+     01-home.jpg by six to eight points and cost the page real height across
+     four bands. At 44px "Explore the planned terminal." could not hold one
+     line in its half of the pricing row, which is one of the line-break
+     mismatches the fidelity review picked up; at 2.7vw it renders ~35px at
+     1280, which is where the mockup sets it, and the heading fits. */
+  --surge-h2: clamp(1.75rem, 2.7vw, 2.25rem);           /* 28 -> 36px */
+  --surge-h3: 1.25rem;                                  /* 20px */
+  --surge-h4: 1.0625rem;                                /* 17px */
+  --surge-body-lg: 1.125rem;                            /* 18px */
+  --surge-body: 1.0625rem;                              /* 17px */
+  --surge-small: 0.9375rem;                             /* 15px */
+  --surge-micro: 0.8125rem;                             /* 13px */
+  --surge-leading-tight: 1.03;
+  --surge-leading-heading: 1.08;
+  --surge-leading-body: 1.55;
+  --surge-measure: 68ch;
+
+  /* ---- motion: 160–220ms for menus, tabs and hover ---- */
+  --surge-motion-fast: 160ms;
+  --surge-motion-slow: 220ms;
+  --surge-ease: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* The handoff's own reduced-motion block, extended to the two derived
+   durations. Everything animated on these routes reads one of these three
+   variables, so this single override is the whole opt-out — there is no
+   transition with a hard-coded duration for it to miss. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --surge-motion: 0ms;
+    --surge-motion-fast: 0ms;
+    --surge-motion-slow: 0ms;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --surge-gutter: var(--surge-space-7); /* 48px */
+  }
+}
+
+/* THE FONT STACK, DECLARED WHERE next/font'S VARIABLE ACTUALLY EXISTS.
+   layout.tsx puts both `inter.variable` (which defines --font-marketing) and
+   `surge-scope` on the same element, so this declaration resolves against an
+   element that has --font-marketing — which is the whole point. The literal
+   `Inter` after it is the handoff's stack, kept as the fallback chain for the
+   case where the self-hosted asset has not arrived yet. */
+.surge-scope {
+  --surge-font: var(--font-marketing), Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ---- primitives that are cleaner as CSS than as a class string ---- */
+
+/* The 1240px rail. Every full-width band puts its content in one of these. */
+.surge-wrap {
+  margin-inline: auto;
+  width: 100%;
+  max-width: var(--surge-content-width);
+  padding-inline: var(--surge-gutter);
+}
+
+/* ==========================================================================
+   FULL-BLEED PICTURES THAT ARE STILL MEASURED FROM THE RAIL
+   ==========================================================================
+
+   THE BUG THIS EXISTS TO KILL. A picture that bleeds off the right edge of a
+   band used to be written as `absolute; right:0; width:52%` on a child of the
+   full-width <section>. A percentage on an absolutely positioned box resolves
+   against its CONTAINING BLOCK, and the containing block there is the section,
+   which is the VIEWPORT. So the picture's left edge sat at 48% of the viewport
+   while the text column sat inside a rail capped at 1240px: the two moved apart
+   at 1280 and towards each other everywhere else. At 1920 the photograph's left
+   edge landed at 922px, over the hero copy (which ends at 983) and over the
+   "Pricing" and "Guides" items in the header. At 2560 it ate 1331px of the
+   page. The layout was only ever correct at the one width it was checked at.
+
+   THE RULE THESE CLASSES ENFORCE. The right edge is the viewport (that is what
+   "bleed" means). The LEFT edge is computed from the rail, never from the
+   viewport:
+
+       left = (rail's content-box right edge) − share × (rail's content width)
+
+   `min(100%, 50% + var(--surge-content-width) / 2)` is the rail's right edge
+   expressed against the section: 50% is the viewport's midpoint, half the rail
+   is added to it, and the min() clamps it to the viewport on screens narrower
+   than 1240 where the rail is the viewport. Percentages here resolve against
+   the containing block's width — the section — so this is the CLIENT width and
+   carries no scrollbar error, which a `100vw` formulation would.
+
+   `--surge-bleed-share` is the fraction of the rail's CONTENT width the picture
+   occupies inside the rail; the rest of it is the bleed. Set it beside the
+   class (`[--surge-bleed-share:0.42]`) so one number places the picture and the
+   text column that abuts it.
+
+   ONLY THE TWO OFFSETS ARE SET HERE. `width` and `max-width` are deliberately
+   left alone: this sheet is unlayered and would otherwise beat the `w-full
+   max-w-[…]` utilities the same element needs for its in-flow mobile layout.
+   An absolutely positioned box with both offsets set and `width:auto` sizes
+   itself from the offsets, which is exactly what is wanted. */
+.surge-rail-bleed-right {
+  --surge-rail-inner: calc(min(100%, var(--surge-content-width)) - 2 * var(--surge-gutter));
+  right: 0;
+  left: calc(
+    min(100%, 50% + var(--surge-content-width) / 2) - var(--surge-gutter) -
+      var(--surge-rail-inner) * var(--surge-bleed-share, 0.42)
+  );
+}
+
+/* THE HOME HERO'S PHOTOGRAPH.
+   Below `lg` it is an ordinary block inside the rail, under the copy, and this
+   rule does nothing — DESIGN-SYSTEM.md asks for text before imagery on a narrow
+   screen and that is the source order. From `lg` it leaves the flow and bleeds.
+
+   IT STARTS BELOW THE HEADER RAIL, NOT AT y=0. 01-home.jpg runs the room up
+   past the nav and floats the nav on it, and that is what this used to do. It
+   cannot survive a wide display: the header's own items ("Pricing", "Guides",
+   "Sign in", "Book a demo") are laid out inside the 1240px rail while the
+   picture's left edge marches left as the viewport grows, so from about 1500px
+   up the nav is drawn on top of a photograph and stops being readable. Clearing
+   the 72px rail is the only way the nav is legible AND the picture still bleeds.
+   Recorded as a deviation from the mockup in the fidelity notes.
+
+   Declared here rather than as `lg:` utilities because this sheet is unlayered
+   and therefore beats Tailwind's utility layer — the same cascade fact that
+   made the previous attempt spell the rail out in utilities. Owning the whole
+   rule in one place is what stops the two halves disagreeing again. */
+@media (min-width: 1024px) {
+  .surge-hero-media {
+    position: absolute;
+    top: var(--surge-header-h);
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+/* THE FOCUS RING IS DECLARED ONCE, HERE, FOR THE WHOLE MARKETING TREE.
+   Reason: a ring applied per-component is a ring that gets forgotten on the
+   next component. :focus-visible keeps it off mouse clicks; 2px of
+   --surge-action is 5.22:1 against white and 5.19:1 against the charcoal band,
+   both clear of the 3:1 WCAG asks of a focus indicator. */
+.surge-scope :focus-visible {
+  outline: 2px solid var(--surge-action);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* On the charcoal band --surge-action is only 2.5:1, so the ring flips to the
+   accent (5.19:1 there) rather than staying the same blue everywhere. */
+.surge-on-dark :focus-visible {
+  outline-color: var(--surge-accent);
+}
+
+/* Minimum 44px on every main control, set once so no button can opt out by
+   forgetting a padding class.
+   DELIBERATELY NO `display` HERE. It used to set `display:inline-flex`, which
+   is the same specificity as Tailwind's `.lg\:hidden{display:none}` and, being
+   later in the cascade, silently beat it — the mobile menu button stayed
+   visible at 1280. Layout belongs to the utility classes; this rule owns only
+   the things utilities cannot express as one token. */
+.surge-control {
+  min-height: var(--surge-control-min);
+  border-radius: var(--surge-radius-control);
+  transition: background-color var(--surge-motion) var(--surge-ease),
+              border-color var(--surge-motion) var(--surge-ease),
+              color var(--surge-motion) var(--surge-ease);
+}
+
+/* Skip link — the first focusable thing in the tree. Off-screen until focused;
+   it is NOT display:none, which would take it out of the tab order entirely. */
+.surge-skip {
+  position: absolute;
+  left: var(--surge-space-4);
+  top: -100px;
+  z-index: 100;
+  background: var(--surge-surface);
+  color: var(--surge-action);
+  padding: var(--surge-space-3) var(--surge-space-4);
+  border-radius: var(--surge-radius-control);
+  border: 1px solid var(--surge-border);
+  font-weight: 700;
+  transition: top var(--surge-motion) var(--surge-ease);
+}
+.surge-skip:focus {
+  top: var(--surge-space-4);
+}
