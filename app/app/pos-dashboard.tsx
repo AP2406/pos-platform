@@ -1214,8 +1214,14 @@ export async function PosDashboard({
             " down to " +
             num(low[0].stock_qty) +
             (low.length > 1 ? " · " + (low.length - 1) + " more" : ""),
-          href: "/app/inventory",
-          actionLabel: "Review inventory",
+          // Goes to the low-stock report rather than the Inventory table. This
+          // signal counts tracked CATALOG ITEMS only, because that is all this
+          // query loads; the report also covers tracked ingredients, so it can
+          // legitimately list more rows than the count here. That is the right
+          // direction for a link to point — from the flag to the fuller list —
+          // but it is why the title says "items" and the report does not.
+          href: "/app/inventory/low-stock",
+          actionLabel: "Open low-stock report",
           weight: low.length,
         });
       }
