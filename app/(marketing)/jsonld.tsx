@@ -55,29 +55,16 @@ export function breadcrumbTrail(items: { name: string; path: string }[]) {
   };
 }
 
-// Service offered in a specific area — used by the local landing pages.
-export function localService({
-  name,
-  description,
-  areaServed,
-  path,
-}: {
-  name: string;
-  description: string;
-  areaServed: string[];
-  path: string;
-}) {
-  return {
-    "@context": "https://schema.org",
-    "@type": "Service",
-    name,
-    serviceType: name,
-    description,
-    provider: { "@type": "LocalBusiness", name: "Surge", url: SITE },
-    areaServed,
-    url: SITE + path,
-  };
-}
+// REMOVED: `localService({ name, description, areaServed, path })`.
+//
+// It built a Service node whose provider was a `LocalBusiness` and which
+// carried an `areaServed` list of municipalities. The local landing pages that
+// called it are gone — they are 308s now (see legacy-redirects.ts) — so the
+// helper had no callers left and emitted nothing. It is deleted rather than
+// left dormant because the site no longer claims a service area anywhere, and
+// a geography-shaped helper sitting in the file is an invitation to put one
+// back a page at a time. The site-wide identity is `ORGANIZATION` above, which
+// has no slot for an address or a service area; that is the point.
 
 // Article schema for /guides posts.
 export function article({
