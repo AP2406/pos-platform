@@ -2,6 +2,7 @@ import Link from "next/link";
 import { pageMetadata, Photo, Checklist } from "../design";
 import { ContactForm } from "./contact-form";
 import { JsonLd, breadcrumb } from "../jsonld";
+import { WHATSAPP_DISPLAY, WHATSAPP_HREF } from "@/lib/brand/contact";
 export const metadata = pageMetadata(
   "Contact Surge",
   "Talk to Surge about your POS, business setup or the free pilot. Share your country, time zone and what your team needs.",
@@ -28,6 +29,11 @@ export default function ContactPage() {
           <div className="s-contact-links">
             <a href="mailto:info@surgetechpos.com">info@surgetechpos.com ↗</a>
             <a href="tel:+18886488097">+1 (888) 648-8097</a>
+            {/* WhatsApp, because an owner abroad reads WhatsApp and will not
+                place an international call to ask a first question. */}
+            <a href={WHATSAPP_HREF} target="_blank" rel="noopener noreferrer">
+              WhatsApp {WHATSAPP_DISPLAY} ↗
+            </a>
             <Link href="/book" className="s-text-link">
               Want to see the POS? Book a demo →
             </Link>

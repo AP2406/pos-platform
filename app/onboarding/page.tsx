@@ -1,6 +1,8 @@
 import { requireUser, getCurrentBusiness } from "@/lib/services/tenancy";
 import { redirect } from "next/navigation";
 import { OnboardingForm } from "./form";
+import { PilotAccess } from "./pilot-access";
+import { isPlatformAdmin } from "@/lib/services/platform-admin";
 import { SurgeLogo } from "@/components/brand/surge-logo";
 
 export default async function OnboardingPage({
@@ -8,7 +10,7 @@ export default async function OnboardingPage({
 }: {
   searchParams: Promise<{ add?: string }>;
 }) {
-  await requireUser();
+  const user = await requireUser();
   const sp = await searchParams;
   const isAdding = sp?.add === "1";
 
@@ -16,6 +18,15 @@ export default async function OnboardingPage({
   // Only bounce to /app if they already have a business AND aren't deliberately
   // adding another one.
   if (ctx && !isAdding) redirect("/app");
+
+  // While the pilot runs, accounts are opened by us. Anyone else who lands here
+  // — and they DO land here, because Google sign-in makes an auth user for any
+  // Google account and requireBusiness() sends a user with no business straight
+  // to this route — gets the access screen instead of the create form.
+  //
+  // This is the polite half of the lock. The half that enforces it is in
+  // createBusiness(): a hidden form is not a closed door.
+  const canCreate = await isPlatformAdmin();
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -110,7 +121,11 @@ export default async function OnboardingPage({
 
       {/* Form panel */}
       <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
-        <OnboardingForm />
+        {canCreate ? (
+          <OnboardingForm />
+        ) : (
+          <PilotAccess email={user.email ?? null} />
+        )}
       </div>
     </div>
   );

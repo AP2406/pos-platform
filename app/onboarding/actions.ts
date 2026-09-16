@@ -5,6 +5,8 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import { BUSINESS_MODES } from "@/lib/modules/modes";
 import { ACTIVE_BUSINESS_COOKIE } from "@/lib/services/tenancy";
+import { isPlatformAdmin } from "@/lib/services/platform-admin";
+import { PILOT_ONLY_MESSAGE } from "@/lib/brand/contact";
 
 const schema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(100),
@@ -15,6 +17,23 @@ export async function createBusiness(input: {
   name: string;
   mode: string;
 }): Promise<{ ok: true; businessId: string } | { error: string }> {
+  // THE LOCK, and it lives here rather than on the page.
+  //
+  // Nothing about this codebase ever had a /signup route, which made it look
+  // closed. It was not. Google sign-in on /login creates a Supabase auth user
+  // for any Google account; requireBusiness() then sends a user with no
+  // business to /onboarding; and this action handed them a business and an
+  // owner membership. Three steps, no invitation, no review — a complete
+  // self-serve signup assembled out of parts that each looked innocent.
+  //
+  // It is checked in the ACTION and not only in the page for the same reason
+  // app/app/debug/guard.ts exists: a server action is a POST to a build-time
+  // id that ships in the client bundle, and layouts and pages do not run for
+  // action invocations. Hiding the form hides the form.
+  if (!(await isPlatformAdmin())) {
+    return { error: PILOT_ONLY_MESSAGE };
+  }
+
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
