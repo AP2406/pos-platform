@@ -237,7 +237,14 @@ export default async function ReportsPage({
           if (!m || !m.name) continue;
           const group = (m.group_name || "").trim() || "Other";
           const name = String(m.name);
-          const key = group + " " + name;
+          // NUL as the delimiter so a group/name pair cannot collide with a
+          // different pair that concatenates the same way ("Size"+"Large" vs
+          // "Siz"+"eLarge"). It must be written as the ESCAPE, not as a raw
+          // byte: a literal NUL in the source makes git classify this whole
+          // file as binary, which silently turns off diffs for the entire
+          // reports page. It was a raw byte until Sep 2026, and every change
+          // to this file was unreviewable for as long as it was there.
+          const key = group + "\u0000" + name;
           if (!modAgg[key]) modAgg[key] = { group, name, count: 0, listRevenue: 0 };
           modAgg[key].count += q;
           modAgg[key].listRevenue += (Number(m.price) || 0) * q;
