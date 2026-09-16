@@ -41,7 +41,10 @@ const industries = [
 ];
 export default function Home() {
   return (
-    <>
+    // marketing.css is scoped under .surge-site, and this element is the
+    // scope. It used to be the marketing layout wrapper, which put the home
+    // page inside it too.
+    <div className="surge-site">
       <Hero
         eyebrow="Point of sale, with people in mind"
         title={"Your business.\nIn good hands."}
@@ -183,6 +186,6 @@ export default function Home() {
       />
       <ExploreNext />
       <ClosingCta />
-    </>
+    </div>
   );
 }

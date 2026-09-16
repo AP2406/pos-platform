@@ -14,7 +14,10 @@ import type { SolutionContent } from "./solution-content";
 import { ExploreNext } from "./next-steps";
 export function SolutionPage({ content: c }: { content: SolutionContent }) {
   return (
-    <>
+    // marketing.css is scoped under .surge-site, and this element is the
+    // scope. It used to be the marketing layout wrapper, which put the home
+    // page inside it too.
+    <div className="surge-site">
       <JsonLd data={breadcrumb(c.eyebrow, c.path)} />
       <Hero
         eyebrow={c.eyebrow}
@@ -66,6 +69,6 @@ export function SolutionPage({ content: c }: { content: SolutionContent }) {
         <ExploreNext current={c.path} />
       </div>
       <ClosingCta />
-    </>
+    </div>
   );
 }

@@ -120,8 +120,11 @@ export function SiteNav() {
       document.removeEventListener("pointerdown", outside);
     };
   }, [open]);
+  // `surge-site` is on the element itself rather than on a wrapper: this
+  // header is `position: sticky`, and a wrapper div would become its
+  // containing block and stop it travelling.
   return (
-    <header className="s-header" ref={header}>
+    <header className="s-header surge-site" ref={header}>
       <div className="s-announcement">
         <span className="s-announcement-dot" aria-hidden="true" /> Meet your
         next POS.{" "}

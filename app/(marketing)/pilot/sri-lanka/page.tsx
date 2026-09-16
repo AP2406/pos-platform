@@ -319,7 +319,10 @@ const serviceSchema = {
 
 export default function SriLankaPilotPage() {
   return (
-    <>
+    // marketing.css is scoped under .surge-site, and this element is the
+    // scope. It used to be the marketing layout wrapper, which put the home
+    // page inside it too.
+    <div className="surge-site">
       <JsonLd data={faqSchema} />
       <JsonLd data={serviceSchema} />
       {/* Two levels, not three. There is no /pilot index route, and a
@@ -479,6 +482,6 @@ export default function SriLankaPilotPage() {
           </div>
         </div>
       </section>
-    </>
+    </div>
   );
 }

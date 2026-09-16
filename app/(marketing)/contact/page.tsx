@@ -9,7 +9,11 @@ export const metadata = pageMetadata(
 );
 export default function ContactPage() {
   return (
-    <section className="s-wrap">
+    // marketing.css is scoped under .surge-site, and this element is the
+    // scope. It used to be the marketing layout wrapper, which put the home
+    // page inside it too.
+    <div className="surge-site">
+      <section className="s-wrap">
       <JsonLd data={breadcrumb("Contact", "/contact")} />
       <div className="s-page-intro">
         <p className="s-eyebrow">Let’s talk</p>
@@ -49,6 +53,7 @@ export default function ContactPage() {
           </p>
         </div>
       </div>
-    </section>
+      </section>
+    </div>
   );
 }
