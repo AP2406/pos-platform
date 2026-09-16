@@ -2,7 +2,13 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness, listBusinesses } from "@/lib/services/tenancy";
 import { hasFloorService } from "@/lib/modules/modes";
-import { displayItemName } from "@/lib/format";
+import { aggregateItemSales } from "@/lib/services/product-mix";
+import {
+  CHANNELS,
+  CHANNEL_LABEL,
+  channelOf,
+  type ChannelKey,
+} from "@/lib/services/order-channel";
 import { ExportButton } from "./export-button";
 import { reasonLabel, reasonLabelForAction, COMP_REASONS } from "../pos/reason-codes";
 
@@ -21,32 +27,11 @@ type OrderRow = {
   channel: ChannelKey;
 };
 
-// Fulfillment channel. Two fields feed it and neither alone is enough:
-// `orders.channel` is populated only for third-party / online orders, while an
-// order rung in-house carries dining_option inside the SNAPSHOT (there is no
-// dining_option column — see lib/services/order-fulfill.ts). Anything with
-// neither is a counter sale, which is what "In-store" means here.
-const CHANNELS = ["dine_in", "takeout", "pickup", "delivery", "in_store"] as const;
-type ChannelKey = (typeof CHANNELS)[number];
-
-const CHANNEL_LABEL: Record<ChannelKey, string> = {
-  dine_in: "Dine-in",
-  takeout: "Takeout",
-  pickup: "Pickup",
-  delivery: "Delivery",
-  in_store: "In-store",
-};
-
-function channelOf(o: Record<string, unknown>): ChannelKey {
-  const snap = (o.snapshot ?? null) as { dining_option?: string | null } | null;
-  const d = (snap?.dining_option ?? "").toLowerCase();
-  if (d === "dine_in" || d === "takeout" || d === "pickup" || d === "delivery") return d;
-  const c = ((o.channel as string | null) ?? "").toLowerCase();
-  if (c.includes("delivery")) return "delivery";
-  if (c.includes("pickup")) return "pickup";
-  if (c.includes("takeout") || c.includes("togo")) return "takeout";
-  return "in_store";
-}
+// Fulfillment channel and product mix both moved to lib/services — the admin
+// home needs the same two answers, and a second copy of either would have been a
+// second answer the moment one page was touched. Nothing about the
+// classification or the aggregation changed in the move; see
+// lib/services/order-channel.ts and lib/services/product-mix.ts.
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -166,7 +151,9 @@ export default async function ReportsPage({
 
   const payTotals: Record<string, number> = { cash: 0, card: 0, gift_card: 0, store_credit: 0, house_account: 0, other: 0 };
   let refunds = 0;
-  const itemAgg: Record<string, { name: string; qty: number; revenue: number; catId: string | null }> = {};
+  // The per-item roll-up is aggregateItemSales() now; only the two category
+  // roll-ups, which nothing else needs, are still accumulated inline below.
+  let itemSales: ReturnType<typeof aggregateItemSales> = [];
   const catAgg: Record<string, { qty: number; revenue: number }> = {};
   // Reporting/tax sales category (food/alcohol/merch), distinct from display category.
   const salesCatAgg: Record<string, { qty: number; revenue: number }> = {};
@@ -258,16 +245,12 @@ export default async function ReportsPage({
       }
     }
 
+    itemSales = aggregateItemSales(lines);
+
     for (const l of lines) {
       const cid = (l.catalog_item_id as string | null) ?? null;
-      // Collapse split "X (shared)" into "X" so product mix shows one row per item.
-      const name = displayItemName(l.name as string);
       const qty = Number(l.quantity) || 0;
       const revenue = (Number(l.unit_price) || 0) * qty;
-      const key = cid ? "id:" + cid : "name:" + name;
-      if (!itemAgg[key]) itemAgg[key] = { name: name, qty: 0, revenue: 0, catId: cid };
-      itemAgg[key].qty += qty;
-      itemAgg[key].revenue += revenue;
 
       // No catalog_item_id = a Custom (one-off) line; show it as "Custom" rather
       // than "Uncategorized" (which is reserved for catalog items lacking a category).
@@ -292,10 +275,7 @@ export default async function ReportsPage({
   const houseAccount = round2(payTotals.house_account);
   const other = round2(payTotals.other);
 
-  const topItems = Object.keys(itemAgg)
-    .map((k) => itemAgg[k])
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 20);
+  const topItems = itemSales.slice(0, 20);
 
   const categories = Object.keys(catAgg)
     .map((k) => ({ name: k, qty: catAgg[k].qty, revenue: catAgg[k].revenue }))

@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Competitor dashboard evidence — Surge study, Sept 2026</title>
+<style>
+  :root { color-scheme: light; }
+  body { margin:0; background:#f6f6f7; color:#18181b;
+         font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:1180px; margin:0 auto; padding:48px 24px 96px; }
+  h1 { font-size:30px; letter-spacing:-.02em; margin:0 0 8px; }
+  .lede { color:#52525b; max-width:62ch; margin:0 0 40px; }
+  .lede code { background:#e7e7ea; padding:1px 5px; border-radius:4px; font-size:13px; }
+  h2 { font-size:20px; letter-spacing:-.01em; margin:56px 0 6px;
+       padding-bottom:8px; border-bottom:1px solid #d9d9de; }
+  h2 span { font-weight:400; color:#71717a; font-size:14px; }
+  figure { margin:24px 0 0; background:#fff; border:1px solid #dcdce1;
+           border-radius:12px; overflow:hidden;
+           box-shadow:0 1px 2px rgba(0,0,0,.06), 0 10px 24px -14px rgba(0,0,0,.16); }
+  figure img { display:block; width:100%; height:auto; background:#fafafa; }
+  figcaption { padding:14px 18px; border-top:1px solid #ebebef; }
+  .cap { font-weight:600; font-size:14px; }
+  .note { color:#52525b; font-size:13px; margin-top:4px; }
+  .src { margin-top:8px; font-size:11.5px; word-break:break-all; }
+  .src a { color:#5a5a63; }
+  .warn { background:#fff8e6; border:1px solid #ecd9a0; border-radius:10px;
+          padding:14px 18px; font-size:13.5px; color:#5c4a12; margin:24px 0 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Competitor dashboard evidence</h1>
+<p class="lede">
+  Every screenshot referenced in <code>docs/competitor-dashboard-study.md</code>,
+  loaded live from the vendors&rsquo; own CDNs. Researched 10&nbsp;September&nbsp;2026 from
+  public support documentation, product pages, and vendor-supplied screenshots on
+  Software&nbsp;Advice. No merchant account was signed into.
+</p>
+
+<div class="warn">
+  Images are hot-linked rather than stored locally — the sandbox that would have
+  downloaded them ran out of disk during this session. If a vendor rotates a CDN
+  path, that image will 404; the source article link under each one still resolves.
+</div>
+
+<h2>Toast <span>— Toast Web</span></h2>
+
+<figure>
+  <img src="https://dwvhey99m5tyy.cloudfront.net/images/ka2PV000000P0UnYAK/0EMPV00000hxI8D" alt="Toast Web homepage">
+  <figcaption>
+    <div class="cap">Toast Web homepage</div>
+    <div class="note">Three-column card grid. Col&nbsp;1 <code>QUICK ACTIONS</code> (7 blue links, no numbers);
+      col&nbsp;2 <code>NET SALES</code> $5,359.15 with a green ▲20% pill, and <code>DISCOUNTS</code> below;
+      col&nbsp;3 <code>LABOR COST % OF NET SALES</code> 15.91% with a red ▼-14% pill, and a QR-code
+      upsell card for Toast Now. <code>Edit time filter</code> top-right. No chart. Three equal
+      metrics, no hero number. Uppercase letterspaced card eyebrows with a rule under them.</div>
+    <div class="src"><a href="https://support.toasttab.com/en/article/Reporting-Best-Practices-Reports-to-Use-After-Your-First-Day-on-Toast">support.toasttab.com/en/article/Reporting-Best-Practices-Reports-to-Use-After-Your-First-Day-on-Toast</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://dwvhey99m5tyy.cloudfront.net/images/ka2PV000000LRtFYAW/0EM4W000009g86q" alt="Toast Sales Trends charts">
+  <figcaption>
+    <div class="cap">Sales Summary — <code>SALES TRENDS</code>, pinned to the top of the report</div>
+    <div class="note">Three bar charts (Sales by day / Day of week / Time of day). Flat orange bars,
+      no rounding, light horizontal gridlines only. Toast orange is used for data and nothing else.
+      Toast documents that this block &ldquo;cannot be moved&rdquo;.</div>
+    <div class="src"><a href="https://central.toasttab.com/s/article/Sales-Summary-Report">central.toasttab.com/s/article/Sales-Summary-Report</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://dwvhey99m5tyy.cloudfront.net/images/ka2PV000000LRtFYAW/0EM4W000008gHm8" alt="Toast summary card header and rows">
+  <figcaption>
+    <div class="cap">Card anatomy — eyebrow header, drill caret, zebra rows</div>
+    <div class="note">Uppercase grey eyebrow <code>CASH ACTIVITY</code> with a hairline under it; a circular
+      ghost <code>›</code> button top-right, tooltipped with its destination (&ldquo;Cash activity audit&rdquo;);
+      body is left label / right-aligned value with zebra striping and inline ⓘ definition icons.
+      Values are the same size as their labels — this is a ledger, not a KPI tile.</div>
+    <div class="src"><a href="https://central.toasttab.com/s/article/Sales-Summary-Report">central.toasttab.com/s/article/Sales-Summary-Report</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://dwvhey99m5tyy.cloudfront.net/images/ka2PV000000LRtFYAW/0EM4W000008gHlj" alt="Toast Customize layout modal">
+  <figcaption>
+    <div class="cap">&ldquo;Customize layout&rdquo; — do <em>not</em> copy this</div>
+    <div class="note">Drag-to-reorder for 12+ summary cards. It exists because 17 fixed cards serve nobody;
+      the docs admit the order &ldquo;will not be maintained across browsers, devices, or exports&rdquo;.
+      Note the blue primary button — Toast reserves orange for data, blue for actions.</div>
+    <div class="src"><a href="https://central.toasttab.com/s/article/Sales-Summary-Report">central.toasttab.com/s/article/Sales-Summary-Report</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://dwvhey99m5tyy.cloudfront.net/images/ka2PV000000LRtFYAW/0EM4W000008gHlF" alt="Toast date and location filters">
+  <figcaption>
+    <div class="cap">Global date + location controls</div>
+    <div class="note">Preset drop-down plus <code>Custom date</code>, and a location drop-down, sitting above the
+      report — never on individual cards.</div>
+    <div class="src"><a href="https://central.toasttab.com/s/article/Sales-Summary-Report">central.toasttab.com/s/article/Sales-Summary-Report</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://dwvhey99m5tyy.cloudfront.net/images/ka2PV000000LRtFYAW/0EM4W000008gHlU" alt="Toast More filters drawer">
+  <figcaption>
+    <div class="cap"><code>More filters</code> — right-side drawer</div>
+    <div class="note">Hours, days of week, revenue centres, service areas, with <code>Apply filters</code> /
+      <code>Clear all</code>. Advanced filtering goes in a drawer; the common controls stay inline.</div>
+    <div class="src"><a href="https://central.toasttab.com/s/article/Sales-Summary-Report">central.toasttab.com/s/article/Sales-Summary-Report</a></div>
+  </figcaption>
+</figure>
+
+<h2>Square <span>— Square Dashboard</span></h2>
+
+<figure>
+  <img src="https://images.ctfassets.net/2d5q1td6cyxq/11zJd5cQixpOn3MoIHN01C/f3e5e5777b917e6e8217c2c82adfc1e2/PD07415_-_USEN_Dashboard_Home.png?w=2400" alt="Square Dashboard home">
+  <figcaption>
+    <div class="cap">Square Dashboard Home — the most modern of the four</div>
+    <div class="note">Hero is a <em>sentence</em>, not a number: &ldquo;Hello! You have $384.23 available.&rdquo;
+      Then an action row (one filled blue primary, three tinted secondaries, <code>⋯</code>).
+      Then a light-grey <code>Performance</code> group containing white cards — a surface ladder built by
+      nesting, with no borders and no shadows. <code>Location Chicago</code>, <code>Date Today</code> and
+      <code>Checks Closed</code> are label+value chips. <code>Key metrics</code> is subtitled
+      <code>vs Prior Wednesday</code>; each metric carries a tinted green/red pill. Metric values
+      (~19px) are barely larger than the card title (~20px) — a deliberately flat scale carried by
+      whitespace. Sidebar: white, 10 flat items, icons + labels, &ldquo;Search or ask AI&rdquo; on top.</div>
+    <div class="src"><a href="https://squareup.com/us/en/point-of-sale/features/dashboard">squareup.com/us/en/point-of-sale/features/dashboard</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://images.ctfassets.net/2d5q1td6cyxq/1PztpcYXZGq9xvAmgPKtZJ/7c502b05f8f46bbd0a2a3630a4837abc/Dashboard_USEN_Macbook_Sales-Summary.png?w=2400" alt="Square Sales Summary report">
+  <figcaption>
+    <div class="cap">Square Sales Summary — charts first, then a ledger, and <em>no KPI tiles at all</em></div>
+    <div class="note">Filter row of rounded dropdowns: <code>‹ 07/07–07/13 ›</code>, <code>All Day</code>,
+      <code>All Locations</code>, <code>Summary</code>, <code>Advanced Options</code>, <code>Export ⌄</code>.
+      Full-width area chart, then <code>DAY OF WEEK</code> and <code>TIME OF DAY</code> under uppercase
+      eyebrows, then a table with right-aligned <code>Sales | Returns | Net</code> columns, bold totals rows,
+      no zebra. Secondary report nav on the left is labels-only, ~22px rows, active = blue text on a pale
+      blue row with a blue left bar. One hue in the entire screen.</div>
+    <div class="src"><a href="https://squareup.com/us/en/point-of-sale/features/dashboard/analytics">squareup.com/us/en/point-of-sale/features/dashboard/analytics</a></div>
+  </figcaption>
+</figure>
+
+<h2>Lightspeed Restaurant K-Series <span>— Back Office</span></h2>
+
+<figure>
+  <img src="https://k-series-support.lightspeedhq.com/hc/article_attachments/31742059971227" alt="Lightspeed K-Series Back Office home">
+  <figcaption>
+    <div class="cap">Back Office home</div>
+    <div class="note">Black sidebar with a purple active pill. Greeting left; <code>San Francisco · Dec 10 ·
+      16:26 · 32.5°F · Boston</code> right (weather on a POS dashboard, and a city that doesn&rsquo;t match the
+      location selector). Segmented date control <code>Today | Yesterday | This week | This month | This
+      year</code>. Two columns: wide <code>Sales metrics</code> (6 metrics in a 2×3 grid, each with an
+      absolute <em>and</em> percentage delta, with a grouped bar chart nested inside the same card) beside
+      narrow <code>Best sellers</code> and <code>Top payment methods</code>. Blue banner up top is
+      migration chrome.</div>
+    <div class="src"><a href="https://k-series-support.lightspeedhq.com/hc/en-us/articles/4403208456603-Understanding-the-Dashboard-page">k-series-support.lightspeedhq.com/hc/en-us/articles/4403208456603-Understanding-the-Dashboard-page</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://k-series-support.lightspeedhq.com/hc/article_attachments/31742098425115" alt="Lightspeed Sales metrics card">
+  <figcaption>
+    <div class="cap"><code>Sales metrics</code> card — the best metric-block in the category</div>
+    <div class="note">Title ~16px semibold + subtitle <code>vs. Sunday, Jan 1, 2023</code> ~11px. Six
+      label / value / delta stacks, ratio value:label ≈ 1.75. Deltas give both dollars and percent —
+      <code>-$63,956.70 (-19%)</code> — in plain red or green, not pills. The chart lives inside the same
+      card with a legend naming both periods and their totals. Downside: auto-computed y-axis ticks
+      (<code>$64,124 / $54,963 / $45,803</code>) instead of round numbers.</div>
+    <div class="src"><a href="https://k-series-support.lightspeedhq.com/hc/en-us/articles/4403208456603-Understanding-the-Dashboard-page">k-series-support.lightspeedhq.com/hc/en-us/articles/4403208456603-Understanding-the-Dashboard-page</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://k-series-support.lightspeedhq.com/hc/article_attachments/47990521074843" alt="Lightspeed Back Office sidebar and empty dashboard">
+  <figcaption>
+    <div class="cap">Sidebar + a real zero state — the most instructive image in the study</div>
+    <div class="note">Sidebar: wordmark, location switcher, <code>Search ⌘K</code>, then 16 items in three
+      divider-separated groups, icons + labels, <code>›</code> on expandable ones, a <code>New</code> badge.
+      Empty state: <code>Sales metrics</code> shows <code>€0.00</code> with <code>No data</code> beneath each
+      (a real zero and a missing value are distinguished — good), but every other card repeats
+      &ldquo;No data found / Try adjusting the date range&rdquo;. Five near-identical messages down one page
+      reads as a broken product, not a quiet day. One good touch: the tinted inline nudge inside the empty
+      Shifts card — <code>ℹ Set up more shifts … Go to shifts ✕</code>.</div>
+    <div class="src"><a href="https://k-series-support.lightspeedhq.com/hc/en-us/articles/360054950934-Introduction-to-the-Back-Office">k-series-support.lightspeedhq.com/hc/en-us/articles/360054950934-Introduction-to-the-Back-Office</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://k-series-support.lightspeedhq.com/hc/article_attachments/51729483217051" alt="Lightspeed Sales report">
+  <figcaption>
+    <div class="cap">Sales report — table and filter grammar</div>
+    <div class="note">H1 + a subtitle with inline glossary links. Saved views as underline tabs
+      (<code>Original view | Weekends this year | Weekends vs. previous year | Compared to last year</code>).
+      Grey toolbar band with <code>More actions</code> / <code>Download</code>. Filter row of pill dropdowns.
+      A second tab strip inside the table card. Table has a sticky header with sort carets, per-column
+      <code>⋮</code> menus, a column-picker at far right, zebra rows, right-aligned numerics and a bold
+      <code>Total</code> row. Expanding <code>Reports</code> inserts its children inline in the sidebar.</div>
+    <div class="src"><a href="https://k-series-support.lightspeedhq.com/hc/en-us/articles/35539237853467-Understanding-the-Sales-Report-dashboard">k-series-support.lightspeedhq.com/hc/en-us/articles/35539237853467-Understanding-the-Sales-Report-dashboard</a></div>
+  </figcaption>
+</figure>
+
+<h2>TouchBistro <span>— TouchBistro Cloud (dated; help centre is login-gated)</span></h2>
+
+<figure>
+  <img src="https://gdm-catalog-fmapi-prod.imgix.net/ProductScreenshot/2e38cbfd-ca1d-419e-a09b-76053cd05405.png" alt="TouchBistro Cloud sales dashboard">
+  <figcaption>
+    <div class="cap">TouchBistro Cloud Sales Dashboard — real UI, vendor-supplied, 2020 sample data</div>
+    <div class="note">URL bar reads <code>cloud.touchbistro.com/reporting/dashboard#start</code>. One control:
+      a date-range picker top-right. Three equal summary cards, then six donut charts each with a legend
+      table beneath carrying every number the donut encodes. No comparison to any prior period anywhere.
+      Colour is decorative — <code>Net Sales</code> in teal beside <code>Average Spend</code> in orange,
+      meaning nothing. Surfaces are inverted: white canvas, grey cards, so cards recede instead of lifting.
+      Sidebar is a three-level accordion with ~10px labels.</div>
+    <div class="src"><a href="https://www.softwareadvice.com/restaurant/touchbistro-profile/">softwareadvice.com/restaurant/touchbistro-profile/</a>
+      · help centre now requires customer login: <a href="https://help.touchbistro.com/s/article/cloud-reporting-site-basics">help.touchbistro.com/s/article/cloud-reporting-site-basics</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://www.touchbistro.com/wp-content/uploads/2021/02/reporting-1.webp" alt="TouchBistro marketing illustration">
+  <figcaption>
+    <div class="cap">TouchBistro marketing &ldquo;screenshot&rdquo; — not real UI</div>
+    <div class="note">Included so nobody mistakes it for evidence. Grey placeholder bars stand in for the
+      axis labels. TouchBistro&rsquo;s public marketing shows abstracted mocks; the shipping UI is behind
+      the login wall.</div>
+    <div class="src"><a href="https://www.touchbistro.com/features/reporting-analytics/">touchbistro.com/features/reporting-analytics/</a></div>
+  </figcaption>
+</figure>
+
+<h2>Clover <span>— historical only, current dashboard unverified</span></h2>
+
+<figure>
+  <img src="https://gdm-catalog-fmapi-prod.imgix.net/ProductScreenshot/bfa2d4bb-86d7-4d8a-b472-cf6244ed187d.png" alt="Clover dashboard, 2013-era">
+  <figcaption>
+    <div class="cap">Clover dashboard — sample data literally reads <code>TODAY: MAY 31, 2013</code></div>
+    <div class="note">Hero arc gauge with <code>THIS WEEK $96,128</code> inside and an orange goal figure
+      beneath; a <code>PROGRESS THIS WEEK</code> row of four icon tiles; auto-generated
+      <code>STORIES FOR WEEK OF MAY 26</code> insight cards. A gauge encodes one number in the least legible
+      possible way. <code>clover.com/pos-systems/reporting</code> now redirects to the marketing home page,
+      so Clover&rsquo;s current dashboard could not be verified — do not treat this as what Clover ships today.</div>
+    <div class="src"><a href="https://www.softwareadvice.com/retail/clover-profile/">softwareadvice.com/retail/clover-profile/</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://gdm-catalog-fmapi-prod.imgix.net/ProductScreenshot/3ec3c3ea-8257-4d59-8b7e-057db32fc87b.png" alt="Clover Home app grid">
+  <figcaption>
+    <div class="cap"><code>Clover Home</code> — an app launcher, not a dashboard</div>
+    <div class="note">Grid of large skeuomorphic icons with a <code>More Apps</code> upsell panel. Same era,
+      same caveat.</div>
+    <div class="src"><a href="https://www.softwareadvice.com/retail/clover-profile/">softwareadvice.com/retail/clover-profile/</a></div>
+  </figcaption>
+</figure>
+
+</div>
+</body>
+</html>

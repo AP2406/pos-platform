@@ -1,12 +1,15 @@
 import { describe, it, expect } from "vitest";
 import {
   agingThresholds,
+  axisDivisions,
   computePace,
   cumulativeCurve,
+  hourlyBuckets,
   minutesSince,
   niceCeiling,
   paymentMix,
   rankSignals,
+  tradingHours,
   type AttentionSignal,
 } from "@/lib/services/dashboard-signals";
 
@@ -322,5 +325,163 @@ describe("paymentMix", () => {
       { method: "cash", amount: 50 },
     ]);
     expect(a.map((x) => x.key)).toEqual(b.map((x) => x.key));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The hourly bars
+// ---------------------------------------------------------------------------
+//
+// These are the cases you cannot see by opening the app on a Tuesday afternoon:
+// a sale that lands in the hour the clocks change, a restaurant whose whole day
+// happened between six and seven, a timestamp from the wrong day.
+
+describe("hourly buckets", () => {
+  // Fixed instants rather than "now" so the expectations mean the same thing in
+  // CI, on a laptop in Toronto and on one in Berlin.
+  const toronto = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Toronto",
+    hour: "numeric",
+    hour12: false,
+  });
+  // 2026-09-10, local midnight in Toronto (UTC-4 in September).
+  const dayStart = Date.parse("2026-09-10T04:00:00Z");
+  const dayLen = 24 * 60 * 60 * 1000;
+
+  it("files a sale under the hour it happened in the business's own timezone", () => {
+    // 2026-09-10T23:30Z is 7:30 p.m. in Toronto, not 11 p.m. A dashboard that
+    // bucketed by UTC would put the dinner rush after close.
+    const b = hourlyBuckets(
+      [{ at: "2026-09-10T23:30:00Z", amount: 120 }],
+      toronto,
+      dayStart,
+      dayLen
+    );
+    expect(b[19].amount).toBe(120);
+    expect(b[23].amount).toBe(0);
+  });
+
+  it("always returns all 24 hours, so a closed hour is a zero and not a gap", () => {
+    const b = hourlyBuckets([], toronto, dayStart, dayLen);
+    expect(b).toHaveLength(24);
+    expect(b.every((x) => x.amount === 0 && x.count === 0)).toBe(true);
+  });
+
+  it("counts orders separately from money, so a comped sale still happened", () => {
+    const b = hourlyBuckets(
+      [
+        { at: "2026-09-10T17:00:00Z", amount: 0 },
+        { at: "2026-09-10T17:10:00Z", amount: 40 },
+      ],
+      toronto,
+      dayStart,
+      dayLen
+    );
+    expect(b[13].count).toBe(2);
+    expect(b[13].amount).toBe(40);
+  });
+
+  it("drops a timestamp outside the day rather than clamping it to an end bar", () => {
+    // Clamping would invent a rush at open or at close, and this function has no
+    // way to tell a timezone bug from a real late sale.
+    const b = hourlyBuckets(
+      [
+        { at: "2026-09-09T12:00:00Z", amount: 500 },
+        { at: "2026-09-12T12:00:00Z", amount: 500 },
+      ],
+      toronto,
+      dayStart,
+      dayLen
+    );
+    expect(b.reduce((s, x) => s + x.amount, 0)).toBe(0);
+  });
+
+  it("ignores a row with no usable timestamp instead of filing it at midnight", () => {
+    const b = hourlyBuckets(
+      [
+        { at: null, amount: 90 },
+        { at: "not a date", amount: 90 },
+      ],
+      toronto,
+      dayStart,
+      dayLen
+    );
+    expect(b[0].amount).toBe(0);
+  });
+});
+
+describe("trading hours", () => {
+  const empty = () =>
+    Array.from({ length: 24 }, (_, h) => ({ hour: h, amount: 0, count: 0 }));
+
+  it("returns null when nothing traded, so the caller writes a sentence", () => {
+    expect(tradingHours(empty())).toBeNull();
+  });
+
+  it("trims to the first and last hour that actually sold something", () => {
+    const b = empty();
+    b[11] = { hour: 11, amount: 100, count: 2 };
+    b[21] = { hour: 21, amount: 300, count: 5 };
+    expect(tradingHours(b)).toEqual({ from: 11, to: 21 });
+  });
+
+  it("widens a one-hour day so a single bar doesn't fill the card", () => {
+    // One bar spanning the whole plot reads as a rendering fault rather than as
+    // a quiet day with one sale in it.
+    const b = empty();
+    b[14] = { hour: 14, amount: 60, count: 1 };
+    const span = tradingHours(b);
+    expect(span).not.toBeNull();
+    expect(span!.to - span!.from).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does not widen past midnight at either end", () => {
+    const b = empty();
+    b[0] = { hour: 0, amount: 10, count: 1 };
+    const span = tradingHours(b)!;
+    expect(span.from).toBe(0);
+    expect(span.to).toBeLessThanOrEqual(23);
+
+    const c = empty();
+    c[23] = { hour: 23, amount: 10, count: 1 };
+    const late = tradingHours(c)!;
+    expect(late.to).toBe(23);
+    expect(late.from).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("axis divisions", () => {
+  // niceCeiling guarantees the TOP of the axis is a figure a person would say
+  // out loud. This guarantees every rung under it is too — the failure this
+  // exists to prevent is Lightspeed's "$64,124 / $54,963 / $45,803", committed
+  // one level down by dividing a nice ceiling into an awkward number of steps.
+  const isRound = (step: number) => {
+    const mag = Math.pow(10, Math.floor(Math.log10(step)));
+    const n = step / mag;
+    return [1, 2, 2.5, 5, 10].some((x) => Math.abs(n - x) < 1e-9);
+  };
+
+  it("gives every ceiling niceCeiling can produce a set of round gridlines", () => {
+    for (const base of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) {
+      for (const mag of [10, 100, 1000, 10000]) {
+        const ceiling = base * mag;
+        const d = axisDivisions(ceiling);
+        expect(isRound(ceiling / d)).toBe(true);
+      }
+    }
+  });
+
+  it("prefers five intervals when five works", () => {
+    // Five is the densest a 200px plot reads cleanly, and it is what the
+    // approved mockup draws: $0 200 400 600 800 $1k.
+    expect(axisDivisions(1000)).toBe(5);
+    expect(axisDivisions(250)).toBe(5);
+  });
+
+  it("falls back to four rather than to something unreadable", () => {
+    // Four puts the midpoint at exactly half the ceiling, which is the one rung
+    // a reader can still verify by eye.
+    expect(axisDivisions(0)).toBe(4);
+    expect(axisDivisions(Number.NaN)).toBe(4);
   });
 });

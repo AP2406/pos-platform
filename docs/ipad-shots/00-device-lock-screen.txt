@@ -1,0 +1,26 @@
+[
+    {
+        "caption": "12:51\u202fPM",
+        "estimated_uid": "06000000-0000-0000-2100-000000000000",
+        "platform_identifier": "21000000004E8CD9030000000600000000000000",
+        "spoken_description": "12:51\u202fPM"
+    },
+    {
+        "caption": "SETTINGS, Yesterday, 6:44\u202fPM, Software Update Available, To install this update, you\u2019ll need to free up more storage space., Button",
+        "estimated_uid": "07000000-0000-0000-2100-000000000000",
+        "platform_identifier": "21000000000A00DE030000000700000000000000",
+        "spoken_description": "SETTINGS, Yesterday, 6:44\u202fPM, Software Update Available, To install this update, you\u2019ll need to free up more storage space., Button"
+    },
+    {
+        "caption": "Do Not Disturb, Button",
+        "estimated_uid": "08000000-0000-0000-2100-000000000000",
+        "platform_identifier": "2100000000FA21D8030000000800000000000000",
+        "spoken_description": "Do Not Disturb, Button"
+    },
+    {
+        "caption": "Show Notifications, Button",
+        "estimated_uid": "09000000-0000-0000-2100-000000000000",
+        "platform_identifier": "2100000020370DDA030000000900000000000000",
+        "spoken_description": "Show Notifications, Button"
+    }
+]

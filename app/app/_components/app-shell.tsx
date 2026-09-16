@@ -60,14 +60,21 @@ function WorkspaceSwitcher({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 text-left rounded-md p-1.5 -m-1.5 hover:bg-sidebar-accent transition-colors"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        // THE BORDERED CARD. Two changes from what this was, both the design's:
+        // it has an edge now (1px border / 10px radius / 14px padding), and the
+        // `WORKSPACE` micro-label has moved OUT of it to sit over the nav list
+        // instead. Inside the card the label was captioning the switcher; over
+        // the list it captions the list, which is what the word is actually for
+        // — every row under it is a screen in this workspace.
+        className="u-tx u-focus flex w-full items-center gap-2 rounded-[10px] border border-sidebar-border p-[14px] text-left hover:bg-sidebar-accent/40"
       >
         <span className="min-w-0 flex-1">
-          <span className="block text-[10px] uppercase tracking-[0.08em] text-sidebar-muted font-medium">
-            Workspace
+          <span className="block truncate text-[15px] font-bold leading-5 tracking-[-0.01em]">
+            {name}
           </span>
-          <span className="block font-medium text-sm mt-1 truncate">{name}</span>
-          <span className="block text-xs text-sidebar-muted mt-0.5">
+          <span className="mt-1 block truncate text-[13px] leading-4 text-sidebar-muted">
             {typeLabel} {"\u00B7"} {roleLabel}
           </span>
         </span>
@@ -338,7 +345,6 @@ export function AppShell({
 
       <div className="flex min-w-0 min-h-0 flex-1 flex-col">
         <TopBar
-          workspaceName={businessName}
           userName={userName}
           roleLabel={roleLabel}
           nav={nav}

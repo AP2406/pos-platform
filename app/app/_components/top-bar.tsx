@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { SearchIcon } from "lucide-react";
@@ -22,7 +22,12 @@ import { flattenNav, type NavItem, type NavSection } from "./sidebar-nav";
 // sidebar — one home, as in the mockup — and a second copy in the breadcrumb
 // would be two controls for one piece of state.
 
-function initialsOf(name: string): string {
+/**
+ * Shared with the sidebar's user block, which is where the approved design puts
+ * the avatar — exported rather than copied so the two can never disagree about
+ * what "Alex Chen" reduces to.
+ */
+export function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
@@ -52,23 +57,43 @@ function ConnectionDot() {
     };
   }, []);
 
+  // TEXT FIRST, THEN THE DOT — the design's order, which was the other way
+  // round here. It reads better for the reason the design presumably chose it:
+  // the dot is a state indicator for a phrase, and an indicator that precedes
+  // the thing it indicates is a bullet point.
   return (
-    <span className="hidden items-center gap-2 text-xs text-muted-foreground lg:inline-flex">
+    <span className="hidden items-center gap-2 text-[13px] text-muted-foreground lg:inline-flex">
+      {online ? "Connected" : "Offline"}
       <span
         aria-hidden
         className={
           "size-2 rounded-full " + (online ? "bg-emerald-500" : "bg-destructive")
         }
       />
-      {online ? "Connected" : "Offline"}
     </span>
   );
 }
 
-function JumpTo({ items }: { items: NavItem[] }) {
+/**
+ * The design's search field, built as a REAL field this time.
+ *
+ * It used to be a button that looked like a field and opened a palette with the
+ * actual input inside it. The design draws one bordered 300px input at a 10px
+ * radius with a placeholder in it, so that is what this is — you type into the
+ * thing you are looking at.
+ *
+ * WHAT IT SEARCHES IS THIS WORKSPACE'S SCREENS, and the results panel says so
+ * in its own heading. There is still no index over orders, items, guests or
+ * staff (`grep -rn "globalSearch" app lib` finds nothing), so the panel names
+ * its scope rather than letting the placeholder imply one it can't honour. The
+ * field is genuinely useful: the rail folds ~36 destinations under 8 primaries,
+ * and this is how you reach the other 28 without expanding a branch.
+ */
+function SearchField({ items }: { items: NavItem[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -90,9 +115,13 @@ function JumpTo({ items }: { items: NavItem[] }) {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
+        inputRef.current?.focus();
         setOpen(true);
       }
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") {
+        close();
+        inputRef.current?.blur();
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -100,43 +129,64 @@ function JumpTo({ items }: { items: NavItem[] }) {
 
   function go(href: string) {
     close();
+    inputRef.current?.blur();
     router.push(href);
   }
 
+  const listId = "top-bar-search-results";
+
   return (
-    <div className="relative min-w-0 flex-1 max-w-sm">
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="u-tx u-focus flex h-9 w-full items-center gap-2 rounded-lg bg-raised px-3 text-left text-sm text-muted-foreground ring-1 ring-line hover:ring-line-strong"
-      >
-        <SearchIcon aria-hidden className="size-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">Jump to&hellip;</span>
-        <kbd className="hidden shrink-0 rounded border border-line px-1 text-[10px] leading-4 text-muted-foreground sm:inline">
-          {"⌘K"}
-        </kbd>
-      </button>
+    // 300px exactly, and fixed rather than `flex-1 max-w-sm`: the design sizes
+    // this field, it does not let the column size it.
+    <div className="relative hidden w-[300px] shrink-0 md:block">
+      <SearchIcon
+        aria-hidden
+        className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+      />
+      <input
+        ref={inputRef}
+        type="text"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && matches[0]) go(matches[0].href);
+        }}
+        placeholder="Search anything"
+        // The accessible name states the scope the placeholder can't. A screen
+        // reader user gets "Search this workspace's screens"; a sighted reader
+        // gets the design's words plus a panel headed "Screens".
+        aria-label="Search this workspace's screens"
+        className="u-tx u-focus h-10 w-full rounded-[10px] border border-line bg-card pl-9 pr-14 text-sm placeholder:text-muted-foreground hover:border-line-strong"
+      />
+      <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border border-line px-1 text-[10px] leading-4 text-muted-foreground lg:inline">
+        {"⌘K"}
+      </kbd>
 
       {open && (
         <>
           <div className="fixed inset-0 z-40" aria-hidden onClick={close} />
-          <div className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-lg bg-popover ring-1 ring-line shadow-elevation">
-            <input
-              // The field only exists while the palette is open, so the browser's
-              // own autofocus is enough — no effect chasing `open`.
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && matches[0]) go(matches[0].href);
-              }}
-              placeholder="Jump to a screen"
-              aria-label="Jump to a screen"
-              className="u-focus w-full border-b border-line-soft bg-transparent px-3 py-2.5 text-sm outline-none"
-            />
+          <div
+            id={listId}
+            className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-[10px] bg-popover ring-1 ring-line shadow-elevation"
+          >
+            {/* The scope, named. This is the whole reason the field is allowed
+                to carry the design's placeholder: the panel it opens says what
+                it actually looked in, so "Search anything" never gets a chance
+                to mean "your orders". */}
+            <p className="border-b border-line-soft px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              Screens
+            </p>
             {matches.length === 0 ? (
               <p className="px-3 py-3 text-sm text-muted-foreground">
-                Nothing here by that name.
+                No screen by that name.
               </p>
             ) : (
               <ul className="max-h-72 overflow-y-auto py-1">
@@ -144,7 +194,13 @@ function JumpTo({ items }: { items: NavItem[] }) {
                   <li key={m.href}>
                     <button
                       type="button"
-                      onClick={() => go(m.href)}
+                      // onMouseDown, not onClick: the backdrop above and the
+                      // input's own blur both fire first on a click, and the
+                      // row would be unmounted before the click landed.
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        go(m.href);
+                      }}
                       className="u-tx block w-full px-3 py-2 text-left text-sm hover:bg-accent"
                     >
                       {m.label}
@@ -161,24 +217,29 @@ function JumpTo({ items }: { items: NavItem[] }) {
 }
 
 export function TopBar({
-  workspaceName,
+  nav,
   userName,
   roleLabel,
-  nav,
   className = "",
 }: {
-  workspaceName: string;
+  nav: NavSection[];
   /** Display name if the account has one, otherwise the sign-in address. */
   userName: string;
   roleLabel: string;
-  nav: NavSection[];
   className?: string;
 }) {
   const pathname = usePathname();
   const destinations = useMemo(() => flattenNav(nav), [nav]);
 
-  // The breadcrumb is read off the nav tree rather than off the URL, so it
-  // says the same words the sidebar does — "Menu", not "catalog".
+  // The first crumb is the nav SECTION's label — "Workspace" — not the business
+  // name, which is the design's `Workspace / Overview` and is also the string
+  // the rail prints over its own list. The business name is not lost: it is the
+  // bold line of the bordered card at the top of the rail, which is where the
+  // design puts it and where one copy of it belongs.
+  const rootLabel = nav[0]?.label ?? "Workspace";
+
+  // The rest of the breadcrumb is read off the nav tree rather than off the
+  // URL, so it says the same words the sidebar does — "Menu", not "catalog".
   const trail = useMemo(() => {
     let best: { labels: string[]; len: number } | null = null;
     const consider = (labels: string[], href: string) => {
@@ -207,7 +268,7 @@ export function TopBar({
     >
       <nav aria-label="Breadcrumb" className="hidden min-w-0 md:block">
         <ol className="flex min-w-0 items-center gap-1.5 text-sm">
-          <li className="truncate text-muted-foreground">{workspaceName}</li>
+          <li className="truncate text-muted-foreground">{rootLabel}</li>
           {trail.map((label, i) => (
             <li key={label + i} className="flex min-w-0 items-center gap-1.5">
               <span aria-hidden className="text-muted-foreground/50">
@@ -229,7 +290,7 @@ export function TopBar({
       </nav>
 
       <div className="ml-auto flex min-w-0 items-center gap-3">
-        <JumpTo items={destinations} />
+        <SearchField items={destinations} />
         <ConnectionDot />
         {/* A link to Settings, not a menu. Sign-out and the theme switch stay
             at the foot of the sidebar, which is the only copy of them that the

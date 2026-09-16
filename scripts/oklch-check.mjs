@@ -1,6 +1,8 @@
-// Throwaway: sRGB hex <-> OKLCH + WCAG contrast, so the dark tokens this branch
-// aligns to the UI handoff are measured rather than guessed. Not wired into
-// anything; run with `node scripts/oklch-check.mjs`.
+// Throwaway: sRGB hex <-> OKLCH + WCAG contrast, so the tokens these branches
+// add are measured rather than guessed. Two passes wrote into this file — the
+// handoff alignment (dark ladder) and the Overview dashboard pass (white rail,
+// chart bars, light canvas) — and both sets of measurements are kept below.
+// Not wired into anything; run with `node scripts/oklch-check.mjs`.
 function oklchToSrgb(L, C, hDeg) {
   const h = (hDeg * Math.PI) / 180;
   const a = C * Math.cos(h);
@@ -86,7 +88,7 @@ for (const [name, h] of Object.entries(HANDOFF)) {
   console.log(name.padEnd(18), `oklch(${fmt(b.L, 3)} ${fmt(b.C, 3)} 265)`.padEnd(26), "->", hex(b.rgb), "target", h.toUpperCase());
 }
 
-console.log("\n--- what the dark theme ships TODAY (the 'before' column) ---");
+console.log("\n--- what the dark theme shipped BEFORE the handoff alignment ---");
 for (const [name, l, c, h] of [
   ["--background", 0.145, 0.012, 265],
   ["--sidebar", 0.115, 0.011, 265],
@@ -130,9 +132,9 @@ for (const [name, fg, bg] of rows) {
 }
 
 console.log("\n--- the surface ladder above 'card', step-preserved ---");
-// Current dark ladder: canvas .145 / card .205 / raised .245 / popover .275.
+// Old dark ladder: canvas .145 / card .205 / raised .245 / popover .275.
 // Steps above card: +0.040 (raised), +0.070 (popover), +0.060 (surface-2 .265),
-// +0.085 (accent .29). Re-applied to the new card at 0.185.
+// +0.085 (accent .29). Re-applied to the new card at 0.230.
 for (const [name, L] of [["raised/secondary", 0.27], ["surface-2", 0.29], ["popover/overlay", 0.3], ["accent", 0.315]]) {
   const rgb = S(L, 0.013, 265);
   console.log(name.padEnd(18), `oklch(${L} 0.013 265)`.padEnd(26), hex(rgb), "vs card", ratio(rgb, card).toFixed(2) + ":1", "vs canvas", ratio(rgb, canvas).toFixed(2) + ":1");
@@ -171,4 +173,74 @@ for (const [name, l, c, h] of [
 ]) {
   const rgb = S(l, c, h);
   console.log(name.padEnd(18), `oklch(${l} ${c} ${h})`.padEnd(26), hex(rgb), "vs card", ratio(rgb, card).toFixed(2) + ":1", "vs canvas", ratio(rgb, canvas).toFixed(2) + ":1");
+}
+
+// ---------------------------------------------------------------------------
+// OVERVIEW DASHBOARD PASS. White rail in light, chart bars in both themes, and
+// the light canvas moving to #F7F8FA. Everything below that names a dark rail
+// is measured against the HANDOFF's rail (0.204 / #15171B), not against the
+// 0.185–0.19 this pass originally proposed — the two passes collided there and
+// the handoff's named value is the one that ships.
+// ---------------------------------------------------------------------------
+const lightCanvas = S(0.965, 0.005, 265);
+const darkCard = card;
+
+const show = (name, l, c, h, against, againstName) => {
+  const rgb = S(l, c, h);
+  console.log(
+    name.padEnd(30),
+    `oklch(${l} ${c} ${h})`.padEnd(26),
+    hex(rgb),
+    " vs " + againstName.padEnd(12),
+    ratio(rgb, against).toFixed(2) + ":1"
+  );
+};
+
+console.log("\n--- light: chart bars on a white card ---");
+for (const l of [0.72, 0.74, 0.76, 0.78, 0.8, 0.82, 0.85]) show("periwinkle L=" + l, l, 0.075, 268, white, "white card");
+console.log();
+for (const l of [0.34, 0.36, 0.38, 0.4, 0.42]) show("navy peak L=" + l, l, 0.05, 265, white, "white card");
+
+console.log("\n--- light: sidebar ---");
+show("sidebar accent (pale blue)", 0.945, 0.032, 253, white, "white rail");
+show("active label on accent", 0.35, 0.11, 253, S(0.945, 0.032, 253), "pale blue");
+show("active icon on accent", 0.54, 0.2, 253, S(0.945, 0.032, 253), "pale blue");
+show("sidebar muted on white", 0.52, 0.02, 265, white, "white rail");
+show("sidebar fg on white", 0.21, 0.02, 265, white, "white rail");
+show("badge fill", 0.94, 0.005, 265, white, "white rail");
+show("badge text on fill", 0.42, 0.02, 265, S(0.94, 0.005, 265), "badge fill");
+show("avatar fill", 0.93, 0.03, 253, white, "white rail");
+show("avatar initials", 0.42, 0.15, 253, S(0.93, 0.03, 253), "avatar fill");
+
+console.log("\n--- dark: chart bars on a dark card (#1A1D22) ---");
+for (const l of [0.38, 0.42, 0.46, 0.5]) show("slate idle L=" + l, l, 0.05, 268, darkCard, "dark card");
+for (const l of [0.78, 0.8, 0.82]) show("periwinkle peak L=" + l, l, 0.085, 268, darkCard, "dark card");
+
+console.log("\n--- dark: sidebar, measured against the SHIPPED rail #15171B ---");
+show("rail", 0.204, 0.009, 265, canvas, "dark canvas");
+show("accent fill", 0.29, 0.055, 253, rail, "rail");
+show("active label on accent", 0.94, 0.06, 253, S(0.29, 0.055, 253), "accent");
+show("active icon on accent", 0.72, 0.16, 253, S(0.29, 0.055, 253), "accent");
+show("muted on rail (#a5acb8)", 0.742, 0.02, 265, rail, "rail");
+show("badge fill", 0.28, 0.015, 265, rail, "rail");
+show("badge text", 0.82, 0.02, 265, S(0.28, 0.015, 265), "badge fill");
+show("avatar fill", 0.3, 0.05, 253, rail, "rail");
+show("avatar initials", 0.88, 0.06, 253, S(0.3, 0.05, 253), "avatar fill");
+
+console.log("\n--- light canvas ---");
+console.log("old --background          ", hex(lightCanvas), "(spec asks for the #F7F8FA family)");
+console.log("#F7F8FA target            ", hex(S(0.974, 0.0035, 258)));
+
+console.log("\n--- canvas candidates for the #F7F8FA family ---");
+for (const [l, c, h] of [[0.972,0.003,258],[0.974,0.003,258],[0.976,0.003,258],[0.976,0.004,262],[0.978,0.003,258]]) {
+  const rgb = S(l, c, h);
+  console.log(`oklch(${l} ${c} ${h})`.padEnd(26), hex(rgb),
+    "muted-fg 5.2 on it:", ratio(S(0.52,0.02,265), rgb).toFixed(2),
+    "| ring on it:", ratio(S(0.54,0.2,253), rgb).toFixed(2),
+    "| white card vs it:", ratio(white, rgb).toFixed(3));
+}
+
+console.log("\n--- land exactly on #F7F8FA ---");
+for (const [l, c, h] of [[0.979,0.0026,256],[0.9795,0.0025,255],[0.98,0.0024,255],[0.9805,0.0022,254]]) {
+  console.log(`oklch(${l} ${c} ${h})`.padEnd(26), hex(S(l,c,h)));
 }

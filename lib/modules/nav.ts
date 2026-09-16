@@ -283,5 +283,10 @@ export function buildNav(ctx: NavBuildContext): NavSection[] {
   // ink, and with 8 primaries there is nothing left to group. The section
   // wrapper survives because the sidebar, the role editor and the tests all
   // speak it, and a future mode may want to split the rail again.
-  return top.length > 0 ? [{ key: "primary", label: "Main", items: top }] : [];
+  // "Workspace", not "Main", and it is now rendered rather than suppressed. The
+  // approved design puts a `WORKSPACE` micro-label over the rail's list AND
+  // makes it the first crumb of the top bar's breadcrumb (`Workspace / Overview`).
+  // Naming the section here is what lets both read the same string out of one
+  // source instead of two components hard-coding the same word and drifting.
+  return top.length > 0 ? [{ key: "primary", label: "Workspace", items: top }] : [];
 }

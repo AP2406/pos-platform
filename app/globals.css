@@ -19,6 +19,25 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar: var(--sidebar);
+  /* Two neutral fills that only exist inside the rail, and they need their own
+     tokens now that the rail is WHITE in light mode. --raised (0.972) is a step
+     up from a 0.965 canvas; against a 1.0 rail it is invisible, so the count
+     badge beside Orders and the circular avatar at the foot would both have
+     read as untinted text. They are deliberately separate from each other
+     because one is neutral grey and one is the pale brand tint. */
+  --color-sidebar-chip: var(--sidebar-chip);
+  --color-sidebar-chip-foreground: var(--sidebar-chip-foreground);
+  --color-sidebar-avatar: var(--sidebar-avatar);
+  --color-sidebar-avatar-foreground: var(--sidebar-avatar-foreground);
+  /* THE DASHBOARD BAR CHART, AND IT IS NOT THE BRAND BLUE.
+     --ramp-N is the share ramp: "these are N shares of one thing, show me their
+     order", which is what the channel bar needs. The sales chart asks a
+     different question — one series, one bar singled out — and the approved
+     design answers it in a muted periwinkle/navy pair rather than in the accent.
+     Keeping it off --ramp-N also stops the two charts on this page reading as
+     the same measurement at two sizes. */
+  --color-bar-idle: var(--bar-idle);
+  --color-bar-peak: var(--bar-peak);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   /* THE SIGN-IN SURFACE. /login is the one admin screen with no chrome around
@@ -138,12 +157,25 @@
    * white and has nowhere to go), so the canvas drops instead and the shadow
    * does more of the work than it does in dark.
    *
-   *   canvas   0.965   the page behind everything
+   *   canvas   0.979   the page behind everything (#F7F8FA — see below)
    *   card     1.000   pure white, sitting clearly on top of it
    *   raised   0.972   inputs, table headers, chips — inside a card
    *   overlay  1.000   popovers and sheets, lifted by shadow
+   *
+   * NOTE THAT `raised` IS NOW DARKER THAN THE CANVAS, not lighter, and that is
+   * correct: it is the fill for things nested INSIDE a white card (a segmented
+   * control's track, a table's header row), so what it has to step away from is
+   * the card at 1.000, never the page.
    */
-  --background: oklch(0.965 0.005 265);
+  /* THE CANVAS IS THE APPROVED DESIGN'S, TO THE HEX. It was 0.965 = #F2F3F7;
+     the design specifies #F7F8FA, which round-trips out of this value with no
+     drift. That is a lighter page, so a white card is separated from it by less
+     lightness (1.065:1, from 1.084:1) and leans harder on its own hairline —
+     which is what the design does, and why --line is drawn at full strength.
+     Nothing loses contrast: muted text on the canvas improves 5.08 -> 5.17:1
+     and the focus ring 4.65 -> 4.73:1, because every foreground on this page is
+     darker than the surface under it. */
+  --background: oklch(0.979 0.0026 256); /* #F7F8FA */
   --foreground: oklch(0.21 0.02 265);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.21 0.02 265);
@@ -280,19 +312,51 @@
      variants without shipping two files. */
   --logo-ink: oklch(0.19 0.011 261);
 
-  /* Sidebar — dark rail in both modes */
-  --sidebar: oklch(0.18 0.015 265);
-  --sidebar-foreground: oklch(0.97 0.004 265);
-  --sidebar-muted: oklch(0.62 0.02 265);
-  /* The rail is dark in both themes, so the active marker can be the logo blue
-     at full strength: 5.54:1 against the rail as a 3px bar and an icon tint,
-     and 5.73:1 as a fill under --sidebar-primary-foreground. */
-  --sidebar-primary: oklch(0.64 0.2 253);
-  --sidebar-primary-foreground: oklch(0.16 0.02 265);
-  --sidebar-accent: oklch(0.64 0.2 253 / 0.16);
-  --sidebar-accent-foreground: oklch(0.92 0.06 253);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.64 0.2 253);
+  /* SIDEBAR — WHITE, and this is the change the approved Overview design forced.
+     The rail was a dark plane in BOTH themes, which was a deliberate old
+     decision (one rail, one set of numbers to measure). The design puts a white
+     rail against the near-white canvas, separated by nothing but its right-hand
+     hairline, so the rail is now the same material as a card: pure white in
+     light, the card plane in dark. Every value below is measured against that
+     white, not inherited.
+
+     The active row is a pale blue rounded rectangle rather than a 3px bar plus
+     a tinted pill, so --sidebar-accent is an OPAQUE pale blue rather than the
+     16%-alpha wash it was — a wash of the logo blue over white is a different
+     colour on a card than it is on the canvas, and the rail now has both
+     behind it (the drawer floats over a scrim on a phone). */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.21 0.02 265); /* 17.73:1 on the rail */
+  --sidebar-muted: oklch(0.52 0.02 265); /*  5.51:1 on the rail */
+  /* The active row's ICON, on the pale blue behind it: 4.29:1. --primary, not
+     --brand — the logo blue at 0.64 measures 2.6:1 on that fill, which is the
+     same trade already written up at --primary. */
+  --sidebar-primary: oklch(0.54 0.2 253);
+  --sidebar-primary-foreground: oklch(0.99 0.002 265);
+  --sidebar-accent: oklch(0.945 0.032 253);
+  /* The active row's LABEL: 9.67:1 on the pale blue. Deliberately darker and
+     less saturated than the icon — the label is read, the icon is recognised. */
+  --sidebar-accent-foreground: oklch(0.35 0.11 253);
+  --sidebar-border: oklch(0.21 0.02 265 / 0.17); /* tracks --line exactly */
+  --sidebar-ring: oklch(0.54 0.2 253);
+  /* The count badge beside Orders: a neutral grey fill, 7.10:1 under its text. */
+  --sidebar-chip: oklch(0.94 0.005 265);
+  --sidebar-chip-foreground: oklch(0.42 0.02 265);
+  /* The user block's circular avatar: a pale brand fill, 6.89:1 under initials. */
+  --sidebar-avatar: oklch(0.93 0.03 253);
+  --sidebar-avatar-foreground: oklch(0.42 0.15 253);
+
+  /* The sales chart's two tones. Light periwinkle for the thirteen bars a
+     reader takes the SHAPE of, dark desaturated navy for the one the footer
+     names in words.
+     MEASURED, and the idle bar is the one number on this page that does not
+     clear 3:1: #A3B6E8 on a white card is 2.01:1. That is the design's colour
+     and it is kept, because the chart carries a complete text alternative —
+     every bar, labelled, with its amount — and the one bar that carries a
+     claim on its own (the peak) is at 10.05:1 and is also written out in the
+     footer line underneath. Nothing on this chart is understood by hue alone. */
+  --bar-idle: oklch(0.78 0.075 268); /* #A3B6E8 · 2.01:1 on a white card */
+  --bar-peak: oklch(0.38 0.05 265); /* #35425D · 10.05:1 on a white card */
 
   /* Floor table status — turn-time at a glance */
   --table-available-bg: var(--card);
@@ -605,25 +669,54 @@
   /* The kit's `flat-dark` variant: white lettering and outline. */
   --logo-ink: oklch(1 0 0);
 
-  /* #15171B, the handoff's rail — and it is LIGHTER than the canvas now, not
-     deeper. The old value (0.115, #040509) was chosen to keep the rail a
-     distinct plane from the page; that still holds, only from above. Sitting
-     between the canvas (0.181) and a card (0.230) makes it read as the wall
-     the cards are mounted on, which is the relationship the mockups draw. */
+  /* SIDEBAR, DARK. Two passes arrived here from opposite directions and this
+     block is the merge of both, so it is worth saying which half is whose.
+
+     THE PLANE ITSELF IS ui-polish's, i.e. the UI handoff's (#15171B). The
+     dashboard pass had independently reached the same conclusion — that the
+     rail belongs ABOVE the canvas rather than below it, a reversal of the old
+     0.115 "deeper than the page" rail — and had landed on 0.19 by eye. The
+     handoff names 0.204 by hex and the rest of the dark ladder is already
+     pinned to it (canvas 0.181 / rail 0.204 / card 0.230 / hairline 0.308), so
+     the rail takes the named value and the two passes agree on the idea as
+     well as the number. Same reasoning for --sidebar-foreground (pure white),
+     --sidebar-muted (one secondary grey, #A5ACB8, shared with
+     --muted-foreground) and --sidebar-border (the named hairline #2C3037
+     rather than a white alpha, which is a different colour over every rung).
+
+     THE ACTIVE ROW IS THE DASHBOARD PASS's, because it is the half that has a
+     component behind it: sidebar-nav.tsx now draws the active item as a filled
+     rounded rectangle, not as a 3px bar plus a tinted pill. A 18%-alpha wash of
+     the logo blue is a different colour over the rail than it is over the scrim
+     the mobile drawer floats on, so the fill has to be opaque. 1.27:1 over the
+     handoff's rail — it sits above the plane, as intended — and the label on it
+     is 11.68:1, the icon 5.63:1. Re-measured against 0.204 rather than the
+     0.19 this pass proposed; see scripts/oklch-check.mjs. */
   --sidebar: oklch(0.204 0.009 265);
   --sidebar-foreground: oklch(1 0 0);
-  /* One secondary grey for the whole dark theme: the handoff's #A5ACB8, same
-     value as --muted-foreground. The rail used to run its own, dimmer grey
-     (0.68); there was never a reason for the sidebar's inactive labels and the
-     page's helper text to be two different colours. 7.84:1 on the rail. */
-  --sidebar-muted: oklch(0.742 0.02 265);
-  --sidebar-primary: oklch(0.64 0.2 253);
+  --sidebar-muted: oklch(0.742 0.02 265); /* 7.84:1 on the rail */
+  /* On ink the logo blue needs no walking down — 5.63:1 on the accent fill. */
+  --sidebar-primary: oklch(0.72 0.16 253);
   --sidebar-primary-foreground: oklch(0.16 0.02 265);
-  --sidebar-accent: oklch(0.64 0.2 253 / 0.18);
-  --sidebar-accent-foreground: oklch(0.94 0.06 253);
+  --sidebar-accent: oklch(0.29 0.055 253);
+  --sidebar-accent-foreground: oklch(0.94 0.06 253); /* 11.68:1 on the accent */
   /* The same named hairline as --border; see the note there. */
   --sidebar-border: oklch(0.308 0.014 265);
   --sidebar-ring: oklch(0.64 0.2 253);
+  --sidebar-chip: oklch(0.28 0.015 265);
+  --sidebar-chip-foreground: oklch(0.82 0.02 265); /*  8.36:1 on the chip */
+  --sidebar-avatar: oklch(0.3 0.05 253);
+  --sidebar-avatar-foreground: oklch(0.88 0.06 253); /*  9.52:1 on the avatar */
+
+  /* The sales chart, dark, and the pair swaps ends rather than being inverted
+     in place. Light singles the peak out by making it the DARKEST thing in the
+     plot; on ink the darkest thing in the plot is the card, so the peak becomes
+     the brightest and the idle bars drop to a muted slate. Same two facts —
+     "these are the series" and "this one is the peak" — via the axis that still
+     works. The idle bar clears 2.50:1 here against light's 2.01:1, because a
+     dark card has further to travel before a tint disappears into it. */
+  --bar-idle: oklch(0.46 0.05 268); /* #4C5775 ·  2.50:1 on a dark card */
+  --bar-peak: oklch(0.82 0.085 268); /* #ACC3FC · 10.20:1 on a dark card */
 
   /* FLOOR TABLE STATUS, DARK — the colour comes off the tile and onto a dot.
      This is the one place the handoff changes what the floor MEANS, not just
