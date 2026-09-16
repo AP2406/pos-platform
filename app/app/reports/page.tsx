@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBusiness, listBusinesses } from "@/lib/services/tenancy";
 import { hasFloorService } from "@/lib/modules/modes";
 import { aggregateItemSales } from "@/lib/services/product-mix";
+import { dayAxis, dayAxisTruncated, utcDayMs } from "@/lib/services/day-axis";
 import {
   CHANNELS,
   CHANNEL_LABEL,
@@ -143,6 +144,58 @@ export default async function ReportsPage({
   const orderIds = orders.map((o) => o.id);
 
   const count = orders.length;
+  // ---- Net sales by day ----------------------------------------------------
+  //
+  // The range's day-over-day shape. Net = subtotal − discount (pre-tax, pre-tip),
+  // bucketed by the business-timezone calendar day, with quiet days drawn as zero
+  // so a gap reads as "no sales" rather than as a missing bar. Sums to
+  // gross − discounts for the range.
+  //
+  // THE CALENDAR WALK IS DONE IN UTC ON PURPOSE. The obvious version of this
+  // steps back through `now - i * 86400000` and formats each instant in the
+  // business timezone, which is wrong twice a year: a local day is 23 hours long
+  // at the spring transition and 25 at the autumn one, so a fixed 24-hour step
+  // either skips a calendar day outright or lands on the same one twice. Day
+  // KEYS, though, are exactly 86400000 ms apart when built with Date.UTC,
+  // because UTC has no transitions. So the local day is resolved once per order
+  // (dayKey, above) and the axis is generated from the key strings.
+  const dayNet: Record<string, { net: number; count: number }> = {};
+  for (const o of orders) {
+    const k = dayKey(o.created_at, tz);
+    (dayNet[k] ||= { net: 0, count: 0 });
+    dayNet[k].net += o.subtotal - o.discount;
+    dayNet[k].count += 1;
+  }
+
+  // dayKey yields en-CA YYYY-MM-DD, which is what dayAxis takes and returns.
+  const trendFromKey = dayKey(new Date(windowStartMs).toISOString(), tz);
+  const trendToKey = Number.isFinite(windowEndMs)
+    ? dayKey(new Date(windowEndMs).toISOString(), tz)
+    : todayKey;
+  const trendLabel = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    weekday: "short",
+    day: "numeric",
+  });
+  const trend = dayAxis(trendFromKey, trendToKey).map((key) => {
+    const b = dayNet[key] ?? { net: 0, count: 0 };
+    return {
+      key,
+      // Formatted in UTC to match the key the axis produced. Reading it back in
+      // the business timezone would render the previous evening's date.
+      label: trendLabel.format(new Date(utcDayMs(key))),
+      net: round2(b.net),
+      count: b.count,
+    };
+  });
+  const trendMax = Math.max(1, ...trend.map((d) => d.net));
+  const trendTotal = round2(trend.reduce((s2, d) => s2 + d.net, 0));
+  const trendBest = trend.reduce(
+    (m, d) => (d.net > m.net ? d : m),
+    { key: "", label: "", net: 0, count: 0 }
+  );
+  const trendTruncated = dayAxisTruncated(trendFromKey, trendToKey);
+
   const gross = round2(orders.reduce((a, o) => a + o.subtotal, 0));
   const discounts = round2(orders.reduce((a, o) => a + o.discount, 0));
   const tax = round2(orders.reduce((a, o) => a + o.tax, 0));
@@ -597,6 +650,59 @@ export default async function ReportsPage({
           </div>
         </div>
       </div>
+
+      {/* Net sales by day — the shape of the range, not just its total. Hidden on
+          the single-day scope, where one bar is not a trend. */}
+      {range !== "today" && trend.length >= 2 && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+          <div className="flex items-baseline justify-between gap-4 mb-4">
+            <h2 className="text-sm font-medium text-muted-foreground">Net sales by day</h2>
+            <span className="text-xs text-muted-foreground text-right">
+              {money(trendTotal) + " net"}
+              {trendBest.net > 0 ? " · best " + trendBest.label + " " + money(trendBest.net) : ""}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <div className="flex items-end gap-2 h-40" style={{ minWidth: trend.length * 28 }}>
+              {trend.map((d) => (
+                <div
+                  key={d.key}
+                  className="flex-1 min-w-[20px] flex flex-col items-center justify-end h-full"
+                  title={
+                    d.label + ": " + money(d.net) + " · " +
+                    d.count + (d.count === 1 ? " sale" : " sales")
+                  }
+                >
+                  {/* A zero day draws nothing rather than a 2% stub: a sliver at
+                      the axis reads as a small sale, which is a different fact
+                      from no sale at all. */}
+                  <div
+                    className="w-full rounded-t bg-foreground/80"
+                    style={{
+                      height:
+                        (d.net > 0 ? Math.max(Math.round((d.net / trendMax) * 100), 2) : 0) + "%",
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-1.5" style={{ minWidth: trend.length * 28 }}>
+              {trend.map((d) => (
+                <div
+                  key={d.key}
+                  className="flex-1 min-w-[20px] text-center text-[10px] text-muted-foreground truncate"
+                >
+                  {d.label}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-2">
+            Net of discounts, before tax &amp; tips.
+            {trendTruncated ? " Showing the first " + trend.length + " days of the range." : ""}
+          </div>
+        </div>
+      )}
 
       {/* Sales by channel — the revenue-centre split an operator uses to weigh
           packaging and aggregator cost against dining-room covers. Only
