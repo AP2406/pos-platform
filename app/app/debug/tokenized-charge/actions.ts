@@ -1,5 +1,7 @@
 "use server";
 
+import { assertDebugAllowed } from "../guard";
+
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { isFinixConfigured, createBuyerIdentity, finix, resolveMerchantId } from "@/lib/services/finix";
@@ -12,6 +14,7 @@ type TokenizedChargeConfig = {
 };
 
 export async function getTokenizedChargeConfig(): Promise<TokenizedChargeConfig> {
+  await assertDebugAllowed();
   const { business } = await requireBusiness();
   const supabase = await createClient();
 
@@ -63,6 +66,7 @@ type ChargeError = { error: string; details?: unknown };
 export async function chargeTokenizedCard(
   input: TokenizedChargeInput
 ): Promise<ChargeOk | ChargeError> {
+  await assertDebugAllowed();
   const { business } = await requireBusiness();
 
   if (!isFinixConfigured()) {

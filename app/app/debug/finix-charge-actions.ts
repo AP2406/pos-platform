@@ -1,5 +1,7 @@
 "use server";
 
+import { assertDebugAllowed } from "./guard";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireBusiness } from "@/lib/services/tenancy";
 import {
@@ -35,6 +37,7 @@ type ChargeError = { error: string; details?: unknown };
 export async function chargeTestCard(
   input: ChargeInput
 ): Promise<ChargeOk | ChargeError> {
+  await assertDebugAllowed();
   await requireBusiness();
 
   if (!isFinixConfigured()) {

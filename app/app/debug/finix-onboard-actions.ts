@@ -1,5 +1,7 @@
 "use server";
 
+import { assertDebugAllowed } from "./guard";
+
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { isFinixConfigured } from "@/lib/services/finix";
@@ -27,6 +29,7 @@ export async function onboardCurrentBusiness(
   input: CreateMerchantIdentityInput,
   bank: MerchantBankAccountFields
 ): Promise<OnboardOk | OnboardError> {
+  await assertDebugAllowed();
   const { business } = await requireBusiness();
 
   if (!isFinixConfigured()) {

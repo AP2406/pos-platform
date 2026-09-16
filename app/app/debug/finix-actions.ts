@@ -1,5 +1,7 @@
 "use server";
 
+import { assertDebugAllowed } from "./guard";
+
 import { requireBusiness } from "@/lib/services/tenancy";
 import { finix, getFinixConfig, isFinixConfigured } from "@/lib/services/finix";
 
@@ -18,6 +20,7 @@ export async function pingFinix(): Promise<
   | { ok: true; summary: string; sample: unknown }
   | { error: string; details?: unknown }
 > {
+  await assertDebugAllowed();
   await requireBusiness();
 
   if (!isFinixConfigured()) {

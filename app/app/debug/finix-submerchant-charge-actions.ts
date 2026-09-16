@@ -1,5 +1,7 @@
 "use server";
 
+import { assertDebugAllowed } from "./guard";
+
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireBusiness } from "@/lib/services/tenancy";
@@ -59,6 +61,7 @@ type ChargeError = { error: string; details?: unknown };
 export async function chargeIntoSubMerchant(
   input: ChargeInput
 ): Promise<ChargeOk | ChargeError> {
+  await assertDebugAllowed();
   const { business } = await requireBusiness();
 
   if (!isFinixConfigured()) {
