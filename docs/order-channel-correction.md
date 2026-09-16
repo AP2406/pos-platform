@@ -96,10 +96,43 @@ table. It is pinned by a test so the next person adding an ordering surface has
 to come here. `tests/unit/delivery-channels.test.ts` also reads 0074's own
 allow-list and fails if SQL gains a platform that this list did not.
 
-## Before you ship: measure it
+## Measured against production — 16 Sep 2026
 
-I could not read production from here. Run this and you will know exactly what
-moves, per business, before any merchant sees a different number:
+**Blast radius: zero. No reported figure changes for any merchant.**
+
+Every row in `orders`, grouped by the two fields that decide classification:
+
+| `channel` | `dining_option` | orders | businesses | sales | before → after |
+|---|---|---|---|---|---|
+| NULL | `dine_in` | 51 | 2 | $762.40 | Dine-in → Dine-in |
+| NULL | *(none)* | 30 | 3 | $10,416.28 | In-store → In-store |
+| `delivery` | *(none)* | 1 | 1 | $32.77 | Delivery → Delivery |
+
+Not one row carries `doordash`, `ubereats`, `grubhub`, `kiosk`, `online` or
+`qr` — the six values the old classifier mishandled. The single delivery is on
+the literal `delivery` slug, which is the one value the substring match caught
+correctly. `open_tickets.channel` is NULL on all 7 rows.
+
+So this is a correctness fix landing **ahead of** the first delivery integration
+going live, not a restatement of anything a merchant has already read. Ship it
+without a heads-up email.
+
+Re-run the query below if delivery, kiosk, online or QR goes live before this
+merges — the answer above has a shelf life.
+
+### Worth knowing separately
+
+The same pass showed 12 businesses exist but only **4** have ever rung an order,
+82 orders total, and **none in the last 30 days** (most recent: 22 Jul 2026).
+That has nothing to do with this fix, but it is worth being accurate about: the
+platform is pre-revenue in practice, which is an argument for shipping
+correctness fixes freely — there is no live reporting to disturb — and it is the
+number the pilot push exists to change.
+
+### The query
+
+Run this and you will know exactly what moves, per business, before any merchant
+sees a different number:
 
 ```sql
 -- Every distinct channel / dining_option pair, with volume and money.
@@ -118,9 +151,6 @@ order by orders desc;
 
 Any row whose `channel` is `doordash`, `ubereats`, `grubhub`, `kiosk`, `online`
 or `qr` is a row that was being counted as In-store and will not be after this.
-If every row comes back NULL, no live figure moves at all and this is purely a
-correctness fix ahead of the first delivery integration going live.
 
-Worth also telling any merchant who has been running delivery that their
-In-store number was overstated and is about to drop — better from you first than
-noticed later.
+If such rows exist, tell the affected merchant before they notice: their
+In-store number was overstated and is about to drop. Better from you first.
