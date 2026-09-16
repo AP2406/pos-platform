@@ -8,7 +8,18 @@ export default defineConfig({
   resolve: {
     // Mirror the tsconfig "@/*" path alias so tests can import production modules
     // that use it (e.g. app/app/pos/split-alloc.ts -> @/lib/services/tax-compute).
+    //
+    // The @surge/* workspace packages need mirroring for the same reason: they
+    // are tsconfig paths, not installed packages, so Vite cannot resolve them on
+    // its own. Both are in mobile/tsconfig.json too — anything shared between the
+    // web app and the iPad app lives there.
     alias: {
+      "@surge/api-contracts": fileURLToPath(
+        new URL("./packages/api-contracts/src", import.meta.url)
+      ),
+      "@surge/design-tokens": fileURLToPath(
+        new URL("./packages/design-tokens/src", import.meta.url)
+      ),
       "@": fileURLToPath(new URL(".", import.meta.url)),
     },
   },

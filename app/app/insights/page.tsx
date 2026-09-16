@@ -111,9 +111,20 @@ export default async function InsightsPage({
   const avgPartySize = coverChecks > 0 ? coversTotal / coverChecks : 0;
   const hasCovers = coversTotal > 0 || turnCount > 0;
 
-  // GAP-1: sales by order channel (NULL channel = in-store register). Only shown
-  // once at least one non-store channel has rung up, so existing single-channel
-  // restaurants see no new noise.
+  // GAP-1: sales by ordering SURFACE — which door the order came through, in
+  // money. Deliberately not the same question as the channel split on /app/reports
+  // and the admin home, which uses lib/services/order-channel and answers "what
+  // kind of service was this" (dine-in / takeout / pickup / delivery) in counts.
+  //
+  // Keeping both is on purpose: an owner wants "DoorDash vs Uber Eats vs the
+  // counter" here and "how much of tonight was delivery" there, and collapsing
+  // this one onto ChannelKey would throw the per-platform breakdown away. What is
+  // NOT ok is calling both of them "channel" and labelling both "In-store" while
+  // they count differently — that is what made the two screens look like they
+  // contradicted each other. Hence the wording below and the heading.
+  //
+  // NULL channel = rung at a till. Only shown once at least one non-counter
+  // surface has rung up, so single-surface restaurants see no new noise.
   const CHANNEL_LABEL: Record<string, string> = { kiosk: "Kiosk", online: "Online", qr: "QR table", doordash: "DoorDash", ubereats: "Uber Eats", grubhub: "Grubhub" };
   const channelAgg = new Map<string, { sales: number; checks: number }>();
   for (const o of liveOrders) {
@@ -123,7 +134,10 @@ export default async function InsightsPage({
     channelAgg.set(key, cur);
   }
   const channelRows = Array.from(channelAgg.entries())
-    .map(([key, v]) => ({ key, label: key === "instore" ? "In-store" : CHANNEL_LABEL[key] ?? key, sales: Math.round(v.sales * 100) / 100, checks: v.checks }))
+    // "Counter", not "In-store": the reports/dashboard split has an In-store
+    // bucket that means something narrower, and two different numbers under one
+    // word is the whole problem this section used to create.
+    .map(([key, v]) => ({ key, label: key === "instore" ? "Counter" : CHANNEL_LABEL[key] ?? key, sales: Math.round(v.sales * 100) / 100, checks: v.checks }))
     .sort((a, b) => b.sales - a.sales);
   const channelSalesMax = Math.max(1, ...channelRows.map((r) => r.sales));
   const hasMultiChannel = channelRows.some((r) => r.key !== "instore");
@@ -274,7 +288,7 @@ export default async function InsightsPage({
         </div>
         {hasMultiChannel && (
           <div className="bg-card ring-1 ring-line shadow-elevation rounded-xl p-4">
-            <h2 className="font-semibold mb-2 text-sm">By channel</h2>
+            <h2 className="font-semibold mb-2 text-sm">By ordering surface</h2>
             <div className="space-y-1">
               {channelRows.map((r) => <Bar key={r.key} label={r.label} value={r.sales} max={channelSalesMax} />)}
             </div>

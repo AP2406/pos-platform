@@ -36,29 +36,61 @@ describe("channel classification", () => {
   });
 
   // ---------------------------------------------------------------------
-  // The defect, pinned deliberately
+  // The defect, corrected
   // ---------------------------------------------------------------------
   //
-  // These assertions describe behaviour that is WRONG. They are here so that
-  // whoever fixes it has to come and change them on purpose, rather than
-  // discovering afterwards that /app/reports' channel table moved.
-  // See docs/dashboard-overview-audit.md §4.
+  // These assertions used to pin the WRONG answers on purpose, so that whoever
+  // fixed the classifier had to come and change them deliberately rather than
+  // discover afterwards that /app/reports' channel table had moved. This is
+  // that change. See docs/order-channel-correction.md for which figures shift.
 
-  it("KNOWN DEFECT: files a named delivery platform as In-store", () => {
-    // migration 0074 writes 'doordash' | 'ubereats' | 'grubhub' and only falls
-    // back to the literal 'delivery' for platforms it does not recognise, but
-    // the classifier matches delivery by substring — so the three real platforms
-    // miss and the unknown-platform fallback is the only one that lands.
-    expect(channelOf({ channel: "doordash" })).toBe("in_store");
-    expect(channelOf({ channel: "ubereats" })).toBe("in_store");
-    expect(channelOf({ channel: "grubhub" })).toBe("in_store");
+  it("files every named delivery platform as Delivery", () => {
+    // 0074 writes 'doordash' | 'ubereats' | 'grubhub' and normalises anything
+    // it does not recognise to the literal 'delivery', so these four are the
+    // complete set. Previously only the fallback landed, because the arm
+    // matched by substring.
+    expect(channelOf({ channel: "doordash" })).toBe("delivery");
+    expect(channelOf({ channel: "ubereats" })).toBe("delivery");
+    expect(channelOf({ channel: "grubhub" })).toBe("delivery");
     expect(channelOf({ channel: "delivery" })).toBe("delivery");
   });
 
-  it("KNOWN DEFECT: files kiosk, online and QR orders as In-store", () => {
-    expect(channelOf({ channel: "kiosk" })).toBe("in_store");
-    expect(channelOf({ channel: "online" })).toBe("in_store");
-    expect(channelOf({ channel: "qr" })).toBe("in_store");
+  it("places kiosk, online and QR on the axis each one actually belongs to", () => {
+    // Not all three into one bucket: they arrived differently AND they leave
+    // differently. A kiosk check is togo (0071), an online order is collected
+    // (0072, "an online pickup order"), and a QR check is someone sitting at a
+    // table paying for themselves (0073).
+    expect(channelOf({ channel: "kiosk" })).toBe("takeout");
+    expect(channelOf({ channel: "online" })).toBe("pickup");
+    expect(channelOf({ channel: "qr" })).toBe("dine_in");
+  });
+
+  it("lets a delivery platform outrank the register's dining option", () => {
+    // These are the two axes disagreeing. A DoorDash order is a delivery no
+    // matter what the check was flagged as on the way out.
+    expect(channelOf({ channel: "doordash", snapshot: { dining_option: "takeout" } }))
+      .toBe("delivery");
+  });
+
+  it("is case- and whitespace-insensitive about the column", () => {
+    // orders.channel is plain text with no enum and no CHECK constraint.
+    expect(channelOf({ channel: "DoorDash" })).toBe("delivery");
+    expect(channelOf({ channel: " kiosk " })).toBe("takeout");
+  });
+
+  it("does not match on substrings", () => {
+    // The original defect was the mirror of this: 'doordash' failed to match
+    // because the test was `includes("delivery")`. Guard the other direction
+    // too, so a future slug that merely contains a keyword is not swept up.
+    expect(channelOf({ channel: "delivery-pending-cancellation" })).toBe("in_store");
+    expect(channelOf({ channel: "takeout-window" })).toBe("in_store");
+  });
+
+  it("KNOWN GAP: an unrecognised channel still reads as In-store", () => {
+    // Deliberate, not forgotten. There is no "other" bucket that would not
+    // change the shape of the report's table. Whoever adds the next ordering
+    // surface has to add its slug to the map — this test is the reminder.
+    expect(channelOf({ channel: "whatsapp" })).toBe("in_store");
   });
 });
 

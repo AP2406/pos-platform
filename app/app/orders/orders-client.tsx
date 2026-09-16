@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { CircleCheck, Inbox, ListFilter, TriangleAlert } from "lucide-react";
+import { isDeliveryChannel } from "@surge/api-contracts";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { markOrderFulfilled, recallOrder } from "../kitchen/actions";
@@ -22,10 +23,16 @@ export type OrderRow = {
 type ChannelKey = "dine_in" | "takeout" | "pickup" | "delivery" | "online" | "kiosk" | "qr" | "other";
 
 // Collapse an order's channel + dining option into one fulfillment channel.
+//
+// This hub keeps a richer bucket set than the reports split (Kiosk, Online and
+// QR are first-class filter tabs here, which they cannot be there) — but it does
+// NOT get its own opinion about what a delivery platform is. It used to match
+// only the literal 'delivery', so real DoorDash, Uber Eats and Grubhub orders
+// filed themselves as "Other".
 function channelOf(o: OrderRow): ChannelKey {
   const ch = (o.channel || "").toLowerCase();
   const d = (o.diningOption || "").toLowerCase();
-  if (ch === "delivery" || d === "delivery") return "delivery";
+  if (isDeliveryChannel(ch) || d === "delivery") return "delivery";
   if (d === "pickup") return "pickup";
   if (d === "takeout") return "takeout";
   if (ch === "online") return "online";

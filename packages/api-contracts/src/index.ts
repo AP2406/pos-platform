@@ -183,3 +183,37 @@ export type TicketAppendItem = {
 };
 export type TicketAppendRequest = { elementId: string; label?: string | null; item: TicketAppendItem };
 export type TicketAppendResponse = { ticketId: string };
+
+// ---- Delivery channels (the orders.channel column) --------------------------
+// Every value migration 0074 can write to orders.channel for a delivery. It
+// normalises any platform it does not recognise to the literal 'delivery', so
+// this list is complete by construction.
+//
+// It lives in the shared package because BOTH the web app and the iPad app
+// classify orders, and each used to carry its own copy of this list. All three
+// copies were wrong, and wrong differently: a DoorDash order read as "In-store"
+// on the reports split, "Other" in the web Orders hub, and "Dine-in" on the iPad
+// — the one a server actually looks at mid-service. Screens may keep their own
+// bucket models; none of them gets its own opinion about what a delivery is.
+//
+// Add a platform to 0074's normalisation and add it here. Nowhere else.
+export const DELIVERY_CHANNELS: readonly string[] = [
+  "doordash",
+  "ubereats",
+  "grubhub",
+  "delivery",
+];
+
+/**
+ * True when orders.channel holds a delivery.
+ *
+ * NOT the same question as lib/services/delivery.ts's isDeliveryPlatform, which
+ * asks "is this an inbound webhook sender we serve" and answers yes to
+ * 'deliverect' — the aggregator that fronts Uber Eats, DoorDash and Skip. That
+ * value never reaches orders.channel: 0074 normalises it, like every platform it
+ * does not recognise, to the literal 'delivery'. Two different sets, two
+ * different jobs; keep the names apart.
+ */
+export function isDeliveryChannel(channel: string | null | undefined): boolean {
+  return DELIVERY_CHANNELS.includes((channel ?? "").toLowerCase().trim());
+}

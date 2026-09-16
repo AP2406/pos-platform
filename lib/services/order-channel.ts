@@ -1,3 +1,5 @@
+import { isDeliveryChannel } from "@surge/api-contracts";
+
 // How an order reached us — the one definition, for every page that asks.
 //
 // This lived inside app/app/reports/page.tsx, where it was correct and where
@@ -42,33 +44,66 @@ export const CHANNEL_LABEL: Record<ChannelKey, string> = {
   in_store: "In-store",
 };
 
+// The delivery list is in the shared package, not here: the iPad app classifies
+// orders too and cannot import from lib/. Three private copies of it were the
+// actual defect, each failing differently. Re-exported so existing importers of
+// this module keep working.
+export { DELIVERY_CHANNELS, isDeliveryChannel } from "@surge/api-contracts";
+
 /**
- * KNOWN DEFECT, PRESERVED ON PURPOSE.
+ * TWO AXES, FIVE BUCKETS — which is the whole difficulty here.
  *
- * The delivery arm matches by substring, so an order whose channel is literally
- * 'doordash', 'ubereats' or 'grubhub' does not match and falls through to
- * in_store. Only 'delivery' — which migration 0074 uses as the fallback slug for
- * platforms it does not recognise — is classified correctly. 'kiosk', 'online'
- * and 'qr' land in in_store too.
+ * `channel` says how the order ARRIVED (kiosk, online, qr, a delivery
+ * platform). `dining_option` says how the food LEAVES (dine in, takeout,
+ * pickup, delivery). They are independent facts, and ChannelKey has five slots
+ * for both of them, so every value has to be placed deliberately:
  *
- * That is wrong, and it is wrong in /app/reports today. It was NOT fixed while
- * lifting this function, because correcting it changes the figures on a
- * financial report, and changing a report's numbers inside a dashboard restyle
- * is how a reporting discrepancy ships without anyone noticing. It wants its
- * own change with its own before-and-after. See docs/dashboard-overview-audit.md.
+ *   doordash | ubereats | grubhub | delivery  -> delivery
+ *     0074 normalises any unrecognised platform to the literal 'delivery', so
+ *     these four are the complete set. A third-party order IS a delivery
+ *     however the check was flagged, which is why this arm outranks
+ *     dining_option below.
+ *   online -> pickup      0072 calls it "an online pickup order": ordered
+ *                         ahead, collected in person.
+ *   qr     -> dine_in     0073 is guest-pay — someone sitting at a table
+ *                         settling their own check.
+ *   kiosk  -> takeout     0071 tags a togo check placed at an on-premise
+ *                         self-serve kiosk.
+ *   NULL   -> whatever the register wrote, else in_store.
  *
- * /app/insights has a third, different and actually-correct channel map that
- * ignores dining_option entirely. Three views, three answers. Same note applies.
+ * WHAT CHANGED, AND WHY THE NUMBERS MOVE. This previously matched by substring,
+ * so 'doordash', 'ubereats' and 'grubhub' all missed the delivery arm and fell
+ * through to in_store, as did 'kiosk', 'online' and 'qr'. Only the literal
+ * 'delivery' — the fallback slug for platforms 0074 does not recognise — landed
+ * correctly. In-store was therefore absorbing every non-register channel, and
+ * /app/reports has been reporting it that way. Correcting it moves real figures
+ * on a financial report; see docs/order-channel-correction.md for the
+ * before-and-after.
+ *
+ * An unrecognised non-null channel still falls to in_store, which is the same
+ * shape of bug for whatever surface gets added next. It is deliberate rather
+ * than forgotten: there is no "other" bucket to put it in without changing what
+ * the report's table looks like. Add the slug here when you add the surface.
  */
+const CHANNEL_TO_KEY: Record<string, ChannelKey> = {
+  online: "pickup",
+  qr: "dine_in",
+  kiosk: "takeout",
+};
+
 export function channelOf(o: Record<string, unknown>): ChannelKey {
+  const c = ((o.channel as string | null) ?? "").toLowerCase().trim();
+
+  // A third-party platform is definitive about fulfilment, so it is read before
+  // the snapshot rather than after it.
+  if (isDeliveryChannel(c)) return "delivery";
+
+  // The register's own statement of how the food leaves wins next.
   const snap = (o.snapshot ?? null) as { dining_option?: string | null } | null;
   const d = (snap?.dining_option ?? "").toLowerCase();
   if (d === "dine_in" || d === "takeout" || d === "pickup" || d === "delivery") return d;
-  const c = ((o.channel as string | null) ?? "").toLowerCase();
-  if (c.includes("delivery")) return "delivery";
-  if (c.includes("pickup")) return "pickup";
-  if (c.includes("takeout") || c.includes("togo")) return "takeout";
-  return "in_store";
+
+  return CHANNEL_TO_KEY[c] ?? "in_store";
 }
 
 export type ChannelCount = {

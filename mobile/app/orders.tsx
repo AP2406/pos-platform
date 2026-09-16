@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ChevronRight, Inbox, Clock } from "lucide-react-native";
+import { isDeliveryChannel } from "@surge/api-contracts";
 import { SegmentedTabs, Button, ScreenHeader, EmptyState, StatusChip, color, space, radius } from "@/design";
 import { useSession } from "@/state/session";
 import { notify } from "@/lib/notice";
@@ -34,12 +35,19 @@ const STATE_TABS: { key: OrderState; label: string }[] = [
 const stateOf = (o: OrderHubRow): OrderState => (o.cancelled ? "cancelled" : o.fulfilledAt ? "completed" : "active");
 
 // Collapse channel + dining option into one fulfillment channel (mirrors the web hub).
+//
+// The delivery arm used to test `ch === "delivery"` only. Migration 0074 writes
+// the platform name — 'doordash', 'ubereats', 'grubhub' — and reserves the
+// literal 'delivery' for platforms it does not recognise, so a real third-party
+// order missed every branch above and fell to the default: **Dine-in**. On the
+// screen a server reads during service, a DoorDash order looked like a table.
+// The platform list is shared with the web app now; do not re-inline it.
 function channelOf(o: OrderHubRow): Channel {
   const ch = (o.channel || "").toLowerCase();
+  if (isDeliveryChannel(ch)) return "delivery";
   if (ch === "online") return "online";
   if (ch === "kiosk") return "kiosk";
   if (ch === "qr") return "qr";
-  if (ch === "delivery") return "delivery";
   const d = (o.diningOption || "").toLowerCase();
   if (d === "takeout") return "takeout";
   if (d === "pickup") return "pickup";
