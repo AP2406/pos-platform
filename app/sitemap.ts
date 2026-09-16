@@ -7,6 +7,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/",
     ...SOLUTIONS.map((page) => page.path),
     "/pricing",
+    // The Sri Lanka pilot page. Indexable and listed on purpose: it is a
+    // recruitment page for a named audience and the whole point is that someone
+    // searching for a POS in Sri Lanka can find it and read the gaps before
+    // they talk to us. It is NOT a location landing page — it carries no
+    // service area, no address and no offer (see the notes in its own file);
+    // the three city pages that were location landing pages are 308s now.
+    "/pilot/sri-lanka",
     "/contact",
     "/book",
     "/guides",
