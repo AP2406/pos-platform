@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { SearchIcon } from "lucide-react";
@@ -218,9 +218,14 @@ function SearchField({ items }: { items: NavItem[] }) {
 
 export function TopBar({
   nav,
+  userName,
+  roleLabel,
   className = "",
 }: {
   nav: NavSection[];
+  /** Display name if the account has one, otherwise the sign-in address. */
+  userName: string;
+  roleLabel: string;
   className?: string;
 }) {
   const pathname = usePathname();
@@ -263,7 +268,7 @@ export function TopBar({
     >
       <nav aria-label="Breadcrumb" className="hidden min-w-0 md:block">
         <ol className="flex min-w-0 items-center gap-1.5 text-sm">
-          <li className="truncate text-muted-foreground">{workspaceName}</li>
+          <li className="truncate text-muted-foreground">{rootLabel}</li>
           {trail.map((label, i) => (
             <li key={label + i} className="flex min-w-0 items-center gap-1.5">
               <span aria-hidden className="text-muted-foreground/50">
@@ -285,7 +290,7 @@ export function TopBar({
       </nav>
 
       <div className="ml-auto flex min-w-0 items-center gap-3">
-        <JumpTo items={destinations} />
+        <SearchField items={destinations} />
         <ConnectionDot />
         {/* A link to Settings, not a menu. Sign-out and the theme switch stay
             at the foot of the sidebar, which is the only copy of them that the

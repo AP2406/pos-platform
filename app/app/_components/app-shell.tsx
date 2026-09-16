@@ -345,7 +345,6 @@ export function AppShell({
 
       <div className="flex min-w-0 min-h-0 flex-1 flex-col">
         <TopBar
-          workspaceName={businessName}
           userName={userName}
           roleLabel={roleLabel}
           nav={nav}
