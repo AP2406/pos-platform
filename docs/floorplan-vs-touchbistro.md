@@ -90,9 +90,8 @@ the stronger commercial case.
 
 ## Gaps this opens on our side
 
-1. ~~Individual bar seats as addressable positions on the map.~~ **Half done —
-   see "Bar stools, 16 Sep 2026" below.** A bar can now be given numbered
-   stools and both floors draw them. Opening a check *on* a stool is still to do.
+1. ~~Individual bar seats as addressable positions on the map.~~ **Done** —
+   `e6d89fa` draws and numbers them, `c31946f` makes them hold a check.
 2. Lakeview Bistro's demo floor needs building out — 7 elements is not a
    restaurant, and every demo and screenshot starts from it.
 
@@ -144,29 +143,45 @@ button and isn't one is worse than no row. *Close Table* / *Delete All Items &
 Close Table* exist server-side (`closeTableTicket`, `discardTicket`) but are
 money-path and get their own change.
 
-**Still open from these screenshots:**
+**Closed in `c31946f`:**
 
-- **Table Code.** A property on their element we do not have an equivalent for.
-  Worth understanding before building — do not guess at what it does.
-- **Transfer Order to Tab.** We have table checks and bar tabs but no
-  conversion between them. Money path.
+- **Transfer Order to Tab** → `transferTicketToTab`. The cart is untouched and
+  the row keeps its id, so a pre-auth, a split or a fired chit that already
+  points at the check still does; kitchen tickets are re-pointed off the element
+  onto the tab's name so a chit on the rail does not end up naming a table
+  someone else is now sitting at.
+- **Close Table / Delete All Items & Close Table.** Split by what is safe.
+  "Close table" only appears on a check with nothing rung — `closeTableTicket`
+  deletes the check outright, so pointing it at one with items would destroy
+  unpaid items with no void and no audit line. "Delete all items & close" uses
+  `discardTicket`, which already requires `delete_item_prepay`. Once anything is
+  fired, neither appears and the row says why: a comp or a void needs a reason
+  code and lives in the register.
+- **End of Day warning** → an amber banner, not their blocking modal. A server
+  ringing a drink should not meet a wall about last night's paperwork, and a
+  modal whose safe answer is "Cancel" teaches everyone to dismiss modals. It
+  stays silent for a business that has never closed a drawer — a card-only shop
+  is not behind on anything, and a banner every shift trains the floor to ignore
+  banners. `lib/services/day-open.ts`, thresholds tested.
+
+**Still open:**
+
+- **Table Code.** Still unresolved. Their public floor-plan documentation does
+  not describe it and their help centre renders client-side, so a fetch returns
+  an empty shell. Not building a guess at a field in a POS — find out first.
 - **Reset** on an element. Semantics unclear from a screenshot alone.
-- **End of Day.** They block the floor with "you have not ended your business
-  day in over 24 hours". We have `business_day_cutoff`, a `day_close` audit
-  action and a drawer closeout, but no equivalent prompt. Not a floor-plan
-  feature; sizeable on its own.
 
 Worth recording about their build: two of the eight screenshots are error
 states — a cloud auth failure whose only control is "Dismiss", and the stale
 end-of-day warning. Neither is a product claim about TouchBistro and neither
 belongs in a pitch.
 
-**Still missing:** a stool is not ringable. `RINGABLE` is `["table", "booth",
-"counter", "station"]` on web and `["table", "booth"]` on mobile, and neither
-includes `seat`, so you can open a check on *the bar* but not on *stool 103* —
-which is the thing TouchBistro actually does. That is a change to check-opening,
-i.e. a money path, and it gets its own commit rather than riding along with a
-layout change.
+**Closed in `c31946f`:** stool 103 holds its own check on both floors. It stays
+stool-sized rather than becoming a table tile — eight bar seats drawn as eight
+four-tops would misrepresent the room — and it does not replace the named bar
+tab. They are different shapes for different guests: a stool check for someone
+sitting at 103, a tab for someone who moves around, optionally with a card held.
+`transferTicketToTab` is the bridge between them.
 
 ### Correction, 16 Sep 2026
 The first version of this document claimed Surge does not show seat counts on
