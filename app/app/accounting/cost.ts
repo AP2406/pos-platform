@@ -44,7 +44,26 @@ export async function plateCostByItem(
 
 // Labor cost for [startIso, endIso): each clock entry prorated to its overlap
 // with the window × the staff member's pay rate. Open shifts run to "now".
-async function laborForPeriod(
+//
+// EXPORTED so the admin home can call it instead of writing a fifth version of
+// this arithmetic. There are already four — this one, /app/labor (which adds a
+// per-ISO-week overtime split), /app/schedule (which forecasts from SCHEDULED
+// shifts rather than punches) and /app/m — and they do not all agree. Sharing
+// this one puts the dashboard on the same figure as /app/accounting,
+// /app/locations, the consolidated export and the scheduled-report email.
+//
+// It still differs from /app/labor, which applies the OT multiplier. Over a
+// single business day the two converge in practice (splitOtHours buckets by ISO
+// week, and one day of hours rarely crosses 44), but they are not guaranteed
+// identical. The honest fix is one service both call; that touches payroll maths
+// and the tips/payroll exports, so it is its own change.
+// See docs/dashboard-overview-audit.md § 1.
+//
+// Note `cost` only accrues for staff with a pay_rate on file. A caller that
+// wants to show a labour PERCENTAGE must check `hours` separately: hours > 0
+// with cost === 0 means the rates are missing, not that the shift was free, and
+// rendering 0.0% for it would be a lie the reader has no way to catch.
+export async function laborForPeriod(
   supabase: Awaited<ReturnType<typeof createClient>>,
   businessId: string,
   startIso: string,

@@ -1,0 +1,92 @@
+[
+    {
+        "caption": "Log in, Header",
+        "estimated_uid": "05000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A000000F81B1F010000000500000000000000",
+        "spoken_description": "Log in, Header"
+    },
+    {
+        "caption": "View time clock, Button",
+        "estimated_uid": "06000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A0000800CA434010000000600000000000000",
+        "spoken_description": "View time clock, Button"
+    },
+    {
+        "caption": "Enter passcode",
+        "estimated_uid": "07000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A000000084138010000000700000000000000",
+        "spoken_description": "Enter passcode"
+    },
+    {
+        "caption": "Passcode, 0 of 4 digits entered",
+        "estimated_uid": "04000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A0000004E681E010000000400000000000000",
+        "spoken_description": "Passcode, 0 of 4 digits entered"
+    },
+    {
+        "caption": "1, Keyboard Key",
+        "estimated_uid": "08000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A0000000FA434010000000800000000000000",
+        "spoken_description": "1, Keyboard Key"
+    },
+    {
+        "caption": "2, Keyboard Key",
+        "estimated_uid": "09000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A00008011A434010000000900000000000000",
+        "spoken_description": "2, Keyboard Key"
+    },
+    {
+        "caption": "3, Keyboard Key",
+        "estimated_uid": "0A000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A00000014A434010000000A00000000000000",
+        "spoken_description": "3, Keyboard Key"
+    },
+    {
+        "caption": "4, Keyboard Key",
+        "estimated_uid": "0B000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A00008016A434010000000B00000000000000",
+        "spoken_description": "4, Keyboard Key"
+    },
+    {
+        "caption": "5, Keyboard Key",
+        "estimated_uid": "0C000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A00000019A434010000000C00000000000000",
+        "spoken_description": "5, Keyboard Key"
+    },
+    {
+        "caption": "6, Keyboard Key",
+        "estimated_uid": "0D000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A0000801BA434010000000D00000000000000",
+        "spoken_description": "6, Keyboard Key"
+    },
+    {
+        "caption": "7, Keyboard Key",
+        "estimated_uid": "0E000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A0000001EA434010000000E00000000000000",
+        "spoken_description": "7, Keyboard Key"
+    },
+    {
+        "caption": "8, Keyboard Key",
+        "estimated_uid": "0F000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A00008020A434010000000F00000000000000",
+        "spoken_description": "8, Keyboard Key"
+    },
+    {
+        "caption": "9, Keyboard Key",
+        "estimated_uid": "10000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A00000023A434010000001000000000000000",
+        "spoken_description": "9, Keyboard Key"
+    },
+    {
+        "caption": "0, Keyboard Key",
+        "estimated_uid": "11000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A00008025A434010000001100000000000000",
+        "spoken_description": "0, Keyboard Key"
+    },
+    {
+        "caption": "Delete, Keyboard Key",
+        "estimated_uid": "12000000-0000-0000-040A-000000000000",
+        "platform_identifier": "040A00000028A434010000001200000000000000",
+        "spoken_description": "Delete, Keyboard Key"
+    }
+]

@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Staff PIN pad evidence — Surge study, Sept 2026</title>
+<style>
+  :root { color-scheme: light; }
+  body { margin:0; background:#f6f6f7; color:#18181b;
+         font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:1180px; margin:0 auto; padding:48px 24px 96px; }
+  h1 { font-size:30px; letter-spacing:-.02em; margin:0 0 8px; }
+  .lede { color:#52525b; max-width:64ch; margin:0 0 28px; }
+  .lede code { background:#e7e7ea; padding:1px 5px; border-radius:4px; font-size:13px; }
+  h2 { font-size:20px; letter-spacing:-.01em; margin:56px 0 6px;
+       padding-bottom:8px; border-bottom:1px solid #d9d9de; }
+  h2 span { font-weight:400; color:#71717a; font-size:14px; }
+  figure { margin:24px 0 0; background:#fff; border:1px solid #dcdce1;
+           border-radius:12px; overflow:hidden;
+           box-shadow:0 1px 2px rgba(0,0,0,.06), 0 10px 24px -14px rgba(0,0,0,.16); }
+  figure img { display:block; width:100%; height:auto; background:#fafafa; }
+  figcaption { padding:14px 18px; border-top:1px solid #ebebef; }
+  .cap { font-weight:600; font-size:14px; }
+  .dim { font-weight:400; color:#71717a; }
+  .note { color:#52525b; font-size:13px; margin-top:4px; }
+  .note code { background:#f1f1f4; padding:1px 5px; border-radius:4px; font-size:12px; }
+  .src { margin-top:8px; font-size:11.5px; word-break:break-all; }
+  .src a { color:#5a5a63; }
+  .warn { background:#fff8e6; border:1px solid #ecd9a0; border-radius:10px;
+          padding:14px 18px; font-size:13.5px; color:#5c4a12; margin:20px 0 0; }
+  .miss { background:#fdeeee; border:1px solid #f0c8c8; border-radius:10px;
+          padding:14px 18px; font-size:13.5px; color:#6b2b2b; margin:24px 0 0; }
+  .unviewed { background:#eef2fb; border:1px solid #c9d4ee; border-radius:10px;
+          padding:14px 18px; font-size:13.5px; color:#2f3f66; margin:24px 0 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Staff PIN pad / employee sign-in evidence</h1>
+<p class="lede">
+  Every screenshot referenced in <code>docs/pinpad-competitor-study.md</code>, loaded live
+  from the vendors&rsquo; own CDNs. Researched 10&nbsp;September&nbsp;2026 from public
+  support documentation, help-centre screenshots, App&nbsp;Store listings and
+  vendor-supplied screenshots on Software&nbsp;Advice. No merchant account was signed
+  into and no credentials were used. Every image below was rendered and examined
+  except where explicitly flagged as unviewed.
+</p>
+
+<div class="warn">
+  Images are hot-linked rather than stored locally &mdash; the workspace shell in this
+  session has no outbound network access (all egress blocked by an allowlist proxy), so
+  <code>docs/pinpad-screens/touchbistro/</code> and <code>docs/pinpad-screens/square/</code>
+  exist but are empty. If a vendor rotates a CDN path, that image will 404; the source
+  article link under each one still resolves.
+</div>
+
+<!-- ───────────────────────── SURGE (OURS) ───────────────────────── -->
+<h2>Surge <span>&mdash; ours, for comparison</span></h2>
+
+<figure>
+  <img src="surge/ipad-signin-step3-pinpad.png" alt="Surge iPad sign-in, step 3, PIN pad">
+  <figcaption>
+    <div class="cap">Our iPad sign-in &mdash; step 3 of 3 <span class="dim">2160&times;1620, landscape</span></div>
+    <div class="note">Already in this folder; included so the comparison is on one page.
+      <code>SURGE</code> mark, <code>Point of Sale</code>, then a centred card:
+      <code>Aathy Bistro</code>, <code>Enter your staff PIN</code>, four dot placeholders,
+      a 3&times;4 keypad with bottom row <em>blank</em> &middot; <code>0</code> &middot;
+      <code>&#9003;</code>, a <strong><code>Continue</code></strong> button (no auto-submit),
+      <code>Switch location</code>, and a <code>This iPad is a: Register | Kitchen screen</code>
+      device-role selector.
+      <br><br>
+      Measured against this capture: the card spans roughly <strong>35% of the screen width</strong>
+      (380&nbsp;pt of 1080&nbsp;pt) and about two thirds of the display is empty black. Compare
+      TouchBistro, which fills that space with brand art; Lightspeed K-Series, which fills it with a
+      staff grid and a device-diagnostics panel; and Lightspeed L-Series, which fills it with eleven
+      photo tiles six across. Note also what is <em>not</em> here that three or four vendors have:
+      no clock-in control, no staff list, no shift state, no offline indicator, and no clock other
+      than the iOS status bar.</div>
+    <div class="src">Local file &mdash; <code>docs/pinpad-screens/surge/ipad-signin-step3-pinpad.png</code>.
+      Code inventory: <code>docs/pinpad-surge-inventory.md</code></div>
+  </figcaption>
+</figure>
+
+<!-- ───────────────────────── TOUCHBISTRO ───────────────────────── -->
+<h2>TouchBistro <span>&mdash; iPad POS</span></h2>
+
+<figure>
+  <img src="https://cdn.help.touchbistro.com/end57image014.png" alt="TouchBistro passcode screen">
+  <figcaption>
+    <div class="cap">The passcode screen <span class="dim">995&times;1210</span></div>
+    <div class="note">Full-bleed dark teal-navy with a tone-on-tone chef-hat watermark bleeding off
+      the right edge. Venue name <code>TouchBistro Sample Cafe</code> centred at the top, white,
+      light weight. One centred white card: header row with placeholder <code>Enter passcode</code>
+      left and a <strong>QR-code icon</strong> right; a 3&times;4 keypad, <code>1-9</code> phone order;
+      bottom row <strong>red</strong> backspace (circled left chevron) &middot; <code>0</code> &middot;
+      <strong>green</strong> circled checkmark (submit). A full-width <code>Clock in/out</code> bar is
+      attached beneath the pad inside the same card. Below, the background curves into a white band
+      carrying <code>View menu</code> &mdash; the menu is readable without a passcode &mdash; then the
+      TouchBistro wordmark. The card occupies roughly a third of the frame width; the leftover space
+      carries brand art, not information.</div>
+    <div class="src"><a href="https://help.touchbistro.com/s/article/How-Do-I-Clock-In?language=en_US">help.touchbistro.com/s/article/How-Do-I-Clock-In</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://cdn.help.touchbistro.com/schedenforce001.jpg" alt="TouchBistro schedule-enforcement error and Manager Confirmation modal">
+  <figcaption>
+    <div class="cap">Schedule enforcement &rarr; Manager Confirmation <span class="dim">938&times;552</span></div>
+    <div class="note">Left: clocking in outside a scheduled shift produces
+      &ldquo;<em>Something went wrong / We&rsquo;re unable to process your clock-in. Please try again or
+      contact our support team for assistance. Error: Not scheduled to work or 7shifts scheduling
+      integration role name does not match</em>&rdquo; with an <code>OK</code> button &mdash; a policy
+      refusal dressed as a crash, with integration internals leaked into the copy.
+      Right: the <code>Manager Confirmation</code> modal, <code>&times;</code> top-left to decline,
+      copy &ldquo;Enter a manager passcode <strong>or present a manager&rsquo;s QR Code</strong> to
+      continue.&rdquo; Note this keypad is styled <strong>differently from the sign-in keypad</strong>
+      &mdash; light grey rounded keys, <code>&#9003;</code> &middot; <code>0</code> &middot; a navy
+      checkmark, versus the sign-in pad&rsquo;s red/green. Two keypads, two visual languages.</div>
+    <div class="src"><a href="https://help.touchbistro.com/s/article/How-Do-I-Clock-In?language=en_US">help.touchbistro.com/s/article/How-Do-I-Clock-In</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://cdn.help.touchbistro.com/login.png" alt="TouchBistro Select Staff Type sheet">
+  <figcaption>
+    <div class="cap">Staff-type picker after the passcode <span class="dim">975&times;571</span></div>
+    <div class="note">A <code>Select Staff Type</code> sheet &mdash; Bartender / Waiter / Host &mdash;
+      over the passcode screen. Staff assigned more than one type choose which one they are working
+      as for this shift, which then drives their pay rate and permissions. The venue name sits
+      centred above on the same dark navy field.</div>
+    <div class="src"><a href="https://help.touchbistro.com/s/article/How-Do-I-Clock-In?language=en_US">help.touchbistro.com/s/article/How-Do-I-Clock-In</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://cdn.help.touchbistro.com/chapter10image008.png" alt="TouchBistro floor plan bottom bar showing Darko: Switch">
+  <figcaption>
+    <div class="cap">Fast user switch, bottom-left <span class="dim">999&times;353</span></div>
+    <div class="note">The floor plan&rsquo;s bottom bar: <code>Darko: Switch</code> at bottom-left
+      (highlighted in red by TouchBistro&rsquo;s own annotation), <code>TouchBistro | Main Floor</code>
+      centred. The clock-in article&rsquo;s instruction is &ldquo;If you are on the floor plan screen and
+      do not see your name in the bottom left, tap it.&rdquo; Identity and the switch affordance are one
+      object.</div>
+    <div class="src"><a href="https://help.touchbistro.com/s/article/How-Do-I-Clock-In?language=en_US">help.touchbistro.com/s/article/How-Do-I-Clock-In</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://gdm-catalog-fmapi-prod.imgix.net/ProductScreenshot/19360ba5-9cda-46cf-81c5-277b6b1e547c.png?w=1400" alt="TouchBistro full floor plan with Admin: Switch">
+  <figcaption>
+    <div class="cap">The same control in a full product screenshot</div>
+    <div class="note">Vendor-supplied. iPad status bar <code>12:06 PM Tue Jun 23 &middot; 99%</code>;
+      top bar <code>Menu | Orders | Register</code> &mdash; <code>TouchBistro Sample Cafe</code> &mdash;
+      <code>Reservations | Admin</code>; bottom bar <code>Admin: Switch</code> left,
+      <code>TouchBistro Lite | Main Floor</code> centre. Confirms the switch control is persistent
+      chrome, not an artefact of the help-centre crop.</div>
+    <div class="src"><a href="https://www.softwareadvice.com/restaurant/touchbistro-profile/">softwareadvice.com/restaurant/touchbistro-profile/</a></div>
+  </figcaption>
+</figure>
+
+<!-- ───────────────────────── SQUARE ───────────────────────── -->
+<h2>Square <span>&mdash; Square for Restaurants, iPad POS</span></h2>
+
+<div class="miss">
+  <strong>No public image of Square&rsquo;s passcode screen exists that I could find.</strong>
+  Not in the help centre (article&nbsp;8357 illustrates passcodes with a video, not a screenshot),
+  not in the App&nbsp;Store gallery (stylised isometric renders), not on the Play listing (the
+  handheld app), and not in Software&nbsp;Advice&rsquo;s six-screenshot Square for Restaurants
+  gallery. Keypad layout, digit order, masking, auto-submit behaviour, and whether the screen shows
+  a business name, clock, logo, location or offline state are therefore all
+  <strong>unverified</strong> for Square. The images below are the closest available context.
+</div>
+
+<figure>
+  <img src="https://gdm-catalog-fmapi-prod.imgix.net/ProductScreenshot/8b971a48-db98-4e61-84a7-4a0fe620625a.png?w=1400" alt="Square for Restaurants order screen chrome">
+  <figcaption>
+    <div class="cap">Sign-in chrome on the order screen <span class="dim">1400&times;1049</span></div>
+    <div class="note">The strip under the iPad status bar reads <code>POS1 &ndash; Lauren N.</code>
+      top-left (device name + signed-in user), <code>Reader Ready</code> centred and
+      <code>Printer Connected</code> top-right &mdash; card-reader and printer state share a strip with
+      the operator&rsquo;s identity. Bottom-left is <strong><code>Log Out LN</code></strong>: the
+      log-out button carries the user&rsquo;s <em>initials</em>. Square, like TouchBistro, keeps a
+      persistent user-identified switch control in the bottom-left corner.
+      <strong>Caveat:</strong> vendor-supplied and the styling looks older than current Square for
+      Restaurants &mdash; treat as indicative, not current.</div>
+    <div class="src"><a href="https://www.softwareadvice.com/restaurant/square-for-restaurants-profile/">softwareadvice.com/restaurant/square-for-restaurants-profile/</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/36/e0/3e/36e03e10-0cd6-2d89-8206-0b1ce468bff1/USEN_-_Thumbnail_01__U00282048x2732_U0029.jpg/1056x1408bb.jpg" alt="Square for Restaurants App Store render">
+  <figcaption>
+    <div class="cap">App Store render <span class="dim">2048&times;2732 native</span></div>
+    <div class="note">Square&rsquo;s own marketing asset. <code>Log out</code> is visible as a
+      bottom-navigation item alongside Menu / Orders / Transactions / Items / More, corroborating that
+      log-out is first-class chrome rather than buried in a settings sheet. The isometric treatment
+      makes this <strong>unusable as layout evidence</strong> for anything else.</div>
+    <div class="src"><a href="https://apps.apple.com/us/app/square-restaurants-pos/id1346862885">apps.apple.com/us/app/square-restaurants-pos/id1346862885</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://i.ytimg.com/vi/be7suLQUWfw/maxresdefault.jpg" alt="Square passcode video title card">
+  <figcaption>
+    <div class="cap">The video Square uses instead of a screenshot <span class="dim">1280&times;720</span></div>
+    <div class="note">Title card of <em>Use Passcodes with Square Point of Sale</em>, the video embedded
+      in help article&nbsp;8357 where a screenshot would otherwise be. Included to document that the
+      passcode screen is shown by Square only in video form; I could not read frames from it.</div>
+    <div class="src"><a href="https://squareup.com/help/us/en/article/8357-require-passcodes-at-point-of-sale">squareup.com/help/us/en/article/8357-require-passcodes-at-point-of-sale</a></div>
+  </figcaption>
+</figure>
+
+<!-- ───────────────────────── TOAST ───────────────────────── -->
+<h2>Toast <span>&mdash; brief, for the &ldquo;what do others do&rdquo; section</span></h2>
+
+<figure>
+  <img src="https://dwvhey99m5tyy.cloudfront.net/images/ka2PV000000RRAbYAO/0EMPV00000DjcRR" alt="Toast POS passcode screen">
+  <figcaption>
+    <div class="cap">The Toast passcode screen <span class="dim">624&times;470</span></div>
+    <div class="note">Black, full-bleed. The field label is
+      <strong><code>Swipe card or enter your passcode</code></strong> &mdash; magstripe and passcode
+      are peers on the same screen. Grey keys <code>1-9</code>; bottom row
+      <code>&#8855;</code> (clear-all) &middot; <code>0</code> &middot; <code>&#9003;</code>
+      (backspace) &mdash; the only vendor here with <em>both</em> a clear and a backspace. A
+      <strong>fourth column</strong> on the right holds two stacked keys, <code>Timeclock</code>
+      (hourglass) and a blue <code>Go</code>: the same passcode routes to two destinations. Toast&rsquo;s
+      own troubleshooting table lists &ldquo;User selected Go instead of Timeclock when logging in&rdquo;
+      as a known error &mdash; the cost of this design, documented by its author. No business name, no
+      clock, no logo in this capture.</div>
+    <div class="src"><a href="https://support.toasttab.com/en/article/Log-in-to-a-Toast-Product-or-Device">support.toasttab.com/en/article/Log-in-to-a-Toast-Product-or-Device</a></div>
+  </figcaption>
+</figure>
+
+<div class="unviewed">
+  <strong>Unviewed:</strong> <code>https://dwvhey99m5tyy.cloudfront.net/images/ka2PV000000SqdBYAS/0EM4W0000088o09</code>
+  &mdash; vendor alt text &ldquo;Toast device login screen with timeclock button circled&rdquo;, cited in
+  <a href="https://support.toasttab.com/en/article/Clocking-In-and-Out-for-Shifts-and-Breaks">Clocking In and Out for Shifts and Breaks</a>.
+  Listed for completeness; I did not render it, so nothing in the study rests on it.
+</div>
+
+<!-- ───────────────────────── LIGHTSPEED ───────────────────────── -->
+<h2>Lightspeed <span>&mdash; the only vendor that does not do blind PIN entry</span></h2>
+
+<figure>
+  <img src="https://k-series-support.lightspeedhq.com/hc/article_attachments/34054928933531" alt="Lightspeed K-Series Home screen">
+  <figcaption>
+    <div class="cap">K-Series Home screen &mdash; which is also the lock screen <span class="dim">1400&times;1050, landscape</span></div>
+    <div class="note">Lightspeed&rsquo;s docs are explicit: &ldquo;The Home screen is the main lock screen
+      in Lightspeed Restaurant, which the app returns to after a user logs out.&rdquo; Black full-bleed.
+      <code>About</code> top-left; the <strong>device name</strong> <code>Lightspeed K Series</code>
+      centred in the top bar; Lightspeed logo; the line &ldquo;Welcome! Tap an active user, view the
+      floor plan or clock in/out.&rdquo;; a <strong><code>Sort by</code></strong> control top-right with
+      alphabetical and clock buttons; a grid of <strong>staff tiles</strong> carrying a name and a role
+      chip (<code>MANAGERS</code>); and three full-width blue buttons pinned along the bottom edge:
+      <code>Clock in/out</code> &middot; <code>View floor plan</code> &middot; <code>Scan QR code</code>.
+      The content uses the entire landscape width. Behind <code>About</code>: business name, device
+      name, active configuration, sharing mode, app version, Wi-Fi SSID, IP address and whether the
+      device is an active or passive POS &mdash; all readable before anyone authenticates.</div>
+    <div class="src"><a href="https://k-series-support.lightspeedhq.com/hc/en-us/articles/360050329234-Using-the-Home-screen">k-series-support.lightspeedhq.com/hc/en-us/articles/360050329234-Using-the-Home-screen</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://k-series-support.lightspeedhq.com/hc/article_attachments/47203237493915" alt="Lightspeed K-Series PIN entry overlay">
+  <figcaption>
+    <div class="cap">K-Series PIN entry &mdash; an overlay <em>after</em> you pick a person <span class="dim">1400&times;1050</span></div>
+    <div class="note">&ldquo;Please enter your PIN code&rdquo;, <strong>four dot placeholders</strong>,
+      white rounded keys <code>1-9</code>, and a bottom row of only <code>0</code> and <code>&lt;</code>
+      &mdash; <strong>there is no confirm key on the pad at all</strong>. Behind the dim, the
+      <code>Clock in / out</code> screen with a search field and a named list (Kay, Manager, Mary,
+      Michael, Ray). The missing submit key implies auto-submit, but the documented PIN length is a
+      variable 4&ndash;6 digits, which argues against it &mdash; unresolved, and flagged as such in the
+      study. The overlay itself is a narrow centred column; the screen underneath is full-width.</div>
+    <div class="src"><a href="https://k-series-support.lightspeedhq.com/hc/en-us/articles/360050309174-Clocking-in-and-out">k-series-support.lightspeedhq.com/hc/en-us/articles/360050309174-Clocking-in-and-out</a></div>
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="https://resto-support.lightspeedhq.com/hc/article_attachments/1260801522650" alt="Lightspeed L-Series user login screen with staff photo tiles">
+  <figcaption>
+    <div class="cap">L-Series &mdash; staff <strong>photo</strong> tiles <span class="dim">5208&times;3850</span></div>
+    <div class="note">A real iPad in landscape. Status bar <code>5:38 Tue Mar 2 &middot; 60%</code>.
+      Top-left, behind an <code>&#9432;</code>: <strong><code>App: 7.36.20237 / Server: 6.0.144599 /
+      Lightspeed L-Series</code></strong> &mdash; version strings on the login screen.
+      <code>Help Center</code> top-right. A <code>USER LOGIN | PIN LOGIN</code> segmented toggle, then
+      <strong>eleven staff photo tiles</strong>, six across, filling the full landscape width, each with
+      a name and role beneath: <code>Leah - Manag&hellip;</code>, <code>Cashier</code> (a generic
+      role account with a cutlery icon), <code>Heather - Ser&hellip;</code>, <code>Amelie - Server</code>,
+      <code>Gus - Server</code>, <code>Sam - Barten&hellip;</code>, <code>Steve - Busser</code>,
+      <code>Mary</code>, <code>Larry</code>, <code>Kate</code>, <code>Bob</code>. The docs say plainly:
+      &ldquo;Tap your user image.&rdquo; Two tiles (Heather, Amelie) carry a <strong>green underline
+      bar</strong> &mdash; most likely a clocked-in marker, but that is not documented and is listed
+      under &ldquo;could not verify&rdquo;. Bottom bar: <code>Restaurant Manager</code> &middot;
+      <code>Explore new features!</code> &middot; <code>Tools</code>.</div>
+    <div class="src"><a href="https://resto-support.lightspeedhq.com/hc/en-us/articles/226306927-Logging-in-to-Restaurant-POS">resto-support.lightspeedhq.com/hc/en-us/articles/226306927-Logging-in-to-Restaurant-POS</a></div>
+  </figcaption>
+</figure>
+
+</div>
+</body>
+</html>

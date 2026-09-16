@@ -74,15 +74,17 @@ function businessRevenue(trip: TripData): number {
 export default async function DashboardPage({
   searchParams,
 }: {
-  // The POS dashboard's scope control lives in the URL, the same way the
-  // reports page's range presets do.
-  searchParams: Promise<{ day?: string }>;
+  // The POS dashboard's scope control and its chart toggle both live in the
+  // URL, the same way the reports page's range presets do — two destinations
+  // each, both real links a manager can bookmark or paste into a message, and
+  // no client component between them and the server that has the numbers.
+  searchParams: Promise<{ day?: string; chart?: string }>;
 }) {
   const { business, role } = await requireBusiness();
 
   if (business.industry !== "transportation") {
-    const { day } = await searchParams;
-    return <PosDashboard business={business} role={role} day={day} />;
+    const { day, chart } = await searchParams;
+    return <PosDashboard business={business} role={role} day={day} chart={chart} />;
   }
 
   const vocab = getVocab(business.industry);

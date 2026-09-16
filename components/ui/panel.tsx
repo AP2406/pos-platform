@@ -78,26 +78,32 @@ export function enterAt(step: number): React.CSSProperties {
  */
 type PanelSize = "lg" | "md" | "sm"
 
+// 17px BOLD at `lg`, and every card on the Overview is now `lg`. The approved
+// design gives all four panels one title treatment — there is no quiet tier on
+// that page — so the tiers survive for other surfaces but the dashboard reads
+// them all at the top rung. `font-bold` rather than the `font-semibold` this
+// was: the design's titles are noticeably heavier than the 14px row titles
+// under them, and 600 at 17px is a step you can measure and not one you can see.
 const TITLE_TYPE: Record<PanelSize, string> = {
-  lg: "text-[17px] font-semibold leading-6 tracking-tight",
+  lg: "text-[17px] font-bold leading-6 tracking-[-0.01em]",
   md: "text-[15px] font-semibold leading-5 tracking-tight",
   sm: "text-[13px] font-medium leading-5 tracking-tight text-muted-foreground",
 }
 
 const HEADER_PAD: Record<PanelSize, string> = {
-  lg: "pt-6",
+  lg: "pt-5",
   md: "pt-5",
   sm: "pt-4",
 }
 
 const HEADER_PAD_BORDERED: Record<PanelSize, string> = {
-  lg: "py-5",
+  lg: "py-4",
   md: "py-4",
   sm: "py-3",
 }
 
 const BODY_PAD: Record<PanelSize, string> = {
-  lg: "pt-5 pb-7",
+  lg: "pt-4 pb-5",
   md: "pt-4 pb-5",
   sm: "pt-3 pb-4",
 }
@@ -134,7 +140,11 @@ function Panel({
     <section
       data-slot="panel"
       className={cn(
-        "flex flex-col overflow-hidden rounded-xl bg-card ring-1 ring-line shadow-sheen",
+        // rounded-lg = --radius-lg = 12px, which is the top of the approved
+        // design's 10–12px band. It was rounded-xl, i.e. --radius-xl = 16.8px —
+        // a noticeably softer corner than the design draws, and the one piece of
+        // card geometry a reader compares across four cards at once.
+        "flex flex-col overflow-hidden rounded-lg bg-card ring-1 ring-line shadow-sheen",
         // relative is what .u-lit's ::before hangs off; overflow-hidden above is
         // what clips it back inside the corner radius.
         lit && "relative u-lit",

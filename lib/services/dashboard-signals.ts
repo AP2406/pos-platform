@@ -81,6 +81,14 @@ export type CurvePoint = { at: string | number | null | undefined; amount: numbe
 /**
  * Takings accumulated across a day, sampled at `steps` even intervals.
  *
+ * NOTHING CALLS THIS RIGHT NOW. The admin home drew a cumulative pace curve
+ * until the Overview rebuild moved the wide slot to hourly bars; the pace
+ * COMPARISON survives (it is the delta line under Net sales) but the picture of
+ * it does not. Kept rather than deleted because it is pure, tested, and the
+ * shape it draws — two monotonic series on one axis — is the right answer to
+ * "are we ahead of last Wednesday", which is a question /app/reports will
+ * eventually want to draw. Delete it if that stops being true.
+ *
  * Cumulative rather than per-interval on purpose: half-hourly bars at a single
  * restaurant's volume are mostly noise, while the running total is the shape an
  * owner already carries in their head — "we were at four grand by eight". Two
@@ -113,6 +121,104 @@ export function cumulativeCurve(
   return buckets.map((b) => (running += b));
 }
 
+// ---------------------------------------------------------------------------
+// The hourly bars
+// ---------------------------------------------------------------------------
+
+/** One hour of trading: the bar, and the two things its label needs. */
+export type HourBucket = {
+  /** 0–23 in the BUSINESS's local time, which is the only hour a person means. */
+  hour: number;
+  amount: number;
+  count: number;
+};
+
+/**
+ * Takings per hour of the local day — not accumulated.
+ *
+ * This is the deliberate opposite of cumulativeCurve() above, and both are
+ * right. The running total answers "are we ahead of last Wednesday", which is a
+ * question about a trajectory and reads as a line. Per-hour answers "when is the
+ * rush", which is a question about shape and reads as bars — an owner deciding
+ * whether to cut a server at four o'clock cannot get that off a monotonic curve,
+ * because a flat stretch and a busy one both slope upward.
+ *
+ * BUCKETED BY THE FORMATTER, NOT BY ARITHMETIC. `(t - startMs) / 3600000` looks
+ * equivalent and is wrong twice a year: on a DST changeover the local day is 23
+ * or 25 hours long, and the offset arithmetic silently files a 3pm sale under
+ * 2pm for the rest of the day. Only the timezone formatter knows what hour a
+ * timestamp was in the room it happened in.
+ *
+ * `hourFmt` is passed in rather than built here because the caller already has
+ * one configured with the business's timezone, and because constructing an
+ * Intl.DateTimeFormat per call inside a loop over a busy Friday is the kind of
+ * cost that does not show up until a restaurant gets popular.
+ *
+ * Timestamps outside the day are dropped rather than clamped, exactly as
+ * cumulativeCurve drops them: clamping would pile a stray row onto the first or
+ * last bar and invent a rush that never happened, and this function cannot tell
+ * a timezone bug from a real 2am sale.
+ */
+export function hourlyBuckets(
+  sales: CurvePoint[],
+  hourFmt: Intl.DateTimeFormat,
+  startMs: number,
+  lengthMs: number
+): HourBucket[] {
+  const buckets: HourBucket[] = [];
+  for (let h = 0; h < 24; h++) buckets.push({ hour: h, amount: 0, count: 0 });
+
+  if (!(lengthMs > 0)) return buckets;
+
+  for (const s of sales) {
+    const t =
+      typeof s.at === "number" ? s.at : s.at ? new Date(s.at).getTime() : Number.NaN;
+    if (!Number.isFinite(t)) continue;
+    if (t < startMs || t >= startMs + lengthMs) continue;
+    // hour12: false still yields "24" for midnight in some environments, so the
+    // modulo is load-bearing rather than defensive.
+    const h = Number(hourFmt.format(new Date(t))) % 24;
+    if (!Number.isFinite(h)) continue;
+    buckets[h].amount += Number.isFinite(s.amount) ? s.amount : 0;
+    buckets[h].count += 1;
+  }
+
+  return buckets;
+}
+
+/**
+ * The hours worth drawing — first traded hour to last, inclusive.
+ *
+ * A restaurant open eleven to eleven should not be shown thirteen empty bars
+ * either side of its service. But the window is trimmed to the DATA, not to a
+ * configured opening time, because there is no opening time in the schema and
+ * because a sale rung at 2am on a night that ran long is a real sale that has to
+ * appear somewhere.
+ *
+ * Returns null when nothing traded: fourteen empty tracks is a picture of
+ * nothing, and the caller owes the reader a sentence instead.
+ */
+export function tradingHours(
+  buckets: HourBucket[]
+): { from: number; to: number } | null {
+  let from = -1;
+  let to = -1;
+  for (const b of buckets) {
+    if (b.count === 0) continue;
+    if (from === -1) from = b.hour;
+    to = b.hour;
+  }
+  if (from === -1) return null;
+  // A single busy hour would otherwise draw as one bar filling the card, which
+  // reads as a chart with a rendering fault. Three hours is the narrowest window
+  // that still looks like a chart.
+  if (to - from < 2) {
+    from = Math.max(0, from - 1);
+    to = Math.min(23, Math.max(to + 1, from + 2));
+  }
+  return { from, to };
+}
+
 /**
  * The next round number at or above `value`, for a chart's top gridline.
  *
@@ -130,6 +236,39 @@ export function niceCeiling(value: number): number {
   const normalised = value / magnitude;
   const step = ladder.find((s) => normalised <= s) ?? 10;
   return step * magnitude;
+}
+
+/** Gridline steps a person reads without doing arithmetic. */
+const NICE_STEPS = [1, 2, 2.5, 5, 10];
+
+/**
+ * How many gridlines to hang under a ceiling so every tick is a round number.
+ *
+ * niceCeiling() guarantees the TOP of the axis is a figure you would say out
+ * loud. It does not guarantee the rungs are, and dividing $1,200 into the
+ * obvious five gives $240, $480, $720, $960 — which is precisely the Lightspeed
+ * axis (`$64,124 / $54,963 / $45,803`) that niceCeiling exists to avoid, just
+ * committed one level further down. So the division is chosen to fit the
+ * ceiling rather than fixed.
+ *
+ * Five first, because five intervals is the densest a 200px plot reads cleanly
+ * and it is what the mockup draws. Then four, six and three. $1,200 lands on six
+ * ($200 steps), $1,500 on six ($250), $3,000 on six ($500), $8,000 on four
+ * ($2,000) — every rung a figure with at most two significant digits.
+ *
+ * Four is the fallback, not five: if nothing fits, four intervals puts the
+ * midpoint at exactly half the ceiling, which is the one rung a reader can still
+ * verify by eye.
+ */
+export function axisDivisions(ceiling: number): number {
+  if (!Number.isFinite(ceiling) || ceiling <= 0) return 4;
+  for (const d of [5, 4, 6, 3]) {
+    const step = ceiling / d;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(step)));
+    const normalised = step / magnitude;
+    if (NICE_STEPS.some((n) => Math.abs(normalised - n) < 1e-9)) return d;
+  }
+  return 4;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +335,14 @@ export type PaymentSlice = {
 
 /**
  * Money taken, split by tender, largest first.
+ *
+ * NOTHING CALLS THIS RIGHT NOW either — the payment-mix donut left the admin
+ * home with the Overview rebuild, which has no slot for a chart you glance at
+ * rather than read. Same reasoning as cumulativeCurve above: pure, tested, and
+ * the question it answers is real (a cash share that jumps is a till that needs
+ * counting more often; a delivery-app share that climbs is commission quietly
+ * eating a margin nobody re-checked). It belongs on /app/reports, where there is
+ * room to say so properly.
  *
  * The percentages are the point — this is the one chart on the page whose
  * legend is read instead of the picture — so they are rounded by largest
