@@ -121,6 +121,46 @@ What was actually missing:
 - Numbering. Stools are labelled from 101, continuing across a second bar rather
   than restarting, so two bars on one floor can never both own "103".
 
+### Second pass, 16 Sep 2026 — the layout editor and the two action menus
+
+Eight more screenshots: their layout editor, the seating dialog, the long-press
+table menu, and the Admin menu. Feature by feature, against what we actually
+have rather than what the earlier version of this document assumed.
+
+**Closed in `72e39c9`:**
+
+| Their feature | What we had | What we shipped |
+|---|---|---|
+| Party Name + Party Size at seating, tile reads "Johnson: 4" | guest count only, in a number field; tile showed the server | name + a 24-target tap grid; tile reads "Okafor · 4 guests"; find-a-check searches the name |
+| Rename Party… | nothing | `renameParty`, on the table's options menu |
+| Long-press → Options for Table | a strip with a dropdown to re-pick a table you had already touched | press-and-hold (or right-click) any tile; the strip survives as one keyboard-accessible button |
+| Section on the element's Properties | only the separate Server sections card | both; the element is where the decision is made |
+| Duplicate | nothing | copies the element and its seats, next free table number |
+
+Two of theirs we chose **not** to copy. *Print Preview* and *Print All On One
+Bill* need the live cart — a bill has to price discounts, comps, service charge
+and tax — and the register is what holds it; a menu row that looks like a
+button and isn't one is worse than no row. *Close Table* / *Delete All Items &
+Close Table* exist server-side (`closeTableTicket`, `discardTicket`) but are
+money-path and get their own change.
+
+**Still open from these screenshots:**
+
+- **Table Code.** A property on their element we do not have an equivalent for.
+  Worth understanding before building — do not guess at what it does.
+- **Transfer Order to Tab.** We have table checks and bar tabs but no
+  conversion between them. Money path.
+- **Reset** on an element. Semantics unclear from a screenshot alone.
+- **End of Day.** They block the floor with "you have not ended your business
+  day in over 24 hours". We have `business_day_cutoff`, a `day_close` audit
+  action and a drawer closeout, but no equivalent prompt. Not a floor-plan
+  feature; sizeable on its own.
+
+Worth recording about their build: two of the eight screenshots are error
+states — a cloud auth failure whose only control is "Dismiss", and the stale
+end-of-day warning. Neither is a product claim about TouchBistro and neither
+belongs in a pitch.
+
 **Still missing:** a stool is not ringable. `RINGABLE` is `["table", "booth",
 "counter", "station"]` on web and `["table", "booth"]` on mobile, and neither
 includes `seat`, so you can open a check on *the bar* but not on *stool 103* —
