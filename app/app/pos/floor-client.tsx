@@ -881,9 +881,15 @@ export function FloorClient({
                 } as const;
 
                 if (!ring) {
+                  // A labelled seat is a BAR STOOL — the editor numbers a
+                  // counter's seats (101, 102 …) so a server can say which one.
+                  // It has to read inside an 18px circle, so it gets its own
+                  // type size and no padding; anything else keeps the old
+                  // décor label. Unlabelled table chairs render blank as before.
+                  const isStool = el.kind === "seat";
                   return (
-                    <div key={el.id} className={"absolute flex items-center justify-center text-[10px] overflow-hidden " + decorClass(el.kind)} style={baseStyle}>
-                      {el.label ? <span className="px-1 truncate">{el.label}</span> : null}
+                    <div key={el.id} className={"absolute flex items-center justify-center overflow-hidden " + (isStool ? "text-[8px] font-medium leading-none " : "text-[10px] ") + decorClass(el.kind)} style={baseStyle}>
+                      {el.label ? <span className={isStool ? "" : "px-1 truncate"}>{el.label}</span> : null}
                     </div>
                   );
                 }

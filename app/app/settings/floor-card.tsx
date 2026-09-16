@@ -18,7 +18,7 @@ import {
 } from "../floor/floor-actions";
 import { setFloorChairMode } from "./floor-chair-actions";
 import { createClient } from "@/lib/supabase/client";
-import { chairPositions, CHAIR_SIZE } from "../pos/floor-style";
+import { seatPositions, CHAIR_SIZE } from "../pos/floor-style";
 
 const GRID = 20;
 
@@ -41,7 +41,7 @@ const PALETTE: PaletteItem[] = [
   { kind: "table", label: "Table", shape: "rect", w: 80, h: 80, seats: true },
   { kind: "table", label: "Round table", shape: "round", w: 84, h: 84, seats: true },
   { kind: "booth", label: "Booth", shape: "rect", w: 150, h: 72, seats: true },
-  { kind: "counter", label: "Counter", shape: "rect", w: 220, h: 40 },
+  { kind: "counter", label: "Counter", shape: "rect", w: 220, h: 40, seats: true },
   { kind: "station", label: "Station", shape: "rect", w: 60, h: 60 },
   { kind: "wall", label: "Wall", shape: "rect", w: 180, h: 10 },
   { kind: "room", label: "Room", shape: "rect", w: 280, h: 200 },
@@ -49,7 +49,14 @@ const PALETTE: PaletteItem[] = [
 ];
 
 const NAMEABLE: ElementKind[] = ["table", "booth", "counter", "station", "room", "label"];
-const SEATABLE: ElementKind[] = ["table", "booth"];
+// A counter takes a seat count like a table does. Its seats are BAR STOOLS: laid
+// out in a row along the bar rather than wrapped around four sides, and numbered
+// so a server can say "stool 103" the way they say "table 4". Both floor screens
+// already draw a counter's seats at their real positions and print the number —
+// until now the editor could not create any, so no bar ever had one.
+const SEATABLE: ElementKind[] = ["table", "booth", "counter"];
+const STOOL_PARENTS: ElementKind[] = ["counter", "station"];
+const STOOL_BASE = 100; // bar seats number from 101, clear of "Table 1".
 
 function snap(v: number) {
   return Math.round(v / GRID) * GRID;
@@ -269,6 +276,38 @@ export function FloorCard({
     addElement(p, 0);
   }
 
+  // Where a new bar's stool numbers start, so two bars on one floor can never
+  // both own "103". Continues from the highest number already in use by any
+  // OTHER counter — so resizing bar A renumbers only bar A, and bar B keeps the
+  // numbers that are written on its physical stools.
+  function nextStoolBase(all: El[], forParentId: string): number {
+    const kindById = new Map(all.map((e) => [e.id, e.kind] as const));
+    let max = STOOL_BASE;
+    for (const e of all) {
+      if (e.kind !== "seat" || !e.parent_id || e.parent_id === forParentId) continue;
+      if (!STOOL_PARENTS.includes(kindById.get(e.parent_id) as ElementKind)) continue;
+      const n = parseInt((e.label ?? "").trim(), 10);
+      if (Number.isFinite(n)) max = Math.max(max, n);
+    }
+    return max;
+  }
+
+  // The seats for one parent. A table gets unlabelled chairs (its tile shows
+  // "N seats"); a counter gets numbered stools, because a stool is a place a
+  // check can be attached to and therefore needs a name a server can say aloud.
+  function makeSeats(parent: El, count: number, all: El[]): El[] {
+    const isBar = STOOL_PARENTS.includes(parent.kind);
+    const base = isBar ? nextStoolBase(all, parent.id) : 0;
+    return seatPositions(parent, count).map((pos, i) => ({
+      id: crypto.randomUUID(),
+      kind: "seat" as const,
+      label: isBar ? String(base + i + 1) : null,
+      x: pos.x, y: pos.y,
+      w: CHAIR_SIZE, h: CHAIR_SIZE, rotation: 0, shape: "round" as const,
+      parent_id: parent.id, seat_no: i + 1,
+    }));
+  }
+
   function addElement(p: PaletteItem, seats: number) {
     const id = crypto.randomUUID();
     const offset = (els.length % 6) * GRID;
@@ -280,27 +319,20 @@ export function FloorCard({
       y: snap(80 + offset),
       w: p.w, h: p.h, rotation: 0, shape: p.shape, parent_id: null, seat_no: null,
     };
-    const chairs: El[] = chairPositions(table, seats).map((pos, i) => ({
-      id: crypto.randomUUID(), kind: "seat", label: null, x: pos.x, y: pos.y,
-      w: CHAIR_SIZE, h: CHAIR_SIZE, rotation: 0, shape: "round" as const, parent_id: id, seat_no: i + 1,
-    }));
-    setEls((prev) => [...prev, table, ...chairs]);
+    setEls((prev) => [...prev, table, ...makeSeats(table, seats, prev)]);
     setSelectedId(id);
     setDirty(true);
     setSeatPrompt(null);
   }
 
-  // Rebuild a table's chairs for a new seat count (or after a resize).
+  // Rebuild a table's chairs (or a bar's stools) for a new seat count, or after
+  // a resize moved the edge they sit along.
   function regenChairs(tableId: string, seats: number) {
     setEls((prev) => {
       const table = prev.find((e) => e.id === tableId);
       if (!table) return prev;
       const without = prev.filter((e) => !(e.kind === "seat" && e.parent_id === tableId));
-      const chairs: El[] = chairPositions(table, seats).map((pos, i) => ({
-        id: crypto.randomUUID(), kind: "seat" as const, label: null, x: pos.x, y: pos.y,
-        w: CHAIR_SIZE, h: CHAIR_SIZE, rotation: 0, shape: "round" as const, parent_id: tableId, seat_no: i + 1,
-      }));
-      return [...without, ...chairs];
+      return [...without, ...makeSeats(table, seats, without)];
     });
     setDirty(true);
   }
@@ -451,8 +483,9 @@ export function FloorCard({
 
       <p className="text-xs text-muted-foreground mb-3">
         Design this floor: drag to position and resize. Adding a table asks for
-        its seats and draws the chairs automatically. Table names auto-number and
-        must be unique on a floor.
+        its seats and draws the chairs automatically; adding a counter asks for
+        its stools and numbers them from 101, so a bar seat can be named the way
+        a table is. Table names auto-number and must be unique on a floor.
       </p>
 
       {/* Palette */}
@@ -476,7 +509,7 @@ export function FloorCard({
           )}
           {SEATABLE.includes(selected.kind) && (
             <div className="space-y-1">
-              <Label className="text-xs">Seats</Label>
+              <Label className="text-xs">{selected.kind === "counter" ? "Stools" : "Seats"}</Label>
               <Input type="number" min="0" max="20" value={selectedSeats} onChange={(e) => regenChairs(selected.id, Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))} className="h-9 w-20" />
             </div>
           )}
@@ -524,7 +557,14 @@ export function FloorCard({
                   zIndex: zFor(el.kind) + (isSel ? 10 : 0),
                 }}
               >
-                {el.label && el.kind !== "seat" ? <span className="px-1 truncate">{el.label}</span> : null}
+                {el.label ? (
+                  // Stools carry their number as a label so you can see the bar
+                  // numbering while you build it, the same way the live floor and
+                  // the iPad show it. Table chairs have no label and stay blank.
+                  <span className={el.kind === "seat" ? "text-[8px] leading-none" : "px-1 truncate"}>
+                    {el.label}
+                  </span>
+                ) : null}
                 {isSel && !isChair && (
                   <div
                     onPointerDown={(e) => onElementPointerDown(e, el, "resize")}
@@ -573,7 +613,9 @@ export function FloorCard({
               <button type="button" onClick={() => setSeatPrompt(null)} className="text-xs text-muted-foreground underline">Cancel</button>
             </div>
             <div className="space-y-1 mb-3">
-              <Label className="text-xs">How many seats?</Label>
+              <Label className="text-xs">
+                {seatPrompt.kind === "counter" ? "How many stools?" : "How many seats?"}
+              </Label>
               <Input type="number" min="0" max="20" value={seatN} onChange={(e) => setSeatN(e.target.value)} className="h-11" />
             </div>
             <Button className="w-full h-11" onClick={() => addElement(seatPrompt, Math.max(0, Math.min(20, parseInt(seatN) || 0)))}>Add</Button>

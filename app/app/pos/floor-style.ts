@@ -28,3 +28,53 @@ export function chairPositions(t: Rect, count: number): { x: number; y: number }
   for (const cy of along(sides.right, t.h, t.y)) pts.push({ x: Math.round(t.x + t.w + OFFSET), y: Math.round(cy - CHAIR_SIZE / 2) });
   return pts;
 }
+
+// Stool positions for a COUNTER, which is a different problem from chairs
+// around a table.
+//
+// chairPositions wraps a table on all four sides, because you can sit all the
+// way round one. A bar has a service side and a guest side: stools belong in a
+// row along ONE long edge, the way they physically are in a room. Wrapping them
+// round a 220x40 counter puts two stools behind the bartender.
+//
+// The long edge is chosen by the counter's own proportions, and the side is the
+// one facing away from the top-left origin — for a horizontal bar that is below
+// it, for a vertical bar to its right. A bar drawn against the far wall can be
+// rotated in the editor like any other element.
+export function stoolPositions(c: Rect, count: number): { x: number; y: number }[] {
+  if (count <= 0) return [];
+  const horizontal = c.w >= c.h;
+  const pts: { x: number; y: number }[] = [];
+  const span = horizontal ? c.w : c.h;
+  for (let i = 0; i < count; i++) {
+    // Evenly spaced along the edge, inset by half a gap at each end so the first
+    // and last stool are not hanging off the corners.
+    const t = span * (i + 1) / (count + 1);
+    if (horizontal) {
+      pts.push({
+        x: Math.round(c.x + t - CHAIR_SIZE / 2),
+        y: Math.round(c.y + c.h + OFFSET),
+      });
+    } else {
+      pts.push({
+        x: Math.round(c.x + c.w + OFFSET),
+        y: Math.round(c.y + t - CHAIR_SIZE / 2),
+      });
+    }
+  }
+  return pts;
+}
+
+/**
+ * Seats for any parent: stools in a row for a counter, chairs around the edges
+ * for anything else. One entry point so the editor does not have to know which
+ * rule applies where.
+ */
+export function seatPositions(
+  parent: Rect & { kind?: string },
+  count: number
+): { x: number; y: number }[] {
+  return parent.kind === "counter" || parent.kind === "station"
+    ? stoolPositions(parent, count)
+    : chairPositions(parent, count);
+}
