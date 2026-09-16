@@ -218,6 +218,26 @@ export function isDeliveryChannel(channel: string | null | undefined): boolean {
   return DELIVERY_CHANNELS.includes((channel ?? "").toLowerCase().trim());
 }
 
+// ---- Bar stools ---------------------------------------------------------------
+// A floor element of kind "seat" is either a chair pulled up to a table or a
+// stool at a bar, and the ONLY thing that tells them apart is what it hangs off.
+// That matters because the difference decides real behaviour: a stool holds its
+// own check and a chair does not, a stool is drawn in a row along one edge and
+// a chair wraps four sides, and a stool is a move target and a chair is not.
+//
+// Three files had started to carry their own copy of this test — the server's
+// move-target list, the web floor and the iPad floor — which is precisely how
+// DELIVERY_CHANNELS above ended up wrong in three different ways at once. One
+// copy, before the drift starts rather than after.
+export const STOOL_PARENT_KINDS: readonly string[] = ["counter", "station"];
+
+export function isStoolSeat(
+  kind: string | null | undefined,
+  parentKind: string | null | undefined
+): boolean {
+  return kind === "seat" && STOOL_PARENT_KINDS.includes(parentKind ?? "");
+}
+
 // ---- Check names (party name, to-go name, bar tab name) ---------------------
 // One column, open_tickets.label, holds all three, because a check has one name
 // whatever kind of check it is. The normalisation below was copy-pasted into

@@ -1,6 +1,8 @@
 // Shared floor geometry used by the editor and the live floor so chairs are
 // placed identically in both.
 
+import { STOOL_PARENT_KINDS } from "@surge/api-contracts";
+
 export const CHAIR_SIZE = 18;
 const OFFSET = 8; // gap between the table edge and its chairs
 
@@ -74,7 +76,7 @@ export function seatPositions(
   parent: Rect & { kind?: string },
   count: number
 ): { x: number; y: number }[] {
-  return parent.kind === "counter" || parent.kind === "station"
+  return STOOL_PARENT_KINDS.includes(parent.kind ?? "")
     ? stoolPositions(parent, count)
     : chairPositions(parent, count);
 }

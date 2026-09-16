@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDuration } from "@/lib/format";
-import { partySummary } from "@surge/api-contracts";
+import { partySummary, isStoolSeat } from "@surge/api-contracts";
 import { RegisterClient } from "./register-client";
 import {
   openTableTicket,
@@ -24,6 +24,9 @@ import {
   listTableMoveTargets,
   moveTicketToTable,
   renameParty,
+  transferTicketToTab,
+  closeTableTicket,
+  discardTicket,
   setTicketServer,
   type TableCart,
   type TableTicketSummary,
@@ -110,6 +113,35 @@ export function FloorClient({
 }) {
   const sectionById = new Map(sections.map((s) => [s.id, s]));
   const [elements, setElements] = useState<FloorElement[]>(initialElements);
+
+  // A BAR STOOL is a seat whose parent is a counter or a station. That is the
+  // only thing separating it from the chairs around a table, and it is the
+  // whole reason a stool can hold a check and a chair cannot: you sit AT a bar
+  // seat and you sit at a TABLE, not at one of its chairs.
+  const kindOf: Record<string, ElementKind> = {};
+  const labelOf: Record<string, string | null> = {};
+  for (const e of elements) {
+    kindOf[e.id] = e.kind;
+    labelOf[e.id] = e.label;
+  }
+  function isStool(el: { kind: ElementKind; parent_id: string | null }): boolean {
+    return isStoolSeat(el.kind, el.parent_id ? kindOf[el.parent_id] : null);
+  }
+  function canRing(el: FloorElement): boolean {
+    return isRingable(el.kind) || isStool(el);
+  }
+  // What to call this element anywhere it appears outside the map. On the map a
+  // stool is a numbered circle attached to a visible bar, so "103" is enough;
+  // in a list, a dropdown or a dialog title it is sitting next to "Table 4" and
+  // has to say which bar it belongs to.
+  function displayNameOf(el: FloorElement): string {
+    if (isStool(el)) {
+      const bar = (el.parent_id ? labelOf[el.parent_id] : null)?.trim();
+      return (bar || "Bar") + " · " + (el.label?.trim() || "seat");
+    }
+    if (el.label && el.label.trim()) return el.label.trim();
+    return el.kind === "counter" ? "Counter" : el.kind === "station" ? "Station" : "Table";
+  }
   const [activePlan, setActivePlan] = useState<string>(plans[0]?.id ?? "");
   const [planLoading, setPlanLoading] = useState(false);
   const [openByElement, setOpenByElement] = useState<Record<string, TableTicketSummary>>(() => {
@@ -129,6 +161,14 @@ export function FloorClient({
   const [partyName, setPartyName] = useState("");
   const [renameFor, setRenameFor] = useState<{ ticketId: string; label: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [tabFor, setTabFor] = useState<{ ticketId: string; label: string } | null>(null);
+  const [tabValue, setTabValue] = useState("");
+  // A destructive row asks once before it runs. Not window.confirm: on an iPad
+  // that is a system sheet a passing elbow can dismiss, and this one deletes a
+  // check.
+  const [confirmIt, setConfirmIt] = useState<
+    { title: string; body: string; cta: string; run: () => void } | null
+  >(null);
   // The table options menu. `at` is where the press landed, so the menu opens
   // under the finger; null means "centre it", which is what the toolbar button
   // and the keyboard path want.
@@ -310,7 +350,7 @@ export function FloorClient({
 
   // Tap a floor element: resume if open, else open it (tables ask guest count).
   function tapElement(el: FloorElement) {
-    if (!isRingable(el.kind)) return;
+    if (!canRing(el)) return;
     const open = openByElement[el.id];
     if (open && open.child_count > 0) {
       openSplitView(el, open);
@@ -320,6 +360,11 @@ export function FloorClient({
       setGuests("");
       setPartyName("");
       setPromptTable(el);
+    } else if (isStool(el)) {
+      // No party-size dialog for a bar seat: a stool seats one, and asking is a
+      // tap between the bartender and the drink. A name can be added afterwards
+      // from the stool's options menu, which is where a bar tab's name lives too.
+      enterElement(el, 1);
     } else {
       enterElement(el, null);
     }
@@ -373,6 +418,54 @@ export function FloorClient({
         openTableMenu(el, open, { x: e.clientX, y: e.clientY });
       },
     };
+  }
+
+  // --- clearing a table from the floor ---------------------------------------
+  //
+  // Two different actions that look like one, kept apart on purpose.
+  //
+  // CLOSE TABLE is only offered for a check with nothing on it: a party was
+  // seated and walked, or the wrong tile was tapped. closeTableTicket deletes
+  // the open check outright — it exists to clear a table after the money is in
+  // — so pointing it at a check that still has items would destroy unpaid
+  // items with no void, no audit line and no way back.
+  //
+  // DELETE ALL ITEMS & CLOSE goes through discardTicket, which requires the
+  // same delete_item_prepay authority as removing an item before payment and
+  // is enforced server-side.
+  //
+  // Neither is offered once anything has been FIRED. Food that the kitchen has
+  // already cooked is a comp or a void, with a reason code, and that lives in
+  // the register — the same boundary that keeps Print off this menu.
+  function doCloseTable(ticketId: string) {
+    setError(null);
+    startTransition(async () => {
+      const res = await closeTableTicket(ticketId);
+      if ("error" in res) { setError(res.error); return; }
+      setActionTableId("");
+      await refreshOpen();
+    });
+  }
+  function doDiscardTable(ticketId: string) {
+    setError(null);
+    startTransition(async () => {
+      const res = await discardTicket(ticketId);
+      if ("error" in res) { setError(res.error); return; }
+      setActionTableId("");
+      await refreshOpen();
+    });
+  }
+  function doTransferToTab() {
+    const target = tabFor;
+    if (!target) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await transferTicketToTab(target.ticketId, tabValue);
+      if ("error" in res) { setError(res.error); return; }
+      setTabFor(null);
+      setActionTableId("");
+      await refreshOpen();
+    });
   }
 
   // Rename the party at a table. The name lives on the check, so this is a
@@ -650,7 +743,7 @@ export function FloorClient({
   const serversWithOpen = staff.filter((s) => (openCountByStaff[s.id] || 0) > 0);
 
   const ordered = [...elements].sort((a, b) => zFor(a.kind) - zFor(b.kind));
-  const ringableCount = elements.filter((e) => isRingable(e.kind)).length;
+  const ringableCount = elements.filter((e) => canRing(e)).length;
 
   function decorClass(kind: ElementKind): string {
     if (kind === "wall") return "bg-foreground/25";
@@ -723,7 +816,7 @@ export function FloorClient({
   }
 
   // Live summary for the toolbar.
-  const ringEls = elements.filter((e) => isRingable(e.kind));
+  const ringEls = elements.filter((e) => canRing(e));
   const seatedCount = ringEls.filter((e) => openByElement[e.id]).length;
   const overdue = ringEls.filter((e) => {
     const o = openByElement[e.id];
@@ -737,7 +830,7 @@ export function FloorClient({
     .map((e) => ({
       elementId: e.id,
       ticketId: openByElement[e.id].id,
-      label: e.label ?? "Table",
+      label: displayNameOf(e),
       childCount: openByElement[e.id].child_count ?? 0,
       serverName: openByElement[e.id].server_name,
     }))
@@ -891,7 +984,7 @@ export function FloorClient({
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
               {ordered
-                .filter((el) => isRingable(el.kind) && matchesFind(el))
+                .filter((el) => canRing(el) && matchesFind(el))
                 .sort((a, b) => (a.label ?? "").localeCompare(b.label ?? "", undefined, { numeric: true }))
                 .map((el) => {
                   const open = openByElement[el.id];
@@ -909,7 +1002,7 @@ export function FloorClient({
                         <span className="flex items-center gap-2 min-w-0">
                           {/* Same badge as the map tile, same reason. */}
                           {(() => { const dot = statusDotClass(status); return dot ? <span className={"shrink-0 w-2 h-2 rounded-full " + dot} aria-hidden="true" /> : null; })()}
-                          <span className="font-semibold text-base truncate">{el.label ?? "Table"}</span>
+                          <span className="font-semibold text-base truncate">{displayNameOf(el)}</span>
                           <span className="sr-only">{statusLabel(status)}</span>
                         </span>
                         {open && <span className="tabular-nums text-sm font-medium">{"$" + open.subtotal.toFixed(2)}</span>}
@@ -958,7 +1051,7 @@ export function FloorClient({
                   tables in z-order) and they are not interactive. Floors whose
                   designer never placed chairs look exactly as they did. */}
               {ordered.map((el) => {
-                const ring = isRingable(el.kind);
+                const ring = canRing(el);
                 const open = ring ? openByElement[el.id] : undefined;
                 const dim = q && ring && !matchesFind(el);
                 // 8px corners, per the handoff. Chairs get a tighter 6 so a seat
@@ -970,16 +1063,35 @@ export function FloorClient({
                   zIndex: zFor(el.kind), opacity: dim ? 0.3 : 1,
                 } as const;
 
-                if (!ring) {
-                  // A labelled seat is a BAR STOOL — the editor numbers a
-                  // counter's seats (101, 102 …) so a server can say which one.
-                  // It has to read inside an 18px circle, so it gets its own
-                  // type size and no padding; anything else keeps the old
-                  // décor label. Unlabelled table chairs render blank as before.
-                  const isStool = el.kind === "seat";
+                // A BAR STOOL stays the size it is. It is a seat for one, and
+                // blowing it up to a table tile so it could carry a party line
+                // and a price would misrepresent the room — eight stools would
+                // read as eight four-tops. Its colour carries the status, its
+                // number carries the identity, and everything else about it is
+                // in the check you open by tapping it.
+                if (isStool(el)) {
+                  const st = tableStatus(open);
                   return (
-                    <div key={el.id} className={"absolute flex items-center justify-center overflow-hidden " + (isStool ? "text-[8px] font-medium leading-none " : "text-[10px] ") + decorClass(el.kind)} style={baseStyle}>
-                      {el.label ? <span className={isStool ? "" : "px-1 truncate"}>{el.label}</span> : null}
+                    <button
+                      key={el.id}
+                      type="button"
+                      disabled={pending}
+                      onClick={() => { if (consumePress()) return; tapElement(el); }}
+                      {...pressHandlers(el)}
+                      title={(el.label ? "Stool " + el.label : "Bar seat") + (open ? " · $" + open.subtotal.toFixed(2) : " · available")}
+                      className={"absolute flex items-center justify-center overflow-hidden border text-[8px] font-semibold leading-none active:scale-[0.92] transition-all " + statusClass(st)}
+                      style={baseStyle}
+                    >
+                      <span className="sr-only">{(el.label ? "Stool " + el.label + ". " : "Bar seat. ") + statusLabel(st)}</span>
+                      {el.label ? <span aria-hidden="true">{el.label}</span> : null}
+                    </button>
+                  );
+                }
+
+                if (!ring) {
+                  return (
+                    <div key={el.id} className={"absolute flex items-center justify-center overflow-hidden text-[10px] " + decorClass(el.kind)} style={baseStyle}>
+                      {el.label ? <span className="px-1 truncate">{el.label}</span> : null}
                     </div>
                   );
                 }
@@ -1316,6 +1428,51 @@ export function FloorClient({
         if (isSplit) {
           rows.push({ label: "Un-split check", run: () => handleUnsplit(m.open.id), danger: true });
         }
+        const name = displayNameOf(m.el);
+        rows.push({
+          label: "Move to a bar tab…",
+          run: () => {
+            setTabValue(m.open.party_name ?? "");
+            setTabFor({ ticketId: m.open.id, label: name });
+          },
+          reason: isSplit ? "Un-split " + name + " before moving it to a tab." : null,
+        });
+        if (m.open.item_count === 0) {
+          rows.push({
+            label: "Close table",
+            danger: true,
+            run: () => setConfirmIt({
+              title: "Close " + name + "?",
+              body: "Nothing has been rung on this check, so nothing is lost. The table goes back to available.",
+              cta: "Close table",
+              run: () => doCloseTable(m.open.id),
+            }),
+          });
+        } else if (!m.open.fired) {
+          rows.push({
+            label: "Delete all items & close table",
+            danger: true,
+            run: () => setConfirmIt({
+              title: "Delete everything on " + name + "?",
+              body:
+                m.open.item_count +
+                (m.open.item_count === 1 ? " item" : " items") +
+                " worth $" + m.open.subtotal.toFixed(2) +
+                " will be deleted and the table closed. Nothing has been sent to the kitchen. This cannot be undone.",
+              cta: "Delete and close",
+              run: () => doDiscardTable(m.open.id),
+            }),
+          });
+        } else {
+          // Fired food is a comp or a void with a reason code, and that lives
+          // in the register. Saying so beats a greyed-out row with no
+          // explanation, and beats a row that quietly destroys cooked food.
+          rows.push({
+            label: "Delete all items & close table",
+            run: () => {},
+            reason: "Items have been sent to the kitchen — open the check to void or comp them.",
+          });
+        }
         const W = 264;
         const pos = m.at
           ? {
@@ -1333,7 +1490,7 @@ export function FloorClient({
               style={pos ? { ...pos, width: W } : { width: W }}
             >
               <div className="px-4 py-3 border-b border-border">
-                <div className="font-medium text-sm truncate">{"Options for " + (m.el.label ?? "table")}</div>
+                <div className="font-medium text-sm truncate">{"Options for " + displayNameOf(m.el)}</div>
                 {partyLine(m.open) && (
                   <div className="text-xs text-muted-foreground truncate">{partyLine(m.open)}</div>
                 )}
@@ -1412,6 +1569,58 @@ export function FloorClient({
             >
               Open table
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Moving a check to a bar tab. The tab needs a name because that is the
+          only handle it has left once it stops being "Table 4" — a nameless tab
+          is a check nobody can find. */}
+      {tabFor && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={() => setTabFor(null)}>
+          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-medium">{"Move " + tabFor.label + " to a tab"}</h3>
+              <button type="button" onClick={() => setTabFor(null)} className="text-xs text-muted-foreground underline">Cancel</button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              The check keeps its items and its total. The table goes back to available.
+            </p>
+            <div className="space-y-1 mb-4">
+              <Label className="text-xs">Tab name</Label>
+              <Input
+                value={tabValue}
+                onChange={(e) => setTabValue(e.target.value)}
+                placeholder="Jake"
+                maxLength={80}
+                autoFocus
+                className="h-11"
+              />
+            </div>
+            <Button className="w-full h-12" disabled={pending || !tabValue.trim()} onClick={doTransferToTab}>
+              Move to tab
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* One confirm for every destructive row, saying what is about to be lost
+          in money and items rather than "are you sure?". */}
+      {confirmIt && (
+        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/60 sm:p-4" onClick={() => setConfirmIt(null)}>
+          <div className="bg-card border border-border rounded-t-2xl sm:rounded-lg p-4 w-full sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-medium mb-1">{confirmIt.title}</h3>
+            <p className="text-sm text-muted-foreground mb-4">{confirmIt.body}</p>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 h-12" onClick={() => setConfirmIt(null)}>Cancel</Button>
+              <Button
+                className="flex-1 h-12 bg-red-600 hover:bg-red-700 text-white"
+                disabled={pending}
+                onClick={() => { const r = confirmIt.run; setConfirmIt(null); r(); }}
+              >
+                {confirmIt.cta}
+              </Button>
+            </div>
           </div>
         </div>
       )}

@@ -15,6 +15,7 @@ import { listCourses } from "./courses-actions";
 import { getLoyaltySettings } from "./loyalty-actions";
 import { getReservationSummary, type ReservationSummary } from "../reservations/reservation-actions";
 import { hasFloorService } from "@/lib/modules/modes";
+import { hoursDayOpen, dayOpenPhrase } from "@/lib/services/day-open";
 import type { ReceiptSettings } from "./receipt-template";
 
 export default async function PosPage() {
@@ -116,6 +117,30 @@ export default async function PosPage() {
     .eq("status", "open")
     .maybeSingle();
   const drawerOpen = !!openDrawer;
+
+  // A DAY LEFT OPEN. TouchBistro blocks its floor with a modal after 24 hours
+  // ("we recommend you perform the End of Day before continuing", Cancel / End
+  // Day). Blocking the floor mid-service is the wrong trade — a server who
+  // needs to ring a drink should not meet a wall about yesterday's paperwork —
+  // so this is a banner instead, in the same amber the "you haven't started the
+  // day" strip already uses.
+  //
+  // Only businesses that DO close their day get told. A shop that has never
+  // closed a drawer isn't behind on anything; it just doesn't work that way,
+  // and nagging it every shift would teach everyone to ignore the banner.
+  let hoursSinceDayClose: number | null = null;
+  if (drawerOpen) {
+    const { data: lastClose } = await supabase
+      .from("drawer_sessions")
+      .select("closed_at")
+      .eq("business_id", business.id)
+      .eq("status", "closed")
+      .not("closed_at", "is", null)
+      .order("closed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    hoursSinceDayClose = hoursDayOpen((lastClose?.closed_at as string | null) ?? null);
+  }
 
   let defaultFrac = Number(business.default_tax_rate) || 0;
   if (defaultFrac > 1) defaultFrac = defaultFrac / 100;
@@ -386,7 +411,18 @@ export default async function PosPage() {
           bar — the same visual weight as the amber "you haven't started the
           day" strip above, which is an actual warning and keeps its tint. Two
           states that matter differently should not shout equally loudly. */}
-      {!trainingMode && drawerOpen && (
+      {!trainingMode && drawerOpen && hoursSinceDayClose !== null && (
+        <div className="shrink-0 flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-amber-500/40 bg-amber-500/10 px-3 sm:px-6 lg:px-10 py-1.5 text-xs text-amber-700 dark:text-amber-500 font-medium">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+          {"This day has been open " + dayOpenPhrase(hoursSinceDayClose) +
+            " — until you end it, today's sales keep landing on the same Z-report."}
+          <Link href="/app/pos/drawer" className="underline underline-offset-2 hover:opacity-80">
+            End the day
+          </Link>
+        </div>
+      )}
+
+      {!trainingMode && drawerOpen && hoursSinceDayClose === null && (
         <div className="shrink-0 flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-border bg-card px-3 sm:px-6 lg:px-10 py-2 text-sm">
           <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
           <span className="text-foreground">The day is open.</span>

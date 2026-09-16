@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, useWindowDimensions, type LayoutChangeEvent } from "react-native";
+import { isStoolSeat } from "@surge/api-contracts";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Plus, LogOut, Clock, CalendarCheck, Users, ClipboardList, Settings, UserRound, LayoutGrid, List, KeyRound } from "lucide-react-native";
@@ -179,10 +180,13 @@ export default function Floor() {
   const tables = useMemo(() => elements.filter((e) => RINGABLE.has(e.kind)), [elements]);
   const decor = useMemo(() => elements.filter((e) => DECOR.has(e.kind)), [elements]);
   const kindById = useMemo(() => Object.fromEntries(elements.map((e) => [e.id, e.kind] as const)), [elements]);
+  // A stool's own label is just its number ("103"); the bar it belongs to is
+  // what makes that number mean something once it leaves the map.
+  const labelById = useMemo(() => Object.fromEntries(elements.map((e) => [e.id, e.label] as const)), [elements]);
   // Bar stools = seat elements parented to a counter/station (drawn at their real
   // positions along the bar). Table chairs stay hidden (tables show "N Seats").
   const stools = useMemo(
-    () => elements.filter((e) => e.kind === "seat" && e.parentId && (kindById[e.parentId] === "counter" || kindById[e.parentId] === "station")),
+    () => elements.filter((e) => isStoolSeat(e.kind, e.parentId ? kindById[e.parentId] : null)),
     [elements, kindById]
   );
   // Per-table kitchen state (open vs bumped tickets), keyed by element_id.
@@ -380,17 +384,29 @@ export default function Floor() {
                 {decor.map((el) => (
                   <TableShape key={el.id} x={sx(el.x)} y={sy(el.y)} w={el.w * Sx} h={el.h * Sy} rotation={el.rotation} shape={el.shape} kind={el.kind} label={el.label} />
                 ))}
-                {/* Bar stools — fixed-size round seats at their scaled positions */}
+                {/* Bar stools — fixed-size round seats at their scaled positions.
+                    Tappable: a stool holds its own check, so stool 103 opens
+                    the register the way Table 4 does. It stays stool-sized on
+                    purpose — eight bar seats blown up to table tiles would read
+                    as eight four-tops and misrepresent the room. */}
                 {stools.map((el) => {
-                  const busy = !!summaries[el.id];
+                  const summary = summaries[el.id];
+                  const busy = !!summary;
+                  // Same rule the tables follow: a server on a scoped device
+                  // does not open someone else's check.
+                  const otherServer = scoped && !!summary && summary.staffId !== staffId;
                   const numTxt = el.label ?? (el.seatNo != null ? String(el.seatNo) : "");
+                  const barName = el.parentId ? labelById[el.parentId] : null;
                   return (
-                    <View
+                    <Pressable
                       key={el.id}
-                      style={{ position: "absolute", left: sx(el.x + el.w / 2) - STOOL / 2, top: sy(el.y + el.h / 2) - STOOL / 2, width: STOOL, height: STOOL, borderRadius: 9999, backgroundColor: busy ? F.stoolBusy : F.stoolOpen, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(0,0,0,0.15)" }}
+                      onPress={otherServer ? undefined : () => openTable({ ...el, label: (barName?.trim() || "Bar") + " · " + (numTxt || "seat") }, summary)}
+                      accessibilityRole="button"
+                      accessibilityLabel={(numTxt ? "Stool " + numTxt : "Bar seat") + (busy ? ", in use" : ", available")}
+                      style={{ position: "absolute", left: sx(el.x + el.w / 2) - STOOL / 2, top: sy(el.y + el.h / 2) - STOOL / 2, width: STOOL, height: STOOL, borderRadius: 9999, backgroundColor: otherServer ? "#3A4152" : busy ? F.stoolBusy : F.stoolOpen, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(0,0,0,0.15)" }}
                     >
                       {numTxt ? <Text style={{ color: "#fff", fontSize: 9, fontFamily: "Poppins_600SemiBold" }}>{numTxt}</Text> : null}
-                    </View>
+                    </Pressable>
                   );
                 })}
                 {/* Tables — rich lifecycle tiles, positioned by the fit */}

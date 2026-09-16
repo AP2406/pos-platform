@@ -6,7 +6,7 @@ import { getActiveStaff } from "./staff-session";
 import { verifyManagerPin } from "./approval-actions";
 import { z } from "zod";
 import { posAuthorize } from "@/lib/services/pos-action-guard";
-import { normalizeCheckName } from "@surge/api-contracts";
+import { normalizeCheckName, isStoolSeat } from "@surge/api-contracts";
 
 // A chosen modifier kept structurally on the line (price already inside unit_price).
 const lineModifierSchema = z.object({
@@ -1157,13 +1157,28 @@ export async function listTableMoveTargets(
 ): Promise<{ elementId: string; label: string; occupied: boolean }[]> {
   const { business } = await requireBusiness();
   const supabase = await createClient();
+  // Every seat a check can sit on, not just tables. A bar guest who wants a
+  // table, and a two-top that would rather sit at the bar, are both ordinary
+  // moves; before stools were ringable this list could not express either.
   const { data: els } = await supabase
     .from("floor_elements")
-    .select("id, label, sort_order")
+    .select("id, label, kind, parent_id, sort_order")
     .eq("business_id", business.id)
     .eq("is_active", true)
-    .in("kind", ["table", "booth"])
+    .in("kind", ["table", "booth", "counter", "station", "seat"])
     .order("sort_order", { ascending: true });
+  const rows = els ?? [];
+  const kindById: Record<string, string> = {};
+  const labelById: Record<string, string | null> = {};
+  for (const e of rows) {
+    kindById[e.id as string] = e.kind as string;
+    labelById[e.id as string] = (e.label as string | null) ?? null;
+  }
+  // A chair pulled up to a table is not a place you can open a check; a stool
+  // at the bar is. The difference is only ever the parent's kind.
+  const isStool = (e: (typeof rows)[number]) =>
+    isStoolSeat(e.kind as string, kindById[(e.parent_id as string | null) ?? ""] ?? null);
+
   const { data: open } = await supabase
     .from("open_tickets")
     .select("id, element_id")
@@ -1172,9 +1187,20 @@ export async function listTableMoveTargets(
     .not("element_id", "is", null);
   const occupiedBy: Record<string, string> = {};
   for (const o of open ?? []) occupiedBy[o.element_id as string] = o.id as string;
-  return (els ?? [])
+
+  return rows
+    .filter((e) => e.kind !== "seat" || isStool(e))
     .filter((e) => occupiedBy[e.id as string] !== currentTicketId)
-    .map((e) => ({ elementId: e.id as string, label: (e.label as string) || "Table", occupied: !!occupiedBy[e.id as string] }));
+    .map((e) => {
+      const own = (e.label as string | null) ?? null;
+      // "103" alone is ambiguous in a list of table names, so a stool carries
+      // the bar it belongs to: "Bar · 103".
+      const parentLabel = e.kind === "seat" ? labelById[(e.parent_id as string) ?? ""] ?? null : null;
+      const label = e.kind === "seat"
+        ? (parentLabel ? parentLabel + " · " : "Bar · ") + (own || "seat")
+        : own || (e.kind === "counter" ? "Counter" : e.kind === "station" ? "Station" : "Table");
+      return { elementId: e.id as string, label, occupied: !!occupiedBy[e.id as string] };
+    });
 }
 
 // Move a whole open check to another table. If the target already has a check,
@@ -1346,6 +1372,80 @@ export async function listOpenTableTickets(): Promise<TableTicketSummary[]> {
       party_name: (t.label as string | null) ?? null,
     };
   });
+}
+
+/**
+ * Turn a table's check into a named bar tab, freeing the table.
+ *
+ * The move a bartender actually makes: a party finishes eating, moves to the
+ * bar, and their check has to go with them without being re-rung. Surge has had
+ * both shapes of check since the beginning — a table check bound to an element,
+ * and a named tab bound to nothing — but no way across, so the only options were
+ * re-ringing every item or leaving a table marked occupied all night.
+ *
+ * Nothing is charged, refunded or re-priced here: the cart is untouched and the
+ * same row keeps its id, so a pre-auth, a split or a fired kitchen ticket that
+ * already points at this check still points at it afterwards. What changes is
+ * where it lives.
+ *
+ * A split parent is refused, for the same reason moveTicketToTable refuses one:
+ * the children are bound to the parent's table and would be orphaned.
+ */
+export async function transferTicketToTab(
+  ticketId: string,
+  name: string | null
+): Promise<{ ok: true; name: string } | { error: string }> {
+  if (!ticketId) return { error: "Missing check." };
+  const label = normalizeCheckName(name);
+  if (!label) return { error: "Give the tab a name so the bartender can find it." };
+
+  const { business } = await requireBusiness();
+  const supabase = await createClient();
+
+  const { data: ticket } = await supabase
+    .from("open_tickets")
+    .select("id, element_id, parent_ticket_id, ticket_type")
+    .eq("id", ticketId)
+    .eq("business_id", business.id)
+    .maybeSingle();
+  if (!ticket) return { error: "That check is no longer open." };
+  if ((ticket.ticket_type as string) === "tab") return { error: "That check is already a bar tab." };
+
+  const { count } = await supabase
+    .from("open_tickets")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", business.id)
+    .eq("parent_ticket_id", ticketId);
+  if ((count ?? 0) > 0) {
+    return { error: "Un-split this check before moving it to a tab." };
+  }
+
+  const elementId = (ticket.element_id as string | null) ?? null;
+
+  const { error } = await supabase
+    .from("open_tickets")
+    .update({ element_id: null, ticket_type: "tab", label, guest_count: null })
+    .eq("id", ticketId)
+    .eq("business_id", business.id);
+  if (error) {
+    console.error("transferTicketToTab:", error);
+    return { error: "Could not move this check to a tab. Please try again." };
+  }
+
+  // Kitchen tickets are keyed by element_id, which this check no longer has.
+  // Re-point them at the tab's name so a chit already on the rail still says
+  // where the food is going instead of pointing at a table someone else is
+  // now sitting at.
+  if (elementId) {
+    await supabase
+      .from("kitchen_tickets")
+      .update({ element_id: null, label })
+      .eq("business_id", business.id)
+      .eq("element_id", elementId)
+      .is("fulfilled_at", null);
+  }
+
+  return { ok: true, name: label };
 }
 
 // Rename the party sitting at a table. Separate from openTableTicket because a

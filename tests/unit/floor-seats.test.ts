@@ -5,6 +5,7 @@ import {
   seatPositions,
   stoolPositions,
 } from "@/app/app/pos/floor-style";
+import { isStoolSeat, STOOL_PARENT_KINDS } from "@surge/api-contracts";
 
 // Seat geometry for the floor plan, shared by the editor (settings/floor-card)
 // and both live floors (web pos/floor-client, mobile app/floor).
@@ -70,6 +71,49 @@ describe("bar stools", () => {
   it("never stacks two stools in the same place", () => {
     const pts = stoolPositions(bar, 12);
     expect(new Set(pts.map((p) => p.x + ":" + p.y)).size).toBe(12);
+  });
+});
+
+// The one test that decides whether a seat can hold money. Three files ask this
+// question — the server's move-target list, the web floor and the iPad floor —
+// and they now ask it of the same function, because the last time three files
+// each carried their own copy of a rule (DELIVERY_CHANNELS) all three were
+// wrong and wrong differently.
+describe("what counts as a bar stool", () => {
+  it("is a seat at a counter", () => {
+    expect(isStoolSeat("seat", "counter")).toBe(true);
+  });
+
+  it("is a seat at a station too", () => {
+    expect(isStoolSeat("seat", "station")).toBe(true);
+    expect(STOOL_PARENT_KINDS).toContain("station");
+  });
+
+  it("is NOT a chair at a table", () => {
+    // The whole point. A chair around a table cannot hold its own check — you
+    // sit AT a table, and its check belongs to the table, not to seat 3.
+    expect(isStoolSeat("seat", "table")).toBe(false);
+    expect(isStoolSeat("seat", "booth")).toBe(false);
+  });
+
+  it("is NOT an orphaned seat with no parent at all", () => {
+    // A seat whose parent was deleted must not silently become ringable.
+    expect(isStoolSeat("seat", null)).toBe(false);
+    expect(isStoolSeat("seat", undefined)).toBe(false);
+    expect(isStoolSeat("seat", "")).toBe(false);
+  });
+
+  it("is NOT the bar itself", () => {
+    // A counter is ringable in its own right — one check for the whole bar —
+    // but it is not a stool, and conflating them would put a bar's check and
+    // its stools' checks in the same bucket.
+    expect(isStoolSeat("counter", "room")).toBe(false);
+    expect(isStoolSeat("table", "counter")).toBe(false);
+  });
+
+  it("does not treat décor parked on a counter as seating", () => {
+    expect(isStoolSeat("label", "counter")).toBe(false);
+    expect(isStoolSeat("wall", "counter")).toBe(false);
   });
 });
 
