@@ -13,6 +13,7 @@ import {
   LayoutGrid,
 } from "lucide-react";
 import { OG_BASE } from "./shared-metadata";
+import { TERMINAL_COPY } from "@/lib/services/terminal-availability";
 
 export const photos = {
   owner: {
@@ -316,7 +317,14 @@ export function PaymentsPreview() {
       <div className="s-payment">
         <figure data-reveal>
           <Photo name="terminal" />
-          <figcaption>Concept image. Final hardware may differ.</figcaption>
+          {/* The caption is the constant, not a local string. "Final hardware
+              may differ." said only that the picture was provisional; the
+              handoff's CONTENT-AND-LAUNCH-RULES.md requires the stronger
+              statement that the hardware is not available at all, and
+              lib/services/terminal-availability.ts is the one place that
+              wording is allowed to live. This <figure> is shared by every page
+              that shows the terminal, so fixing it here fixes all of them. */}
+          <figcaption>{TERMINAL_COPY.conceptCaption}</figcaption>
         </figure>
         <div data-reveal>
           <span className="s-badge">Coming soon</span>
