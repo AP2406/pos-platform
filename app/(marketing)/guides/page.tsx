@@ -9,10 +9,7 @@ export const metadata = pageMetadata(
 );
 export default function GuidesPage() {
   return (
-    // marketing.css is scoped under .surge-site, and this element is the
-    // scope. It used to be the marketing layout wrapper, which put the home
-    // page inside it too.
-    <div className="surge-site">
+    <>
       <section className="s-wrap s-hero">
         <div className="s-hero-copy">
           <p className="s-eyebrow">The Surge reading room</p>
@@ -59,6 +56,6 @@ export default function GuidesPage() {
         ))}
       </section>
       <ClosingCta />
-    </div>
+    </>
   );
 }

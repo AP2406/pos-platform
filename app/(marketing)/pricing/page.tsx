@@ -10,10 +10,7 @@ export const metadata = pageMetadata(
 );
 export default function PricingPage() {
   return (
-    // marketing.css is scoped under .surge-site, and this element is the
-    // scope. It used to be the marketing layout wrapper, which put the home
-    // page inside it too.
-    <div className="surge-site">
+    <>
       <JsonLd data={breadcrumb("Pricing & free pilot", "/pricing")} />
       <PageHero
         crumb="The Surge pilot"
@@ -83,6 +80,6 @@ export default function PricingPage() {
         title="Prefer a walkthrough first?"
         description="See the menu, register and day-to-day workflows before deciding whether to apply."
       />
-    </div>
+    </>
   );
 }

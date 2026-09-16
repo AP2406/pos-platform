@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Suspense } from "react";
 import { pageMetadata, Photo, Checklist } from "../design";
 import { ContactForm } from "./contact-form";
 import { JsonLd, breadcrumb } from "../jsonld";
@@ -10,11 +9,7 @@ export const metadata = pageMetadata(
 );
 export default function ContactPage() {
   return (
-    // marketing.css is scoped under .surge-site, and this element is the
-    // scope. It used to be the marketing layout wrapper, which put the home
-    // page inside it too.
-    <div className="surge-site">
-      <section className="s-wrap">
+    <section className="s-wrap">
       <JsonLd data={breadcrumb("Contact", "/contact")} />
       <div className="s-page-intro">
         <p className="s-eyebrow">Let’s talk</p>
@@ -47,21 +42,13 @@ export default function ContactPage() {
           <Photo name="team" />
         </div>
         <div className="s-form-shell">
-          {/* ContactForm reads ?topic= to prefill the terminal-updates
-              enquiry that the home page's "Get terminal updates" button links
-              to. useSearchParams needs a Suspense boundary for the route to
-              stay statically prerendered; without one Next makes the whole
-              page dynamic. */}
-          <Suspense fallback={null}>
-            <ContactForm />
-          </Suspense>
+          <ContactForm />
           <p className="s-form-help">
             Please include your country and time zone if you’d like us to
             arrange a call.
           </p>
         </div>
       </div>
-      </section>
-    </div>
+    </section>
   );
 }

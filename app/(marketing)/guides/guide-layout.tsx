@@ -28,10 +28,7 @@ export function GuideArticle({ slug }: { slug: string }) {
     Math.ceil(guide.sections.flat().join(" ").split(/\s+/).length / 180),
   );
   return (
-    // marketing.css is scoped under .surge-site, and this element is the
-    // scope. It used to be the marketing layout wrapper, which put the home
-    // page inside it too.
-    <div className="surge-site">
+    <>
       <JsonLd
         data={{
           ...article({
@@ -130,6 +127,6 @@ export function GuideArticle({ slug }: { slug: string }) {
         title="Good information. Better conversations."
         description="Want to understand the POS side of your setup? We’ll walk you through Surge and answer your questions."
       />
-    </div>
+    </>
   );
 }
