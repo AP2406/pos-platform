@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { SurgeLogo } from "@/components/brand/surge-logo";
 import { LoginHeroPanel, type LoginHero } from "./hero-panels";
+import { CONTACT_EMAIL, WHATSAPP_DISPLAY, WHATSAPP_PILOT_HREF } from "@/lib/brand/contact";
 
 type Notice = { title: string; body: React.ReactNode };
 
@@ -381,15 +382,46 @@ export function LoginView({ hero }: { hero: LoginHero }) {
                 )}
               </button>
 
-              <p className="mt-7 text-center text-sm text-muted-foreground">
-                New to Surge?{" "}
-                <a
-                  href="/contact"
-                  className={"rounded-sm font-medium text-foreground hover:underline " + focusRing}
-                >
-                  Get in touch <span aria-hidden="true">↗</span>
-                </a>
-              </p>
+              {/* NEW TO SURGE — say the account is opened by us, HERE.
+                  This used to read "New to Surge? Get in touch ↗" and point at
+                  /contact, which is a fine thing to say to someone who has not
+                  tried anything yet. It is the wrong place to leave it now that
+                  the door is shut at /onboarding: a stranger reads "get in
+                  touch", sees a Google button an inch above it, presses the
+                  Google button instead, and only finds out it is
+                  invitation-only after they have handed us their account. Say
+                  it before the button, not after it.
+
+                  "Continue with Google" stays. It is what creates the account,
+                  so it looks like the thing to remove — but it is also how
+                  seven of our twelve businesses sign IN, including the two with
+                  real order history, and removing it locks them out to close a
+                  door that createBusiness() already closes properly. */}
+              <div className="mt-7 text-center text-sm text-muted-foreground">
+                <p>
+                  <span className="text-foreground font-medium">New to Surge?</span>{" "}
+                  Accounts are opened by us while the free pilot programme runs.
+                </p>
+                <p className="mt-2">
+                  <a
+                    href={WHATSAPP_PILOT_HREF}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={"rounded-sm font-medium text-foreground hover:underline " + focusRing}
+                  >
+                    WhatsApp {WHATSAPP_DISPLAY}
+                  </a>
+                  <span className="mx-2 text-muted-foreground/60" aria-hidden="true">
+                    ·
+                  </span>
+                  <a
+                    href={"mailto:" + CONTACT_EMAIL + "?subject=" + encodeURIComponent("Surge pilot programme")}
+                    className={"rounded-sm font-medium text-foreground hover:underline " + focusRing}
+                  >
+                    {CONTACT_EMAIL}
+                  </a>
+                </p>
+              </div>
             </>
           )}
         </div>

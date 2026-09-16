@@ -98,6 +98,31 @@ describe("business creation is gated", () => {
   });
 });
 
+describe("the sign-in page says it before the button, not after", () => {
+  const login = readFileSync(join(process.cwd(), "app/login/login-view.tsx"), "utf8");
+
+  it("tells a new visitor that accounts are opened by us", () => {
+    // It used to say "New to Surge? Get in touch ↗" and link to /contact. Fine
+    // for someone who has not tried anything — wrong once the door at
+    // /onboarding is shut, because a stranger reads it, sees a Google button an
+    // inch above, presses that instead, and only learns it is invitation-only
+    // after handing us their account.
+    expect(login).toContain("WHATSAPP_PILOT_HREF");
+    expect(login).toContain("CONTACT_EMAIL");
+    expect(login.toLowerCase()).toContain("opened by us");
+  });
+
+  it("KEEPS Continue with Google", () => {
+    // The button that creates an account is the obvious thing to delete, and
+    // deleting it would be a serious mistake: seven of our twelve businesses
+    // sign IN with Google, including both businesses with real order history,
+    // and the owner account that administers the platform. Account creation is
+    // closed in createBusiness(), not by removing a sign-in method.
+    expect(login).toContain("Continue with Google");
+    expect(login).toContain("signInWithOAuth");
+  });
+});
+
 describe("the way out is a person", () => {
   it("gives WhatsApp and an email on the access screen", () => {
     const screen = readFileSync(join(process.cwd(), "app/onboarding/pilot-access.tsx"), "utf8");
