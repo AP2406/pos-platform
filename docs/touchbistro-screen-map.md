@@ -1,5 +1,41 @@
 # TouchBistro Pro 11.55.0 — screen map
 
+## Scorecard, once every reachable screen had been opened
+
+Floor, floor editor, seating, table options, order screen, checkout, orders,
+menu, admin. What the comparison actually produced:
+
+**Real gaps, built:** bar stools (drawn, numbered, ringable) · party names
+carried to the check and the bill · a table options menu on long press · section
+and duplicate in the floor editor · move a check to a bar tab · clear a table
+from the floor · an open-day banner · on-shift grouping in the staff picker ·
+search on the Orders hub · Open Drawer on the register · **item descriptions and
+photos on every guest surface**.
+
+**Deliberately declined, because copying would have made Surge worse:** their
+blocking end-of-day modal · Close Table on a check that still has items · Print
+on the floor menu, which needs the register's cart · deleting fired food from
+the floor.
+
+**Looked like gaps, already built, several richer than theirs:** seat counts on
+tiles · category subtotals on the receipt · per-seat ordering · menu dayparting ·
+courses · barcode scan · No Sale · quick cash amounts · split by seat and by
+number · tax exemption (ours carries reason codes) · auto-gratuity (ours has
+waive + approval) · house accounts · reprint · multiple floors · **covers, sales
+per cover, average party size and table turn time**.
+
+That last list is the important one: **five separate times** a screen looked
+like it was ahead of us and reading our own code showed it was not. Checking
+first is now the cheapest step in this loop.
+
+**And the three most serious things found this week came from our own code, not
+theirs** — the register not knowing its currency, an unenforced `no_sale`
+permission, and `requires_manager_approval` gated only in the browser. See
+`docs/unenforced-controls-sweep.md`.
+
+---
+
+
 Built by driving the iPad directly rather than reading screenshots, so the map
 includes affordances that are invisible in a picture: which labels are actually
 buttons, what only appears on a long press, and which controls are disabled.
@@ -282,12 +318,47 @@ check", and the answer was to scroll. Now searchable by sale number, customer
 name or amount, scoped to the tab and the Active/Completed view you are standing
 in, with a match count.
 
-## Menu
+## Menu — a guest browser, not an editor
 
-**Not mappable on this device.** Tapping Menu returns "Authentication Required —
-We are having difficulties communicating with cloud, please try again." The
-menu editor is cloud-backed and the demo device cannot reach it. Worth noting in
-its own right: their menu management is not available offline, and the floor is.
+Loaded on a retry (the cloud gate below is intermittent, not permanent). It is
+**not** a menu editor: it is a read-only browser for showing a guest the menu —
+photo tiles per category, then a list of items with name, price and **full
+description**, searchable, with a layout toggle. Tapping an item gives a
+full-bleed photo, name, price and the description again.
+
+It is also reachable from the staff lock screen as "View menu", so a guest can
+read it with nobody signed in.
+
+**This is the screen that produced the most valuable find of the whole
+comparison** — Surge had no item description at all. See `0101` / `0102` and
+commits f157cc2, ad860da, a261468: description and photo now flow to all four
+guest surfaces, priced in the merchant's own currency.
+
+## Admin
+
+Behind the same intermittent cloud gate; opens on a retry. The list:
+
+Admin Settings · Messages · **Bill / Guest Check History** · Check for Venue
+Changes · Cloud Reporting · **Customer Account List** · Inventory Purchases ·
+Manage iPads (Pro Only) · Payment Gateway Options · Refunded Payments Log ·
+Reports · Sales Statistics & Charts · Snapshot Report · Staff List · Preview /
+Perform End Of Day · legal · help · about.
+
+**Bill / Guest Check History** is a date-range search over past checks — start
+and end date-time pickers, a Years toggle, a Business Days mode — reporting
+**Total** and **Head Count** for the range.
+
+Head count looked like a gap and is not: Surge's Insights already computes
+covers, **sales per cover**, **average party size** and **table turn time** from
+`orders.guest_count` / `seated_at`, which `createOrder` persists at checkout.
+None of those four appear on their screen. Their bill history does have an
+arbitrary date range where `/app/pos/sales` is today-only — but that is a
+navigation difference, not a capability one: date-ranged history lives in
+`/app/reports`, and the Orders hub now has search.
+
+**Customer Account List** — did not open (cloud gate). House accounts already
+exist in Surge (`0090_house_accounts` with a ledger, and "Pay on Account" is
+wired into the tender sheet), so there is nothing here to chase.
 
 ## Staff lock screen — `Admin: Switch`
 
