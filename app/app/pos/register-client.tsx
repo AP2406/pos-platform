@@ -55,6 +55,7 @@ import { getPrinterConfig, printReceiptHtml, printStationChits } from "./qz-prin
 import { type KitchenTicketConfig, KITCHEN_TICKET_DEFAULTS } from "@/lib/services/kitchen-ticket-config";
 import { buildReceiptHtml, type ReceiptSettings } from "./receipt-template";
 import { RegisterRefund } from "./register-refund";
+import { OpenDrawerButton } from "./open-drawer-button";
 import { useOnlineStatus } from "./use-online";
 import { getLoyaltyBalance } from "./loyalty-actions";
 import { getStoreCreditBalance } from "./store-credit-actions";
@@ -3238,6 +3239,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                 </button>
               )}
               <RegisterRefund businessName={businessName} currency={currency} />
+              <OpenDrawerButton />
               {!tableBinding && openTickets.length > 0 && (
                 <button type="button" onClick={() => setTicketsOpen(true)} className="flex h-10 items-center gap-2 rounded-lg border border-sidebar-border px-3.5 text-sm font-semibold hover:bg-sidebar-accent">
                   Tickets

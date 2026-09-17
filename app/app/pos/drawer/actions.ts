@@ -5,6 +5,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
 import { approverByPin } from "@/lib/services/permissions-server";
 import { posAuthorize } from "@/lib/services/pos-action-guard";
+import type { PermissionKey } from "@/lib/services/permissions";
 import { businessDateFor, parseCutoff } from "@/lib/services/business-day";
 import { sendEmail, isEmailConfigured } from "@/lib/services/email";
 import { CASH_MOVEMENT_REASONS, isValidReason } from "../reason-codes";
@@ -55,19 +56,35 @@ export async function recordCashMovement(input: {
     return { error: "Start the day before moving cash." };
   }
 
-  // The active operator needs the `open_drawer` permission for a cash
-  // adjustment; otherwise someone who holds it must approve by PIN.
-  // Behavior-preserving (server/host need a manager; manager/owner don't).
-  if (kind !== "no_sale") {
+  // AUTHORIZATION, INCLUDING FOR NO-SALE.
+  //
+  // This used to read `if (kind !== "no_sale")`, so a no-sale — the one action
+  // here that physically opens the cash drawer with no transaction to account
+  // for it — was the ONLY cash movement requiring no permission and no
+  // approval. Pay-in, pay-out and drop were all gated; the till-theft vector
+  // every POS audits was not.
+  //
+  // The intent had been written down and never wired up: `no_sale` is a
+  // declared PermissionKey with its own label, it is a declared approval action
+  // in the config registry, and DEFAULT_ROLE_PERMISSIONS grants it to owner,
+  // manager and shift_lead while deliberately withholding it from server and
+  // host. Every part of that existed except the call that enforces it, so a
+  // server could open the drawer and the permission screen said they could not.
+  //
+  // A no-sale checks its own key rather than borrowing `open_drawer`, because
+  // the two are separately grantable by design and an operator may reasonably
+  // hold one without the other.
+  const permission: PermissionKey = kind === "no_sale" ? "no_sale" : "open_drawer";
+  {
     // Was `if (active && !actorCan(...))` — which skipped authorization
     // entirely when no cashier was signed in at the PIN pad, and this file has
     // no web-role check to catch it. posAuthorize falls back to the member role
     // instead of skipping.
-    const auth = await posAuthorize(supabase, business.id, role, "open_drawer");
+    const auth = await posAuthorize(supabase, business.id, role, permission);
     if (!auth.ok) return { error: auth.error };
     if (auth.needsApproval) {
       if (!input.approver_pin) return { needs_approval: true };
-      const approver = await approverByPin(supabase, business.id, input.approver_pin, "open_drawer");
+      const approver = await approverByPin(supabase, business.id, input.approver_pin, permission);
       if (!approver) return { error: "That PIN can't approve this." };
     }
   }

@@ -205,6 +205,60 @@ hardcoded dollar values in `buildQuickAmounts` led to
 **`docs/pre-pilot-backlog.md` item 0** — Surge's register does not know what
 currency it is counting. That is now the blocking item on that page.
 
+## Checkout — the Checkout button on the order screen
+
+Left column of options over a live bill preview. The preview adds two lines the
+order screen does not show: `Party Name: Johnson` and `Admin: Admin` (the server).
+
+| Group | Rows |
+|---|---|
+| Options | All on One (ticked) · Split by Seating · Split Evenly by # |
+| Adjustments | Include Gratuity · Discount/Comp All Items · Tax Exclusion · Add Note |
+| Payment Options | Cash · Non-Integrated Payments · Pay on Account · Chase Pay · Edit / Undo Payments |
+| Receipt Options | Print Bill to Receipt Printer · Reprint Credit Card Slips · Close Table |
+| Header | **Open Cash Drawer** |
+
+### Checked against Surge — this one goes our way
+
+Every row above has a Surge equivalent, and several are richer:
+
+- **Split by seating** and **split evenly by #** — both present, plus per-item
+  seat sharing ("which seats are sharing this item") and two settlement modes
+  (each seat paid separately, or one payment itemised per seat).
+- **Tax Exclusion** → `tax_exempt` with `TAX_EXEMPT_REASONS` and a customer-level
+  exemption flag. Theirs is a row; ours carries a reason code.
+- **Include Gratuity** → service charge / auto-gratuity that auto-applies by
+  party size, with a waive path, reason codes and manager approval.
+- **Pay on Account** → house accounts, with the remaining balance enforced.
+- **Reprint** → `ReprintButton`, from the sale's stored snapshot.
+- **Discount/Comp All Items** → both, with reason codes.
+
+**The one real gap was Open Cash Drawer**, and fixing it turned up something
+worse — see below.
+
+## The thing the cash-drawer button uncovered
+
+Wiring "Open drawer" into the register meant reading `recordCashMovement`, and
+its authorization block was wrapped in `if (kind !== "no_sale")`. So a no-sale —
+the action that physically opens the till with **no transaction to account for
+it** — was the only cash movement in the system requiring no permission and no
+approval. Pay-in, pay-out and drop were all gated.
+
+The intent had been written down and never wired up. `no_sale` is a declared
+`PermissionKey` with its own label, a declared approval action in the config
+registry, and `DEFAULT_ROLE_PERMISSIONS` grants it to owner, manager and
+shift_lead while deliberately withholding it from server, host and bookkeeper.
+Every part of the design existed except the line that enforces it — so a server
+could open the cash drawer while the permissions screen said they could not.
+
+Gated now, on its own key rather than borrowing `open_drawer` (the two are
+separately grantable by design), and pinned by `tests/unit/no-sale-guarded.test.ts`.
+
+Worth noticing that this is the same shape as the currency bug found an hour
+earlier: a setting that existed, had a UI, and was read by nobody. Two in one
+session suggests it is a pattern worth looking for on purpose rather than
+stumbling into.
+
 ## Staff lock screen — `Admin: Switch`
 
 Numeric passcode pad, plus:
