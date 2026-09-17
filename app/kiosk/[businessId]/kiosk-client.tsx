@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-export type KioskItem = { id: string; name: string; price: number; category: string | null; description?: string | null };
+export type KioskItem = { id: string; name: string; price: number; category: string | null; description?: string | null; image_url?: string | null };
 
 type CartLine = { item: KioskItem; qty: number };
 
@@ -140,6 +140,10 @@ export function KioskClient({
                   onClick={() => add(it)}
                   className="text-left rounded-xl border border-zinc-200 bg-white p-4 hover:border-zinc-900 active:scale-[0.98] transition"
                 >
+                  {it.image_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={it.image_url} alt="" className="mb-3 h-32 w-full rounded-lg object-cover" />
+                  )}
                   <div className="font-semibold text-zinc-900">{it.name}</div>
                   {/* A kiosk guest has nobody to ask. Clamped to three lines
                       here (unlike the QR menu) because these are fixed-height

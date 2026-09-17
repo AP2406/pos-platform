@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-export type MenuBoardItem = { name: string; price: number; category: string | null; out_of_stock: boolean };
+export type MenuBoardItem = { name: string; price: number; category: string | null; out_of_stock: boolean; description?: string | null };
 
 const money = (n: number) => "$" + (Number(n) || 0).toFixed(2);
 
@@ -51,13 +51,22 @@ export function MenuBoardClient({
               <h2 className="text-xl font-semibold uppercase tracking-wide text-amber-400 border-b border-zinc-800 pb-2 mb-3">{g.name}</h2>
               <div className="space-y-2.5">
                 {g.items.map((it, i) => (
-                  <div key={i} className="flex items-baseline justify-between gap-3">
-                    <span className={"text-lg " + (it.out_of_stock ? "text-zinc-600 line-through" : "")}>
-                      {it.name}
-                      {it.out_of_stock && <span className="ml-2 text-xs uppercase tracking-wide text-zinc-500 no-underline">Sold out</span>}
-                    </span>
-                    <span className="flex-1 border-b border-dotted border-zinc-700 mx-1 translate-y-[-3px]" />
-                    <span className={"text-lg tabular-nums " + (it.out_of_stock ? "text-zinc-600" : "text-zinc-300")}>{money(it.price)}</span>
+                  <div key={i}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className={"text-lg " + (it.out_of_stock ? "text-zinc-600 line-through" : "")}>
+                        {it.name}
+                        {it.out_of_stock && <span className="ml-2 text-xs uppercase tracking-wide text-zinc-500 no-underline">Sold out</span>}
+                      </span>
+                      <span className="flex-1 border-b border-dotted border-zinc-700 mx-1 translate-y-[-3px]" />
+                      <span className={"text-lg tabular-nums " + (it.out_of_stock ? "text-zinc-600" : "text-zinc-300")}>{money(it.price)}</span>
+                    </div>
+                    {/* A board is read from across the room, so the description
+                        sits under the dotted leader at a smaller size rather
+                        than competing with the name. Clamped to two lines: a
+                        board with one chatty item pushes the rest off screen. */}
+                    {it.description && it.description.trim() && !it.out_of_stock && (
+                      <p className="text-sm text-zinc-500 leading-snug mt-0.5 pr-24 line-clamp-2">{it.description}</p>
+                    )}
                   </div>
                 ))}
               </div>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { PayPanel } from "./pay-panel";
 
-export type GuestMenuItem = { id: string; name: string; price: number; category: string | null; description?: string | null };
+export type GuestMenuItem = { id: string; name: string; price: number; category: string | null; description?: string | null; image_url?: string | null };
 
 const money = (n: number) => "$" + (Number(n) || 0).toFixed(2);
 
@@ -121,7 +121,13 @@ export function GuestOrderClient({
                 const n = qty[it.id] ?? 0;
                 return (
                   <div key={it.id} className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
-                    <div className="min-w-0">
+                    {/* A thumbnail, not a hero image: this is a phone held at a
+                        table and the guest is scanning a list, not browsing. */}
+                    {it.image_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={it.image_url} alt="" className="h-14 w-14 shrink-0 rounded-md object-cover" />
+                    )}
+                    <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium truncate">{it.name}</div>
                       {/* The description is the whole point of a guest menu: there
                           is no server standing here to answer "what's in it".
