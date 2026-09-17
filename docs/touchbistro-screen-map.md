@@ -156,6 +156,55 @@ Worth keeping for positioning. Worth **not** overstating: a local main device is
 also why their floor keeps working when the internet drops, which is a real
 trade and the honest version of this comparison says so.
 
+## Order screen — tap an occupied table
+
+The densest screen in the app, and the one worth the most attention.
+
+**Top bar:** Back · Search · View · UPC · `Table: 201` · Course · Edit · Send ·
+Checkout
+
+**Menu periods as tabs:** Full Menu / Breakfast / Lunch / Dinner, over a
+photo-tiled category grid (Drinks, Appetizers, Breakfast, Lunch, Mains,
+Specials, Desserts).
+
+**The check, grouped by seat and colour-coded.** "Shared Order For Table 201",
+then `Seat 1` in navy with its three lines, `Seat 2` in amber with its three,
+each seat header carrying an ⓘ for seat properties. Then "Order Summary:
+Johnson" with **Food $58.96 / Alcohol $16.98** / Sub-Total / Tax 1 / Total.
+
+**A live seat map in the middle of the screen.** A miniature of the table with
+numbered circles round it — 1 navy, 2 amber, 3 blue, 4 orange — and **the circle
+colours match the check groupings above**. Tap a circle to choose whose order
+you are taking. A `+` adds a seat, and the hint reads "Swipe to combine seats".
+The section name ("Inside") and order number sit in the corners.
+
+That colour tie between a physical position and its lines on the check is the
+best single idea on the screen, and it costs them nothing.
+
+**Bottom quick-tender bar:** Exact · **$86 · $90 · $100** · Cash · Debit ·
+Credit · Tab · No Sale (disabled) · Print · Takeout · Delivery. The three dollar
+amounts are the next round notes above the $85.81 total.
+
+### Checked against Surge — almost all already present
+
+Per-seat ordering with seat names, menu dayparting (migration 0075), courses,
+barcode scanning, No Sale, quick cash amounts *with* an "Exact" button — all
+shipped. Surge additionally has price windows, upsell prompts, service charges,
+split settings and device profiles, which this screen has no equivalent of.
+
+Two real differences:
+
+- **Their seat map.** Surge has seat tabs; they have a diagram that matches the
+  room. Worth considering, not urgent.
+- **Our quick amounts skip the next-dollar-up.** `buildQuickAmounts` rounds to
+  the next $5 and $10 and then offers flat $20/$50/$100, so an $85.81 total
+  gives Exact / $90 / $100 where theirs gives Exact / $86 / $90 / $100.
+
+And one thing this screen surfaced that has nothing to do with TouchBistro: the
+hardcoded dollar values in `buildQuickAmounts` led to
+**`docs/pre-pilot-backlog.md` item 0** — Surge's register does not know what
+currency it is counting. That is now the blocking item on that page.
+
 ## Staff lock screen — `Admin: Switch`
 
 Numeric passcode pad, plus:

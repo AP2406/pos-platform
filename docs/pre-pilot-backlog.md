@@ -4,8 +4,54 @@ Things deliberately not built, each with the reason and the thing that should
 make us pick it up again. The format follows `RELEASE-CHECKLIST.md`: a deferral
 is only honest if it names the trigger that ends it.
 
-Nothing here is blocking. If an item ever becomes blocking, it moves out of this
-file and into the work.
+Everything below item 0 is non-blocking. **Item 0 is blocking**, and it is at
+the top because it is the only thing on this page that a pilot merchant would
+hit on their first day.
+
+---
+
+## 0. BLOCKING — Surge cannot serve a merchant who does not use dollars
+
+Found 16 Sep 2026 while comparing the register against TouchBistro, by asking
+what a Sri Lankan restaurant would actually see. Not a competitor gap — they
+have nothing to do with it.
+
+**Verified, not inferred:**
+
+- `businesses.currency` exists and Settings has a picker for it — offering
+  **`["CAD", "USD"]`** and nothing else (`app/app/settings/tax-currency-form.tsx`).
+  LKR is not selectable.
+- `currency` is **never referenced** anywhere in `app/app/pos/page.tsx`,
+  `register-client.tsx` or `tender-sheet.tsx`. The till does not know what money
+  it is counting.
+- The printed receipt hardcodes it: `money(n) => "$" + n.toFixed(2)` in
+  `app/app/pos/receipt-template.ts`.
+- `buildQuickAmounts` in `tender-sheet.tsx` hardcodes **2000 / 5000 / 10000**
+  cents as the note values a guest might hand over. Those are a $20, $50 and
+  $100 bill. LKR notes are 20 / 50 / 100 / 500 / 1000 / 5000 and a 5000-cent
+  suggestion is meaningless.
+- Roughly **40 files under `app/`** contain a hardcoded `"$"` literal.
+
+**What works already:** the accounting section formats correctly with
+`Intl.NumberFormat(..., { style: "currency", currency })`, and the iPad app has
+a correct `money(n, currency)` helper — its callers just pass `"CAD"` as a
+literal.
+
+**Why this is not a half-fix.** Adding LKR to the picker while the register
+still prints `$` is *worse* than today: a merchant would select their own
+currency and then watch the till contradict it on every screen and every printed
+receipt. Either the whole money-rendering path takes a currency or none of it
+does.
+
+**Shape of the fix:** one `formatMoney(amount, currency)` in
+`@surge/api-contracts` (both clients need it, and the delivery-channel and
+stool-seat precedents say shared money logic belongs there), `business.currency`
+plumbed from `pos/page.tsx` through the register to the tender sheet and the
+receipt, note values driven by currency rather than hardcoded, and the picker
+opened up. The 40 `"$"` sites are then mechanical.
+
+**Trigger: passed.** The stated next move is a Sri Lanka pilot. This is due
+before the first non-CAD merchant sees a till, not after.
 
 ---
 
