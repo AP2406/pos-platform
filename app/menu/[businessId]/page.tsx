@@ -21,6 +21,7 @@ export default async function MenuBoardPage({
   const menu = (data ?? { found: false }) as {
     found: boolean;
     business_name?: string;
+    currency?: string;
     items?: MenuBoardItem[];
   };
 
@@ -32,6 +33,7 @@ export default async function MenuBoardPage({
     <MenuBoardClient
       businessId={businessId}
       businessName={menu.business_name ?? "Menu"}
+      currency={menu.currency ?? "CAD"}
       initialItems={menu.items ?? []}
     />
   );

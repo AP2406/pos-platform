@@ -36,6 +36,7 @@ export default async function GuestOrderPage({
   const menu = data as {
     found: boolean;
     business_name?: string;
+    currency?: string;
     enabled?: boolean;
     table_label?: string | null;
     open?: boolean;
@@ -57,6 +58,7 @@ export default async function GuestOrderPage({
       businessId={businessId}
       elementId={elementId}
       businessName={menu.business_name ?? "Menu"}
+      currency={menu.currency ?? "CAD"}
       tableLabel={menu.table_label ?? null}
       items={menu.items ?? []}
       finixAppId={finixCfg.applicationId}

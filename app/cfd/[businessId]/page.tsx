@@ -23,6 +23,8 @@ export default async function CfdPage({
   const { data } = await supabase.rpc("get_public_menu", { p_business_id: businessId });
   const businessName =
     ((data as { business_name?: string } | null)?.business_name as string) || "Welcome";
+  const currency =
+    ((data as { currency?: string } | null)?.currency as string) || "CAD";
 
-  return <CfdClient businessId={businessId} businessName={businessName} />;
+  return <CfdClient businessId={businessId} businessName={businessName} currency={currency} />;
 }

@@ -1,21 +1,29 @@
 "use client";
 
+import { formatMoney } from "@surge/api-contracts";
+
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export type MenuBoardItem = { name: string; price: number; category: string | null; out_of_stock: boolean; description?: string | null };
 
-const money = (n: number) => "$" + (Number(n) || 0).toFixed(2);
+// money() now takes the merchant's currency — see @surge/api-contracts.
+// It was a hardcoded "$" on a page a GUEST reads.
 
 export function MenuBoardClient({
   businessId,
   businessName,
+  currency,
   initialItems,
 }: {
   businessId: string;
   businessName: string;
+  currency?: string;
   initialItems: MenuBoardItem[];
 }) {
+
+  // The merchant's currency, not ours. This page is read by a GUEST.
+  const money = (n: number) => formatMoney(n, currency ?? "CAD");
   const [items, setItems] = useState<MenuBoardItem[]>(initialItems);
 
   // Refresh so 86 / new items reflect on the board within ~30s.

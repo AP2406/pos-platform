@@ -1,5 +1,7 @@
 "use client";
 
+import { formatMoney } from "@surge/api-contracts";
+
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -7,19 +9,22 @@ export type KioskItem = { id: string; name: string; price: number; category: str
 
 type CartLine = { item: KioskItem; qty: number };
 
-function money(n: number): string {
-  return "$" + n.toFixed(2);
-}
+
 
 export function KioskClient({
   businessId,
   businessName,
+  currency,
   items,
 }: {
   businessId: string;
   businessName: string;
+  currency?: string;
   items: KioskItem[];
 }) {
+
+  // The merchant's currency, not ours. This page is read by a GUEST.
+  const money = (n: number) => formatMoney(n, currency ?? "CAD");
   const categories = useMemo(() => {
     const seen: string[] = [];
     for (const i of items) {

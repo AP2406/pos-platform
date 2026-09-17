@@ -1,17 +1,21 @@
 "use client";
 
+import { formatMoney } from "@surge/api-contracts";
+
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { PayPanel } from "./pay-panel";
 
 export type GuestMenuItem = { id: string; name: string; price: number; category: string | null; description?: string | null; image_url?: string | null };
 
-const money = (n: number) => "$" + (Number(n) || 0).toFixed(2);
+// money() now takes the merchant's currency — see @surge/api-contracts.
+// It was a hardcoded "$" on a page a GUEST reads.
 
 export function GuestOrderClient({
   businessId,
   elementId,
   businessName,
+  currency,
   tableLabel,
   items,
   finixAppId,
@@ -20,11 +24,15 @@ export function GuestOrderClient({
   businessId: string;
   elementId: string;
   businessName: string;
+  currency?: string;
   tableLabel: string | null;
   items: GuestMenuItem[];
   finixAppId: string;
   finixEnv: string;
 }) {
+
+  // The merchant's currency, not ours. This page is read by a GUEST.
+  const money = (n: number) => formatMoney(n, currency ?? "CAD");
   const [qty, setQty] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
@@ -107,6 +115,7 @@ export function GuestOrderClient({
           elementId={elementId}
           finixAppId={finixAppId}
           finixEnv={finixEnv}
+          currency={currency ?? "CAD"}
           onClose={() => setShowPay(false)}
         />
       )}

@@ -1,9 +1,12 @@
 "use client";
 
+import { formatMoney } from "@surge/api-contracts";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getGuestCheck, payGuestCheck, type GuestCheckView } from "./pay-actions";
 
-const money = (n: number) => "$" + (Number(n) || 0).toFixed(2);
+// money() now takes the merchant's currency — see @surge/api-contracts.
+// It was a hardcoded "$" on a page a GUEST reads.
 
 // Finix.js (hosted card fields) injected at runtime. The card data is tokenized in
 // the browser — a raw PAN never reaches our server. Types are loose because the SDK
@@ -47,13 +50,18 @@ export function PayPanel({
   finixAppId,
   finixEnv,
   onClose,
+  currency = "CAD",
 }: {
   businessId: string;
   elementId: string;
   finixAppId: string;
   finixEnv: string; // "sandbox" | "live"
   onClose: () => void;
+  currency?: string;
 }) {
+
+  // The merchant's currency, not ours. This page is read by a GUEST.
+  const money = (n: number) => formatMoney(n, currency ?? "CAD");
   const [check, setCheck] = useState<GuestCheckView | null>(null);
   const [tipPct, setTipPct] = useState(0.18);
   const [name, setName] = useState("");

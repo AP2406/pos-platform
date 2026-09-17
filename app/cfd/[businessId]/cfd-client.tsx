@@ -1,5 +1,7 @@
 "use client";
 
+import { formatMoney } from "@surge/api-contracts";
+
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -7,6 +9,7 @@ type CfdItem = { name: string; quantity: number; unit_price: number };
 type TipRequest = { base: number; presets: number[] };
 type CfdState = {
   businessName: string;
+  currency?: string;
   status: "idle" | "cart" | "paid";
   items: CfdItem[];
   subtotal: number;
@@ -18,12 +21,14 @@ type CfdState = {
   tipRequest?: TipRequest | null;
 };
 
-function money(n: number): string {
-  return "$" + (Math.round(n * 100) / 100).toFixed(2);
-}
 
-export function CfdClient({ businessId, businessName }: { businessId: string; businessName: string }) {
+
+export function CfdClient({ businessId, businessName, currency = "CAD" }: { businessId: string; businessName: string; currency?: string }) {
   const [state, setState] = useState<CfdState | null>(null);
+  // The register broadcasts its own currency with each cart update; the prop is
+  // the fallback for the idle screen, before any cart has arrived. Declared
+  // AFTER state, or it closes over a binding that does not exist yet.
+  const money = (n: number) => formatMoney(n, state?.currency ?? currency);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
   // E2: once the guest submits their tip + signature, show a brief thank-you.
@@ -61,7 +66,7 @@ export function CfdClient({ businessId, businessName }: { businessId: string; bu
 
   // E2: guest tip + signature step.
   if (status === "cart" && state?.tipRequest && !submitted) {
-    return <TipSignature name={name} req={state.tipRequest} total={state.total} onDone={sendGuestInput} />;
+    return <TipSignature currency={state?.currency ?? currency} name={name} req={state.tipRequest} total={state.total} onDone={sendGuestInput} />;
   }
   if (status === "cart" && state?.tipRequest && submitted) {
     return (
@@ -135,7 +140,8 @@ export function CfdClient({ businessId, businessName }: { businessId: string; bu
   );
 }
 
-function TipSignature({ name, req, total, onDone }: { name: string; req: TipRequest; total: number; onDone: (tip: number, sig: string | null) => void }) {
+function TipSignature({ name, req, total, onDone, currency = "CAD" }: { name: string; req: TipRequest; total: number; onDone: (tip: number, sig: string | null) => void; currency?: string }) {
+  const money = (n: number) => formatMoney(n, currency);
   const [tip, setTip] = useState<number>(0);
   const [custom, setCustom] = useState("");
   const canvasRef = useRef<HTMLCanvasElement | null>(null);

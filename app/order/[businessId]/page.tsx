@@ -22,6 +22,7 @@ export default async function OnlineOrderPage({
   const menu = (data ?? { found: false }) as {
     found: boolean;
     business_name?: string;
+    currency?: string;
     enabled?: boolean;
     items?: OnlineItem[];
   };
@@ -33,6 +34,7 @@ export default async function OnlineOrderPage({
     <OnlineOrderClient
       businessId={businessId}
       businessName={menu.business_name ?? "Order"}
+      currency={menu.currency ?? "CAD"}
       items={menu.items ?? []}
     />
   );

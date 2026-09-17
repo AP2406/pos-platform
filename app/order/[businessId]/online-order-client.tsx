@@ -1,5 +1,7 @@
 "use client";
 
+import { formatMoney } from "@surge/api-contracts";
+
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -7,9 +9,7 @@ export type OnlineItem = { id: string; name: string; price: number; category: st
 
 type CartLine = { item: OnlineItem; qty: number };
 
-function money(n: number): string {
-  return "$" + n.toFixed(2);
-}
+
 
 // GAP-1 (2/5): online pickup ordering. Same build-a-cart flow as the kiosk, but for
 // a customer's own phone: name + phone are required (so the shop can call about the
@@ -18,12 +18,17 @@ function money(n: number): string {
 export function OnlineOrderClient({
   businessId,
   businessName,
+  currency,
   items,
 }: {
   businessId: string;
   businessName: string;
+  currency?: string;
   items: OnlineItem[];
 }) {
+
+  // The merchant's currency, not ours. This page is read by a GUEST.
+  const money = (n: number) => formatMoney(n, currency ?? "CAD");
   const categories = useMemo(() => {
     const seen: string[] = [];
     for (const i of items) {

@@ -20,6 +20,7 @@ export default async function KioskPage({
   const menu = (data ?? { found: false }) as {
     found: boolean;
     business_name?: string;
+    currency?: string;
     enabled?: boolean;
     items?: KioskItem[];
   };
@@ -31,6 +32,7 @@ export default async function KioskPage({
     <KioskClient
       businessId={businessId}
       businessName={menu.business_name ?? "Order"}
+      currency={menu.currency ?? "CAD"}
       items={menu.items ?? []}
     />
   );
