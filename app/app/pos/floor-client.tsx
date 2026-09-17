@@ -130,6 +130,20 @@ export function FloorClient({
   function canRing(el: FloorElement): boolean {
     return isRingable(el.kind) || isStool(el);
   }
+  // What the register calls this check once it is open — and, through
+  // `tableName`, what prints on the bill.
+  //
+  // A to-go order has read "Takeout · Ana" and a bar tab "Tab · Jake" since
+  // they were built. A table check read "Table 4" and dropped the party's name
+  // the moment you opened it, so the name we now take at the door survived
+  // exactly as far as the floor tile. TouchBistro prints "Party Name: Johnson"
+  // on the bill; a server handing over a check ought to be able to read whose
+  // it is without walking back to the map.
+  function checkTitle(el: FloorElement, party: string | null): string {
+    const base = displayNameOf(el);
+    const name = (party ?? "").trim();
+    return name ? base + " · " + name : base;
+  }
   // What to call this element anywhere it appears outside the map. On the map a
   // stool is a numbered circle attached to a visible bar, so "103" is enough;
   // in a list, a dropdown or a dialog title it is sitting next to "Table 4" and
@@ -330,13 +344,14 @@ export function FloorClient({
         setError(res.error);
         return;
       }
-      setSelected({ elementId: el.id, ticketId: res.ticketId, tableLabel: el.label ?? "Table", cart: res.cart, serverName: null, seatCount: chairs > 0 ? chairs : guestCount, guestCount: guestCount });
+      setSelected({ elementId: el.id, ticketId: res.ticketId, tableLabel: checkTitle(el, party ?? null), cart: res.cart, serverName: null, seatCount: chairs > 0 ? chairs : guestCount, guestCount: guestCount });
     });
   }
 
   function resumeElement(el: FloorElement, ticketId: string, serverName: string | null) {
     setError(null);
     const chairs = seatsOf(el.id);
+    const party = openByElement[el.id]?.party_name ?? null;
     startTransition(async () => {
       const res = await loadTableTicket(ticketId);
       if ("error" in res) {
@@ -344,7 +359,7 @@ export function FloorClient({
         await refreshOpen();
         return;
       }
-      setSelected({ elementId: el.id, ticketId: ticketId, tableLabel: el.label ?? "Table", cart: res.cart, serverName: serverName, seatCount: chairs > 0 ? chairs : res.guestCount, guestCount: res.guestCount });
+      setSelected({ elementId: el.id, ticketId: ticketId, tableLabel: checkTitle(el, party), cart: res.cart, serverName: serverName, seatCount: chairs > 0 ? chairs : res.guestCount, guestCount: res.guestCount });
     });
   }
 

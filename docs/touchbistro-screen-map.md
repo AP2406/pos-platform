@@ -108,6 +108,54 @@ Tables** · date picker (day / hour / minute / AM-PM) · party size picker.
 - **Tapping Done on the table picker SAVES the reservation.** There is no
   discard; backing out of the form afterwards leaves the record behind.
 
+### The eight rows, opened
+
+| Row | What it actually is |
+|---|---|
+| Print Preview | full bill: address block, order #, `Table: 201, 4 guests`, **`Party Name: Johnson`**, line items, **Food Total / Alcohol Total**, Sub Total, Tax 1, Total, footer |
+| Transfer Table To Staff… | the grouped Select Staff list above |
+| Transfer Entire Party | **"Select a Table for the Party"** — the floor plan becomes the picker |
+| Rename Party… | one text field + Save |
+| Print All On One Bill | un-split print |
+| Transfer Order to Tab | bare confirm: "Move Table to Tab? Are you sure…" — Cancel / Continue. **No name is asked for** |
+| Delete All Items & Close Table | not opened |
+| Close Table | not opened |
+
+### Seating a table — tap a vacant one
+
+`addPartyScreen`: a name field, a 24-cell party-size grid
+(`newPartyButtonBySeatCount.1` … `.24`) and "Add to Table".
+
+**The grid arrives with the table's own seat count already selected**, so a
+four-top seating four is one tap. Ours starts with nothing selected.
+
+## Floors
+
+`TouchBistro Pro | Main Floor` at the bottom centre opens "Select Floorplan":
+Main Floor, Second Floor. The second floor holds tables 600–609 and stools
+500–503 — the hundreds digit encodes the floor, which is convention rather than
+a feature, but it is how their demo keeps 24 tables legible.
+
+## Main Device — the ⓘ at the bottom right
+
+Not a gap. An architecture disclosure, and the most useful thing found all
+session:
+
+> "This iPad is the main device. It is where important POS data is kept within
+> the TouchBistro system, including financial, staffing and menu information.
+> **Never remove this device from your venue during service. Doing so will
+> prevent TouchBistro from functioning.**"
+
+TouchBistro Pro designates one iPad as the store of record; the others are
+clients of it. That is a single point of failure that has to physically stay in
+the building, and it is their own wording, on their own screen, not a claim we
+are making about them. Surge has no main device — every till is a client of the
+same cloud, and losing one loses nothing.
+
+Worth keeping for positioning. Worth **not** overstating: a local main device is
+also why their floor keeps working when the internet drops, which is a real
+trade and the honest version of this comparison says so.
+
 ## Staff lock screen — `Admin: Switch`
 
 Numeric passcode pad, plus:
@@ -138,6 +186,27 @@ whoever has that section today, but once someone changed it by hand there was no
 route back to that answer. The assign dialog now offers **Section default**,
 named, at the top — the same idea as their "Section Default (Chris)".
 
+**The party name stopped at the floor tile.** We started taking a name at the
+door in `72e39c9`, but opening the check threw it away: a to-go order has always
+read "Takeout · Ana" and a bar tab "Tab · Jake", while a table check read
+"Table 4". Their bill prints `Party Name: Johnson`, and a server handing over a
+check should be able to read whose it is without walking back to the map. The
+name now rides into the register header and, through `tableName`, onto the
+printed bill.
+
+## Checked and NOT a gap
+
+Worth writing down, because both looked like gaps and building either would have
+been duplicate work:
+
+- **Food / Alcohol subtotals on the bill.** Their print preview splits them and
+  ours appeared not to. It does: `showCategoryTotals` in the receipt settings,
+  fed by `categorySubtotals`, driven by the `sales_category` column added in
+  migration 0088. It ships **off by default**, which is the real finding — turn
+  it on for any venue with a bar.
+- **Multiple floors.** Theirs is a button at the bottom you have to know to
+  press; ours draws plan tabs in the toolbar.
+
 ## Confirmed gaps, not yet built
 
 - **Pre-assigning a server to a vacant table.** Theirs is the only row a vacant
@@ -153,6 +222,12 @@ named, at the top — the same idea as their "Section Default (Chris)".
 - **Device status line.** Device role, uptime, network, IP and version in one
   place is a genuine support aid — the first question on any support call is
   "which iPad, on what network, running what version".
+- **Party size pre-selected to the table's seat count.** One tap to seat a full
+  four-top. Ours opens with nothing chosen. Small, and the kind of thing that
+  only shows up by actually using the screen.
+- **Transfer party picks the destination on the map.** Ours lists candidate
+  tables in a dialog. On a busy floor, pointing at the table you mean is faster
+  and harder to get wrong than reading a list of names.
 
 ## Where Surge is ahead, from the same pass
 
