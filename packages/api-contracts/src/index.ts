@@ -218,6 +218,19 @@ export function isDeliveryChannel(channel: string | null | undefined): boolean {
   return DELIVERY_CHANNELS.includes((channel ?? "").toLowerCase().trim());
 }
 
+// ---- Money ------------------------------------------------------------------
+// Rendering and tendering in the merchant's own currency. See money.ts for why
+// this had to exist at all.
+export {
+  formatMoney,
+  currencyDecimals,
+  minorUnits,
+  cashNotes,
+  cashSuggestions,
+  CASH_NOTES,
+  SUPPORTED_CURRENCIES,
+} from "./money";
+
 // ---- Bar stools ---------------------------------------------------------------
 // A floor element of kind "seat" is either a chair pulled up to a table or a
 // stool at a bar, and the ONLY thing that tells them apart is what it hangs off.

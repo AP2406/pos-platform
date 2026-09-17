@@ -1,5 +1,7 @@
 "use client";
 
+import { formatMoney } from "@surge/api-contracts";
+
 import { useState, useTransition, useEffect, useRef } from "react";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -124,6 +126,9 @@ type Tender = { method: "cash" | "card" | "other" | "gift_card" | "store_credit"
 type PaymentLine = { method: string; amount: number; tendered: number | null; change: number | null };
 type Receipt = {
   id: string;
+  // ISO 4217, carried onto the printed receipt so it stops saying "$" to a
+  // merchant who does not use dollars.
+  currency?: string;
   saleNumber: number;
   businessName: string;
   customerName: string | null;
@@ -226,7 +231,7 @@ function hydrateTableLines(stored: TableCart | null | undefined, items: Item[], 
   });
 }
 
-export function RegisterClient({ items, taxRate, taxMeta, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto", upsellPrompts = [], defaultToSeat = true, deviceProfiles = [], kitchenTicketConfig = KITCHEN_TICKET_DEFAULTS }: { items: Item[]; taxRate: number; taxMeta?: { itemTaxMeta: Record<string, ItemTaxMeta>; rateFracById: Record<string, number>; rateNameById: Record<string, string> }; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string; upsellPrompts?: UpsellPrompt[]; defaultToSeat?: boolean; deviceProfiles?: DeviceProfile[]; kitchenTicketConfig?: KitchenTicketConfig }) {
+export function RegisterClient({ items, taxRate, taxMeta, businessName, businessId, hasStaff, activeStaff, receiptSettings, showItemPhotos, categoryColors, serviceCharge, splitSettings, courses, loyalty, tableBinding, initialTableCart, onExitToFloor, staffList, priceWindows = [], timezone = "America/Toronto", upsellPrompts = [], defaultToSeat = true, deviceProfiles = [], kitchenTicketConfig = KITCHEN_TICKET_DEFAULTS, currency = "CAD" }: { items: Item[]; taxRate: number; taxMeta?: { itemTaxMeta: Record<string, ItemTaxMeta>; rateFracById: Record<string, number>; rateNameById: Record<string, string> }; businessName: string; businessId?: string; hasStaff: boolean; activeStaff: ActiveStaff | null; receiptSettings: Partial<ReceiptSettings> | null; showItemPhotos: boolean; categoryColors: Record<string, string>; serviceCharge?: ServiceChargeCfg; splitSettings?: SplitCfg; courses?: Course[]; loyalty?: { enabled: boolean; redeemPerDollar: number }; tableBinding?: TableBinding; initialTableCart?: TableCart | null; onExitToFloor?: () => void; staffList?: StaffMember[]; priceWindows?: PriceWindow[]; timezone?: string; upsellPrompts?: UpsellPrompt[]; defaultToSeat?: boolean; deviceProfiles?: DeviceProfile[]; kitchenTicketConfig?: KitchenTicketConfig; currency?: string }) {
   const [cart, setCart] = useState<CartLine[]>(() => hydrateTableLines(initialTableCart, items, taxRate));
   const online = useOnlineStatus();
   // P1-22: back up the quick-service cart (no table/tab — nothing server-side
@@ -972,7 +977,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                   <span className={"w-4 h-4 border flex items-center justify-center text-[10px] " + (single ? "rounded-full" : "rounded") + " " + (checked ? "bg-foreground text-background border-foreground" : "border-muted-foreground")}>{checked ? "✓" : ""}</span>
                   <span className="text-sm font-medium">{m.name}</span>
                 </span>
-                {m.price > 0 && <span className="text-sm tabular-nums text-muted-foreground">{"+$" + m.price.toFixed(2)}</span>}
+                {m.price > 0 && <span className="text-sm tabular-nums text-muted-foreground">{"+" + formatMoney(m.price, currency)}</span>}
               </button>
               {checked && g.allow_split && (
                 <div className="flex gap-1 pl-6">
@@ -1299,7 +1304,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
             <span className="truncate">{line.name}{line.void ? "  · Void" : ""}</span>
           </div>
           <div className="text-xs text-muted-foreground">
-            {"$" + line.unit_price.toFixed(2) + " each" + (line.taxable ? "" : "  " + "·" + "  Tax-free") + (line.note ? "  " + "·" + "  " + line.note : "")}
+            {formatMoney(line.unit_price, currency) + " each" + (line.taxable ? "" : "  " + "·" + "  Tax-free") + (line.note ? "  " + "·" + "  " + line.note : "")}
           </div>
           {coursingOn && (
             <div className="text-[10px] mt-0.5 flex items-center gap-1.5">
@@ -1315,7 +1320,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
           <span className="w-6 text-center text-sm tabular-nums">{line.quantity}</span>
           <button type="button" onClick={() => changeQty(index, 1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">+</button>
         </div>
-        <div className={"w-16 text-right text-sm font-semibold tabular-nums shrink-0 " + (line.void ? "line-through text-muted-foreground" : "")}>{"$" + (line.unit_price * line.quantity).toFixed(2)}</div>
+        <div className={"w-16 text-right text-sm font-semibold tabular-nums shrink-0 " + (line.void ? "line-through text-muted-foreground" : "")}>{formatMoney(line.unit_price * line.quantity, currency)}</div>
       </div>
     );
   }
@@ -1353,6 +1358,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
     if (cart.length === 0) return;
     const rec: Receipt = {
       id: "bill",
+      currency,
       saleNumber: 0,
       businessName,
       customerName: customer ? customer.name : null,
@@ -1827,6 +1833,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
     for (const o of orders) {
       const rec: Receipt = {
         id: o.id,
+        currency,
         saleNumber: o.sale_number,
         businessName,
         customerName: customer ? customer.name : null,
@@ -1972,7 +1979,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       setTip(t > 0 ? String(t) : "");
       if (typeof p.signature === "string" && p.signature.length > 0) setSignatureData(p.signature.slice(0, 200000));
       setCfdTipRequest(false);
-      setCfdGuestMsg("Guest added " + (t > 0 ? "$" + t.toFixed(2) + " tip" : "no tip") + (p.signature ? " + signed" : "") + ".");
+      setCfdGuestMsg("Guest added " + (t > 0 ? formatMoney(t, currency) + " tip" : "no tip") + (p.signature ? " + signed" : "") + ".");
     });
     ch.subscribe();
     cfdChannelRef.current = ch;
@@ -2001,6 +2008,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
         total,
         customerName: customer?.name ?? null,
         paidTotal: receipt?.total ?? null,
+        currency,
         saleNumber: receipt?.saleNumber ?? null,
         // E2: when set, the CFD shows a tip-preset + signature step for the guest.
         tipRequest: cfdTipRequest && status === "cart" ? { base: subtotal, presets: [15, 18, 20] } : null,
@@ -2219,6 +2227,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
   function finishSale(res: { id: string; sale_number: number }, pm: string, payments: PaymentLine[], snap: Snap) {
     const rec: Receipt = {
       id: res.id,
+      currency,
       saleNumber: res.sale_number,
       businessName,
       customerName: snap.customerName,
@@ -2459,6 +2468,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
     if (!m) return;
     const rec: Receipt = {
       id: res.id,
+      currency,
       saleNumber: res.sale_number,
       businessName,
       customerName: m.receipt.customerName,
@@ -2490,6 +2500,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
     if (!m) return;
     const rec: Receipt = {
       id: res.id,
+      currency,
       saleNumber: res.sale_number,
       businessName,
       customerName: m.receipt.customerName,
@@ -2532,6 +2543,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
         if ("ok" in res) {
           const rec: Receipt = {
             id: res.id,
+            currency,
             saleNumber: res.sale_number,
             businessName,
             customerName: customer ? customer.name : null,
@@ -2774,7 +2786,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
               <Input autoFocus type="number" inputMode="decimal" min="0" step="0.01" value={openPriceInput} onChange={(e) => setOpenPriceInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submitOpenPrice(); }} className="h-11 text-lg" />
             </div>
             <Button className="w-full mt-3 h-11" disabled={!(parseFloat(openPriceInput) > 0)} onClick={submitOpenPrice}>
-              {"Add" + (parseFloat(openPriceInput) > 0 ? " · $" + (Math.round(parseFloat(openPriceInput) * 100) / 100).toFixed(2) : "")}
+              {"Add" + (parseFloat(openPriceInput) > 0 ? " · " + formatMoney(Math.round(parseFloat(openPriceInput) * 100) / 100, currency) : "")}
             </Button>
           </div>
         </div>
@@ -2798,7 +2810,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                   return (
                     <button key={v.id} type="button" onClick={() => setPickerVariationId(v.id)} className={"w-full flex items-center justify-between p-3 rounded-md border text-left transition-colors " + (selected ? "border-foreground bg-accent" : "border-border hover:border-foreground/40 hover:bg-accent/50")}>
                       <span className="text-sm font-medium">{v.name}</span>
-                      <span className="text-sm tabular-nums">{"$" + v.price.toFixed(2)}</span>
+                      <span className="text-sm tabular-nums">{formatMoney(v.price, currency)}</span>
                     </button>
                   );
                 })}
@@ -2843,7 +2855,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
             </div>
 
             <Button className="w-full" onClick={confirmOptions} disabled={(pickerItem.variations.length > 0 && !pickerVariationId) || requiredUnmet(pickerItem).length > 0}>
-              {requiredUnmet(pickerItem).length > 0 ? "Choose " + requiredUnmet(pickerItem)[0].name : (pickerEditIndex != null ? "Save - $" : "Add to cart - $") + pickerUnitPrice(pickerItem).toFixed(2)}
+              {requiredUnmet(pickerItem).length > 0 ? "Choose " + requiredUnmet(pickerItem)[0].name : (pickerEditIndex != null ? "Save - " : "Add to cart - ") + formatMoney(pickerUnitPrice(pickerItem), currency)}
             </Button>
           </div>
         </div>
@@ -2970,7 +2982,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">{t.label ? t.label : "Ticket"}</div>
                       <div className="text-xs text-muted-foreground">
-                        {t.item_count + (t.item_count === 1 ? " item" : " items") + "  " + "\u00b7" + "  " + "$" + t.subtotal.toFixed(2)}
+                        {t.item_count + (t.item_count === 1 ? " item" : " items") + "  " + "\u00b7" + "  " + formatMoney(t.subtotal, currency)}
                       </div>
                       <div className="text-xs text-muted-foreground">{new Date(t.created_at).toLocaleString()}</div>
                     </div>
@@ -3030,6 +3042,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       )}
 
       <TenderSheet
+        currency={currency}
         open={tenderOpen}
         onClose={() => setTenderOpen(false)}
         total={total}
@@ -3050,6 +3063,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
       />
 
       <SplitSheet
+        currency={currency}
         open={splitOpen}
         onClose={() => setSplitOpen(false)}
         lines={cart.map((l) => ({ catalog_item_id: l.catalog_item_id, name: l.name, unit_price: l.unit_price, quantity: l.quantity, taxable: l.taxable, seat: l.seat ?? null, shared_seats: l.shared_seats ?? null }))}
@@ -3080,20 +3094,20 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                 <div key={o.id} className="rounded-md border border-border p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{o.label}{splitResult.mode === "separate" ? " · #" + o.sale_number : ""}</span>
-                    <span className="text-sm tabular-nums font-semibold">{"$" + o.total.toFixed(2)}</span>
+                    <span className="text-sm tabular-nums font-semibold">{formatMoney(o.total, currency)}</span>
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground space-y-0.5">
                     {o.items.map((it, k) => (
-                      <div key={k} className="flex justify-between"><span className="truncate pr-2">{it.name}{it.quantity > 1 ? " ×" + it.quantity : ""}</span><span className="tabular-nums">{"$" + (it.unit_price * it.quantity).toFixed(2)}</span></div>
+                      <div key={k} className="flex justify-between"><span className="truncate pr-2">{it.name}{it.quantity > 1 ? " ×" + it.quantity : ""}</span><span className="tabular-nums">{formatMoney(it.unit_price * it.quantity, currency)}</span></div>
                     ))}
-                    <div className="flex justify-between pt-1 border-t border-border/60"><span>Tax{o.service_charge > 0 ? " + charge" : ""}</span><span className="tabular-nums">{"$" + (o.tax + o.service_charge).toFixed(2)}</span></div>
-                    {splitResult.mode === "separate" && <div className="flex justify-between capitalize"><span>{o.payment_method}</span><span className="tabular-nums">{"$" + o.total.toFixed(2)}</span></div>}
+                    <div className="flex justify-between pt-1 border-t border-border/60"><span>Tax{o.service_charge > 0 ? " + charge" : ""}</span><span className="tabular-nums">{formatMoney(o.tax + o.service_charge, currency)}</span></div>
+                    {splitResult.mode === "separate" && <div className="flex justify-between capitalize"><span>{o.payment_method}</span><span className="tabular-nums">{formatMoney(o.total, currency)}</span></div>}
                   </div>
                 </div>
               ))}
               <div className="flex justify-between text-sm font-medium pt-1">
                 <span>Total collected</span>
-                <span className="tabular-nums">{"$" + splitResult.orders.reduce((s, o) => s + o.total, 0).toFixed(2)}</span>
+                <span className="tabular-nums">{formatMoney(splitResult.orders.reduce((s, o) => s + o.total, 0), currency)}</span>
               </div>
             </div>
           </div>
@@ -3117,39 +3131,39 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
               {receipt.items.map((l, i) => (
                 <div key={i} className="flex justify-between">
                   <span className="truncate">{l.name} x{l.quantity}</span>
-                  <span className="tabular-nums">{"$" + (l.unit_price * l.quantity).toFixed(2)}</span>
+                  <span className="tabular-nums">{formatMoney(l.unit_price * l.quantity, currency)}</span>
                 </div>
               ))}
               {receipt.discount > 0 && (
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Discount</span>
-                  <span className="tabular-nums text-red-600">{"-$" + receipt.discount.toFixed(2)}</span>
+                  <span className="tabular-nums text-red-600">{"-" + formatMoney(receipt.discount, currency)}</span>
                 </div>
               )}
               {receipt.comp > 0 && (
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Comp</span>
-                  <span className="tabular-nums text-red-600">{"-$" + receipt.comp.toFixed(2)}</span>
+                  <span className="tabular-nums text-red-600">{"-" + formatMoney(receipt.comp, currency)}</span>
                 </div>
               )}
               {receipt.serviceCharge > 0 && (
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">{receipt.serviceLabel}</span>
-                  <span className="tabular-nums">{"$" + receipt.serviceCharge.toFixed(2)}</span>
+                  <span className="tabular-nums">{formatMoney(receipt.serviceCharge, currency)}</span>
                 </div>
               )}
               <div className="flex justify-between font-semibold pt-2 border-t border-border">
                 <span>Total</span>
-                <span className="tabular-nums">{"$" + receipt.total.toFixed(2)}</span>
+                <span className="tabular-nums">{formatMoney(receipt.total, currency)}</span>
               </div>
               <div className="pt-2 border-t border-border space-y-1">
                 {receipt.payments.map((p, i) => (
                   <div key={i} className="flex justify-between text-xs">
                     <span className="text-muted-foreground">
                       {methodLabel(p.method)}
-                      {p.method === "cash" && p.change !== null && p.change > 0 ? " (change $" + p.change.toFixed(2) + ")" : ""}
+                      {p.method === "cash" && p.change !== null && p.change > 0 ? " (change " + formatMoney(p.change, currency) + ")" : ""}
                     </span>
-                    <span className="tabular-nums">{"$" + p.amount.toFixed(2)}</span>
+                    <span className="tabular-nums">{formatMoney(p.amount, currency)}</span>
                   </div>
                 ))}
               </div>
@@ -3223,7 +3237,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                   )}
                 </button>
               )}
-              <RegisterRefund businessName={businessName} />
+              <RegisterRefund businessName={businessName} currency={currency} />
               {!tableBinding && openTickets.length > 0 && (
                 <button type="button" onClick={() => setTicketsOpen(true)} className="flex h-10 items-center gap-2 rounded-lg border border-sidebar-border px-3.5 text-sm font-semibold hover:bg-sidebar-accent">
                   Tickets
@@ -3343,10 +3357,10 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                           const hhWin = activeWindow(item); // E1
                           const hhPrice = hhWin && !hasVars ? windowPrice(item.price, hhWin) : null;
                           const priceLabel = hasVars
-                            ? "From $" + Math.min(...item.variations.map((v) => v.price)).toFixed(2)
+                            ? "From " + formatMoney(Math.min(...item.variations.map((v) => v.price)), currency)
                             : hhPrice != null
-                              ? "$" + hhPrice.toFixed(2)
-                              : "$" + item.price.toFixed(2);
+                              ? formatMoney(hhPrice, currency)
+                              : formatMoney(item.price, currency);
                           const oos = isOos(item);
                           const low = isLowStock(item);
                           // A7: show the live remaining count ("3 left") so staff can pace a
@@ -3480,7 +3494,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                         <div key={seat === null ? "shared" : "s" + seat} className="space-y-1.5">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-semibold text-muted-foreground">{seat === null ? "Shared" : seatName(seat) ? "Seat " + seat + " · " + seatName(seat) : "Seat " + seat}</span>
-                            {entries.length > 0 && <span className="text-xs tabular-nums text-muted-foreground">{"$" + sub.toFixed(2)}</span>}
+                            {entries.length > 0 && <span className="text-xs tabular-nums text-muted-foreground">{formatMoney(sub, currency)}</span>}
                           </div>
                           {entries.length === 0 ? (
                             <p className="text-xs text-muted-foreground/60 pl-1">No items</p>
@@ -3549,11 +3563,11 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                     </span>
                     {loyaltyApplied ? (
                       <button type="button" onClick={clearLoyalty} className="shrink-0 text-xs rounded-md border border-foreground px-2.5 py-1.5 hover:bg-accent">
-                        {"Redeemed -$" + discount.toFixed(2)} · Clear
+                        {"Redeemed -" + formatMoney(discount, currency)} · Clear
                       </button>
                     ) : (
                       <button type="button" onClick={redeemLoyalty} disabled={loyaltyMaxDollars <= 0} className="shrink-0 text-xs rounded-md border border-border px-2.5 py-1.5 hover:bg-accent disabled:opacity-40">
-                        {loyaltyMaxDollars > 0 ? "Redeem $" + loyaltyMaxDollars.toFixed(2) : "No points to redeem"}
+                        {loyaltyMaxDollars > 0 ? "Redeem " + formatMoney(loyaltyMaxDollars, currency) : "No points to redeem"}
                       </button>
                     )}
                   </div>
@@ -3562,15 +3576,15 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                   <div className="flex gap-1 p-2 border-b border-border overflow-x-auto">
                     <button type="button" onClick={() => setSheet("discount")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (discount > 0 ? "border-foreground" : "border-border")}>
                       <div className="text-[10px] text-muted-foreground">Discount</div>
-                      <div className="text-xs font-medium truncate">{discount > 0 ? "-$" + discount.toFixed(2) : "Add"}</div>
+                      <div className="text-xs font-medium truncate">{discount > 0 ? "-" + formatMoney(discount, currency) : "Add"}</div>
                     </button>
                     <button type="button" onClick={() => { setCompValue(""); setSheet("comp"); }} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (comp > 0 ? "border-foreground" : "border-border")}>
                       <div className="text-[10px] text-muted-foreground">Comp</div>
-                      <div className="text-xs font-medium truncate">{comp > 0 ? "-$" + comp.toFixed(2) : "Add"}</div>
+                      <div className="text-xs font-medium truncate">{comp > 0 ? "-" + formatMoney(comp, currency) : "Add"}</div>
                     </button>
                     <button type="button" onClick={() => setSheet("tip")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (tipNum > 0 ? "border-foreground" : "border-border")}>
                       <div className="text-[10px] text-muted-foreground">Tip</div>
-                      <div className="text-xs font-medium truncate">{tipNum > 0 ? "$" + tipNum.toFixed(2) : "Add"}</div>
+                      <div className="text-xs font-medium truncate">{tipNum > 0 ? formatMoney(tipNum, currency) : "Add"}</div>
                     </button>
                     <button type="button" onClick={() => setSheet("tax")} className={"flex-1 min-w-[60px] rounded-md border px-1 py-2 text-center hover:bg-accent " + (effectiveExempt ? "border-emerald-600" : "border-border")}>
                       <div className="text-[10px] text-muted-foreground">Tax</div>
@@ -3605,23 +3619,23 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                 <div className="p-4 space-y-1">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span className="tabular-nums">{"$" + subtotal.toFixed(2)}</span>
+                    <span className="tabular-nums">{formatMoney(subtotal, currency)}</span>
                   </div>
                   {discount > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Discount</span>
-                      <span className="tabular-nums text-red-600">{"-$" + discount.toFixed(2)}</span>
+                      <span className="tabular-nums text-red-600">{"-" + formatMoney(discount, currency)}</span>
                     </div>
                   )}
                   {comp > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Comp</span>
-                      <span className="tabular-nums text-red-600">{"-$" + comp.toFixed(2)}</span>
+                      <span className="tabular-nums text-red-600">{"-" + formatMoney(comp, currency)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">{effectiveExempt ? "Tax (exempt)" : "Tax"}</span>
-                    <span className="tabular-nums">{"$" + tax.toFixed(2)}</span>
+                    <span className="tabular-nums">{formatMoney(tax, currency)}</span>
                   </div>
                   {scAvailable && (serviceApplied || scAuto) && (
                     <button type="button" onClick={() => setSheet("service")} className="w-full flex justify-between items-center text-sm rounded px-1 -mx-1 hover:bg-accent/50">
@@ -3629,24 +3643,24 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                         {(scIsAuto ? "Auto-gratuity" : scCfg.label) + " (" + scCfg.pct + "%)" + (serviceApplied ? (scIsAuto ? " · taxed" : "") : " · waived")}
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3 shrink-0 opacity-60"><path d="M9 6l6 6-6 6" /></svg>
                       </span>
-                      <span className={"tabular-nums " + (serviceApplied ? "" : "text-muted-foreground line-through")}>{serviceApplied ? "$" + serviceChargeAmt.toFixed(2) : "$0.00"}</span>
+                      <span className={"tabular-nums " + (serviceApplied ? "" : "text-muted-foreground line-through")}>{serviceApplied ? formatMoney(serviceChargeAmt, currency) : "$0.00"}</span>
                     </button>
                   )}
                   {tipNum > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Tip</span>
-                      <span className="tabular-nums">{"$" + tipNum.toFixed(2)}</span>
+                      <span className="tabular-nums">{formatMoney(tipNum, currency)}</span>
                     </div>
                   )}
                   <div className="flex items-end justify-between pt-1">
                     <span className="text-sm font-medium">Total</span>
-                    <span className="text-3xl font-bold tabular-nums leading-none">{"$" + total.toFixed(2)}</span>
+                    <span className="text-3xl font-bold tabular-nums leading-none">{formatMoney(total, currency)}</span>
                   </div>
 
                   {error && <p className="text-sm text-red-600 pt-1">{error}</p>}
 
                   <Button variant="primary" className="w-full h-14 text-base mt-2" onClick={openTender} disabled={pending || tabBusy || heldCents != null || cart.length === 0 || (discount > 0 && !discountReasonOk) || (comp > 0 && !compReasonOk) || (scWaived && !serviceWaiveOk) || (taxExempt && !taxExemptOk)}>
-                    {"Charge" + (total > 0 ? " $" + total.toFixed(2) : "")}
+                    {"Charge" + (total > 0 ? " " + formatMoney(total, currency) : "")}
                   </Button>
 
                   {/* Bar-tab card hold (pre-auth): hold at open, capture the final total at close. */}
@@ -3659,10 +3673,10 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                       <div className="mt-1 rounded-md border border-border p-2 space-y-2">
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground">Card on file</span>
-                          <span className="tabular-nums font-medium">{"$" + (heldCents / 100).toFixed(2) + " held"}</span>
+                          <span className="tabular-nums font-medium">{formatMoney(heldCents / 100, currency) + " held"}</span>
                         </div>
                         <Button variant="primary" className="w-full h-12" onClick={captureHeldCard} disabled={pending || tabBusy || cart.length === 0}>
-                          {tabBusy ? "Charging…" : "Charge card on file" + (total > 0 ? " · $" + total.toFixed(2) : "")}
+                          {tabBusy ? "Charging…" : "Charge card on file" + (total > 0 ? " · " + formatMoney(total, currency) : "")}
                         </Button>
                         <button type="button" onClick={releaseHeldCard} disabled={pending || tabBusy} className="w-full h-9 rounded-md border border-border text-sm hover:bg-accent disabled:opacity-50">
                           Release hold
@@ -3695,7 +3709,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                     <span className="w-8 text-center text-base tabular-nums">{cart[editLineIndex].quantity}</span>
                     <button type="button" onClick={() => changeQty(editLineIndex, 1)} className="w-11 h-11 rounded-md border border-border hover:bg-accent text-lg leading-none">+</button>
                   </div>
-                  <span className="text-base font-semibold tabular-nums">{"$" + (cart[editLineIndex].unit_price * cart[editLineIndex].quantity).toFixed(2)}</span>
+                  <span className="text-base font-semibold tabular-nums">{formatMoney(cart[editLineIndex].unit_price * cart[editLineIndex].quantity, currency)}</span>
                 </div>
                 {(cart[editLineIndex].sent_qty ?? 0) > 0 && (
                   <p className="text-[11px] text-amber-600 mt-1.5">
@@ -3972,7 +3986,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                 {serviceApplied && (
                   <div className="flex justify-between text-sm mt-3">
                     <span className="text-muted-foreground">Charge</span>
-                    <span className="tabular-nums">{"$" + serviceChargeAmt.toFixed(2)}</span>
+                    <span className="tabular-nums">{formatMoney(serviceChargeAmt, currency)}</span>
                   </div>
                 )}
                 {scWaived && (
@@ -4012,7 +4026,7 @@ export function RegisterClient({ items, taxRate, taxMeta, businessName, business
                 {/* $ / % entry-mode toggle */}
                 <div className="flex rounded-md border border-border overflow-hidden mb-3 text-sm">
                   <button type="button" onClick={() => setTipMode("amount")} className={"flex-1 py-2 " + (tipMode === "amount" ? "bg-foreground text-background" : "hover:bg-accent")}>$ Amount</button>
-                  <button type="button" onClick={() => setTipMode("percent")} className={"flex-1 py-2 border-l border-border " + (tipMode === "percent" ? "bg-foreground text-background" : "hover:bg-accent")}>% of {"$" + tipBase.toFixed(2)}</button>
+                  <button type="button" onClick={() => setTipMode("percent")} className={"flex-1 py-2 border-l border-border " + (tipMode === "percent" ? "bg-foreground text-background" : "hover:bg-accent")}>% of {formatMoney(tipBase, currency)}</button>
                 </div>
                 {/* Presets */}
                 <div className="grid grid-cols-4 gap-2 mb-3">

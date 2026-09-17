@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { formatMoney, minorUnits, cashSuggestions } from "@surge/api-contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -22,6 +23,9 @@ type Props = {
   // much credit remains (null = no limit). Enables the "+ Acct" tender.
   houseAccountEnabled?: boolean;
   houseAccountRemaining?: number | null;
+  // ISO 4217 of the business. Absent means CAD, which is what every "$" in
+  // this file silently assumed before.
+  currency?: string;
   onCash: (tenderedDollars: number) => void;
   onSplit: (tenders: Tender[]) => void;
   onCardManual: () => void;
@@ -39,20 +43,18 @@ function methodLabel(m: string): string {
   return "Other";
 }
 
-function buildQuickAmounts(totalCents: number): number[] {
+// Quick-tender amounts, in MINOR units so the pad can set them directly.
+//
+// This used to round to the next 500 and 1000 cents and then offer flat 2000 /
+// 5000 / 10000 — a $20, a $50 and a $100 bill, hardcoded. In rupees those are
+// 20, 50 and 100, so on a 3,480 rupee bill all three buttons were SMALLER than
+// the total and none of them could settle the check. The ladder now comes from
+// the currency's real note denominations.
+function buildQuickAmounts(totalCents: number, currency: string): number[] {
   if (totalCents <= 0) return [];
-  const out: number[] = [totalCents];
-  const candidates = [
-    Math.ceil(totalCents / 500) * 500,
-    Math.ceil(totalCents / 1000) * 1000,
-    2000,
-    5000,
-    10000,
-  ];
-  for (const v of candidates) {
-    if (v >= totalCents && out.indexOf(v) === -1) out.push(v);
-  }
-  return out.slice(0, 6);
+  const unit = minorUnits(currency);
+  const total = totalCents / unit;
+  return [totalCents, ...cashSuggestions(total, currency, 5).map((v) => Math.round(v * unit))];
 }
 
 export function TenderSheet(props: Props) {
@@ -86,7 +88,9 @@ export function TenderSheet(props: Props) {
 
   const changeCents = cashCents - totalCents;
   const cashReady = cashCents >= totalCents && totalCents > 0;
-  const quickAmounts = buildQuickAmounts(totalCents);
+  const cur = props.currency || "CAD";
+  const unit = minorUnits(cur);
+  const quickAmounts = buildQuickAmounts(totalCents, cur);
 
   function newLine(m: TMethod): SplitLine {
     const id = splitIdRef.current;
@@ -196,7 +200,7 @@ export function TenderSheet(props: Props) {
           Back
         </button>
         <span className="text-sm font-medium">Take payment</span>
-        <span className="text-base font-semibold tabular-nums">{"$" + props.total.toFixed(2)}</span>
+        <span className="text-base font-semibold tabular-nums">{formatMoney(props.total, cur)}</span>
       </div>
 
       <div className="shrink-0 px-4 pt-4">
@@ -223,15 +227,15 @@ export function TenderSheet(props: Props) {
             <div>
               <div className="rounded-lg border border-border p-4 mb-3 text-center">
                 <div className="text-xs text-muted-foreground">Cash received</div>
-                <div className="text-3xl font-semibold tabular-nums mt-1">{"$" + (cashCents / 100).toFixed(2)}</div>
+                <div className="text-3xl font-semibold tabular-nums mt-1">{formatMoney(cashCents / unit, cur)}</div>
                 <div className={"text-sm mt-1 tabular-nums " + (changeCents >= 0 ? "text-emerald-500" : "text-muted-foreground")}>
-                  {changeCents >= 0 ? "Change due $" + (changeCents / 100).toFixed(2) : "Remaining $" + (Math.abs(changeCents) / 100).toFixed(2)}
+                  {changeCents >= 0 ? "Change due " + formatMoney(changeCents / unit, cur) : "Remaining " + formatMoney(Math.abs(changeCents) / unit, cur)}
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-2 mb-3">
                 {quickAmounts.map(function (amt, i) {
-                  const label = i === 0 ? "Exact" : "$" + (amt / 100).toFixed(0);
+                  const label = i === 0 ? "Exact" : formatMoney(amt / unit, cur);
                   return (
                     <button
                       key={amt + "-" + i}
@@ -369,7 +373,7 @@ export function TenderSheet(props: Props) {
                         </div>
                       )}
                       {change !== null && change > 0 && (
-                        <div className="flex justify-between text-xs"><span className="text-muted-foreground">Change</span><span className="tabular-nums">{"$" + change.toFixed(2)}</span></div>
+                        <div className="flex justify-between text-xs"><span className="text-muted-foreground">Change</span><span className="tabular-nums">{formatMoney(change, cur)}</span></div>
                       )}
                     </div>
                   );
@@ -391,11 +395,11 @@ export function TenderSheet(props: Props) {
 
               <div className="flex justify-between text-sm mt-3 pt-2 border-t border-border">
                 <span className="text-muted-foreground">Allocated</span>
-                <span className="tabular-nums">{"$" + (splitSumCents / 100).toFixed(2)}</span>
+                <span className="tabular-nums">{formatMoney(splitSumCents / unit, cur)}</span>
               </div>
               <div className="flex justify-between text-sm font-medium">
                 <span>{splitRemainingCents < 0 ? "Over by" : "Remaining"}</span>
-                <span className={"tabular-nums " + (splitRemainingCents === 0 ? "text-emerald-500" : "text-red-500")}>{"$" + (Math.abs(splitRemainingCents) / 100).toFixed(2)}</span>
+                <span className={"tabular-nums " + (splitRemainingCents === 0 ? "text-emerald-500" : "text-red-500")}>{formatMoney(Math.abs(splitRemainingCents) / unit, cur)}</span>
               </div>
 
               {splitError && <p className="text-sm text-red-600 mt-2">{splitError}</p>}

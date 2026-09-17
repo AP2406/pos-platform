@@ -19,7 +19,7 @@ const STYLES: { key: ReceiptStyle; label: string; hint: string }[] = [
   { key: "bold", label: "Bold", hint: "Inverted header bar" },
 ];
 
-export function ReceiptSettingsForm({ initial, businessName }: { initial: Partial<ReceiptSettings> | null; businessName: string }) {
+export function ReceiptSettingsForm({ initial, businessName, currency = "CAD" }: { initial: Partial<ReceiptSettings> | null; businessName: string; currency?: string }) {
   const [s, setS] = useState<ReceiptSettings>(mergeReceiptSettings(initial));
   const [pending, startTransition] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
@@ -37,9 +37,9 @@ export function ReceiptSettingsForm({ initial, businessName }: { initial: Partia
 
   const previewHtml = useMemo(
     function () {
-      return buildReceiptHtml(sampleReceipt(s.headerName.trim() || businessName), s, 54);
+      return buildReceiptHtml(sampleReceipt(s.headerName.trim() || businessName, currency), s, 54);
     },
-    [s, businessName]
+    [s, businessName, currency]
   );
 
   function save() {

@@ -3,10 +3,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireBusiness } from "@/lib/services/tenancy";
 import { revalidatePath } from "next/cache";
+import { formatMoney } from "@surge/api-contracts";
 import { sendEmail, isEmailConfigured } from "@/lib/services/email";
 
-function money(n: number): string {
-  return "$" + (Math.round((Number(n) || 0) * 100) / 100).toFixed(2);
+// The EMAILED receipt. Printed one says Rs and this one saying $ is the first
+// inconsistency a merchant would notice, because the guest sees both.
+function money(n: number, currency = "CAD"): string {
+  return formatMoney(Math.round((Number(n) || 0) * 100) / 100, currency);
 }
 
 function esc(s: string): string {
@@ -29,7 +32,7 @@ type OrderForEmail = {
   created_at: string;
 };
 
-function buildReceiptHtml(businessName: string, order: OrderForEmail): string {
+function buildReceiptHtml(businessName: string, order: OrderForEmail, cur = "CAD"): string {
   const snap =
     (order.snapshot as {
       items?: { name: string; unit_price: number; quantity: number }[];
@@ -57,7 +60,7 @@ function buildReceiptHtml(businessName: string, order: OrderForEmail): string {
         " x" +
         l.quantity +
         '</td><td style="padding:4px 0;text-align:right">' +
-        money(l.unit_price * l.quantity) +
+        money(l.unit_price * l.quantity, cur) +
         "</td></tr>"
       );
     })
@@ -65,7 +68,7 @@ function buildReceiptHtml(businessName: string, order: OrderForEmail): string {
 
   const discountRow =
     discount > 0
-      ? '<tr><td>Discount</td><td style="text-align:right">-' + money(discount) + "</td></tr>"
+      ? '<tr><td>Discount</td><td style="text-align:right">-' + money(discount, cur) + "</td></tr>"
       : "";
 
   return (
@@ -88,17 +91,17 @@ function buildReceiptHtml(businessName: string, order: OrderForEmail): string {
     '<hr style="border:none;border-top:1px solid #ddd;margin:10px 0" />' +
     '<table style="width:100%;border-collapse:collapse;font-size:14px">' +
     '<tr><td>Subtotal</td><td style="text-align:right">' +
-    money(subtotal) +
+    money(subtotal, cur) +
     "</td></tr>" +
     discountRow +
     '<tr><td>Tax</td><td style="text-align:right">' +
-    money(tax) +
+    money(tax, cur) +
     "</td></tr>" +
     '<tr><td>Tip</td><td style="text-align:right">' +
-    money(tip) +
+    money(tip, cur) +
     "</td></tr>" +
     '<tr><td style="font-weight:bold;padding-top:6px">Total</td><td style="text-align:right;font-weight:bold;padding-top:6px">' +
-    money(total) +
+    money(total, cur) +
     "</td></tr>" +
     "</table>" +
     '<p style="text-align:center;color:#666;font-size:12px;margin-top:16px">Thank you!</p>' +
@@ -118,7 +121,7 @@ type RefundForEmail = {
   amount: number;
 };
 
-function buildRefundReceiptHtml(businessName: string, refund: RefundForEmail): string {
+function buildRefundReceiptHtml(businessName: string, refund: RefundForEmail, cur = "CAD"): string {
   const reasonLabel = REFUND_REASON_LABELS[refund.reason] || refund.reason;
 
   const rows = refund.items
@@ -129,7 +132,7 @@ function buildRefundReceiptHtml(businessName: string, refund: RefundForEmail): s
         " x" +
         l.quantity +
         '</td><td style="padding:4px 0;text-align:right">' +
-        money(l.line_subtotal) +
+        money(l.line_subtotal, cur) +
         "</td></tr>"
       );
     })
@@ -137,12 +140,12 @@ function buildRefundReceiptHtml(businessName: string, refund: RefundForEmail): s
 
   const discountRow =
     refund.discount_portion > 0
-      ? '<tr><td>Less discount</td><td style="text-align:right">-' + money(refund.discount_portion) + "</td></tr>"
+      ? '<tr><td>Less discount</td><td style="text-align:right">-' + money(refund.discount_portion, cur) + "</td></tr>"
       : "";
 
   const taxRow =
     refund.tax_portion > 0
-      ? '<tr><td>Tax</td><td style="text-align:right">+' + money(refund.tax_portion) + "</td></tr>"
+      ? '<tr><td>Tax</td><td style="text-align:right">+' + money(refund.tax_portion, cur) + "</td></tr>"
       : "";
 
   return (
@@ -166,12 +169,12 @@ function buildRefundReceiptHtml(businessName: string, refund: RefundForEmail): s
     '<hr style="border:none;border-top:1px solid #ddd;margin:10px 0" />' +
     '<table style="width:100%;border-collapse:collapse;font-size:14px">' +
     '<tr><td>Items returned</td><td style="text-align:right">' +
-    money(refund.returned_subtotal) +
+    money(refund.returned_subtotal, cur) +
     "</td></tr>" +
     discountRow +
     taxRow +
     '<tr><td style="font-weight:bold;padding-top:6px">Refunded</td><td style="text-align:right;font-weight:bold;padding-top:6px">-' +
-    money(refund.amount) +
+    money(refund.amount, cur) +
     "</td></tr>" +
     "</table>" +
     '<div style="text-align:center;color:#666;font-size:12px;margin-top:10px">Reason: ' +
@@ -200,7 +203,7 @@ export async function getReceiptHtml(orderId: string): Promise<{ ok: true; html:
     snapshot: order.snapshot,
     total: Number(order.total) || 0,
     created_at: order.created_at as string,
-  });
+  }, (business as { currency?: string }).currency || "CAD");
   return { ok: true, html, sale_number: order.sale_number != null ? Number(order.sale_number) : null };
 }
 
@@ -233,7 +236,7 @@ export async function emailReceipt(
     snapshot: order.snapshot,
     total: Number(order.total) || 0,
     created_at: order.created_at as string,
-  });
+  }, (business as { currency?: string }).currency || "CAD");
   const subject =
     "Receipt from " +
     business.name +
@@ -333,7 +336,7 @@ export async function emailRefundReceipt(
     discount_portion: typeof snap.discount_portion === "number" ? snap.discount_portion : 0,
     tax_portion: typeof snap.tax_portion === "number" ? snap.tax_portion : 0,
     amount: Number(refund.amount) || 0,
-  });
+  }, (business as { currency?: string }).currency || "CAD");
 
   const subject =
     "Refund from " +

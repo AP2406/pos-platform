@@ -1,5 +1,7 @@
 "use client";
 
+import { formatMoney } from "@surge/api-contracts";
+
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,25 +26,28 @@ type DoneInfo = { refund_id: string | null; amount: number; fully: boolean; disc
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
-function cad(n: number): string {
-  return (n < 0 ? "-$" : "$") + Math.abs(n).toFixed(2);
+// Named `cad` when dollars were the only possibility. It now formats whatever
+// the merchant actually uses; the name stays so the call sites do not churn.
+function cad(n: number, currency = "CAD"): string {
+  return (n < 0 ? "-" : "") + formatMoney(Math.abs(n), currency);
 }
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function printRefundReceipt(r: { businessName: string; saleNumber: number; info: DoneInfo }) {
+function printRefundReceipt(r: { businessName: string; saleNumber: number; info: DoneInfo; currency?: string }) {
+  const cur = r.currency || "CAD";
   const win = window.open("", "_blank", "width=340,height=640");
   if (!win) return;
   const match = REASONS.find((x) => x.value === r.info.reason);
   const reasonLabel = match ? match.label : r.info.reason;
   const rows = r.info.items
     .map(function (l) {
-      return "<tr><td>" + escapeHtml(l.name) + " x" + l.quantity + '</td><td style="text-align:right">$' + l.line_subtotal.toFixed(2) + "</td></tr>";
+      return "<tr><td>" + escapeHtml(l.name) + " x" + l.quantity + '</td><td style="text-align:right">' + cad(l.line_subtotal, cur) + "</td></tr>";
     })
     .join("");
-  const discountRow = r.info.discount_portion > 0 ? '<tr><td>Less discount</td><td style="text-align:right">-$' + r.info.discount_portion.toFixed(2) + "</td></tr>" : "";
-  const taxRow = r.info.tax_portion > 0 ? '<tr><td>Tax</td><td style="text-align:right">+$' + r.info.tax_portion.toFixed(2) + "</td></tr>" : "";
+  const discountRow = r.info.discount_portion > 0 ? '<tr><td>Less discount</td><td style="text-align:right">-' + cad(r.info.discount_portion, cur) + "</td></tr>" : "";
+  const taxRow = r.info.tax_portion > 0 ? '<tr><td>Tax</td><td style="text-align:right">+' + cad(r.info.tax_portion, cur) + "</td></tr>" : "";
   const html =
     "<html><head><title>Refund</title><style>" +
     "body{font-family:monospace;font-size:12px;width:280px;margin:0 auto;padding:8px;color:#000}" +
@@ -63,11 +68,11 @@ function printRefundReceipt(r: { businessName: string; saleNumber: number; info:
     "<table>" + rows + "</table>" +
     '<div class="line"></div>' +
     "<table>" +
-    '<tr><td>Items</td><td style="text-align:right">$' + r.info.returned_subtotal.toFixed(2) + "</td></tr>" +
+    '<tr><td>Items</td><td style="text-align:right">' + cad(r.info.returned_subtotal, cur) + "</td></tr>" +
     discountRow +
     taxRow +
     "</table>" +
-    '<div class="big">-$' + r.info.amount.toFixed(2) + "</div>" +
+    '<div class="big">-' + cad(r.info.amount, cur) + "</div>" +
     '<div class="center">Reason: ' + escapeHtml(reasonLabel) + "</div>" +
     '<div class="line"></div>' +
     '<div class="center" style="margin-top:8px">Thank you!</div>' +
@@ -78,7 +83,7 @@ function printRefundReceipt(r: { businessName: string; saleNumber: number; info:
   win.print();
 }
 
-export function RegisterRefund({ businessName }: { businessName: string }) {
+export function RegisterRefund({ businessName, currency = "CAD" }: { businessName: string; currency?: string }) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"pick" | "refund">("pick");
 
@@ -307,7 +312,7 @@ export function RegisterRefund({ businessName }: { businessName: string }) {
                           </div>
                           <div className="text-xs text-muted-foreground">{fmtTime(s.created_at)}</div>
                         </div>
-                        <span className="text-sm tabular-nums shrink-0">{cad(s.total)}</span>
+                        <span className="text-sm tabular-nums shrink-0">{cad(s.total, currency)}</span>
                       </button>
                     ))}
                   </div>
@@ -318,10 +323,10 @@ export function RegisterRefund({ businessName }: { businessName: string }) {
             ) : done ? (
               <div className="space-y-3">
                 <h3 className="font-medium">{done.fully ? "Full refund recorded" : "Partial refund recorded"}</h3>
-                <div className="text-sm text-emerald-600">{"✓ Refund " + (done.refund_id ? "#" + done.refund_id.slice(0, 8) + " " : "") + "recorded · " + cad(done.amount)}</div>
+                <div className="text-sm text-emerald-600">{"✓ Refund " + (done.refund_id ? "#" + done.refund_id.slice(0, 8) + " " : "") + "recorded · " + cad(done.amount, currency)}</div>
                 <div className="text-sm text-muted-foreground">{"Sale #" + saleNumber}</div>
                 <div className="flex gap-2">
-                  <Button className="flex-1" onClick={() => printRefundReceipt({ businessName, saleNumber, info: done })}>Print receipt</Button>
+                  <Button className="flex-1" onClick={() => printRefundReceipt({ businessName, saleNumber, info: done, currency })}>Print receipt</Button>
                   <Button variant="outline" className="flex-1" onClick={backToPick}>Refund another</Button>
                 </div>
                 <div className="pt-3 border-t border-border space-y-2">
@@ -352,7 +357,7 @@ export function RegisterRefund({ businessName }: { businessName: string }) {
               <div className="space-y-3">
                 <h3 className="font-medium">Manager approval</h3>
                 <p className="text-sm text-muted-foreground">
-                  A manager must approve this refund of {cad(previewAmount)}. Ask a manager to enter their PIN.
+                  A manager must approve this refund of {cad(previewAmount, currency)}. Ask a manager to enter their PIN.
                 </p>
                 <Input type="password" inputMode="numeric" value={mgrPin} onChange={(e) => setMgrPin(e.target.value)} placeholder="Manager PIN" className="h-9" />
                 {err && <p className="text-sm text-red-600">{err}</p>}
@@ -386,7 +391,7 @@ export function RegisterRefund({ businessName }: { businessName: string }) {
                           <div className="min-w-0">
                             <div className="text-sm font-medium truncate">{l.name}</div>
                             <div className="text-xs text-muted-foreground">
-                              {cad(l.unit_price) + " - " + l.returnable + " of " + l.sold + " returnable"}
+                              {cad(l.unit_price, currency) + " - " + l.returnable + " of " + l.sold + " returnable"}
                             </div>
                           </div>
                           {exhausted ? (
@@ -407,23 +412,23 @@ export function RegisterRefund({ businessName }: { businessName: string }) {
                 <div className="pt-2 border-t border-border space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Items</span>
-                    <span className="tabular-nums">{cad(returnedSubtotal)}</span>
+                    <span className="tabular-nums">{cad(returnedSubtotal, currency)}</span>
                   </div>
                   {discountPortion > 0 && (
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">Less discount</span>
-                      <span className="tabular-nums">{"-" + cad(discountPortion)}</span>
+                      <span className="tabular-nums">{"-" + cad(discountPortion, currency)}</span>
                     </div>
                   )}
                   {taxPortion > 0 && (
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">Tax</span>
-                      <span className="tabular-nums">{"+" + cad(taxPortion)}</span>
+                      <span className="tabular-nums">{"+" + cad(taxPortion, currency)}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-semibold pt-1">
                     <span>Refund total</span>
-                    <span className="tabular-nums">{cad(previewAmount)}</span>
+                    <span className="tabular-nums">{cad(previewAmount, currency)}</span>
                   </div>
                 </div>
 
@@ -455,7 +460,7 @@ export function RegisterRefund({ businessName }: { businessName: string }) {
 
                 <div className="flex gap-2 pt-1">
                   <Button className="flex-1" onClick={submit} disabled={pending || !anySelected || !reason}>
-                    {pending ? "Refunding..." : "Confirm refund " + cad(previewAmount)}
+                    {pending ? "Refunding..." : "Confirm refund " + cad(previewAmount, currency)}
                   </Button>
                   <Button variant="outline" className="flex-1" onClick={backToPick}>Back</Button>
                 </div>

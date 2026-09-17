@@ -184,7 +184,7 @@ export default async function DrawerPage() {
           and see over/short.
         </p>
       </div>
-      <DrawerClient open={open} closed={closed} blindDefault={blindDefault} />
+      <DrawerClient open={open} closed={closed} blindDefault={blindDefault} currency={(business as { currency?: string }).currency || "CAD"} />
     </div>
   );
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { formatMoney } from "@surge/api-contracts";
+
 import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +39,8 @@ export type SplitQuoteContext = {
 };
 
 type Props = {
+  // ISO 4217 of the business.
+  currency?: string;
   open: boolean;
   onClose: () => void;
   lines: SplitLine[];
@@ -59,6 +63,7 @@ const PAY_METHODS: { key: "cash" | "card" | "other"; label: string }[] = [
 const evenCents = allocateEqual;
 
 export function SplitSheet(props: Props) {
+  const currency = props.currency || "CAD";
   const { lines, allowUnits, settlementMode } = props;
   const unitCents = lines.map((l) => Math.round(l.unit_price * 100));
   const lineCents = lines.map((l, i) => unitCents[i] * l.quantity);
@@ -356,7 +361,7 @@ export function SplitSheet(props: Props) {
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <div className="text-sm truncate">{l.name}{l.quantity > 1 ? " ×" + l.quantity : ""}</div>
-                    <div className="text-xs text-muted-foreground tabular-nums">{"$" + (lineCents[i] / 100).toFixed(2)}</div>
+                    <div className="text-xs text-muted-foreground tabular-nums">{formatMoney(lineCents[i] / 100, currency)}</div>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-1">
                     {Array.from({ length: n }, (_, ci) => (
@@ -453,7 +458,7 @@ export function SplitSheet(props: Props) {
                 {Array.from({ length: n }, (_, ci) => (
                   <div key={ci} className="rounded-md border border-border p-2 flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Seat {ci + 1}</span>
-                    <span className={"text-sm tabular-nums " + (checkCents[ci] > 0 ? "" : "text-red-600")}>{"$" + (checkCents[ci] / 100).toFixed(2)}</span>
+                    <span className={"text-sm tabular-nums " + (checkCents[ci] > 0 ? "" : "text-red-600")}>{formatMoney(checkCents[ci] / 100, currency)}</span>
                   </div>
                 ))}
               </div>

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDuration } from "@/lib/format";
-import { partySummary, isStoolSeat } from "@surge/api-contracts";
+import { partySummary, isStoolSeat, formatMoney } from "@surge/api-contracts";
 import { RegisterClient } from "./register-client";
 import {
   openTableTicket,
@@ -99,6 +99,7 @@ export function FloorClient({
   staff,
   sections = [],
   aging = { yellowMin: 45, redMin: 90 },
+  currency = "CAD",
 }: {
   register: RegisterProps;
   plans: FloorPlan[];
@@ -110,6 +111,8 @@ export function FloorClient({
   staff: StaffMember[];
   sections?: { id: string; name: string; color: string | null; server: string | null; serverId?: string | null }[];
   aging?: { yellowMin: number; redMin: number };
+  // ISO 4217 of the business. Every price on this screen used to be "$".
+  currency?: string;
 }) {
   const sectionById = new Map(sections.map((s) => [s.id, s]));
   const [elements, setElements] = useState<FloorElement[]>(initialElements);
@@ -1027,7 +1030,7 @@ export function FloorClient({
                           <span className="font-semibold text-base truncate">{displayNameOf(el)}</span>
                           <span className="sr-only">{statusLabel(status)}</span>
                         </span>
-                        {open && <span className="tabular-nums text-sm font-medium">{"$" + open.subtotal.toFixed(2)}</span>}
+                        {open && <span className="tabular-nums text-sm font-medium">{formatMoney(open.subtotal, currency)}</span>}
                       </div>
                       {open && partyLine(open) && (
                         <div className="text-[11px] mt-0.5 truncate font-medium">{partyLine(open)}</div>
@@ -1100,7 +1103,7 @@ export function FloorClient({
                       disabled={pending}
                       onClick={() => { if (consumePress()) return; tapElement(el); }}
                       {...pressHandlers(el)}
-                      title={(el.label ? "Stool " + el.label : "Bar seat") + (open ? " · $" + open.subtotal.toFixed(2) : " · available")}
+                      title={(el.label ? "Stool " + el.label : "Bar seat") + (open ? " · " + formatMoney(open.subtotal, currency) : " · available")}
                       className={"absolute flex items-center justify-center overflow-hidden border text-[8px] font-semibold leading-none active:scale-[0.92] transition-all " + statusClass(st)}
                       style={baseStyle}
                     >
@@ -1176,7 +1179,7 @@ export function FloorClient({
                     )}
                     {open ? (
                       <>
-                        <span className="text-sm tabular-nums font-medium">{"$" + open.subtotal.toFixed(2)}</span>
+                        <span className="text-sm tabular-nums font-medium">{formatMoney(open.subtotal, currency)}</span>
                         {!short && <span className="text-[11px] opacity-80 truncate max-w-full">{formatDuration(minutesOpen(open.opened_at)) + (open.server_name ? " · " + open.server_name : "")}</span>}
                       </>
                     ) : (
@@ -1216,7 +1219,7 @@ export function FloorClient({
                 {visibleTabs.map((t) => (
                   <button key={t.id} type="button" disabled={pending} onClick={() => resumeTab(t)} className="w-full text-left rounded-lg border border-border bg-accent/40 p-2.5 active:scale-[0.98] transition-transform">
                     <div className="font-medium text-sm truncate">{t.name ?? "Tab"}</div>
-                    <div className="text-sm tabular-nums font-medium">{"$" + t.subtotal.toFixed(2)}</div>
+                    <div className="text-sm tabular-nums font-medium">{formatMoney(t.subtotal, currency)}</div>
                     <div className="text-[11px] text-muted-foreground truncate">{(t.server_name ? t.server_name + "  ·  " : "") + formatDuration(minutesOpen(t.opened_at))}</div>
                   </button>
                 ))}
@@ -1228,7 +1231,7 @@ export function FloorClient({
                 {visibleTogo.map((t) => (
                   <button key={t.id} type="button" disabled={pending} onClick={() => resumeTogo(t)} className="w-full text-left rounded-lg border border-table-warn-border bg-table-warn-bg p-2.5 active:scale-[0.98] transition-transform">
                     <div className="font-medium text-sm truncate text-table-warn-fg">{t.name ?? "Takeout"}</div>
-                    <div className="text-sm tabular-nums font-medium">{"$" + t.subtotal.toFixed(2)}</div>
+                    <div className="text-sm tabular-nums font-medium">{formatMoney(t.subtotal, currency)}</div>
                     <div className="text-[11px] text-muted-foreground truncate">{(t.phone ? t.phone + "  ·  " : "") + formatDuration(minutesOpen(t.opened_at))}</div>
                   </button>
                 ))}
@@ -1535,7 +1538,7 @@ export function FloorClient({
               body:
                 m.open.item_count +
                 (m.open.item_count === 1 ? " item" : " items") +
-                " worth $" + m.open.subtotal.toFixed(2) +
+                " worth " + formatMoney(m.open.subtotal, currency) +
                 " will be deleted and the table closed. Nothing has been sent to the kitchen. This cannot be undone.",
               cta: "Delete and close",
               run: () => doDiscardTable(m.open.id),
@@ -1745,7 +1748,7 @@ export function FloorClient({
               {splitView.children.map((c) => (
                 <button key={c.id} type="button" onClick={() => payChild(c)} className="w-full flex items-center justify-between p-3 rounded-md border border-border hover:bg-accent text-left">
                   <span className="text-sm font-medium">{c.label}</span>
-                  <span className="text-sm tabular-nums">{"$" + c.subtotal.toFixed(2) + " +tax"}</span>
+                  <span className="text-sm tabular-nums">{formatMoney(c.subtotal, currency) + " +tax"}</span>
                 </button>
               ))}
             </div>

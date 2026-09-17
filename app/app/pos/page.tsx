@@ -356,6 +356,11 @@ export default async function PosPage() {
     deviceProfiles: parseDeviceProfiles((business as { settings?: unknown }).settings),
     // Phase 2 #8: what prints on a fired station chit (manager-controlled).
     kitchenTicketConfig: parseKitchenTicketConfig((business as { settings?: unknown }).settings),
+    // THE MERCHANT'S OWN CURRENCY. businesses.currency has existed, and had a
+    // settings picker, since long before today — and nothing on this screen
+    // read it. Every price, every change calculation and every printed receipt
+    // said "$" no matter what the merchant had chosen.
+    currency: (business as { currency?: string }).currency || "CAD",
   };
 
   // Full-service restaurants get the table floor first; every other mode (and
@@ -473,6 +478,7 @@ export default async function PosPage() {
             staff={serverStaff}
             sections={sections}
             aging={tableAging}
+            currency={registerProps.currency}
           />
         ) : (
           <RegisterClient {...registerProps} />

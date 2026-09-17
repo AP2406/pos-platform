@@ -1,5 +1,7 @@
 "use client";
 
+import { formatMoney } from "@surge/api-contracts";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -8,8 +10,11 @@ import { Label } from "@/components/ui/label";
 import { openDrawerSession, closeDrawerSession, recordCashMovement, getXReport, type DayTotals } from "./actions";
 import { CASH_MOVEMENT_REASONS } from "../reason-codes";
 
-function money(n: number): string {
-  return (n < 0 ? "-$" : "$") + Math.abs(n).toFixed(2);
+// Takes the merchant's currency now. The drawer counts real cash, so a till in
+// Colombo printing a dollar sign over a rupee float is the most confusing place
+// this could possibly have been wrong.
+function money(n: number, currency = "CAD"): string {
+  return (n < 0 ? "-" : "") + formatMoney(Math.abs(n), currency);
 }
 
 type Closeout = {
@@ -82,10 +87,12 @@ function Row({ label, value }: { label: string; value: string }) {
 export function DrawerClient({
   open,
   closed,
+  currency = "CAD",
   blindDefault = false,
 }: {
   open: OpenSession | null;
   closed: ClosedSession[];
+  currency?: string;
   blindDefault?: boolean;
 }) {
   const router = useRouter();
@@ -241,50 +248,50 @@ export function DrawerClient({
           <div className="space-y-1 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Cash sales</span>
-              <span className="tabular-nums">{money(result.cash_sales)}</span>
+              <span className="tabular-nums">{money(result.cash_sales, currency)}</span>
             </div>
             {result.card_sales > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Card sales</span>
-                <span className="tabular-nums">{money(result.card_sales)}</span>
+                <span className="tabular-nums">{money(result.card_sales, currency)}</span>
               </div>
             )}
             {result.other_sales > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Other</span>
-                <span className="tabular-nums">{money(result.other_sales)}</span>
+                <span className="tabular-nums">{money(result.other_sales, currency)}</span>
               </div>
             )}
             {result.refunds > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Refunds (cash out)</span>
-                <span className="tabular-nums text-red-600">{"-" + money(result.refunds)}</span>
+                <span className="tabular-nums text-red-600">{"-" + money(result.refunds, currency)}</span>
               </div>
             )}
             {result.pay_ins > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Paid in</span>
-                <span className="tabular-nums">{"+" + money(result.pay_ins)}</span>
+                <span className="tabular-nums">{"+" + money(result.pay_ins, currency)}</span>
               </div>
             )}
             {result.pay_outs > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Paid out</span>
-                <span className="tabular-nums text-red-600">{"-" + money(result.pay_outs)}</span>
+                <span className="tabular-nums text-red-600">{"-" + money(result.pay_outs, currency)}</span>
               </div>
             )}
             <div className="flex justify-between pt-2 border-t border-border">
               <span className="text-muted-foreground">Expected in till</span>
-              <span className="tabular-nums">{money(result.expected)}</span>
+              <span className="tabular-nums">{money(result.expected, currency)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Counted</span>
-              <span className="tabular-nums">{money(result.counted)}</span>
+              <span className="tabular-nums">{money(result.counted, currency)}</span>
             </div>
             <div className="flex justify-between font-semibold pt-2 border-t border-border">
               <span>Over / short</span>
               <span className={"tabular-nums " + overShortClass(result.over_short)}>
-                {(result.over_short > 0 ? "+" : "") + money(result.over_short)}
+                {(result.over_short > 0 ? "+" : "") + money(result.over_short, currency)}
               </span>
             </div>
           </div>
@@ -303,40 +310,40 @@ export function DrawerClient({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
             <div>
               <div className="text-muted-foreground text-xs">Starting cash</div>
-              <div className="tabular-nums">{money(open.starting_cash)}</div>
+              <div className="tabular-nums">{money(open.starting_cash, currency)}</div>
             </div>
             <div>
               <div className="text-muted-foreground text-xs">Cash sales</div>
-              <div className="tabular-nums">{money(open.cash)}</div>
+              <div className="tabular-nums">{money(open.cash, currency)}</div>
             </div>
             <div>
               <div className="text-muted-foreground text-xs">Card sales</div>
-              <div className="tabular-nums">{money(open.card)}</div>
+              <div className="tabular-nums">{money(open.card, currency)}</div>
             </div>
             <div>
               <div className="text-muted-foreground text-xs">Other</div>
-              <div className="tabular-nums">{money(open.other)}</div>
+              <div className="tabular-nums">{money(open.other, currency)}</div>
             </div>
           </div>
 
           {open.refunds > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Refunds (cash out)</span>
-              <span className="tabular-nums text-red-600">{"-" + money(open.refunds)}</span>
+              <span className="tabular-nums text-red-600">{"-" + money(open.refunds, currency)}</span>
             </div>
           )}
 
           {(open.pay_ins > 0 || open.pay_outs > 0) && (
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Paid in / out</span>
-              <span className="tabular-nums">{"+" + money(open.pay_ins) + " / -" + money(open.pay_outs)}</span>
+              <span className="tabular-nums">{"+" + money(open.pay_ins, currency) + " / -" + money(open.pay_outs, currency)}</span>
             </div>
           )}
 
           {open.drops > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Safe drops</span>
-              <span className="tabular-nums text-red-600">{"-" + money(open.drops)}</span>
+              <span className="tabular-nums text-red-600">{"-" + money(open.drops, currency)}</span>
             </div>
           )}
 
@@ -348,7 +355,7 @@ export function DrawerClient({
                   (open.count === 1 ? " sale)" : " sales)")}
               </span>
               <span className="tabular-nums font-semibold">
-                {money(open.expected)}
+                {money(open.expected, currency)}
               </span>
             </div>
           )}
@@ -367,7 +374,7 @@ export function DrawerClient({
                 {open.movements.slice(0, 6).map((m) => (
                   <div key={m.id} className="flex justify-between">
                     <span>{MOVE_LABEL[m.kind] || m.kind}{m.reason_code ? " · " + m.reason_code : ""}</span>
-                    <span className="tabular-nums">{m.kind === "no_sale" ? "—" : (m.kind === "pay_out" ? "-" : "+") + money(m.amount)}</span>
+                    <span className="tabular-nums">{m.kind === "no_sale" ? "—" : (m.kind === "pay_out" ? "-" : "+") + money(m.amount, currency)}</span>
                   </div>
                 ))}
               </div>
@@ -380,26 +387,26 @@ export function DrawerClient({
                 <span className="font-medium">X-report · read only</span>
                 <button type="button" onClick={() => setXReport(null)} className="text-xs text-muted-foreground underline">Hide</button>
               </div>
-              <Row label="Gross sales" value={money(xReport.gross_sales)} />
-              <Row label="Net (pre-tax)" value={money(xReport.net_sales)} />
-              <Row label="Tax (GST/HST)" value={money(xReport.tax)} />
-              {xReport.service_charge > 0 && <Row label="Service charge" value={money(xReport.service_charge)} />}
-              <Row label="Tips" value={money(xReport.tips)} />
-              <Row label="Discounts" value={money(xReport.discounts)} />
-              <Row label="Comps" value={money(xReport.comps)} />
-              <Row label="Voids" value={xReport.void_count + " · " + money(xReport.void_amount)} />
-              <Row label="Cash" value={money(xReport.cash_sales)} />
-              <Row label="Card" value={money(xReport.card_sales)} />
-              {xReport.gift_sales > 0 && <Row label="Gift card" value={money(xReport.gift_sales)} />}
-              {xReport.store_credit_sales > 0 && <Row label="Store credit" value={money(xReport.store_credit_sales)} />}
-              {xReport.other_sales > 0 && <Row label="Other tender" value={money(xReport.other_sales)} />}
-              {xReport.refunds > 0 && <Row label="Refunds" value={money(xReport.refunds)} />}
-              {xReport.drops > 0 && <Row label="Safe drops" value={money(xReport.drops)} />}
+              <Row label="Gross sales" value={money(xReport.gross_sales, currency)} />
+              <Row label="Net (pre-tax)" value={money(xReport.net_sales, currency)} />
+              <Row label="Tax (GST/HST)" value={money(xReport.tax, currency)} />
+              {xReport.service_charge > 0 && <Row label="Service charge" value={money(xReport.service_charge, currency)} />}
+              <Row label="Tips" value={money(xReport.tips, currency)} />
+              <Row label="Discounts" value={money(xReport.discounts, currency)} />
+              <Row label="Comps" value={money(xReport.comps, currency)} />
+              <Row label="Voids" value={xReport.void_count + " · " + money(xReport.void_amount, currency)} />
+              <Row label="Cash" value={money(xReport.cash_sales, currency)} />
+              <Row label="Card" value={money(xReport.card_sales, currency)} />
+              {xReport.gift_sales > 0 && <Row label="Gift card" value={money(xReport.gift_sales, currency)} />}
+              {xReport.store_credit_sales > 0 && <Row label="Store credit" value={money(xReport.store_credit_sales, currency)} />}
+              {xReport.other_sales > 0 && <Row label="Other tender" value={money(xReport.other_sales, currency)} />}
+              {xReport.refunds > 0 && <Row label="Refunds" value={money(xReport.refunds, currency)} />}
+              {xReport.drops > 0 && <Row label="Safe drops" value={money(xReport.drops, currency)} />}
               {xReport.per_server.length > 0 && (
                 <div className="pt-2 mt-1 border-t border-border">
                   <div className="text-xs font-medium text-muted-foreground mb-1">Sales by server</div>
                   {xReport.per_server.map((s) => (
-                    <Row key={s.staff_id} label={s.name + " · " + s.count} value={money(s.sales)} />
+                    <Row key={s.staff_id} label={s.name + " · " + s.count} value={money(s.sales, currency)} />
                   ))}
                 </div>
               )}
@@ -527,7 +534,7 @@ export function DrawerClient({
               >
                 <div className="min-w-0">
                   <div className="text-sm font-medium">
-                    {"Counted " + money(s.counted_cash)}
+                    {"Counted " + money(s.counted_cash, currency)}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {fmt(s.closed_at)}
@@ -537,18 +544,18 @@ export function DrawerClient({
                       {s.closeout.sale_count +
                         (s.closeout.sale_count === 1 ? " sale" : " sales") +
                         " \u00b7 cash " +
-                        money(s.closeout.cash_sales) +
-                        (s.closeout.card_sales > 0 ? " \u00b7 card " + money(s.closeout.card_sales) : "") +
-                        (s.closeout.refunds > 0 ? " \u00b7 refunds " + money(s.closeout.refunds) : "")}
+                        money(s.closeout.cash_sales, currency) +
+                        (s.closeout.card_sales > 0 ? " \u00b7 card " + money(s.closeout.card_sales, currency) : "") +
+                        (s.closeout.refunds > 0 ? " \u00b7 refunds " + money(s.closeout.refunds, currency) : "")}
                     </div>
                   )}
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-xs text-muted-foreground">
-                    {"Expected " + money(s.expected_cash)}
+                    {"Expected " + money(s.expected_cash, currency)}
                   </div>
                   <div className={"text-sm tabular-nums " + overShortClass(s.over_short)}>
-                    {(s.over_short > 0 ? "+" : "") + money(s.over_short)}
+                    {(s.over_short > 0 ? "+" : "") + money(s.over_short, currency)}
                   </div>
                 </div>
               </div>

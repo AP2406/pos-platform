@@ -337,7 +337,7 @@ export default async function SettingsPage() {
           <p className="text-sm text-muted-foreground mb-4">
             Brand your printed receipts. Changes apply to every register for this business.
           </p>
-          <ReceiptSettingsForm initial={receiptSettings} businessName={business.name} />
+          <ReceiptSettingsForm initial={receiptSettings} businessName={business.name} currency={business.currency || "CAD"} />
         </div>
       ),
     });

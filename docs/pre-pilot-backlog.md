@@ -10,7 +10,27 @@ hit on their first day.
 
 ---
 
-## 0. BLOCKING — Surge cannot serve a merchant who does not use dollars
+## 0. ~~BLOCKING~~ — Surge cannot serve a merchant who does not use dollars
+
+> **Largely fixed, 16 Sep 2026.** The till, the drawer, the printed receipt, the
+> emailed receipt and the settings preview now all take `businesses.currency`,
+> the picker offers fourteen currencies including LKR, and the cash pad's note
+> denominations come from the currency instead of three hardcoded dollar bills.
+> `formatMoney` / `cashSuggestions` / `minorUnits` live in
+> `@surge/api-contracts` with 22 tests.
+>
+> **What is left** is back-office, not the till: roughly 39 files under `app/`
+> outside `/pos/` still hardcode `$` — insights, customers, catalog, approvals,
+> tips, trips. None of them is in front of a guest or in a server's hands, and
+> each is a mechanical swap to `formatMoney` now that it exists. Also still
+> hardcoded: the iPad app passes the literal `"CAD"` at 37 call sites of its own
+> `money()` helper, which needs the business currency threading into the native
+> client the same way.
+>
+> The original entry is kept below because the shape of the failure is worth
+> remembering: a setting that existed, had a UI, and was read by nobody.
+
+### The original finding
 
 Found 16 Sep 2026 while comparing the register against TouchBistro, by asking
 what a Sri Lankan restaurant would actually see. Not a competitor gap — they

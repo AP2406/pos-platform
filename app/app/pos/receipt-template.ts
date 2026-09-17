@@ -1,3 +1,5 @@
+import { formatMoney } from "@surge/api-contracts";
+
 // Shared, framework-agnostic receipt renderer. Used by both the live preview in
 // settings and the actual print path, so what a merchant sees is what prints.
 
@@ -77,6 +79,9 @@ export function mergeReceiptSettings(partial: Partial<ReceiptSettings> | null | 
 }
 
 export type ReceiptData = {
+  // ISO 4217 of the business. Optional so existing callers compile; absent
+  // means CAD, which is what every call site assumed implicitly before.
+  currency?: string;
   saleNumber: number;
   id: string;
   businessName: string;
@@ -113,8 +118,10 @@ function esc(s: string): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function money(n: number): string {
-  return "$" + (Number(n) || 0).toFixed(2);
+// The merchant's currency, not ours. This printed "$" regardless of what
+// businesses.currency said, which is the whole reason money.ts exists.
+function money(n: number, currency?: string): string {
+  return formatMoney(n, currency || "CAD");
 }
 
 function methodLabel(m: string): string {
@@ -173,7 +180,7 @@ function categoryBlock(r: ReceiptData, s: ReceiptSettings): string {
   if (!s.showCategoryTotals) return "";
   const cats = (r.categorySubtotals ?? []).filter((c) => c.label && (Number(c.amount) || 0) !== 0);
   if (cats.length < 1) return "";
-  const rows = cats.map((c) => row(esc(c.label), money(c.amount), { small: true, muted: true })).join("");
+  const rows = cats.map((c) => row(esc(c.label), money(c.amount, r.currency), { small: true, muted: true })).join("");
   return rows + '<div class="rule"></div>';
 }
 
@@ -188,7 +195,7 @@ function tipGuideBlock(r: ReceiptData, s: ReceiptSettings): string {
     .slice(0, 4);
   if (!pcts.length) return "";
   const rows = pcts
-    .map((p) => row(p + "%", money(Math.round(r.total * p) / 100), { small: true, muted: true }))
+    .map((p) => row(p + "%", money(Math.round(r.total * p) / 100, r.currency), { small: true, muted: true }))
     .join("");
   return '<div class="rule"></div><div class="meta">Tip guide</div>' + rows;
 }
@@ -196,30 +203,30 @@ function tipGuideBlock(r: ReceiptData, s: ReceiptSettings): string {
 function itemsBlock(r: ReceiptData): string {
   return r.items
     .map(function (l) {
-      return row(esc(l.name) + " x" + l.quantity, money(l.unit_price * l.quantity));
+      return row(esc(l.name) + " x" + l.quantity, money(l.unit_price * l.quantity, r.currency));
     })
     .join("");
 }
 
 function totalsBlock(r: ReceiptData, s: ReceiptSettings, boldTotal: boolean): string {
   const taxLabel = s.taxLabel.trim() ? esc(s.taxLabel.trim()) : "Tax";
-  let html = row("Subtotal", money(r.subtotal), { muted: true });
-  if (r.discount > 0) html += row("Discount", "-" + money(r.discount), { muted: true });
-  if ((r.comp ?? 0) > 0) html += row("Comp", "-" + money(r.comp as number), { muted: true });
-  html += row(taxLabel, money(r.tax), { muted: true });
-  if ((r.serviceCharge ?? 0) > 0) html += row(r.serviceLabel || "Service charge", money(r.serviceCharge as number), { muted: true });
-  if (r.tip > 0) html += row("Tip", money(r.tip), { muted: true });
-  html += row("Total", money(r.total), { bold: true });
+  let html = row("Subtotal", money(r.subtotal, r.currency), { muted: true });
+  if (r.discount > 0) html += row("Discount", "-" + money(r.discount, r.currency), { muted: true });
+  if ((r.comp ?? 0) > 0) html += row("Comp", "-" + money(r.comp as number, r.currency), { muted: true });
+  html += row(taxLabel, money(r.tax, r.currency), { muted: true });
+  if ((r.serviceCharge ?? 0) > 0) html += row(r.serviceLabel || "Service charge", money(r.serviceCharge as number, r.currency), { muted: true });
+  if (r.tip > 0) html += row("Tip", money(r.tip, r.currency), { muted: true });
+  html += row("Total", money(r.total, r.currency), { bold: true });
   return html;
 }
 
 function paymentBlock(r: ReceiptData): string {
   return r.payments
     .map(function (p) {
-      let h = row(methodLabel(p.method), money(p.amount), { small: true });
+      let h = row(methodLabel(p.method), money(p.amount, r.currency), { small: true });
       if (p.method === "cash" && p.change !== null && p.change > 0) {
-        h += row("Cash given", money(p.tendered || 0), { small: true, muted: true });
-        h += row("Change", money(p.change), { small: true, muted: true });
+        h += row("Cash given", money(p.tendered || 0, r.currency), { small: true, muted: true });
+        h += row("Change", money(p.change, r.currency), { small: true, muted: true });
       }
       return h;
     })
@@ -305,14 +312,14 @@ export function buildReceiptHtml(r: ReceiptData, settingsIn: Partial<ReceiptSett
   let totals = "";
   if (s.style === "bold") {
     totals =
-      row("Subtotal", money(r.subtotal), { muted: true }) +
-      (r.discount > 0 ? row("Discount", "-" + money(r.discount), { muted: true }) : "") +
-      ((r.comp ?? 0) > 0 ? row("Comp", "-" + money(r.comp as number), { muted: true }) : "") +
-      row(s.taxLabel.trim() ? esc(s.taxLabel.trim()) : "Tax", money(r.tax), { muted: true }) +
-      ((r.serviceCharge ?? 0) > 0 ? row(r.serviceLabel || "Service charge", money(r.serviceCharge as number), { muted: true }) : "") +
-      (r.tip > 0 ? row("Tip", money(r.tip), { muted: true }) : "") +
+      row("Subtotal", money(r.subtotal, r.currency), { muted: true }) +
+      (r.discount > 0 ? row("Discount", "-" + money(r.discount, r.currency), { muted: true }) : "") +
+      ((r.comp ?? 0) > 0 ? row("Comp", "-" + money(r.comp as number, r.currency), { muted: true }) : "") +
+      row(s.taxLabel.trim() ? esc(s.taxLabel.trim()) : "Tax", money(r.tax, r.currency), { muted: true }) +
+      ((r.serviceCharge ?? 0) > 0 ? row(r.serviceLabel || "Service charge", money(r.serviceCharge as number, r.currency), { muted: true }) : "") +
+      (r.tip > 0 ? row("Tip", money(r.tip, r.currency), { muted: true }) : "") +
       '<div class="totbox"><span>TOTAL</span><span>' +
-      money(r.total) +
+      money(r.total, r.currency) +
       "</span></div>";
   } else {
     totals = totalsBlock(r, s, true);
@@ -341,8 +348,11 @@ export function buildReceiptHtml(r: ReceiptData, settingsIn: Partial<ReceiptSett
   );
 }
 
-export function sampleReceipt(businessName: string): ReceiptData {
+export function sampleReceipt(businessName: string, currency = "CAD"): ReceiptData {
   return {
+    // So the settings preview shows the merchant their OWN currency rather than
+    // teaching them the receipt will print dollars.
+    currency,
     saleNumber: 1042,
     id: "a1b2c3d4",
     businessName: businessName || "Your Business",

@@ -6,7 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updateTaxAndCurrency } from "./actions";
 
-const CURRENCIES = ["CAD", "USD"];
+// Was ["CAD", "USD"] — two North American currencies, in a product positioned
+// for operators anywhere and with a Sri Lanka pilot as the next move. A merchant
+// whose currency was missing could not select it at all.
+import { SUPPORTED_CURRENCIES } from "@surge/api-contracts";
+const CURRENCIES = [...SUPPORTED_CURRENCIES];
 
 export function TaxCurrencyForm({ initialTaxPercent, initialCurrency }: { initialTaxPercent: number; initialCurrency: string }) {
   const [tax, setTax] = useState(String(initialTaxPercent));
