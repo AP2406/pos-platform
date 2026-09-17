@@ -31,6 +31,7 @@ export type Item = {
   station_id: string | null;
   sales_category: string | null;
   short_name: string | null;
+  description: string | null;
   open_price: boolean;
   requires_manager_approval: boolean;
   allow_returns: boolean;

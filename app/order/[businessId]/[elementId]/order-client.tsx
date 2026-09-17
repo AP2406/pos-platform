@@ -4,7 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { PayPanel } from "./pay-panel";
 
-export type GuestMenuItem = { id: string; name: string; price: number; category: string | null };
+export type GuestMenuItem = { id: string; name: string; price: number; category: string | null; description?: string | null };
 
 const money = (n: number) => "$" + (Number(n) || 0).toFixed(2);
 
@@ -120,10 +120,18 @@ export function GuestOrderClient({
               {g.items.map((it) => {
                 const n = qty[it.id] ?? 0;
                 return (
-                  <div key={it.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                  <div key={it.id} className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">{it.name}</div>
-                      <div className="text-xs text-muted-foreground tabular-nums">{money(it.price)}</div>
+                      {/* The description is the whole point of a guest menu: there
+                          is no server standing here to answer "what's in it".
+                          NOT truncated — a description cut at one line tells you
+                          less than no description, because it implies you have
+                          read it. */}
+                      {it.description && it.description.trim() && (
+                        <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{it.description}</div>
+                      )}
+                      <div className="text-xs text-muted-foreground tabular-nums mt-0.5">{money(it.price)}</div>
                     </div>
                     {n === 0 ? (
                       <button type="button" onClick={() => add(it.id)} className="shrink-0 h-9 px-3 rounded-md border border-foreground text-sm">Add</button>

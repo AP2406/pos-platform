@@ -19,6 +19,8 @@ const itemSchema = z.object({
   // TouchBistro-parity per-item fields (all optional/additive).
   sales_category: z.string().max(60).optional().or(z.literal("")),
   short_name: z.string().max(60).optional().or(z.literal("")),
+  // Guest-facing copy. 500 rather than 60: this is a sentence, not a label.
+  description: z.string().max(500).optional().or(z.literal("")),
   open_price: z.boolean().optional(),
   requires_manager_approval: z.boolean().optional(),
   allow_returns: z.boolean().optional(),
@@ -34,6 +36,7 @@ type ItemInput = {
   image_url?: string;
   sales_category?: string;
   short_name?: string;
+  description?: string;
   open_price?: boolean;
   requires_manager_approval?: boolean;
   allow_returns?: boolean;
@@ -46,6 +49,7 @@ type ItemInput = {
 function itemExtraFields(d: {
   sales_category?: string;
   short_name?: string;
+  description?: string;
   open_price?: boolean;
   requires_manager_approval?: boolean;
   allow_returns?: boolean;
@@ -56,6 +60,7 @@ function itemExtraFields(d: {
   if (d.short_name !== undefined) out.short_name = d.short_name ? d.short_name.trim().slice(0, 60) : null;
   if (d.open_price !== undefined) out.open_price = !!d.open_price;
   if (d.requires_manager_approval !== undefined) out.requires_manager_approval = !!d.requires_manager_approval;
+  if (d.description !== undefined) out.description = d.description.trim() || null;
   if (d.allow_returns !== undefined) out.allow_returns = !!d.allow_returns;
   if (d.print_separate_ticket !== undefined) out.print_separate_ticket = !!d.print_separate_ticket;
   return out;

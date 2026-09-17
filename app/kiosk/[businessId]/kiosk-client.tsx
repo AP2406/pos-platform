@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-export type KioskItem = { id: string; name: string; price: number; category: string | null };
+export type KioskItem = { id: string; name: string; price: number; category: string | null; description?: string | null };
 
 type CartLine = { item: KioskItem; qty: number };
 
@@ -141,6 +141,13 @@ export function KioskClient({
                   className="text-left rounded-xl border border-zinc-200 bg-white p-4 hover:border-zinc-900 active:scale-[0.98] transition"
                 >
                   <div className="font-semibold text-zinc-900">{it.name}</div>
+                  {/* A kiosk guest has nobody to ask. Clamped to three lines
+                      here (unlike the QR menu) because these are fixed-height
+                      tiles in a grid and one long description would otherwise
+                      stretch its whole row. */}
+                  {it.description && it.description.trim() && (
+                    <div className="text-sm text-zinc-500 mt-1 line-clamp-3 leading-snug">{it.description}</div>
+                  )}
                   <div className="text-zinc-500 mt-1">{money(it.price)}</div>
                 </button>
               ))}

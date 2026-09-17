@@ -170,6 +170,7 @@ export function ItemEditor({
   const [category, setCategory] = useState(item?.category ?? "");
   const [salesCategory, setSalesCategory] = useState(item?.sales_category ?? "");
   const [shortName, setShortName] = useState(item?.short_name ?? "");
+  const [description, setDescription] = useState(item?.description ?? "");
   const [openPrice, setOpenPrice] = useState(item?.open_price ?? false);
   const [reqApproval, setReqApproval] = useState(item?.requires_manager_approval ?? false);
   const [allowReturns, setAllowReturns] = useState(item?.allow_returns ?? false);
@@ -205,6 +206,7 @@ export function ItemEditor({
       category !== (item.category ?? "") ||
       salesCategory !== (item.sales_category ?? "") ||
       shortName !== (item.short_name ?? "") ||
+      description !== (item.description ?? "") ||
       openPrice !== item.open_price ||
       reqApproval !== item.requires_manager_approval ||
       allowReturns !== item.allow_returns ||
@@ -220,6 +222,7 @@ export function ItemEditor({
     setCategory(item.category ?? "");
     setSalesCategory(item.sales_category ?? "");
     setShortName(item.short_name ?? "");
+    setDescription(item.description ?? "");
     setOpenPrice(item.open_price);
     setReqApproval(item.requires_manager_approval);
     setAllowReturns(item.allow_returns);
@@ -248,6 +251,7 @@ export function ItemEditor({
           image_url: draftImage ?? "",
           sales_category: salesCategory,
           short_name: shortName,
+          description,
           open_price: openPrice,
           requires_manager_approval: reqApproval,
           allow_returns: allowReturns,
@@ -276,6 +280,7 @@ export function ItemEditor({
           station_id: null,
           sales_category: salesCategory.trim() || null,
           short_name: shortName.trim() || null,
+          description: description.trim() || null,
           open_price: openPrice,
           requires_manager_approval: reqApproval,
           allow_returns: allowReturns,
@@ -298,6 +303,7 @@ export function ItemEditor({
         category,
         sales_category: salesCategory,
         short_name: shortName,
+        description,
         open_price: openPrice,
         requires_manager_approval: reqApproval,
         allow_returns: allowReturns,
@@ -313,6 +319,7 @@ export function ItemEditor({
         category: category.trim() || null,
         sales_category: salesCategory.trim() || null,
         short_name: shortName.trim() || null,
+        description: description.trim() || null,
         open_price: openPrice,
         requires_manager_approval: reqApproval,
         allow_returns: allowReturns,
@@ -579,6 +586,32 @@ export function ItemEditor({
           </datalist>
         </div>
       </FieldRow>
+
+      {/* Guest-facing copy. Full width and a textarea, not an Input, because
+          this is the sentence a guest reads instead of asking a server — on the
+          QR menu, the kiosk and online ordering, where nobody is standing there
+          to answer "what's in it". It is deliberately NOT shown on the register:
+          staff already know the menu and the extra line would cost them a row
+          of items per screen. */}
+      <div className="space-y-1.5 mb-4">
+        <Label htmlFor="ed-desc" className="text-xs text-muted-foreground">
+          Description <span className="text-muted-foreground/70">(shown to guests ordering themselves)</span>
+        </Label>
+        <textarea
+          id="ed-desc"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={2}
+          maxLength={500}
+          placeholder="Crispy chicken wings, deep fried and coated in a spicy sauce."
+          className="u-tx u-focus w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm resize-y"
+        />
+        <p className="text-[11px] text-muted-foreground">
+          {description.trim()
+            ? description.trim().length + " / 500"
+            : "Blank is fine — the guest just sees the name and price."}
+        </p>
+      </div>
 
       <FieldRow>
         <div className="space-y-1.5">
