@@ -95,7 +95,44 @@ element (`72e39c9`).
 **Trigger:** the next time anything is demoed or screenshotted. This is cheap
 and it is the highest-leverage item on the page.
 
-## 6. SPF verified end to end
+## 6. Pre-assigning a server to a table before anyone sits
+
+**Status:** confirmed gap, needs a migration.
+
+TouchBistro's long press on a *vacant* table offers exactly one thing —
+"Transfer Table To Staff" — so a manager can hand out tables at the start of a
+shift before a single guest arrives. Surge shows no menu at all on an empty
+table.
+
+**Why it is not a UI fix.** Staff attribution in Surge lives on the *check*
+(`open_tickets.staff_id`), and an empty table has no check. `floor_elements` has
+no staff column, so there is nowhere to put the answer. It needs either a column
+on the element or a `table_assignments` table keyed by shift date — the same
+shape `section_assignments` already uses, which is the argument for doing it as
+a sibling of that rather than inventing a second pattern.
+
+**Also worth deciding at the same time:** whether a per-table assignment should
+beat the section's assignment when a check opens, or only fill in where no
+section server exists. Today `openTableTicket` reads the section. Two sources of
+truth for the same question is how that function starts getting confusing.
+
+**Trigger:** a pilot restaurant that runs sections properly, or the first
+operator who asks why they cannot hand out tables at pre-shift.
+
+## 7. Pre-assigning a reservation to specific tables
+
+**Status:** confirmed gap, smaller.
+
+Their booking form has "Specify Tables", which opens the whole floor plan as a
+multi-select picker — a booking can name the tables it will use, bar stools
+included, at the time it is taken. Surge's reservations carry an `element_id`
+but it is set when the party is seated, not when the booking is made.
+
+**Trigger:** any pilot that takes bookings by phone. A host writing "the corner
+booth" in the notes field is the workaround, and the moment we see that we
+should build the picker.
+
+## 8. SPF verified end to end
 
 **Status:** record fixed in Hostinger DNS; never confirmed against a real
 delivery.

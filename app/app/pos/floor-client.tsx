@@ -55,7 +55,7 @@ type RegisterProps = {
   loyalty?: { enabled: boolean; redeemPerDollar: number };
 };
 
-type StaffMember = { id: string; name: string };
+type StaffMember = { id: string; name: string; onShift?: boolean };
 // Turn-time status, named once so the tile class, the dot class and the
 // screen-reader label can't drift apart.
 type TableStatus = "available" | "noorder" | "seated" | "warn" | "late";
@@ -108,7 +108,7 @@ export function FloorClient({
   initialTabs: BarTabSummary[];
   reservationSummary?: { waitlist: number; next: { name: string; at: string; party: number } | null };
   staff: StaffMember[];
-  sections?: { id: string; name: string; color: string | null; server: string | null }[];
+  sections?: { id: string; name: string; color: string | null; server: string | null; serverId?: string | null }[];
   aging?: { yellowMin: number; redMin: number };
 }) {
   const sectionById = new Map(sections.map((s) => [s.id, s]));
@@ -836,6 +836,13 @@ export function FloorClient({
     }))
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
   const actionTarget = actionTargets.find((t) => t.elementId === actionTableId) ?? null;
+  // The section the action table sits in, so the assign dialog can offer that
+  // section's server by name instead of making the operator remember it.
+  const actionSection = (() => {
+    if (!actionTarget) return null;
+    const el = elements.find((e) => e.id === actionTarget.elementId);
+    return el?.section_id ? sectionById.get(el.section_id) ?? null : null;
+  })();
   // Why a control is off, in the words the operator needs. A disabled button
   // with no reason is the same problem as a dead one.
   const actionReason = actionTargets.length === 0
@@ -1301,13 +1308,69 @@ export function FloorClient({
                 <Input type="password" inputMode="numeric" value={assignPin} onChange={(e) => setAssignPin(e.target.value)} placeholder="4-6 digits" className="h-11" />
               </div>
             )}
-            <div className="space-y-1">
-              {staff.map((s) => (
-                <button key={s.id} type="button" disabled={assignBusy || pending} onClick={() => doAssign(actionTarget.ticketId, s.id)} className="u-tx w-full text-left px-3 h-11 rounded-md text-sm border border-border hover:bg-accent disabled:opacity-60">
-                  {s.name}
+            {/* WHO IS ON SHIFT, FIRST.
+                This was one flat alphabetical list of every active staff
+                member, which makes assigning a table to someone who went home
+                at four exactly as easy as assigning it to the person standing
+                in front of you. The database has known who is clocked in since
+                migration 0019 — an open time_clock_entries row — and the floor
+                had simply never asked.
+
+                Off-shift staff are still listed, because a manager reassigning
+                yesterday's check to whoever actually served it is a real thing
+                to need. They are just no longer the default-looking choice. */}
+            {(() => {
+              const sec = actionSection;
+              const secId = sec?.serverId ?? null;
+              const on = staff.filter((s) => s.onShift);
+              const off = staff.filter((s) => !s.onShift);
+              const row = (s: StaffMember, hint?: string) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  disabled={assignBusy || pending}
+                  onClick={() => doAssign(actionTarget.ticketId, s.id)}
+                  className="u-tx w-full text-left px-3 h-11 rounded-md text-sm border border-border hover:bg-accent disabled:opacity-60 flex items-center justify-between gap-2"
+                >
+                  <span className="truncate">{s.name}</span>
+                  {hint && <span className="text-[11px] text-muted-foreground shrink-0">{hint}</span>}
                 </button>
-              ))}
-            </div>
+              );
+              return (
+                <div className="space-y-1">
+                  {/* The section's own server, named and offered. Opening a
+                      check already attributes to them automatically; without
+                      this there was no way back to that answer once someone
+                      changed it by hand. */}
+                  {secId && sec?.server && (
+                    <>
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground pt-1">
+                        Section default
+                      </p>
+                      {row(
+                        { id: secId, name: sec.server, onShift: staff.find((s) => s.id === secId)?.onShift },
+                        sec.name
+                      )}
+                    </>
+                  )}
+                  {on.length > 0 && (
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground pt-2">
+                      On shift
+                    </p>
+                  )}
+                  {on.map((s) => row(s))}
+                  {off.length > 0 && (
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground pt-2">
+                      Off shift
+                    </p>
+                  )}
+                  {off.map((s) => row(s))}
+                  {staff.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No staff on file to assign.</p>
+                  )}
+                </div>
+              );
+            })()}
             {assignErr && <p className="text-sm text-red-600 mt-2">{assignErr}</p>}
           </div>
         </div>

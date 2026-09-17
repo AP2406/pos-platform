@@ -367,8 +367,8 @@ export default async function PosPage() {
   let openTogo: Awaited<ReturnType<typeof listOpenTogoTickets>> = [];
   let openTabs: Awaited<ReturnType<typeof listOpenBarTabs>> = [];
   let reservationSummary: ReservationSummary = { waitlist: 0, next: null };
-  let serverStaff: { id: string; name: string }[] = [];
-  let sections: { id: string; name: string; color: string | null; server: string | null }[] = [];
+  let serverStaff: { id: string; name: string; onShift: boolean }[] = [];
+  let sections: { id: string; name: string; color: string | null; server: string | null; serverId: string | null }[] = [];
   if (showFloor) {
     floorPlans = await listFloorPlans();
     if (floorPlans[0]) floorElements = (await listFloor(floorPlans[0].id)).elements;
@@ -376,14 +376,42 @@ export default async function PosPage() {
     openTogo = await listOpenTogoTickets();
     openTabs = await listOpenBarTabs();
     reservationSummary = await getReservationSummary();
-    sections = (await listSections()).map((s) => ({ id: s.id, name: s.name, color: s.color, server: s.server ? s.server.name : null }));
+    sections = (await listSections()).map((s) => ({
+      id: s.id,
+      name: s.name,
+      color: s.color,
+      server: s.server ? s.server.name : null,
+      // The id as well as the name, so the floor can OFFER this server rather
+      // than only print them — "put this check back on the section's server"
+      // needs something to assign to.
+      serverId: s.server ? s.server.id : null,
+    }));
     const { data: staffData } = await supabase
       .from("staff_members")
       .select("id, name")
       .eq("business_id", business.id)
       .eq("is_active", true)
       .order("name", { ascending: true });
-    serverStaff = (staffData ?? []).map((s) => ({ id: s.id as string, name: s.name as string }));
+    // WHO IS ACTUALLY HERE. An open time_clock_entries row — clock_out null —
+    // is the definition of on shift, and a partial unique index guarantees at
+    // most one per staff member, so this is a set membership test and not a
+    // "most recent entry" guess.
+    //
+    // The floor has always listed every active staff member flat when asking
+    // who to assign a check to, which quietly invites assigning a table to
+    // someone who went home at four. The data to prevent that has been in the
+    // database since migration 0019; nothing had ever asked for it.
+    const { data: openShifts } = await supabase
+      .from("time_clock_entries")
+      .select("staff_id")
+      .eq("business_id", business.id)
+      .is("clock_out", null);
+    const onShift = new Set((openShifts ?? []).map((r) => r.staff_id as string));
+    serverStaff = (staffData ?? []).map((s) => ({
+      id: s.id as string,
+      name: s.name as string,
+      onShift: onShift.has(s.id as string),
+    }));
   }
 
   return (
