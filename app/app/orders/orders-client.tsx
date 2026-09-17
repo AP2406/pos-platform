@@ -58,6 +58,11 @@ export function OrdersClient({ initialOrders, timezone }: { initialOrders: Order
   const [orders, setOrders] = useState<OrderRow[]>(initialOrders);
   const [tab, setTab] = useState<"all" | ChannelKey>("all");
   const [view, setView] = useState<"active" | "completed">("active");
+  // FINDING ONE ORDER. TouchBistro's Orders screen has a search field and ours
+  // did not, which is fine at ten orders and useless at three hundred — the
+  // point of this screen on a busy night is "where is the Johnson check", and
+  // the answer was to scroll.
+  const [q, setQ] = useState("");
   const [pending, start] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
   // Mark-ready used to fail as quietly as the list used to render empty: the
@@ -79,12 +84,22 @@ export function OrdersClient({ initialOrders, timezone }: { initialOrders: Order
   }, [orders]);
 
   const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
     return orders.filter((o) => {
       if (tab !== "all" && channelOf(o) !== tab) return false;
       const active = !o.fulfilledAt;
-      return view === "active" ? active : !active;
+      if (view === "active" ? !active : active) return false;
+      if (!needle) return true;
+      // The three things someone actually knows when they come looking: the
+      // number on the printed bill, the name on the check, and roughly how much
+      // it was. Matching the raw total too means "85.81" finds it.
+      return (
+        String(o.saleNumber ?? "").includes(needle) ||
+        (o.customerName ?? "").toLowerCase().includes(needle) ||
+        o.total.toFixed(2).includes(needle)
+      );
     });
-  }, [orders, tab, view]);
+  }, [orders, tab, view, q]);
 
   const activeCount = (c: "all" | ChannelKey) =>
     orders.filter((o) => !o.fulfilledAt && (c === "all" || channelOf(o) === c)).length;
@@ -205,6 +220,40 @@ export function OrdersClient({ initialOrders, timezone }: { initialOrders: Order
             {CHANNEL_BADGE[c]} {CHANNEL_LABEL[c]}{activeCount(c) > 0 && <span className="ml-1 text-xs text-muted-foreground">{activeCount(c)}</span>}
           </button>
         ))}
+      </div>
+
+      {/* Find one order. Beside the Active/Completed switch rather than above
+          the tabs, because it narrows what those two show rather than replacing
+          them — and a search that silently ignores the tab you are standing in
+          is worse than no search. */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="relative">
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Find an order — number, name or amount"
+            aria-label="Find an order by number, customer name or amount"
+            className="u-tx u-focus h-9 w-72 max-w-full rounded-md border border-border bg-transparent pl-3 pr-8 text-sm"
+          />
+          {q && (
+            <button
+              type="button"
+              onClick={() => setQ("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-sm leading-none"
+            >
+              ×
+            </button>
+          )}
+        </div>
+        {q.trim() && (
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {filtered.length === 0
+              ? "No match in " + (view === "active" ? "active" : "completed") + " orders"
+              : filtered.length + (filtered.length === 1 ? " match" : " matches")}
+          </span>
+        )}
       </div>
 
       {/* Active / Completed */}

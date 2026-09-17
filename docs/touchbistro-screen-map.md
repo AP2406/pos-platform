@@ -259,6 +259,36 @@ earlier: a setting that existed, had a UI, and was read by nobody. Two in one
 session suggests it is a pattern worth looking for on purpose rather than
 stumbling into.
 
+## Orders
+
+Four tabs — **Delivery / Takeout · Bar Tabs · Seated Tables · Closed Bills** —
+with `+ Add`, a **Sort By** control, a **search field**, a running total in the
+header ("All Delivery/Takeout: $0.00"), and per-row **More · print · Edit
+Order**. Closed Bills swaps Edit Order for **Reprint** and adds a toggle.
+
+The organising idea differs from ours. **Theirs groups by check state** (open
+takeout, open tabs, seated, closed) and the screen is for *finding and editing a
+check*. **Ours groups by channel** (dine-in, takeout, pickup, delivery, online,
+kiosk, QR — tabs appear only for channels that actually occur) and the screen is
+for *fulfilment*: mark ready, recall.
+
+Capability-wise we have all of it, but spread out: reprint, reopen, refund, void
+and email-receipt all live on `/app/pos/sales` rather than in the Orders hub.
+
+**The one real gap was findability, and it is fixed.** Their Orders screen has a
+search box and ours had none, which is fine at ten orders and useless at three
+hundred — the job of this screen on a busy night is "where is the Johnson
+check", and the answer was to scroll. Now searchable by sale number, customer
+name or amount, scoped to the tab and the Active/Completed view you are standing
+in, with a match count.
+
+## Menu
+
+**Not mappable on this device.** Tapping Menu returns "Authentication Required —
+We are having difficulties communicating with cloud, please try again." The
+menu editor is cloud-backed and the demo device cannot reach it. Worth noting in
+its own right: their menu management is not available offline, and the floor is.
+
 ## Staff lock screen — `Admin: Switch`
 
 Numeric passcode pad, plus:
