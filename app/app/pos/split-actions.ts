@@ -5,6 +5,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { loadItemTaxMeta } from "@/lib/services/tax-meta";
 import { computeSplitTotals } from "./split-alloc";
 import { verifyInSaleApprovals } from "@/lib/services/approval-gate";
+import { restrictedItemNames, restrictedLabel } from "@/lib/services/restricted-items";
 import { readActiveStaffId, ACTIVE_STAFF_COOKIE } from "@/lib/services/active-staff-cookie";
 import { cookies } from "next/headers";
 import { z } from "zod";
@@ -227,6 +228,15 @@ export async function finalizeSplitCheck(
   // Server-side approval gate: same as the non-split close path. A discount/comp/tax
   // exemption the cashier can't authorize needs a manager PIN that is RE-VERIFIED here
   // (the client-supplied `approver` is never trusted).
+  // Same hole, same fix: a split check can carry a manager-only item too.
+  const splitRestricted = await restrictedItemNames(
+    supabase,
+    business.id,
+    [...data.items, ...data.checks.flatMap((ck) => ck.lines)]
+      .map((i) => i.catalog_item_id)
+      .filter((id): id is string => !!id)
+  );
+
   const splitGate = await verifyInSaleApprovals({
     supabase,
     businessId: business.id,
@@ -243,6 +253,7 @@ export async function finalizeSplitCheck(
       // turned off WITH a waive reason. (A silent SC omission with no reason is a
       // separate server-authoritative-SC gap, tracked as a follow-up on both paths.)
       { present: scEnabled && scPct > 0 && data.service_charge !== true && (data.service_charge_waive_reason_code || "").trim() !== "", label: "service-charge waive", permKey: null, amount: null },
+      { present: splitRestricted.length > 0, label: restrictedLabel(splitRestricted), permKey: null, amount: null },
     ],
   });
   if ("blocked" in splitGate) {

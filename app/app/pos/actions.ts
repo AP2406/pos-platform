@@ -5,6 +5,7 @@ import { requireBusiness } from "@/lib/services/tenancy";
 import { staffPermissionsById } from "@/lib/services/permissions-server";
 import { type PermissionKey } from "@/lib/services/permissions";
 import { verifyInSaleApprovals } from "@/lib/services/approval-gate";
+import { restrictedItemNames, restrictedLabel } from "@/lib/services/restricted-items";
 import { readActiveStaffId, ACTIVE_STAFF_COOKIE } from "@/lib/services/active-staff-cookie";
 import { parseThresholds } from "@/lib/services/exception-thresholds";
 import { isOrderPeriodLocked } from "@/lib/services/period-lock";
@@ -662,6 +663,11 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
   // `approver` is NEVER trusted (a modified client could forge it) — the recorded
   // approver is the one resolved from approver_pin. Training sales and unstaffed
   // tills (no signed-in cashier) are exempt, matching the register's own gate.
+  // A catalog item flagged requires_manager_approval was gated in the BROWSER
+  // only — register-client shows a manager-PIN modal before adding it, and this
+  // gate never looked. taxLineIds already holds every catalog id in the cart.
+  const restricted = await restrictedItemNames(supabase, business.id, taxLineIds);
+
   const gate = await verifyInSaleApprovals({
     supabase,
     businessId: business.id,
@@ -676,6 +682,10 @@ export async function createOrder(input: OrderInput): Promise<CreateOrderResult>
       { present: voidLines.length > 0, label: "line void", permKey: "void", amount: null },
       { present: manualExempt, label: "tax exemption", permKey: null, amount: null },
       { present: scWaived, label: "service-charge waive", permKey: null, amount: null },
+      // permKey null = a manager-role action, the same semantics the client
+      // modal implements: manager or owner may ring it, anyone else needs a
+      // manager PIN, and that PIN is re-verified here rather than trusted.
+      { present: restricted.length > 0, label: restrictedLabel(restricted), permKey: null, amount: null },
     ],
   });
   if ("blocked" in gate) {
