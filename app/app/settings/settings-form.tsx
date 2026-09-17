@@ -7,17 +7,53 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updateBusinessSettings } from "./actions";
 
-const timezones = [
-  "America/Toronto",
-  "America/Vancouver",
-  "America/Edmonton",
-  "America/Winnipeg",
-  "America/Halifax",
-  "America/St_Johns",
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
+// Ten North American zones was the whole list, in a product sold
+// internationally — and timezone is not cosmetic in a POS. It drives the
+// business-day cutoff, the Z-report, the reports day-axis and table aging, so a
+// Colombo restaurant set to America/Toronto rolls its business day over in the
+// middle of dinner service and every daily figure it reads is wrong.
+//
+// Grouped, so a list this long stays scannable. Add a zone when a merchant needs
+// it — the server accepts any zone the runtime recognises, so this list is a
+// convenience, not the boundary.
+const TIMEZONE_GROUPS: { label: string; zones: string[] }[] = [
+  {
+    label: "South Asia",
+    zones: ["Asia/Colombo", "Asia/Kolkata", "Asia/Karachi", "Asia/Dhaka", "Asia/Kathmandu"],
+  },
+  {
+    label: "Southeast Asia & Oceania",
+    zones: [
+      "Asia/Singapore", "Asia/Kuala_Lumpur", "Asia/Bangkok", "Asia/Jakarta",
+      "Asia/Manila", "Asia/Hong_Kong", "Asia/Tokyo",
+      "Australia/Sydney", "Australia/Melbourne", "Australia/Perth", "Pacific/Auckland",
+    ],
+  },
+  {
+    label: "Middle East & Africa",
+    zones: ["Asia/Dubai", "Asia/Riyadh", "Africa/Lagos", "Africa/Nairobi", "Africa/Johannesburg", "Africa/Cairo"],
+  },
+  {
+    label: "Europe",
+    zones: [
+      "Europe/London", "Europe/Dublin", "Europe/Lisbon", "Europe/Madrid", "Europe/Paris",
+      "Europe/Berlin", "Europe/Rome", "Europe/Amsterdam", "Europe/Stockholm",
+      "Europe/Warsaw", "Europe/Athens", "Europe/Istanbul",
+    ],
+  },
+  {
+    label: "North America",
+    zones: [
+      "America/Toronto", "America/Vancouver", "America/Edmonton", "America/Winnipeg",
+      "America/Halifax", "America/St_Johns", "America/New_York", "America/Chicago",
+      "America/Denver", "America/Los_Angeles", "America/Phoenix", "America/Anchorage",
+      "Pacific/Honolulu", "America/Mexico_City",
+    ],
+  },
+  {
+    label: "Latin America",
+    zones: ["America/Bogota", "America/Lima", "America/Santiago", "America/Sao_Paulo", "America/Buenos_Aires"],
+  },
 ];
 
 export function SettingsForm({
@@ -72,10 +108,21 @@ export function SettingsForm({
           onChange={(e) => setTimezone(e.target.value)}
           className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring"
         >
-          {timezones.map((tz) => (
-            <option key={tz} value={tz}>
-              {tz.replace("America/", "").replace("_", " ")}
-            </option>
+          {/* A zone already saved that is not in the list stays selectable, so
+              opening settings never silently reassigns a merchant's timezone. */}
+          {!TIMEZONE_GROUPS.some((g) => g.zones.includes(timezone)) && (
+            <option value={timezone}>{timezone}</option>
+          )}
+          {TIMEZONE_GROUPS.map((g) => (
+            <optgroup key={g.label} label={g.label}>
+              {g.zones.map((tz) => (
+                <option key={tz} value={tz}>
+                  {/* City, then the region, so "Colombo — Asia" sorts in the
+                      head the way a person looks for it. */}
+                  {tz.split("/")[1].replace(/_/g, " ") + " — " + tz.split("/")[0]}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </div>

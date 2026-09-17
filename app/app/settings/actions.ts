@@ -19,9 +19,21 @@ export async function updateBusinessSettings(input: {
   }
 
   const supabase = await createClient();
+
+  // A timezone that Intl does not recognise throws inside every
+  // Intl.DateTimeFormat({ timeZone }) call in the app — the reports day-axis,
+  // the business-day cutoff, the Z-report, attendance. This column had no
+  // server-side validation at all; the dropdown was the only thing holding the
+  // line, and a dropdown is not a boundary.
+  const tz = (input.timezone || "").trim();
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz }).format(new Date());
+  } catch {
+    return { error: "That isn't a timezone we recognise." };
+  }
   const { error } = await supabase
     .from("businesses")
-    .update({ name: input.name.trim(), timezone: input.timezone })
+    .update({ name: input.name.trim(), timezone: tz })
     .eq("id", business.id);
 
   if (error) {
